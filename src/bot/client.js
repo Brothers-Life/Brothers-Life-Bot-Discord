@@ -22,6 +22,8 @@ export function createBot() {
 			GatewayIntentBits.GuildVoiceStates,
 			GatewayIntentBits.GuildInvites,
 			GatewayIntentBits.GuildExpressions,
+			// Private messages to the bot (conversations answered from the panel)
+			GatewayIntentBits.DirectMessages,
 		],
 		// Partials: still get events for messages/members that are no longer in cache
 		partials: [Partials.GuildMember, Partials.Message, Partials.Channel, Partials.User],

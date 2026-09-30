@@ -368,6 +368,20 @@ export function createExecutor(client) {
 			return (await channel.send(payload)).id;
 		},
 
+		// --- Private messages ----------------------------------------------------------------------
+		// Throws an error with code DMS_CLOSED when the person does not accept private messages
+		async sendDirect(userId, { content, files = [] }) {
+			const user = await client.users.fetch(userId);
+			try {
+				const message = await user.send({ content: content || undefined, files: files.map(f => new AttachmentBuilder(f.attachment, { name: f.name })), allowedMentions: { parse: [] } });
+				return message.id;
+			}
+			catch (error) {
+				if (error.code === RESTJSONErrorCodes.CannotSendMessagesToThisUser) throw Object.assign(new Error('DMs closed'), { code: 'DMS_CLOSED' });
+				throw error;
+			}
+		},
+
 		// --- FiveM ---------------------------------------------------------------------------------
 		// Status message edited in place (sent again if it was deleted); returns its id
 		async upsertFivemMessage(channelId, messageId, data) {

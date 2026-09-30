@@ -355,6 +355,13 @@ export function createFakeExecutor() {
 		async lockThread(threadId) {
 			this.lockedThreads.push(threadId);
 		},
+		directs: [],
+		dmsClosed: new Set(),
+		async sendDirect(userId, data) {
+			if (this.dmsClosed.has(userId)) throw Object.assign(new Error('DMs closed'), { code: 'DMS_CLOSED' });
+			this.directs.push({ userId, ...data });
+			return String(850000000000000000n + BigInt(this.directs.length));
+		},
 		fivemMessages: [],
 		async upsertFivemMessage(channelId, messageId, data) {
 			if (this.failOn.has(channelId)) throw new Error('Missing Access');

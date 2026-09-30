@@ -19,6 +19,7 @@ import { Route as AuthenticatedAutomodRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedChangelogRouteImport } from './routes/_authenticated/changelog'
 import { Route as AuthenticatedCommandsRouteImport } from './routes/_authenticated/commands'
 import { Route as AuthenticatedConsoleRouteImport } from './routes/_authenticated/console'
+import { Route as AuthenticatedDmsRouteImport } from './routes/_authenticated/dms'
 import { Route as AuthenticatedEventsRouteImport } from './routes/_authenticated/events'
 import { Route as AuthenticatedFeedbackRouteImport } from './routes/_authenticated/feedback'
 import { Route as AuthenticatedFivemRouteImport } from './routes/_authenticated/fivem'
@@ -92,6 +93,11 @@ const AuthenticatedCommandsRoute = AuthenticatedCommandsRouteImport.update({
 const AuthenticatedConsoleRoute = AuthenticatedConsoleRouteImport.update({
   id: '/console',
   path: '/console',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedDmsRoute = AuthenticatedDmsRouteImport.update({
+  id: '/dms',
+  path: '/dms',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedEventsRoute = AuthenticatedEventsRouteImport.update({
@@ -234,6 +240,7 @@ export interface FileRoutesByFullPath {
   '/changelog': typeof AuthenticatedChangelogRoute
   '/commands': typeof AuthenticatedCommandsRoute
   '/console': typeof AuthenticatedConsoleRoute
+  '/dms': typeof AuthenticatedDmsRoute
   '/events': typeof AuthenticatedEventsRoute
   '/feedback': typeof AuthenticatedFeedbackRoute
   '/fivem': typeof AuthenticatedFivemRoute
@@ -269,6 +276,7 @@ export interface FileRoutesByTo {
   '/changelog': typeof AuthenticatedChangelogRoute
   '/commands': typeof AuthenticatedCommandsRoute
   '/console': typeof AuthenticatedConsoleRoute
+  '/dms': typeof AuthenticatedDmsRoute
   '/events': typeof AuthenticatedEventsRoute
   '/feedback': typeof AuthenticatedFeedbackRoute
   '/fivem': typeof AuthenticatedFivemRoute
@@ -307,6 +315,7 @@ export interface FileRoutesById {
   '/_authenticated/changelog': typeof AuthenticatedChangelogRoute
   '/_authenticated/commands': typeof AuthenticatedCommandsRoute
   '/_authenticated/console': typeof AuthenticatedConsoleRoute
+  '/_authenticated/dms': typeof AuthenticatedDmsRoute
   '/_authenticated/events': typeof AuthenticatedEventsRoute
   '/_authenticated/feedback': typeof AuthenticatedFeedbackRoute
   '/_authenticated/fivem': typeof AuthenticatedFivemRoute
@@ -346,6 +355,7 @@ export interface FileRouteTypes {
     | '/changelog'
     | '/commands'
     | '/console'
+    | '/dms'
     | '/events'
     | '/feedback'
     | '/fivem'
@@ -381,6 +391,7 @@ export interface FileRouteTypes {
     | '/changelog'
     | '/commands'
     | '/console'
+    | '/dms'
     | '/events'
     | '/feedback'
     | '/fivem'
@@ -418,6 +429,7 @@ export interface FileRouteTypes {
     | '/_authenticated/changelog'
     | '/_authenticated/commands'
     | '/_authenticated/console'
+    | '/_authenticated/dms'
     | '/_authenticated/events'
     | '/_authenticated/feedback'
     | '/_authenticated/fivem'
@@ -521,6 +533,13 @@ declare module '@tanstack/react-router' {
       path: '/console'
       fullPath: '/console'
       preLoaderRoute: typeof AuthenticatedConsoleRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/dms': {
+      id: '/_authenticated/dms'
+      path: '/dms'
+      fullPath: '/dms'
+      preLoaderRoute: typeof AuthenticatedDmsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/events': {
@@ -709,6 +728,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedChangelogRoute: typeof AuthenticatedChangelogRoute
   AuthenticatedCommandsRoute: typeof AuthenticatedCommandsRoute
   AuthenticatedConsoleRoute: typeof AuthenticatedConsoleRoute
+  AuthenticatedDmsRoute: typeof AuthenticatedDmsRoute
   AuthenticatedEventsRoute: typeof AuthenticatedEventsRoute
   AuthenticatedFeedbackRoute: typeof AuthenticatedFeedbackRoute
   AuthenticatedFivemRoute: typeof AuthenticatedFivemRoute
@@ -745,6 +765,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedChangelogRoute: AuthenticatedChangelogRoute,
   AuthenticatedCommandsRoute: AuthenticatedCommandsRoute,
   AuthenticatedConsoleRoute: AuthenticatedConsoleRoute,
+  AuthenticatedDmsRoute: AuthenticatedDmsRoute,
   AuthenticatedEventsRoute: AuthenticatedEventsRoute,
   AuthenticatedFeedbackRoute: AuthenticatedFeedbackRoute,
   AuthenticatedFivemRoute: AuthenticatedFivemRoute,
