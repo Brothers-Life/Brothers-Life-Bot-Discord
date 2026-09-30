@@ -46,6 +46,15 @@ export function createFakeExecutor() {
 		async getMemberRoleIds(guildId, userId) {
 			return memberRoles.get(`${guildId}:${userId}`) ?? null;
 		},
+		async listMembersWithAnyRole(guildId, roleIds) {
+			const wanted = new Set(roleIds);
+			return [...memberRoles]
+				.filter(([key, roles]) => key.startsWith(`${guildId}:`) && roles.some(r => wanted.has(r)))
+				.map(([key, roles]) => ({ id: key.split(':')[1], username: `user-${key.slice(-4)}`, globalName: null, avatar: null, roleIds: roles.filter(r => wanted.has(r)) }));
+		},
+		guildIcon() {
+			return null;
+		},
 		async getUser(userId) {
 			return users.get(userId) ?? { id: userId, username: `user-${userId.slice(-4)}`, avatar: null };
 		},
