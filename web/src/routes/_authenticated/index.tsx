@@ -6,6 +6,7 @@ import type { Overview } from '@/lib/types'
 import { duration, bytes } from '@/lib/format'
 import { useMe } from '@/hooks/use-me'
 import { Page, Section, Dot, GuildIcon, EmptyState } from '@/components/app/ui'
+import { BrandMark } from '@/components/app/brand-mark'
 import { AuditList } from '@/features/audit/audit-list'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -18,14 +19,14 @@ function Stat({ label, value, hint }: { label: string; value: React.ReactNode; h
   return (
     <div className='min-w-0 px-4 py-3'>
       <div className='text-xs text-muted-foreground'>{label}</div>
-      <div className='mt-1 truncate text-lg font-semibold tabular-nums'>{value}</div>
+      <div className='mt-1 truncate font-display text-xl font-semibold tabular-nums'>{value}</div>
       {hint && <div className='truncate text-xs text-muted-foreground'>{hint}</div>}
     </div>
   )
 }
 
 function Dashboard() {
-  const { can } = useMe()
+  const { can, me } = useMe()
   const { data, isLoading } = useQuery({
     queryKey: ['overview'],
     queryFn: () => api<Overview>('/overview'),
@@ -46,8 +47,25 @@ function Dashboard() {
 
   return (
     <Page title='Vue d’ensemble'>
+      {/* Welcome banner in the server's colours: a dusk screenshot, the logo, the bot's heartbeat */}
+      <section className='brackets relative isolate overflow-hidden rounded-xl border border-brand/25 bg-[#0e0b09] px-6 py-7 text-[#fff3e6] sm:px-8'>
+        <img src='/brand/sunset-heli.webp' alt='' aria-hidden className='ken-burns absolute inset-0 -z-20 size-full object-cover object-[center_38%] opacity-85' />
+        <div aria-hidden className='absolute inset-0 -z-10 bg-[linear-gradient(100deg,rgba(10,8,6,0.95)_0%,rgba(10,8,6,0.75)_45%,rgba(10,8,6,0.2)_100%)]' />
+        <div className='flex flex-wrap items-center gap-5'>
+          <BrandMark className='size-16' />
+          <div className='min-w-0 flex-1'>
+            <p className='kicker !text-[#ffb968]'>Bon retour{me?.user.username ? `, ${me.user.username}` : ''}</p>
+            <h2 className='mt-1 font-display text-3xl leading-none font-bold tracking-[0.1em] uppercase sm:text-4xl'>Brothers Life</h2>
+            <p className='mt-2 flex items-center gap-2 text-sm text-[rgba(255,243,230,0.72)]'>
+              <span className={online ? 'live-dot' : 'inline-block size-2 rounded-full bg-[#f0545a]'} aria-hidden />
+              {online ? `Bot en ligne · ${network.active} serveur${network.active > 1 ? 's' : ''} dans le réseau` : 'Bot hors ligne'}
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* Status strip: the one thing to check at a glance */}
-      <div className='grid grid-cols-2 divide-border overflow-hidden rounded-lg border bg-card sm:grid-cols-4 sm:divide-x'>
+      <div className='stagger grid grid-cols-2 divide-border overflow-hidden rounded-lg border bg-card sm:grid-cols-4 sm:divide-x'>
         <Stat
           label='Bot'
           value={

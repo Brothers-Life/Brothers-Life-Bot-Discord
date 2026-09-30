@@ -1,4 +1,5 @@
 import { AlertTriangle, CheckCircle2, Info, Inbox, OctagonAlert, type LucideIcon } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Header } from '@/components/layout/header'
@@ -21,7 +22,8 @@ export function Page({
   return (
     <>
       <Header fixed>
-        <h1 className='truncate text-base font-semibold tracking-tight'>{title}</h1>
+        <span aria-hidden className='h-5 w-[3px] shrink-0 rounded-full bg-brand shadow-[0_0_10px_var(--brand)]' />
+        <h1 className='truncate font-display text-lg font-semibold tracking-[0.06em] uppercase'>{title}</h1>
       </Header>
       <Main fixed={fixed} className='page-enter flex flex-col gap-6'>
         {(description || actions) && (
@@ -105,12 +107,12 @@ const statTones: Record<Tone, string> = {
 }
 export function StatCards({ items, className }: { items: Stat[]; className?: string }) {
   return (
-    <div className={cn('grid gap-3 sm:grid-cols-2 lg:grid-cols-4', className)}>
+    <div className={cn('stagger grid gap-3 sm:grid-cols-2 lg:grid-cols-4', className)}>
       {items.map(({ label, value, tone = 'neutral', icon: Icon, hint }) => (
-        <div key={label} className={cn('flex items-center gap-3 rounded-lg border bg-card px-4 py-3', statTones[tone])}>
+        <div key={label} className={cn('flex items-center gap-3 rounded-lg border bg-card px-4 py-3 transition-colors hover:border-brand/40', statTones[tone])}>
           {Icon && <span className='stat-icon grid size-10 shrink-0 place-items-center rounded-lg' aria-hidden><Icon className='size-5' /></span>}
           <div className='min-w-0'>
-            <div className='text-2xl leading-tight font-semibold tabular-nums'>{value}</div>
+            <div className='font-display text-2xl leading-tight font-semibold tabular-nums'>{typeof value === 'number' ? <CountUp value={value} /> : value}</div>
             <div className='truncate text-xs text-muted-foreground'>{label}{hint ? <> · {hint}</> : null}</div>
           </div>
         </div>
@@ -161,4 +163,30 @@ export function RankBadge({ name, color, className }: { name: string; color: str
       {name}
     </span>
   )
+}
+
+// A number that rolls up to its value (instant when the user prefers less motion)
+export function CountUp({ value, duration = 700 }: { value: number; duration?: number }) {
+  const [shown, setShown] = useState(0)
+  const from = useRef(0)
+  useEffect(() => {
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    const start = from.current
+    from.current = value
+    if (reduce || start === value) {
+      setShown(value)
+      return
+    }
+    let frame = 0
+    const t0 = performance.now()
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - t0) / duration)
+      const eased = 1 - Math.pow(1 - p, 3)
+      setShown(Math.round(start + (value - start) * eased))
+      if (p < 1) frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [value, duration])
+  return <>{shown.toLocaleString('fr-FR')}</>
 }

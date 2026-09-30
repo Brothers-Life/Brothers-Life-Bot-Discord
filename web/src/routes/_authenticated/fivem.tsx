@@ -54,7 +54,7 @@ function FivemPage() {
           )}
           {!data.servers.length
             ? <Section title='Serveurs'><EmptyState title='Aucun serveur FiveM'>Ajoute l’adresse ip:port de ton serveur.</EmptyState></Section>
-            : <div className='grid gap-4 lg:grid-cols-2'>{data.servers.map((s) => <ServerCard key={s.id} server={s} data={data} manage={manage} onEdit={() => setEditing(s)} />)}</div>}
+            : <div className='stagger grid gap-4 lg:grid-cols-2'>{data.servers.map((s) => <ServerCard key={s.id} server={s} data={data} manage={manage} onEdit={() => setEditing(s)} />)}</div>}
           {manage && data.servers.length > 0 && <PresenceSection key={JSON.stringify(data.presence)} data={data} />}
         </div>
       )}
@@ -78,7 +78,7 @@ function ServerCard({ server: s, data, manage, onEdit }: { server: Server; data:
   const channelName = (guild: string, id: string) => data.guilds.find((g) => g.id === guild)?.channels.find((c) => c.id === id)?.name ?? id
 
   return (
-    <section className='grid content-start gap-4 rounded-xl border bg-card p-5' style={{ borderTopColor: s.config.color, borderTopWidth: 3 }}>
+    <section className='lift grid content-start gap-4 rounded-xl border bg-card p-5' style={{ borderTopColor: s.config.color, borderTopWidth: 3 }}>
       <div className='flex items-start gap-3'>
         <span className={cn('mt-1.5 size-3 shrink-0 rounded-full', !st ? 'bg-muted-foreground' : st.online ? 'bg-success shadow-[0_0_0_4px] shadow-success/20' : 'bg-destructive')} aria-hidden />
         <div className='min-w-0 flex-1'>

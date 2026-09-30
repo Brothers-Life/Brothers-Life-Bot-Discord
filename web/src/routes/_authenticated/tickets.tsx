@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
-import { MessageSquare, Radio } from 'lucide-react'
+import { MessageSquare } from 'lucide-react'
 import { api } from '@/lib/api'
 import type { Guild, Ticket, TicketConfig, TicketPriority } from '@/lib/types'
 import { ago, dateTime } from '@/lib/format'
@@ -100,7 +100,7 @@ function TicketList({ guildId }: { guildId: string }) {
       description={live ? undefined : 'Connexion au direct…'}
       actions={
         <div className='flex flex-wrap items-center gap-2'>
-          {live && <Pill tone='success'><Radio className='size-3 animate-pulse' /> En direct</Pill>}
+          {live && <Pill tone='accent'><span className='live-dot !size-1.5' aria-hidden /> En direct</Pill>}
           <Select value={status} onValueChange={(v) => setStatus(v as typeof status)}>
             <SelectTrigger className='w-32' aria-label='Ouverts ou fermés'><SelectValue /></SelectTrigger>
             <SelectContent>

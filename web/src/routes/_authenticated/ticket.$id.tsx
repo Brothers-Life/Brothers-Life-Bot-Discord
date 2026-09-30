@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, FileText, Lock, NotebookPen, Radio, RotateCcw, Send, UserPlus } from 'lucide-react'
+import { ArrowLeft, FileText, Lock, NotebookPen, RotateCcw, Send, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { TicketDetail, TicketMessage, TicketPriority } from '@/lib/types'
@@ -93,7 +93,7 @@ function TicketPage() {
       actions={
         <div className='flex flex-wrap items-center gap-2'>
           <Button asChild variant='ghost'><Link to='/tickets'><ArrowLeft /> Tickets</Link></Button>
-          {live ? <Pill tone='success'><Radio className='size-3 animate-pulse' /> En direct</Pill> : <Pill tone='warning'>Reconnexion…</Pill>}
+          {live ? <Pill tone='accent'><span className='live-dot !size-1.5' aria-hidden /> En direct</Pill> : <Pill tone='warning'>Reconnexion…</Pill>}
           {ticket.hasTranscript && <Button variant='outline' onClick={() => setTranscript(true)}><FileText /> Transcript</Button>}
         </div>
       }

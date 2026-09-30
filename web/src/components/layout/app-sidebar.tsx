@@ -31,10 +31,10 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton size='lg' asChild className='hover:bg-transparent'>
               <Link to='/' onClick={() => setOpenMobile(false)}>
-                <BrandMark className='!size-8 shrink-0' />
+                <BrandMark className='!size-9 shrink-0' />
                 <div className='grid leading-tight'>
-                  <span className='truncate font-semibold tracking-tight'>Brothers Life</span>
-                  <span className='truncate text-xs text-sidebar-foreground/60'>Panel du réseau</span>
+                  <span className='truncate font-display text-base font-bold tracking-[0.08em] uppercase'>Brothers Life</span>
+                  <span className='truncate text-[0.65rem] font-display tracking-[0.22em] text-primary uppercase dark:text-brand'>Panel du réseau</span>
                 </div>
               </Link>
             </SidebarMenuButton>
@@ -47,7 +47,7 @@ export function AppSidebar() {
           if (!items.length) return null
           return (
             <SidebarGroup key={section.title}>
-              <SidebarGroupLabel>{section.title}</SidebarGroupLabel>
+              <SidebarGroupLabel className='font-display text-[0.62rem] font-semibold tracking-[0.24em] text-primary uppercase dark:text-brand/75'>{section.title}</SidebarGroupLabel>
               <SidebarMenu>
                 {items.map((item) => {
                   const active = item.url === '/' ? pathname === '/' : pathname.startsWith(item.url)

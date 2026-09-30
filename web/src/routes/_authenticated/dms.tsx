@@ -60,7 +60,7 @@ function DmsPage() {
       description='Écris en MP à n’importe quel membre via le bot et suis les réponses ici, en direct. Une conversation par personne.'
       actions={
         <div className='flex items-center gap-3'>
-          <span className='flex items-center gap-1.5 text-xs text-muted-foreground'><span className={cn('size-2 rounded-full', live ? 'bg-success' : 'bg-muted-foreground')} />{live ? 'En direct' : 'Connexion…'}</span>
+          <span className='flex items-center gap-1.5 text-xs text-muted-foreground'><span className={cn(live ? 'live-dot' : 'size-2 rounded-full bg-muted-foreground')} aria-hidden />{live ? 'En direct' : 'Connexion…'}</span>
           {can('dm.send') && <Button onClick={() => setComposing(true)}><MessageSquarePlus /> Écrire à quelqu’un</Button>}
         </div>
       }

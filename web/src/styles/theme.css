@@ -1,91 +1,98 @@
 /*
- * Brothers Life panel — night-shift moderation console.
- * Deep navy surfaces, one brass accent (the "staff badge"), status colors kept for status only.
+ * Brothers Life panel — the server's own look: Los Santos at dusk.
+ * Warm black plates, one sunset amber (#ff9628, the logo and the loading screen), warm ivory text.
+ * Warning is yellow and info is blue so neither is ever mistaken for the brand accent.
  */
 :root {
-  --radius: 0.5rem;
-  --background: #f5f6f9;
-  --foreground: #121826;
-  --card: #ffffff;
-  --card-foreground: #121826;
-  --popover: #ffffff;
-  --popover-foreground: #121826;
-  --primary: #9a6a14;
+  --radius: 0.625rem;
+  --background: #faf5ee;
+  --foreground: #1f1409;
+  --card: #fffdfa;
+  --card-foreground: #1f1409;
+  --popover: #fffdfa;
+  --popover-foreground: #1f1409;
+  /* Darker amber in daylight so amber text stays readable on ivory */
+  --primary: #b35200;
   --primary-foreground: #ffffff;
-  --secondary: #e9ecf2;
-  --secondary-foreground: #1d2436;
-  --muted: #eceff4;
-  --muted-foreground: #5b6479;
-  --accent: #e9ecf2;
-  --accent-foreground: #1d2436;
+  --brand: #ff9628;
+  --brand-soft: #ffb968;
+  --secondary: #f3e8da;
+  --secondary-foreground: #2a1b0d;
+  --muted: #f1e8dc;
+  --muted-foreground: #6d5c4a;
+  --accent: #f4e6d4;
+  --accent-foreground: #2a1b0d;
   --destructive: #c9303a;
   --destructive-foreground: #ffffff;
   --success: #1f8a5c;
   --success-foreground: #ffffff;
-  /* Amber, kept apart from the brass accent so a warning never reads as "primary" */
-  --warning: #b25e09;
+  --warning: #9a6b00;
   --warning-foreground: #ffffff;
   --info: #2563c9;
   --info-foreground: #ffffff;
-  --border: #dde1ea;
-  --input: #d3d8e3;
-  --ring: #b8862f;
+  --border: #eadbc6;
+  --input: #e2d0b8;
+  --ring: #e07a12;
 
-  --sidebar: #eceff4;
-  --sidebar-foreground: #1d2436;
+  --sidebar: #f4ebdf;
+  --sidebar-foreground: #2a1b0d;
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: #dfe3eb;
-  --sidebar-accent-foreground: #121826;
+  --sidebar-accent: #ecdcc6;
+  --sidebar-accent-foreground: #1f1409;
   --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
 
-  --console: #0b101b;
-  --console-foreground: #cfd6e4;
+  --console: #0d0a08;
+  --console-foreground: #f2e6d8;
 }
 
 .dark {
-  --background: #0f1422;
-  --foreground: #e4e8f1;
-  --card: #161c2d;
-  --card-foreground: #e4e8f1;
-  --popover: #1a2134;
-  --popover-foreground: #e4e8f1;
-  --primary: #d6a249;
-  --primary-foreground: #1a1406;
-  --secondary: #1f2739;
-  --secondary-foreground: #e4e8f1;
-  --muted: #1c2335;
-  --muted-foreground: #8f99ae;
-  --accent: #222b40;
-  --accent-foreground: #e4e8f1;
-  --destructive: #e5484d;
+  --background: #0e0b09;
+  --foreground: #fff3e6;
+  --card: #16110d;
+  --card-foreground: #fff3e6;
+  --popover: #1b1510;
+  --popover-foreground: #fff3e6;
+  --primary: #ff9628;
+  --primary-foreground: #1d0f00;
+  --brand: #ff9628;
+  --brand-soft: #ffb968;
+  --secondary: #221a13;
+  --secondary-foreground: #fff3e6;
+  --muted: #1d1611;
+  --muted-foreground: #b3a38f;
+  --accent: #261d15;
+  --accent-foreground: #fff3e6;
+  --destructive: #f0545a;
   --destructive-foreground: #ffffff;
   --success: #3ccb8a;
   --success-foreground: #04150d;
-  --warning: #f59e0b;
-  --warning-foreground: #1c1203;
+  --warning: #f5c518;
+  --warning-foreground: #1c1500;
   --info: #5b9cf5;
   --info-foreground: #06101f;
-  --border: #263048;
-  --input: #2c3752;
-  --ring: #d6a249;
+  --border: #2e2218;
+  --input: #3a2b1e;
+  --ring: #ff9628;
 
-  --sidebar: #0c111d;
-  --sidebar-foreground: #c9d0de;
+  --sidebar: #0a0806;
+  --sidebar-foreground: #e8dccd;
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: #1a2134;
-  --sidebar-accent-foreground: #f2f4f8;
-  --sidebar-border: #1c2438;
+  --sidebar-accent: #1d1610;
+  --sidebar-accent-foreground: #fff3e6;
+  --sidebar-border: #1f1811;
   --sidebar-ring: var(--ring);
 
-  --console: #080c15;
-  --console-foreground: #cfd6e4;
+  --console: #080605;
+  --console-foreground: #f2e6d8;
 }
 
 @theme inline {
   --font-sans: 'Instrument Sans Variable', ui-sans-serif, system-ui, sans-serif;
+  /* The server's display face (loading screen, pause menu): Bahnschrift, else a close DIN cut */
+  --font-display: 'Bahnschrift', 'Barlow Semi Condensed', 'DIN Alternate', 'Arial Narrow', sans-serif;
   --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
 
   --radius-sm: calc(var(--radius) - 4px);
@@ -100,6 +107,8 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);

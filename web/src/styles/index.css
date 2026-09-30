@@ -16,6 +16,30 @@
   body {
     @apply min-h-svh w-full bg-background text-foreground has-[div[data-variant='inset']]:bg-sidebar;
   }
+  /* Titles in the server's display face */
+  h1,
+  h2 {
+    font-family: var(--font-display);
+    letter-spacing: 0.01em;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--brand) 35%, transparent);
+  }
+  /* Dusk: a faint sunset glow at the top and film grain, like the loading screen */
+  .dark body {
+    background-image: radial-gradient(1100px 420px at 78% -8%, color-mix(in oklab, var(--brand) 9%, transparent), transparent 70%);
+    background-attachment: fixed;
+  }
+  .dark body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    pointer-events: none;
+    opacity: 0.035;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
 
   /* Override Radix scroll locking for sticky headers */
   body[data-scroll-locked] {
@@ -57,6 +81,117 @@
   @apply after:pointer-events-none after:absolute after:inset-s-0 after:bottom-0 after:hidden after:h-32 after:w-full after:rounded-b-2xl after:bg-[linear-gradient(180deg,transparent_10%,var(--background)_70%)] md:after:block;
 }
 
+/* Small uppercase label in the display face, as on the loading screen ("kicker") */
+@utility kicker {
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+/* The server logo glows softly, like on the loading screen */
+@utility logo-breathe {
+  animation: logo-breathe 3.4s ease-in-out infinite;
+}
+@keyframes logo-breathe {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 6px color-mix(in oklab, var(--brand) 40%, transparent));
+  }
+  50% {
+    filter: drop-shadow(0 0 16px color-mix(in oklab, var(--brand) 80%, transparent));
+  }
+}
+
+/* "Live" dot */
+@utility live-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: var(--brand);
+  box-shadow: 0 0 8px 2px color-mix(in oklab, var(--brand) 60%, transparent);
+  animation: live-pulse 2.4s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+/* Amber corner brackets, the frame of the loading screen and pause menu */
+@utility brackets {
+  position: relative;
+  &::before,
+  &::after {
+    content: '';
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    pointer-events: none;
+    border-color: var(--brand);
+    opacity: 0.85;
+  }
+  &::before {
+    top: -1px;
+    left: -1px;
+    border-top: 2px solid;
+    border-left: 2px solid;
+    border-top-left-radius: 6px;
+  }
+  &::after {
+    right: -1px;
+    bottom: -1px;
+    border-right: 2px solid;
+    border-bottom: 2px solid;
+    border-bottom-right-radius: 6px;
+  }
+}
+
+/* Cards that lead somewhere rise slightly and catch the sunset */
+@utility lift {
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+  &:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in oklab, var(--brand) 45%, var(--border));
+    box-shadow: 0 10px 30px -12px color-mix(in oklab, var(--brand) 35%, transparent);
+  }
+}
+
+/* Children appear one after the other (cards, counters) */
+@utility stagger {
+  & > * {
+    animation: page-enter 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  & > *:nth-child(2) { animation-delay: 50ms; }
+  & > *:nth-child(3) { animation-delay: 100ms; }
+  & > *:nth-child(4) { animation-delay: 150ms; }
+  & > *:nth-child(5) { animation-delay: 200ms; }
+  & > *:nth-child(6) { animation-delay: 250ms; }
+  & > *:nth-child(n + 7) { animation-delay: 300ms; }
+}
+
+/* Slow drift of a background picture (login) */
+@utility ken-burns {
+  animation: ken-burns 26s ease-in-out infinite alternate;
+}
+@keyframes ken-burns {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.09);
+  }
+}
+
 /* Page content fades in when a page opens */
 @utility page-enter {
   animation: page-enter 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
@@ -82,7 +217,7 @@
 
 /* Loading placeholders: a light sweep instead of a blink */
 @utility shimmer {
-  background-image: linear-gradient(90deg, transparent 0%, color-mix(in oklab, var(--foreground) 6%, transparent) 50%, transparent 100%);
+  background-image: linear-gradient(90deg, transparent 0%, color-mix(in oklab, var(--brand) 10%, transparent) 50%, transparent 100%);
   background-size: 200% 100%;
   animation: shimmer 1.4s linear infinite;
 }

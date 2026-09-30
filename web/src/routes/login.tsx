@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { BrandMark } from '@/components/app/brand-mark'
 import { Button } from '@/components/ui/button'
@@ -9,6 +10,9 @@ const ERRORS: Record<string, string> = {
   discord: 'Discord n’a pas répondu correctement. Réessaie dans un instant.',
   not_configured: 'Le panel n’est pas configuré : APP_ID et CLIENT_SECRET manquent dans le fichier .env du bot.',
 }
+
+// Screenshots of the server, as on the loading screen
+const BACKGROUNDS = ['/brand/sunset-heli.webp', '/brand/sunset-car.webp', '/brand/sunset-road.webp']
 
 export const Route = createFileRoute('/login')({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -28,32 +32,52 @@ function DiscordIcon() {
 function LoginPage() {
   const { error } = Route.useSearch()
   const message = error ? (ERRORS[error] ?? 'La connexion a échoué.') : null
+  const [background] = useState(() => BACKGROUNDS[Math.floor(Math.random() * BACKGROUNDS.length)])
+  const [loaded, setLoaded] = useState(false)
 
   return (
-    <main className='grid min-h-svh place-items-center bg-sidebar px-6'>
-      <div className='w-full max-w-sm'>
-        <BrandMark className='size-14' />
-        <h1 className='mt-8 text-3xl font-semibold tracking-tight'>Brothers Life</h1>
-        <p className='mt-2 text-muted-foreground'>
-          Panel de gestion du réseau : serveurs, staff, logs et bot.
+    <main className='dark relative grid min-h-svh place-items-center overflow-hidden bg-[#08060a] px-6 text-[#fff3e6]'>
+      {/* Screenshot of the server, drifting slowly, pulled toward the sunset */}
+      <div aria-hidden className='absolute -inset-[3%] overflow-hidden'>
+        <img
+          src={background} alt='' onLoad={() => setLoaded(true)}
+          className={`ken-burns size-full object-cover transition-opacity duration-1000 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+        />
+      </div>
+      <div
+        aria-hidden
+        className='absolute inset-0 bg-[linear-gradient(to_bottom,rgba(5,4,3,0.75)_0%,rgba(5,4,3,0.1)_35%,rgba(5,4,3,0.1)_55%,rgba(5,4,3,0.92)_100%),radial-gradient(120%_80%_at_50%_55%,transparent_40%,rgba(0,0,0,0.6)_100%)]'
+      />
+
+      <section className='brackets page-enter relative w-full max-w-md rounded-2xl border border-[rgba(255,150,40,0.22)] bg-[rgba(14,10,6,0.62)] p-8 shadow-[0_18px_40px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-md sm:p-10'>
+        <div className='flex items-center gap-4'>
+          <BrandMark className='size-16' />
+          <div className='grid gap-1'>
+            <span className='kicker !text-[#ffb968]'>Panel du staff</span>
+            <h1 className='font-display text-3xl leading-none font-bold tracking-[0.1em] uppercase sm:text-4xl'>Brothers Life</h1>
+          </div>
+        </div>
+        <div aria-hidden className='mt-6 h-px bg-gradient-to-r from-[#ff9628] via-[#ff9628]/30 to-transparent' />
+        <p className='mt-5 text-[rgba(255,243,230,0.72)]'>
+          Serveurs, staff, sanctions, tickets et bot : tout le réseau au même endroit.
         </p>
 
         {message && (
-          <p role='alert' className='mt-6 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive'>
+          <p role='alert' className='mt-6 rounded-md border border-[#f0545a]/50 bg-[#f0545a]/12 px-3 py-2 text-sm text-[#ffb3b5]'>
             {message}
           </p>
         )}
 
-        <Button asChild size='lg' className='mt-8 w-full gap-2 bg-[#5865f2] text-white hover:bg-[#4752c4]'>
+        <Button asChild size='lg' className='mt-8 w-full gap-2 bg-[#5865f2] text-white shadow-[0_8px_24px_-8px_#5865f2] hover:bg-[#4752c4]'>
           <a href='/api/auth/login'>
             <DiscordIcon />
             Se connecter avec Discord
           </a>
         </Button>
-        <p className='mt-4 text-xs text-muted-foreground'>
+        <p className='mt-4 text-xs text-[rgba(255,243,230,0.55)]'>
           Seul ton identifiant Discord est demandé. L’accès dépend des rangs attribués dans le panel.
         </p>
-      </div>
+      </section>
     </main>
   )
 }
