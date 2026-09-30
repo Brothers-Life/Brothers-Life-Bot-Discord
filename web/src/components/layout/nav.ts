@@ -1,5 +1,6 @@
 import {
   Gauge,
+  DatabaseBackup,
   Wand2,
   LayoutTemplate,
   Mail,
@@ -53,6 +54,7 @@ export const navSections: NavSection[] = [
       { title: 'Serveurs', url: '/network', icon: Network, permission: 'network.view' },
       { title: 'FiveM', url: '/fivem', icon: Gamepad2, permission: 'fivem.view' },
       { title: 'Modèles de serveur', url: '/templates', icon: LayoutTemplate, permission: 'templates.view' },
+      { title: 'Sauvegardes', url: '/backups', icon: DatabaseBackup, permission: 'backups.view' },
     ],
   },
   {

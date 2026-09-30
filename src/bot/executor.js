@@ -398,6 +398,16 @@ export function createExecutor(client) {
 			};
 		},
 
+		// Who holds which role (members' own roles, not the bots' managed ones), for the backups
+		async snapshotMemberRoles(guildId) {
+			const guild = guildOf(guildId);
+			await guild.members.fetch();
+			return [...guild.members.cache.values()].filter(m => !m.user.bot).map(m => ({
+				id: m.id,
+				roleIds: [...m.roles.cache.values()].filter(r => r.id !== guild.id && !r.managed).map(r => r.id),
+			})).filter(m => m.roleIds.length);
+		},
+
 		async createRole(guildId, data) {
 			const role = await guildOf(guildId).roles.create({
 				name: data.name, colors: { primaryColor: data.color ?? 0 }, hoist: data.hoist, mentionable: data.mentionable,

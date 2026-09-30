@@ -74,7 +74,10 @@ export function createTemplates({ db, network, audit, executor, events, automod,
 
 	// A job cut by a restart leaves the server half built: it is reported, and "Réparer" finishes it
 	const interrupted = settings.get('templates.running', null);
-	if (interrupted) {
+	if (interrupted?.backupId) {
+		settings.set('templates.running', null);
+	}
+	else if (interrupted) {
 		const report = { created: 0, edited: 0, deleted: 0, warnings: ['Interrompue par un redémarrage du bot : lance « Réparer » pour terminer.'], durationMs: 0 };
 		const last = q.application.get(interrupted.guildId);
 		q.saveApplication.run({
@@ -169,20 +172,24 @@ export function createTemplates({ db, network, audit, executor, events, automod,
 	}
 
 	// --- The job: one at a time for the whole bot ---------------------------------------------------
-	async function run(template, guildId, mode, actor) {
-		const snapshot = JSON.parse(template.snapshot);
-		const last = q.application.get(guildId);
-		const saved = last ? JSON.parse(last.mapping) : { roles: {}, channels: {} };
+	// source: { templateId, name, snapshot } — a template, or a backup of the same server (backupId set)
+	// opts: { mapping (ids already known), panel (apply the panel configuration), memberRoles ([{ id, roleIds }] to give back) }
+	async function run(source, guildId, mode, actor, opts = {}) {
+		const { snapshot } = source;
+		const last = source.backupId ? null : q.application.get(guildId);
+		const saved = opts.mapping ?? (last ? JSON.parse(last.mapping) : { roles: {}, channels: {} });
 		const roles = new Map([[snapshot.guild.id, guildId]]);
 		const channels = new Map();
-		const stats = { created: 0, edited: 0, deleted: 0 };
+		const stats = { created: 0, edited: 0, deleted: 0, memberRoles: 0 };
 		const started = now();
-		settings.set('templates.running', { guildId, templateId: template.id, mode, by: actor.id, startedAt: started });
+		settings.set('templates.running', { guildId, templateId: source.templateId ?? null, backupId: source.backupId ?? null, mode, by: actor.id, startedAt: started });
 		events.mute(guildId, true);
 		try {
 			const target = await executor.snapshotGuild(guildId);
-			const { ops, warnings } = plan(snapshot, target, saved, mode);
-			job.warnings.push(...warnings);
+			const planned = plan(snapshot, target, saved, mode);
+			const ops = planned.ops.filter(op => op.op !== 'panel' || opts.panel !== false);
+			if (opts.memberRoles?.length) ops.push({ op: 'memberRoles', members: opts.memberRoles });
+			job.warnings.push(...planned.warnings);
 			job.total = ops.length;
 			for (const op of ops) {
 				job.step = label(op);
@@ -209,11 +216,28 @@ export function createTemplates({ db, network, audit, executor, events, automod,
 		job.step = job.status === 'done' ? 'Terminé' : 'Échec';
 		const report = { ...stats, warnings: job.warnings.slice(0, 200), durationMs: job.finishedAt - started };
 		job.report = report;
+		if (source.backupId) {
+			audit.record({
+				actorId: actor.id, source: actor.source ?? 'panel', action: 'backups.restore', guildId, target: String(source.backupId),
+				details: { backup: source.name, mode: mode === 'restore' ? 'restauration complète' : 'réparation', created: stats.created, edited: stats.edited, deleted: stats.deleted, memberRoles: stats.memberRoles, warnings: report.warnings.length },
+			});
+			return;
+		}
 		const mapping = { roles: Object.fromEntries(roles), channels: Object.fromEntries(channels) };
-		q.saveApplication.run({ guildId, templateId: template.id, mapping: JSON.stringify(mapping), mode, status: job.status, report: JSON.stringify(report), at: now(), by: actor.id });
+		q.saveApplication.run({ guildId, templateId: source.templateId, mapping: JSON.stringify(mapping), mode, status: job.status, report: JSON.stringify(report), at: now(), by: actor.id });
 		audit.record({
 			actorId: actor.id, source: actor.source ?? 'panel', action: 'templates.apply', guildId, target: guildId,
-			details: { template: template.name, mode: mode === 'reset' ? 'réinitialisation' : 'réparation', created: stats.created, edited: stats.edited, deleted: stats.deleted, warnings: report.warnings.length },
+			details: { template: source.name, mode: mode === 'reset' ? 'réinitialisation' : 'réparation', created: stats.created, edited: stats.edited, deleted: stats.deleted, warnings: report.warnings.length },
+		});
+	}
+
+	function startJob({ label: name, guildId, mode, actor, source, opts }) {
+		if (job?.status === 'running') throw new ValidationError(`Une tâche est déjà en cours sur ${job.guildName} : attends la fin.`);
+		const guild = network.find(guildId);
+		job = { templateId: source.templateId ?? null, backupId: source.backupId ?? null, templateName: name, guildId, guildName: guild?.name ?? guildId, mode, status: 'running', step: 'Préparation', done: 0, total: 0, warnings: [], startedAt: now(), finishedAt: null, report: null };
+		job.promise = run(source, guildId, mode, actor, opts).catch((error) => {
+			job.status = 'failed';
+			job.warnings.push(error.message);
 		});
 	}
 
@@ -227,6 +251,7 @@ export function createTemplates({ db, network, audit, executor, events, automod,
 		case 'deleteChannel': return `Suppression de l’ancien salon ${op.name}`;
 		case 'settings': return 'Réglages du serveur';
 		case 'rolePositions': return 'Ordre des rôles';
+		case 'memberRoles': return 'Rôles des membres';
 		default: return 'Configuration du panel';
 		}
 	}
@@ -281,9 +306,24 @@ export function createTemplates({ db, network, audit, executor, events, automod,
 		case 'rolePositions':
 			await executor.setRolePositions(guildId, op.keys.map(k => roles.get(k)).filter(Boolean));
 			return;
+		case 'memberRoles': {
+			// Members still on the server get back the roles they had in the backup
+			for (const m of op.members) {
+				const current = await executor.getMemberRoleIds(guildId, m.id).catch(() => null);
+				if (!current) continue;
+				for (const oldId of m.roleIds) {
+					const roleId = roles.get(oldId);
+					if (!roleId || current.includes(roleId)) continue;
+					job.step = `Rôles des membres (${stats.memberRoles})`;
+					const outcome = await executor.addRole(guildId, m.id, roleId, 'Restauration d’une sauvegarde').catch(error => job.warnings.push(`Rôle de ${m.id} : ${error.message}`));
+					if (outcome !== 'not_member') stats.memberRoles++;
+				}
+			}
+			return;
+		}
 		case 'panel': {
 			const ids = new Map([...roles, ...channels]);
-			const toPublish = applyPanel(snapshot.panel, guildId, mode, ids, job.warnings);
+			const toPublish = applyPanel(snapshot.panel, guildId, mode === 'restore' ? 'reset' : mode, ids, job.warnings);
 			for (const panelId of toPublish) {
 				await tickets.publishPanel(SYSTEM, guildId, panelId).catch(error => job.warnings.push(`Panneau de tickets : ${error.message}`));
 			}
@@ -351,12 +391,7 @@ export function createTemplates({ db, network, audit, executor, events, automod,
 			if (mode === 'reset' && String(confirmName).trim().toLowerCase() !== String(guild.name).trim().toLowerCase()) {
 				throw new ValidationError('Tape le nom exact du serveur pour confirmer la réinitialisation.');
 			}
-			if (job?.status === 'running') throw new ValidationError(`Une application est déjà en cours (${job.guildName}) : attends la fin.`);
-			job = { templateId: id, templateName: row.name, guildId, guildName: guild.name, mode, status: 'running', step: 'Préparation', done: 0, total: 0, warnings: [], startedAt: now(), finishedAt: null, report: null };
-			job.promise = run(row, guildId, mode, actor).catch((error) => {
-				job.status = 'failed';
-				job.warnings.push(error.message);
-			});
+			startJob({ label: row.name, guildId, mode, actor, source: { templateId: row.id, name: row.name, snapshot: JSON.parse(row.snapshot) } });
 			return this.job();
 		},
 
@@ -374,5 +409,18 @@ export function createTemplates({ db, network, audit, executor, events, automod,
 		},
 
 		applications: () => q.applications.all().map(toApplication),
+
+		// Photo of a server (structure + panel configuration), used by the backups
+		photo: async guildId => JSON.parse(await takePhoto(guildId)),
+
+		// A backup put back on its own server: same ids, so the correspondence is the identity
+		restoreBackup(actor, { backupId, name, snapshot, guildId, mode, panel = true, memberRoles = null }) {
+			const identity = {
+				roles: Object.fromEntries(snapshot.guild.roles.map(r => [r.id, r.id])),
+				channels: Object.fromEntries(snapshot.guild.channels.map(c => [c.id, c.id])),
+			};
+			startJob({ label: `Sauvegarde : ${name}`, guildId, mode, actor, source: { backupId, name, snapshot }, opts: { mapping: identity, panel, memberRoles } });
+			return this.job();
+		},
 	};
 }

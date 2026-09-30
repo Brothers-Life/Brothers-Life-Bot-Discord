@@ -363,6 +363,9 @@ export function createFakeExecutor() {
 			if (!m) throw new Error('Unknown guild');
 			return m;
 		},
+		async snapshotMemberRoles(guildId) {
+			return [...memberRoles].filter(([key, roles]) => key.startsWith(`${guildId}:`) && roles.length).map(([key, roles]) => ({ id: key.split(':')[1], roleIds: [...roles] }));
+		},
 		async snapshotGuild(guildId) {
 			return structuredClone(this.model(guildId));
 		},

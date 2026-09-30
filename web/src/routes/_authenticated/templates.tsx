@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Camera, CheckCircle2, Hammer, LayoutTemplate, Loader2, Pencil, Plus, RotateCcw, Trash2, XCircle } from 'lucide-react'
+import { Camera, Hammer, LayoutTemplate, Loader2, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import { ago, dateTime, duration } from '@/lib/format'
-import { cn } from '@/lib/utils'
+import { ago } from '@/lib/format'
 import { useMe } from '@/hooks/use-me'
 import { Page, Section, EmptyState, Pill, GuildIcon } from '@/components/app/ui'
 import { ConfirmDialog } from '@/components/confirm-dialog'
@@ -16,6 +15,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
+import { JobCard, type Job, type Report } from '@/features/templates/job-card'
 
 export const Route = createFileRoute('/_authenticated/templates')({
   component: TemplatesPage,
@@ -25,9 +25,7 @@ type Template = {
   id: number; name: string; description: string | null; sourceGuildId: string; sourceName: string; capturedAt: number
   summary: { roles: number; categories: number; channels: number; ticketTypes: number; logRoutes: number; automod: boolean }
 }
-type Report = { created: number; edited: number; deleted: number; warnings: string[]; durationMs: number }
 type Target = { id: string; name: string; icon: string | null; application: { templateId: number | null; mode: 'reset' | 'repair'; status: 'done' | 'failed'; report: Report; appliedAt: number } | null }
-type Job = { templateName: string; guildId: string; guildName: string; mode: 'reset' | 'repair'; status: 'running' | 'done' | 'failed'; step: string; done: number; total: number; warnings: string[]; startedAt: number; finishedAt: number | null; report: Report | null }
 // 1 salon, 2 salons
 const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? 's' : ''}`
 
@@ -140,35 +138,6 @@ function TemplatesPage() {
       {applying && data && <ApplyDialog {...applying} templates={data.templates} onClose={() => setApplying(null)} onStarted={() => { setApplying(null); refresh() }} />}
       <ConfirmDialog open={Boolean(deleting)} onOpenChange={(o) => !o && setDeleting(null)} title={`Supprimer le modèle ${deleting?.name} ?`} desc='Les serveurs déjà construits ne changent pas. Le Discord modèle reste intact.' confirmText='Supprimer' destructive isLoading={remove.isPending} handleConfirm={() => deleting && remove.mutate(deleting)} />
     </Page>
-  )
-}
-
-function JobCard({ job }: { job: Job }) {
-  const [open, setOpen] = useState(false)
-  const pct = job.total ? Math.round((job.done / job.total) * 100) : 0
-  const bar = job.status === 'running' ? 'bg-primary' : job.status === 'done' ? 'bg-success' : 'bg-destructive'
-  return (
-    <section className={cn('grid gap-3 rounded-xl border p-5', job.status === 'failed' ? 'border-destructive/50 bg-destructive/5' : 'bg-card')} aria-live='polite'>
-      <div className='flex flex-wrap items-center gap-2'>
-        {job.status === 'running' ? <Loader2 className='size-5 animate-spin text-primary' /> : job.status === 'done' ? <CheckCircle2 className='size-5 text-success' /> : <XCircle className='size-5 text-destructive' />}
-        <h2 className='font-semibold'>{job.mode === 'reset' ? 'Réinitialisation' : 'Réparation'} de {job.guildName} · modèle {job.templateName}</h2>
-        <span className='ms-auto text-sm tabular-nums text-muted-foreground'>{job.done}/{job.total}</span>
-      </div>
-      <div className='h-2 overflow-hidden rounded-full bg-muted' role='progressbar' aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label='Avancement'>
-        <div className={cn('h-full rounded-full transition-[width] duration-500', bar)} style={{ width: `${job.status === 'running' ? pct : 100}%` }} />
-      </div>
-      <p className='text-sm text-muted-foreground'>
-        {job.status === 'running' ? job.step : job.report ? `${job.report.created} créés · ${job.report.edited} remis comme le modèle · ${job.report.deleted} supprimés · en ${duration(job.report.durationMs)} · ${dateTime(job.finishedAt)}` : job.step}
-      </p>
-      {job.warnings.length > 0 && (
-        <div>
-          <button type='button' className='flex items-center gap-1.5 text-sm text-warning' aria-expanded={open} onClick={() => setOpen(!open)}>
-            <AlertTriangle className='size-4' /> {job.warnings.length} avertissement(s)
-          </button>
-          {open && <ul className='mt-2 max-h-60 list-disc space-y-0.5 overflow-y-auto ps-5 text-sm text-muted-foreground'>{job.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>}
-        </div>
-      )}
-    </section>
   )
 }
 

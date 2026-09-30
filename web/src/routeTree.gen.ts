@@ -16,6 +16,7 @@ import { Route as AuthenticatedAbsencesRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedAntiraidRouteImport } from './routes/_authenticated/antiraid'
 import { Route as AuthenticatedAuditRouteImport } from './routes/_authenticated/audit'
 import { Route as AuthenticatedAutomodRouteImport } from './routes/_authenticated/automod'
+import { Route as AuthenticatedBackupsRouteImport } from './routes/_authenticated/backups'
 import { Route as AuthenticatedChangelogRouteImport } from './routes/_authenticated/changelog'
 import { Route as AuthenticatedCommandsRouteImport } from './routes/_authenticated/commands'
 import { Route as AuthenticatedConsoleRouteImport } from './routes/_authenticated/console'
@@ -80,6 +81,11 @@ const AuthenticatedAuditRoute = AuthenticatedAuditRouteImport.update({
 const AuthenticatedAutomodRoute = AuthenticatedAutomodRouteImport.update({
   id: '/automod',
   path: '/automod',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedBackupsRoute = AuthenticatedBackupsRouteImport.update({
+  id: '/backups',
+  path: '/backups',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedChangelogRoute = AuthenticatedChangelogRouteImport.update({
@@ -250,6 +256,7 @@ export interface FileRoutesByFullPath {
   '/antiraid': typeof AuthenticatedAntiraidRoute
   '/audit': typeof AuthenticatedAuditRoute
   '/automod': typeof AuthenticatedAutomodRoute
+  '/backups': typeof AuthenticatedBackupsRoute
   '/changelog': typeof AuthenticatedChangelogRoute
   '/commands': typeof AuthenticatedCommandsRoute
   '/console': typeof AuthenticatedConsoleRoute
@@ -288,6 +295,7 @@ export interface FileRoutesByTo {
   '/antiraid': typeof AuthenticatedAntiraidRoute
   '/audit': typeof AuthenticatedAuditRoute
   '/automod': typeof AuthenticatedAutomodRoute
+  '/backups': typeof AuthenticatedBackupsRoute
   '/changelog': typeof AuthenticatedChangelogRoute
   '/commands': typeof AuthenticatedCommandsRoute
   '/console': typeof AuthenticatedConsoleRoute
@@ -329,6 +337,7 @@ export interface FileRoutesById {
   '/_authenticated/antiraid': typeof AuthenticatedAntiraidRoute
   '/_authenticated/audit': typeof AuthenticatedAuditRoute
   '/_authenticated/automod': typeof AuthenticatedAutomodRoute
+  '/_authenticated/backups': typeof AuthenticatedBackupsRoute
   '/_authenticated/changelog': typeof AuthenticatedChangelogRoute
   '/_authenticated/commands': typeof AuthenticatedCommandsRoute
   '/_authenticated/console': typeof AuthenticatedConsoleRoute
@@ -371,6 +380,7 @@ export interface FileRouteTypes {
     | '/antiraid'
     | '/audit'
     | '/automod'
+    | '/backups'
     | '/changelog'
     | '/commands'
     | '/console'
@@ -409,6 +419,7 @@ export interface FileRouteTypes {
     | '/antiraid'
     | '/audit'
     | '/automod'
+    | '/backups'
     | '/changelog'
     | '/commands'
     | '/console'
@@ -449,6 +460,7 @@ export interface FileRouteTypes {
     | '/_authenticated/antiraid'
     | '/_authenticated/audit'
     | '/_authenticated/automod'
+    | '/_authenticated/backups'
     | '/_authenticated/changelog'
     | '/_authenticated/commands'
     | '/_authenticated/console'
@@ -537,6 +549,13 @@ declare module '@tanstack/react-router' {
       path: '/automod'
       fullPath: '/automod'
       preLoaderRoute: typeof AuthenticatedAutomodRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/backups': {
+      id: '/_authenticated/backups'
+      path: '/backups'
+      fullPath: '/backups'
+      preLoaderRoute: typeof AuthenticatedBackupsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/changelog': {
@@ -764,6 +783,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAntiraidRoute: typeof AuthenticatedAntiraidRoute
   AuthenticatedAuditRoute: typeof AuthenticatedAuditRoute
   AuthenticatedAutomodRoute: typeof AuthenticatedAutomodRoute
+  AuthenticatedBackupsRoute: typeof AuthenticatedBackupsRoute
   AuthenticatedChangelogRoute: typeof AuthenticatedChangelogRoute
   AuthenticatedCommandsRoute: typeof AuthenticatedCommandsRoute
   AuthenticatedConsoleRoute: typeof AuthenticatedConsoleRoute
@@ -803,6 +823,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAntiraidRoute: AuthenticatedAntiraidRoute,
   AuthenticatedAuditRoute: AuthenticatedAuditRoute,
   AuthenticatedAutomodRoute: AuthenticatedAutomodRoute,
+  AuthenticatedBackupsRoute: AuthenticatedBackupsRoute,
   AuthenticatedChangelogRoute: AuthenticatedChangelogRoute,
   AuthenticatedCommandsRoute: AuthenticatedCommandsRoute,
   AuthenticatedConsoleRoute: AuthenticatedConsoleRoute,

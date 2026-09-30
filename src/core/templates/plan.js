@@ -53,7 +53,7 @@ export function plan(template, target, mapping = { roles: {}, channels: {} }, mo
 	}
 	const everyone = tpl.roles.find(r => r.everyone);
 	if (everyone) ops.push({ op: 'editRole', key: everyone.id, targetId: target.id, name: '@everyone', data: { permissions: everyone.permissions } });
-	if (mode === 'reset') {
+	if (mode === 'reset' || mode === 'restore') {
 		for (const r of candidates) if (!used.has(r.id)) ops.push({ op: 'deleteRole', targetId: r.id, name: r.name });
 	}
 	for (const r of target.roles.filter(x => !x.everyone && !x.managed && x.position >= target.botRolePosition)) {
@@ -68,7 +68,7 @@ export function plan(template, target, mapping = { roles: {}, channels: {} }, mo
 	for (const c of tplChannels) {
 		const data = channelData(c, { community });
 		if (data.type !== c.type) warnings.push(`Salon « ${c.name} » : type réservé aux serveurs Communauté, créé en ${data.type === 'text' ? 'salon texte' : 'salon vocal'}.`);
-		if (mode === 'repair') {
+		if (mode === 'repair' || mode === 'restore') {
 			const mapped = mapping.channels?.[c.id];
 			const parentName = nameOfParent(tpl, c.parentId);
 			const match = target.channels.find(x => x.id === mapped && !usedChannels.has(x.id))
@@ -100,6 +100,11 @@ export function plan(template, target, mapping = { roles: {}, channels: {} }, mo
 		},
 	});
 
+	if (mode === 'restore') {
+		// Channels the backup did not have (a raid, a mistake): removed, children before their categories
+		const extra = target.channels.filter(c => !usedChannels.has(c.id));
+		for (const c of [...extra.filter(x => x.type !== 'category'), ...extra.filter(x => x.type === 'category')]) ops.push({ op: 'deleteChannel', targetId: c.id, name: c.name });
+	}
 	if (mode === 'reset') {
 		// Children before their categories
 		const old = [...target.channels.filter(c => c.type !== 'category'), ...target.channels.filter(c => c.type === 'category')];
