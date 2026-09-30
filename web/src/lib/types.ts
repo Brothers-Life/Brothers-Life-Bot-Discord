@@ -51,7 +51,7 @@ export type PanelMember = {
   ranks: (RankSummary & { via: 'role' | 'direct'; roleId?: string; addedBy?: string; addedAt?: number })[]
 }
 
-export type DiscordUser = { id: string; username: string; globalName: string | null; avatar: string | null }
+export type DiscordUser = { id: string; username: string; globalName: string | null; avatar: string | null; bot?: boolean; banner?: string | null; accentColor?: string | null }
 
 export type Channel = { id: string; name: string; parent: string | null; canSend: boolean; announcement?: boolean }
 
@@ -226,6 +226,11 @@ export type PersonProfile = {
       nickname: string | null
       joinedAt: number
       timeoutUntil: number | null
+      boostingSince?: number | null
+      serverAvatar?: string | null
+      pending?: boolean
+      color?: string | null
+      voice?: { channelId: string; channelName: string | null; muted: boolean; deafened: boolean; streaming: boolean; camera: boolean } | null
       roles: { id: string; name: string; color: string; editable: boolean; linkedToRank: boolean }[]
     } | null
   }[]

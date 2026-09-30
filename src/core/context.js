@@ -8,6 +8,7 @@ import { createSessions } from './sessions.js';
 import { createSanctions } from './sanctions.js';
 import { createSanctionTemplates } from './sanctionTemplates.js';
 import { createMusic } from './music/index.js';
+import { createMemberInsights } from './memberInsights.js';
 import { createRestrictions } from './restrictions.js';
 import { createModeration } from './moderation.js';
 import { createEvents } from './events.js';
@@ -95,6 +96,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const streams = createStreams({ db, network, audit, executor, settings, logs, fetchImpl, logger });
 	const fivem = createFivem({ db, network, audit, executor, settings, logs, fetchImpl, logger });
 	stats.addVariables(async () => fivem.variables());
+	const memberInsights = createMemberInsights({ db, stats, events });
 	const dms = createDms({ db, audit, executor, settings, logs, uploads, logger });
 	const templates = createTemplates({ db, network, audit, executor, events, automod, tickets, logs, settings, logger });
 	const rpEvents = createRpEvents({ db, network, audit, executor, uploads, logger });
@@ -141,5 +143,5 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 		sanctions.syncGuild(guild.id).catch(error => logger.error(`Ban sync failed on ${guild.name}:`, error));
 	});
 
-	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, sanctionTemplates, music, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents };
+	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, sanctionTemplates, music, memberInsights, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents };
 }

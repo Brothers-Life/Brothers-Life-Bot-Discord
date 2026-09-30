@@ -1,7 +1,7 @@
 import { useDeferredValue, useEffect, useRef, useState } from 'react'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Crown, Plus, Search, Users, X } from 'lucide-react'
+import { ArrowLeft, Bot, Crown, Gem, Headphones, Plus, Search, Sparkles, Timer, Users, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, errorMessage } from '@/lib/api'
 import type { PersonProfile, Role } from '@/lib/types'
@@ -9,6 +9,7 @@ import { dateTime, userName } from '@/lib/format'
 import { useMe } from '@/hooks/use-me'
 import { Page, Section, EmptyState, Pill, RankBadge, UserAvatar } from '@/components/app/ui'
 import { TempRoles } from '@/features/people/temp-roles'
+import { MemberInsights, age, snowflakeTime } from '@/features/people/insights'
 import { SanctionDialog } from '@/features/sanctions/sanction-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -40,7 +41,10 @@ function PeoplePage() {
   )
 }
 
-type DirectoryMember = { id: string; username: string; globalName: string | null; nickname: string | null; avatar: string | null; bot: boolean; joinedAt: number | null; guilds: { id: string; name: string }[] }
+type DirectoryMember = {
+  id: string; username: string; globalName: string | null; nickname: string | null; avatar: string | null; bot: boolean; joinedAt: number | null; guilds: { id: string; name: string }[]
+  accountCreatedAt: number | null; boosting?: boolean; inVoice?: boolean; timedOut?: boolean; topRole?: { name: string; color: string | null } | null
+}
 type DirectoryPage = { guilds: { id: string; name: string }[]; items: DirectoryMember[]; total: number; nextOffset: number | null }
 
 function Directory({ onOpen }: { onOpen: (userId: string) => void }) {
@@ -48,20 +52,23 @@ function Directory({ onOpen }: { onOpen: (userId: string) => void }) {
   const q = useDeferredValue(text.trim())
   const [guildId, setGuildId] = useState('all')
   const [bots, setBots] = useState(false)
+  const [filter, setFilter] = useState('all')
   const query = useInfiniteQuery({
-    queryKey: ['people-directory', q, guildId, bots],
+    queryKey: ['people-directory', q, guildId, bots, filter],
     initialPageParam: 0,
     queryFn: ({ pageParam }) => {
       const params = new URLSearchParams({ offset: String(pageParam), limit: '50' })
       if (q) params.set('q', q)
       if (guildId !== 'all') params.set('guildId', guildId)
       if (bots) params.set('bots', 'true')
+      if (filter !== 'all') params.set('filter', filter)
       return api<DirectoryPage>(`/people?${params}`)
     },
     getNextPageParam: (last) => last.nextOffset ?? undefined,
     placeholderData: keepPreviousData,
   })
   const pages = query.data?.pages ?? []
+  const now = query.dataUpdatedAt
   const members = pages.flatMap((p) => p.items)
   const total = pages[0]?.total ?? 0
   const guilds = pages[0]?.guilds ?? []
@@ -97,6 +104,16 @@ function Directory({ onOpen }: { onOpen: (userId: string) => void }) {
               </SelectContent>
             </Select>
           )}
+          <Select value={filter} onValueChange={setFilter}>
+            <SelectTrigger className='w-44' aria-label='Filtre'><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value='all'>Tout le monde</SelectItem>
+              <SelectItem value='voice'>En vocal maintenant</SelectItem>
+              <SelectItem value='boosters'>Boosters</SelectItem>
+              <SelectItem value='new'>Comptes de moins de 30 j</SelectItem>
+              <SelectItem value='timedout'>Exclus (timeout)</SelectItem>
+            </SelectContent>
+          </Select>
           <label className='flex items-center gap-2 text-sm'><Switch checked={bots} onCheckedChange={setBots} /> Bots</label>
         </div>
       }
@@ -116,8 +133,15 @@ function Directory({ onOpen }: { onOpen: (userId: string) => void }) {
                 <button type='button' onClick={() => onOpen(m.id)} className='flex w-full items-center gap-3 px-4 py-2.5 text-start transition-colors hover:bg-accent/40 focus-visible:bg-accent/40 focus-visible:outline-none'>
                   <UserAvatar src={m.avatar} name={name} className='size-9' />
                   <div className='min-w-0 flex-1'>
-                    <div className='flex items-center gap-2 truncate font-medium'>{name}{m.bot && <Pill tone='info'>Bot</Pill>}</div>
-                    <div className='truncate text-xs text-muted-foreground'>@{m.username}{m.joinedAt ? ` · arrivé le ${new Date(m.joinedAt).toLocaleDateString('fr-FR')}` : ''}</div>
+                    <div className='flex items-center gap-1.5 truncate font-medium'>
+                      <span className='truncate' style={m.topRole?.color ? { color: m.topRole.color } : undefined}>{name}</span>
+                      {m.bot && <Pill tone='info'><Bot className='size-3' />Bot</Pill>}
+                      {m.boosting && <Gem className='size-3.5 shrink-0 text-[#f47fff]' aria-label='Booste le serveur' />}
+                      {m.inVoice && <Headphones className='size-3.5 shrink-0 text-success' aria-label='En vocal' />}
+                      {m.timedOut && <Timer className='size-3.5 shrink-0 text-warning' aria-label='En timeout' />}
+                      {m.accountCreatedAt && now - m.accountCreatedAt < 30 * 86_400_000 && <Pill tone='warning'><Sparkles className='size-3' />compte récent</Pill>}
+                    </div>
+                    <div className='truncate text-xs text-muted-foreground'>@{m.username}{m.topRole ? ` · ${m.topRole.name}` : ''}{m.joinedAt ? ` · arrivé le ${new Date(m.joinedAt).toLocaleDateString('fr-FR')}` : ''}{m.accountCreatedAt ? ` · compte de ${age(m.accountCreatedAt, now)}` : ''}</div>
                   </div>
                   {guilds.length > 1 && (
                     <div className='hidden max-w-[40%] flex-wrap justify-end gap-1 sm:flex'>
@@ -142,7 +166,7 @@ function Directory({ onOpen }: { onOpen: (userId: string) => void }) {
 function Profile({ userId }: { userId: string }) {
   const { can } = useMe()
   const [sanctioning, setSanctioning] = useState(false)
-  const { data, isLoading, error } = useQuery({ queryKey: ['person', userId], queryFn: () => api<PersonProfile>(`/people/${userId}`) })
+  const { data, isLoading, error, dataUpdatedAt } = useQuery({ queryKey: ['person', userId], queryFn: () => api<PersonProfile>(`/people/${userId}`) })
 
   if (isLoading) return <Skeleton className='h-64 w-full' />
   if (error) return <p className='text-sm text-destructive'>{errorMessage(error)}</p>
@@ -150,18 +174,30 @@ function Profile({ userId }: { userId: string }) {
 
   const name = data.user ? userName(data.user) : userId
   const presentOn = data.guilds.filter((g) => g.member)
+  const created = snowflakeTime(userId)
+  const boosting = presentOn.filter((g) => g.member?.boostingSince)
+  const inVoice = presentOn.find((g) => g.member?.voice)
 
   return (
-    <div className='grid gap-6'>
-      <div className='flex flex-wrap items-center gap-4 rounded-lg border bg-card p-4'>
-        <UserAvatar src={data.user?.avatar} name={name} className='size-14' />
-        <div className='min-w-0 flex-1'>
+    <div className='grid grid-cols-[minmax(0,1fr)] gap-6'>
+      <div className='overflow-hidden rounded-lg border bg-card'>
+        <div className='h-24 bg-gradient-to-r from-primary/30 via-primary/10 to-transparent sm:h-32' style={data.user?.banner ? { backgroundImage: `url(${data.user.banner})`, backgroundSize: 'cover', backgroundPosition: 'center' } : data.user?.accentColor ? { background: data.user.accentColor } : undefined} aria-hidden />
+      <div className='flex flex-wrap items-end gap-4 px-4 pb-4'>
+        <UserAvatar src={data.user?.avatar} name={name} className='-mt-10 size-20 border-4 border-card' />
+        <div className='min-w-0 flex-1 pt-2'>
           <div className='flex flex-wrap items-center gap-2 text-lg font-semibold'>
             {name}
+            {data.user?.bot && <Pill tone='info'><Bot className='size-3' />Bot</Pill>}
             {data.isOwner && <Pill tone='accent'><Crown className='size-3' />Chef du réseau</Pill>}
             {data.sanctions.banned && <Pill tone='danger'>Banni du réseau</Pill>}
+            {data.sanctions.active.length > 0 && <Pill tone='warning'>{data.sanctions.active.length} sanction{data.sanctions.active.length > 1 ? 's' : ''} en cours</Pill>}
+            {boosting.length > 0 && <Pill tone='accent'><Gem className='size-3' />booste {boosting.map((g) => g.name).join(', ')}</Pill>}
+            {inVoice?.member?.voice && <Pill tone='success'><Headphones className='size-3' />en vocal : {inVoice.member.voice.channelName ?? 'salon'} ({inVoice.name})</Pill>}
           </div>
-          <div className='text-sm text-muted-foreground'>{userId} · présent sur {presentOn.length}/{data.guilds.length} serveur{data.guilds.length > 1 ? 's' : ''}</div>
+          <div className='text-sm text-muted-foreground'>
+            @{data.user?.username ?? '?'} · {userId} · présent sur {presentOn.length}/{data.guilds.length} serveur{data.guilds.length > 1 ? 's' : ''}
+            {created && <> · compte créé le {new Date(created).toLocaleDateString('fr-FR')} (il y a {age(created, dataUpdatedAt)})</>}
+          </div>
           {data.ranks.length > 0 && <div className='mt-2 flex flex-wrap gap-1.5'>{data.ranks.map((r) => <RankBadge key={r.id} name={r.name} color={r.color} />)}</div>}
         </div>
         <div className='flex flex-wrap gap-2'>
@@ -177,8 +213,11 @@ function Profile({ userId }: { userId: string }) {
           )}
         </div>
       </div>
+      </div>
+
 
       {data.guilds.map((guild) => <GuildMembership key={guild.id} userId={userId} guild={guild} />)}
+      <MemberInsights userId={userId} />
       {sanctioning && <SanctionDialog userId={userId} onClose={() => setSanctioning(false)} />}
     </div>
   )
@@ -224,7 +263,13 @@ function GuildMembership({ userId, guild }: { userId: string; guild: PersonProfi
   return (
     <Section
       title={guild.name}
-      description={member ? `Arrivé le ${dateTime(member.joinedAt)}${isFuture(member.timeoutUntil) ? ` · en timeout jusqu’au ${dateTime(member.timeoutUntil)}` : ''}` : 'N’est pas membre de ce serveur.'}
+      description={member ? [
+        `Arrivé le ${dateTime(member.joinedAt)}`,
+        isFuture(member.timeoutUntil) ? `en timeout jusqu’au ${dateTime(member.timeoutUntil)}` : null,
+        member.boostingSince ? `booste depuis le ${new Date(member.boostingSince).toLocaleDateString('fr-FR')}` : null,
+        member.voice ? `en vocal dans ${member.voice.channelName ?? 'un salon'}${member.voice.streaming ? ' (partage d’écran)' : ''}${member.voice.muted ? ' · micro coupé' : ''}` : null,
+        member.pending ? 'n’a pas encore validé les règles du serveur' : null,
+      ].filter(Boolean).join(' · ') : 'N’est pas membre de ce serveur.'}
       actions={guild.isMain ? <Pill tone='accent'><Crown className='size-3' />Principal</Pill> : undefined}
     >
       {member && (

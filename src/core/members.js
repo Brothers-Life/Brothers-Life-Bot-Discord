@@ -1,4 +1,7 @@
 import { ForbiddenError, ValidationError } from './errors.js';
+import { snowflakeTime } from './memberInsights.js';
+
+const NEW_ACCOUNT_MS = 30 * 86_400_000;
 
 // Looking up and editing members across the network (roles, nickname)
 export function createMembers({ db, network, ranks, sanctions, audit, executor }) {
@@ -76,7 +79,8 @@ export function createMembers({ db, network, ranks, sanctions, audit, executor }
 		},
 
 		// Everyone on the network, one entry per person, sorted by name; `q` matches anywhere in a name or the ID
-		async directory({ q = '', guildId = null, bots = false, offset = 0, limit = 50 } = {}) {
+		// filter: boosters, voice (in a voice channel now), new (account under 30 days), timedout
+		async directory({ q = '', guildId = null, bots = false, filter = null, offset = 0, limit = 50 } = {}) {
 			const active = network.list().filter(g => g.status === 'active' && g.botPresent);
 			const guilds = active.filter(g => !guildId || g.id === guildId);
 			const lists = await Promise.all(guilds.map(g => executor.listMembers(g.id).then(list => [g, list]).catch(() => [g, []])));
@@ -84,8 +88,12 @@ export function createMembers({ db, network, ranks, sanctions, audit, executor }
 			for (const [guild, list] of lists) {
 				for (const member of list) {
 					if (member.bot && !bots) continue;
-					const entry = people.get(member.id) ?? { ...member, guilds: [] };
+					const entry = people.get(member.id) ?? { ...member, accountCreatedAt: snowflakeTime(member.id), guilds: [] };
 					entry.nickname ??= member.nickname;
+					entry.boosting ||= Boolean(member.boosting);
+					entry.inVoice ||= Boolean(member.inVoice);
+					entry.timedOut ||= Boolean(member.timedOut);
+					entry.topRole ??= member.topRole ?? null;
 					entry.guilds.push({ id: guild.id, name: guild.name });
 					people.set(member.id, entry);
 				}
@@ -94,13 +102,18 @@ export function createMembers({ db, network, ranks, sanctions, audit, executor }
 			const nameOf = (m) => (m.nickname || m.globalName || m.username || '').toLowerCase();
 			const all = [...people.values()]
 				.filter(m => !text || m.id === text || [m.username, m.globalName, m.nickname].some(n => n?.toLowerCase().includes(text)))
+				.filter(m => !filter
+					|| (filter === 'boosters' && m.boosting)
+					|| (filter === 'voice' && m.inVoice)
+					|| (filter === 'timedout' && m.timedOut)
+					|| (filter === 'new' && Date.now() - (m.accountCreatedAt ?? 0) < NEW_ACCOUNT_MS))
 				.sort((a, b) => nameOf(a).localeCompare(nameOf(b), 'fr') || a.id.localeCompare(b.id));
 			const items = all.slice(offset, offset + limit);
 			return { guilds: active.map(g => ({ id: g.id, name: g.name })), items, total: all.length, nextOffset: offset + items.length < all.length ? offset + items.length : null };
 		},
 
 		async lookup(userId) {
-			const user = await executor.getUser(userId);
+			const user = (await executor.getUserProfile?.(userId)) ?? await executor.getUser(userId);
 			const principal = await ranks.resolve(userId);
 			const guilds = [];
 			for (const guild of network.list().filter(g => g.status === 'active' && g.botPresent)) {

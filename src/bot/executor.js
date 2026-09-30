@@ -1036,6 +1036,10 @@ export function createExecutor(client) {
 				avatar: m.displayAvatarURL({ size: 64 }),
 				bot: m.user.bot,
 				joinedAt: m.joinedTimestamp,
+				boosting: Boolean(m.premiumSinceTimestamp),
+				inVoice: Boolean(m.voice?.channelId),
+				timedOut: Boolean(m.communicationDisabledUntilTimestamp && m.communicationDisabledUntilTimestamp > Date.now()),
+				topRole: m.roles.highest && m.roles.highest.id !== guild.id ? { name: m.roles.highest.name, color: m.roles.highest.hexColor !== '#000000' ? m.roles.highest.hexColor : null } : null,
 			}));
 		},
 
@@ -1060,6 +1064,18 @@ export function createExecutor(client) {
 				nickname: member.nickname,
 				joinedAt: member.joinedTimestamp,
 				timeoutUntil: member.communicationDisabledUntilTimestamp ?? null,
+				boostingSince: member.premiumSinceTimestamp ?? null,
+				serverAvatar: member.avatar ? member.displayAvatarURL({ size: 128 }) : null,
+				pending: Boolean(member.pending),
+				color: member.displayHexColor !== '#000000' ? member.displayHexColor : null,
+				voice: member.voice?.channelId ? {
+					channelId: member.voice.channelId,
+					channelName: member.voice.channel?.name ?? null,
+					muted: Boolean(member.voice.mute),
+					deafened: Boolean(member.voice.deaf),
+					streaming: Boolean(member.voice.streaming),
+					camera: Boolean(member.voice.selfVideo),
+				} : null,
 				roles: [...member.roles.cache.values()]
 					.filter(r => r.id !== guildId)
 					.sort((a, b) => b.position - a.position)
@@ -1119,6 +1135,20 @@ export function createExecutor(client) {
 			try {
 				const user = await client.users.fetch(userId);
 				return { id: user.id, username: user.username, globalName: user.globalName, avatar: user.displayAvatarURL({ size: 64 }) };
+			}
+			catch {
+				return null;
+			}
+		},
+
+		// Full profile (banner and accent color need a forced fetch)
+		async getUserProfile(userId) {
+			try {
+				const user = await client.users.fetch(userId, { force: true });
+				return {
+					id: user.id, username: user.username, globalName: user.globalName, bot: user.bot,
+					avatar: user.displayAvatarURL({ size: 256 }), banner: user.bannerURL({ size: 1024 }) ?? null, accentColor: user.hexAccentColor ?? null,
+				};
 			}
 			catch {
 				return null;

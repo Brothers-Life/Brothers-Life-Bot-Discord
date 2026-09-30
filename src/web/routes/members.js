@@ -1,4 +1,4 @@
-import { snowflake } from './helpers.js';
+import { resolveNames, snowflake } from './helpers.js';
 
 const personParams = { type: 'object', properties: { userId: snowflake, guildId: snowflake }, required: ['userId'] };
 
@@ -21,6 +21,7 @@ export function registerMemberRoutes(app, { core }) {
 					q: { type: 'string', maxLength: 100 },
 					guildId: snowflake,
 					bots: { type: 'boolean' },
+					filter: { type: 'string', enum: ['boosters', 'voice', 'new', 'timedout'] },
 					offset: { type: 'integer', minimum: 0 },
 					limit: { type: 'integer', minimum: 1, maximum: 100 },
 				},
@@ -30,6 +31,31 @@ export function registerMemberRoutes(app, { core }) {
 
 	app.get('/api/people/:userId', { config: { permission: 'members.view' }, schema: { params: personParams } }, async (request) => {
 		return members.lookup(request.params.userId);
+	});
+
+	// Activity, invitations, tickets, applications, name history, recent events
+	app.get('/api/people/:userId/insights', { config: { permission: 'members.view' }, schema: { params: personParams } }, async (request) => {
+		const data = await core.memberInsights.of(request.params.userId);
+		const people = await resolveNames(executor, [...data.invites.invitedBy.map(i => i.inviterId), ...data.timeline.map(e => e.actorId)]);
+		const guildIds = [...new Set(data.activity.topChannels.map(c => c.guildId))];
+		const channels = new Map();
+		for (const id of guildIds) {
+			const [text, voice] = await Promise.all([executor.listTextChannels(id).catch(() => []), executor.listVoiceChannels(id).catch(() => [])]);
+			for (const c of [...text, ...voice]) channels.set(c.id, c.name);
+		}
+		const guildName = (id) => core.network.find(id)?.name ?? id;
+		return {
+			...data,
+			activity: {
+				...data.activity,
+				byGuild: data.activity.byGuild.map(g => ({ ...g, guildName: guildName(g.guildId) })),
+				topChannels: data.activity.topChannels.map(c => ({ ...c, name: channels.get(c.channelId) ?? null, guildName: guildName(c.guildId) })),
+			},
+			invites: { ...data.invites, invitedBy: data.invites.invitedBy.map(i => ({ ...i, guildName: guildName(i.guildId), inviter: people.get(i.inviterId) ?? null })) },
+			tickets: { ...data.tickets, last: data.tickets.last.map(t => ({ ...t, guildName: guildName(t.guildId) })) },
+			names: data.names.map(n => ({ ...n, guildName: guildName(n.guildId) })),
+			timeline: data.timeline.map(e => ({ ...e, guildName: guildName(e.guildId), actor: e.actorId ? people.get(e.actorId) ?? null : null })),
+		};
 	});
 
 	app.post('/api/people/:userId/guilds/:guildId/roles', {
