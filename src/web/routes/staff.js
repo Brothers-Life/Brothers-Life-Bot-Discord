@@ -34,6 +34,10 @@ export function registerStaffRoutes(app, { core }) {
 	app.put('/api/recruitment/:guildId/positions', { config: { permission: 'recruitment.manage' }, schema: { params: guildParam, body: { type: 'object' } } }, async (request) => {
 		return recruitment.savePosition(request.actor, request.params.guildId, request.body);
 	});
+	app.post('/api/recruitment/positions/:id/open', {
+		config: { permission: 'recruitment.manage' },
+		schema: { params: idParam, body: { type: 'object', required: ['open'], properties: { open: { type: 'boolean' } } } },
+	}, async (request) => recruitment.setOpen(request.actor, request.params.id, request.body.open));
 	app.delete('/api/recruitment/positions/:id', { config: { permission: 'recruitment.manage', confirm: true }, schema: { params: idParam } }, async (request) => {
 		recruitment.deletePosition(request.actor, request.params.id);
 		return { ok: true };

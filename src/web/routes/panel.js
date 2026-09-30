@@ -93,6 +93,8 @@ export function registerPanelRoutes(app, { core, runtime }) {
 			level: { type: 'integer', minimum: 0, maximum: 100 },
 			color: { type: ['string', 'null'] },
 			permissions: { type: 'array', items: { type: 'string' }, maxItems: 200 },
+			inherit: { type: 'boolean' },
+			syncRoles: { type: 'boolean' },
 		},
 		additionalProperties: false,
 	};
@@ -115,6 +117,21 @@ export function registerPanelRoutes(app, { core, runtime }) {
 
 	app.patch('/api/ranks/:id', { config: { permission: 'ranks.manage' }, schema: { params: rankIdParam, body: rankBody } }, async (request) => {
 		return ranks.update(request.actor, request.params.id, request.body);
+	});
+
+	app.post('/api/ranks/:id/duplicate', {
+		config: { permission: 'ranks.manage' },
+		schema: { params: rankIdParam, body: { type: 'object', properties: { name: { type: 'string', maxLength: 50 }, level: { type: 'integer', minimum: 0, maximum: 100 } } } },
+	}, async (request, reply) => {
+		reply.code(201);
+		return ranks.duplicate(request.actor, request.params.id, request.body ?? {});
+	});
+
+	// The rank's role copied (created if needed) and linked on every other server
+	app.post('/api/ranks/:id/copy-role', { config: { permission: 'ranks.manage' }, schema: { params: rankIdParam } }, async (request) => {
+		const result = await core.staffSync.copyRoleToNetwork(request.actor, request.params.id);
+		core.staffSync.syncAll().catch(() => null);
+		return result;
 	});
 
 	app.delete('/api/ranks/:id', { config: { permission: 'ranks.manage', confirm: true }, schema: { params: rankIdParam } }, async (request) => {

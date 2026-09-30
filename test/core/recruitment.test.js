@@ -107,3 +107,14 @@ test('absences: pending then approved by a higher rank, applied then ended autom
 	assert.ok(!executor.memberRoles.get(`${MAIN}:${BOB}`).includes('800000000000000066'));
 	assert.match(executor.messages.at(-1).payload.content, /de retour/);
 });
+
+test('a position can be closed and reopened in one click; its Discord panel follows', async () => {
+	const { recruitment, owner } = await setup();
+	const position = recruitment.savePosition(owner, MAIN, { name: 'Helper', panelChannelId: '610000000000000008' });
+	await recruitment.publishPanel(owner, MAIN, '610000000000000008');
+	const closed = await recruitment.setOpen(owner, position.id, false);
+	assert.equal(closed.config.open, false);
+	await assert.rejects(recruitment.startApplication(position.id, CANDIDATE, MAIN), /fermées/);
+	assert.equal((await recruitment.setOpen(owner, position.id, true)).config.open, true);
+	await recruitment.startApplication(position.id, CANDIDATE, MAIN);
+});

@@ -229,10 +229,20 @@ function Positions({ data, guildId }: { data: Payload; guildId: string }) {
   const refresh = () => qc.invalidateQueries({ queryKey: ['recruitment', guildId] })
   const panel = useMutation({ mutationFn: (channelId: string) => api(`/recruitment/${guildId}/panel`, { method: 'POST', body: { channelId } }), onSuccess: () => { toast.success('Panneau publié'); refresh() } })
   const remove = useMutation({ mutationFn: (p: Position) => api(`/recruitment/positions/${p.id}`, { method: 'DELETE', body: { confirm: true } }), onSuccess: () => { toast.success('Poste supprimé'); setDeleting(null); refresh() } })
+  const setOpen = useMutation({
+    mutationFn: async ({ list, open }: { list: Position[]; open: boolean }) => { for (const p of list) await api(`/recruitment/positions/${p.id}/open`, { method: 'POST', body: { open } }) },
+    onSuccess: (_, v) => { toast.success(v.list.length > 1 ? (v.open ? 'Toutes les candidatures sont ouvertes' : 'Toutes les candidatures sont fermées') : (v.open ? `Candidatures ouvertes : ${v.list[0].name}` : `Candidatures fermées : ${v.list[0].name}`)); refresh() },
+  })
   const panelChannels = [...new Set(data.positions.map((p) => p.panelChannelId).filter(Boolean))] as string[]
   return (
     <div className='grid gap-6'>
-      <Section title='Postes' actions={manage && <Button size='sm' onClick={() => setEditing(EMPTY_POSITION)}><Plus /> Poste</Button>}>
+      <Section title='Postes' actions={manage && (
+        <div className='flex flex-wrap gap-2'>
+          {data.positions.length > 1 && <Button size='sm' variant='success-outline' loading={setOpen.isPending && setOpen.variables?.open === true} onClick={() => setOpen.mutate({ list: data.positions.filter((p) => !p.config.open), open: true })} disabled={data.positions.every((p) => p.config.open)}>Tout ouvrir</Button>}
+          {data.positions.length > 1 && <Button size='sm' variant='danger-outline' loading={setOpen.isPending && setOpen.variables?.open === false} onClick={() => setOpen.mutate({ list: data.positions.filter((p) => p.config.open), open: false })} disabled={data.positions.every((p) => !p.config.open)}>Tout fermer</Button>}
+          <Button size='sm' onClick={() => setEditing(EMPTY_POSITION)}><Plus /> Poste</Button>
+        </div>
+      )}>
         {!data.positions.length ? <EmptyState title='Aucun poste'>Crée par exemple « Modérateur », « Helper » ou « Développeur ».</EmptyState> : (
           <ul className='divide-y'>
             {data.positions.map((p) => (
@@ -242,7 +252,11 @@ function Positions({ data, guildId }: { data: Payload; guildId: string }) {
                   <div className='text-xs text-muted-foreground'>{p.config.form.steps.reduce((n, s) => n + s.questions.length, 0)} questions · {data.applications.filter((a) => a.positionId === p.id).length} candidature(s)</div>
                 </div>
                 {manage && (
-                  <div className='flex gap-2'>
+                  <div className='flex items-center gap-2'>
+                    <label className='flex items-center gap-2 text-sm'>
+                      <Switch checked={p.config.open} disabled={setOpen.isPending} onCheckedChange={(open) => setOpen.mutate({ list: [p], open })} aria-label={`Candidatures ${p.name}`} />
+                      <span className='hidden sm:inline'>{p.config.open ? 'Ouvert' : 'Fermé'}</span>
+                    </label>
                     <Button size='sm' variant='outline' onClick={() => setEditing(p)}>Modifier</Button>
                     <Button size='sm' variant='danger-ghost' onClick={() => setDeleting(p)}><Trash2 /></Button>
                   </div>

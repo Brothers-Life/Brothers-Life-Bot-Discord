@@ -13,8 +13,9 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 		get: db.prepare('SELECT * FROM ranks WHERE id = ?'),
 		perms: db.prepare('SELECT permission FROM rank_permissions WHERE rank_id = ? ORDER BY permission'),
 		roles: db.prepare('SELECT guild_id, role_id FROM rank_roles WHERE rank_id = ?'),
-		insert: db.prepare('INSERT INTO ranks (name, level, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'),
-		update: db.prepare('UPDATE ranks SET name = ?, level = ?, color = ?, updated_at = ? WHERE id = ?'),
+		insert: db.prepare('INSERT INTO ranks (name, level, color, inherit, sync_roles, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'),
+		update: db.prepare('UPDATE ranks SET name = ?, level = ?, color = ?, inherit = ?, sync_roles = ?, updated_at = ? WHERE id = ?'),
+		lower: db.prepare('SELECT id, name FROM ranks WHERE level < ? ORDER BY level DESC'),
 		delete: db.prepare('DELETE FROM ranks WHERE id = ?'),
 		clearPerms: db.prepare('DELETE FROM rank_permissions WHERE rank_id = ?'),
 		addPerm: db.prepare('INSERT INTO rank_permissions (rank_id, permission) VALUES (?, ?)'),
@@ -27,13 +28,34 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 		unassign: db.prepare('DELETE FROM user_ranks WHERE discord_id = ? AND rank_id = ?'),
 	};
 
+	// Permissions a rank gets from the ranks below it (when it inherits): [{ permission, from }]
+	function inheritedOf(row, own) {
+		if (!row.inherit) return [];
+		const seen = new Set(own);
+		const out = [];
+		for (const lower of q.lower.all(row.level)) {
+			for (const { permission } of q.perms.all(lower.id)) {
+				if (seen.has(permission)) continue;
+				seen.add(permission);
+				out.push({ permission, from: lower.name });
+			}
+		}
+		return out;
+	}
+
 	function hydrate(row) {
+		const own = q.perms.all(row.id).map(r => r.permission);
+		const inherited = inheritedOf(row, own);
 		return {
 			id: row.id,
 			name: row.name,
 			level: row.level,
 			color: row.color,
-			permissions: q.perms.all(row.id).map(r => r.permission),
+			inherit: Boolean(row.inherit),
+			syncRoles: Boolean(row.sync_roles),
+			permissions: own,
+			inherited,
+			effectivePermissions: [...own, ...inherited.map(i => i.permission)],
 			roles: q.roles.all(row.id).map(r => ({ guildId: r.guild_id, roleId: r.role_id })),
 			createdAt: row.created_at,
 			updatedAt: row.updated_at,
@@ -129,7 +151,7 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 			const principal = createPrincipal({
 				id: userId,
 				level: Math.max(0, ...userRanks.map(r => r.level)),
-				permissions: userRanks.flatMap(r => r.permissions),
+				permissions: userRanks.flatMap(r => r.effectivePermissions),
 				ranks: userRanks.map(({ id, name, level, color }) => ({ id, name, level, color })),
 			});
 			cache.set(userId, { at: now(), principal });
@@ -138,16 +160,18 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 
 		invalidate,
 
-		create(actor, { name, level, color = null, permissions = [] }) {
+		create(actor, { name, level, color = null, permissions = [], inherit = false, syncRoles = true }) {
 			requirePermission(actor, 'ranks.manage');
 			validate({ name, level, color, permissions });
 			requireBelow(actor, level);
 			requireHeld(actor, permissions);
 			assertUniqueName(name);
+			// What it would inherit must also be something the actor could give
+			if (inherit) requireHeld(actor, inheritedOf({ inherit: 1, level }, permissions).map(i => i.permission));
 
 			const id = db.transaction(() => {
 				const at = now();
-				const { lastInsertRowid } = q.insert.run(name.trim(), level, color, at, at);
+				const { lastInsertRowid } = q.insert.run(name.trim(), level, color, inherit ? 1 : 0, syncRoles ? 1 : 0, at, at);
 				for (const permission of new Set(permissions)) q.addPerm.run(lastInsertRowid, permission);
 				return Number(lastInsertRowid);
 			})();
@@ -172,12 +196,19 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 				removed = rank.permissions.filter(p => !next.has(p));
 				requireHeld(actor, [...added, ...removed]);
 			}
+			const inherit = patch.inherit !== undefined ? Boolean(patch.inherit) : rank.inherit;
+			const syncRoles = patch.syncRoles !== undefined ? Boolean(patch.syncRoles) : rank.syncRoles;
+			if (inherit && (!rank.inherit || patch.level !== undefined)) {
+				requireHeld(actor, inheritedOf({ inherit: 1, level: patch.level ?? rank.level }, patch.permissions ?? rank.permissions).map(i => i.permission));
+			}
 
 			db.transaction(() => {
 				q.update.run(
 					patch.name?.trim() ?? rank.name,
 					patch.level ?? rank.level,
 					patch.color !== undefined ? patch.color : rank.color,
+					inherit ? 1 : 0,
+					syncRoles ? 1 : 0,
 					now(),
 					id,
 				);
@@ -195,8 +226,18 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 				...(patch.level !== undefined && patch.level !== rank.level ? { level: [rank.level, patch.level] } : {}),
 				...(added.length ? { added } : {}),
 				...(removed.length ? { removed } : {}),
+				...(inherit !== rank.inherit ? { inherit } : {}),
+				...(syncRoles !== rank.syncRoles ? { syncRoles } : {}),
 			});
 			return updated;
+		},
+
+		// Same permissions and options under a new name (no Discord role linked)
+		duplicate(actor, id, { name, level } = {}) {
+			const rank = getOrThrow(id);
+			let copyName = String(name ?? '').trim() || `${rank.name} (copie)`;
+			for (let i = 2; !name && q.byName.get(copyName, -1); i++) copyName = `${rank.name} (copie ${i})`;
+			return service.create(actor, { name: copyName.slice(0, 50), level: level ?? Math.max(0, rank.level - 1), color: rank.color, permissions: rank.permissions, inherit: rank.inherit, syncRoles: rank.syncRoles });
 		},
 
 		remove(actor, id) {

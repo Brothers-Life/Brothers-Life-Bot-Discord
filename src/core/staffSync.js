@@ -18,16 +18,18 @@ export function createStaffSync({ db, network, ranks, audit, executor, logs, log
 		return network.activeIds().filter(id => id !== mainId);
 	}
 
-	function linksOf(guildId) {
+	function linksOf(guildId, { syncedOnly = false } = {}) {
 		const map = new Map();
+		const skipped = syncedOnly ? new Set(ranks.list().filter(r => !r.syncRoles).map(r => r.id)) : new Set();
 		for (const { rank_id: rankId, role_id: roleId } of q.linksOf.all(guildId)) {
+			if (skipped.has(rankId)) continue;
 			map.set(rankId, [...(map.get(rankId) ?? []), roleId]);
 		}
 		return map;
 	}
 
 	async function syncMember(guildId, userId, { reason = 'Synchronisation du staff' } = {}) {
-		const links = linksOf(guildId);
+		const links = linksOf(guildId, { syncedOnly: true });
 		if (!links.size) return null;
 		const current = await executor.getMemberRoleIds(guildId, userId);
 		if (!current) return null;
@@ -98,6 +100,49 @@ export function createStaffSync({ db, network, ranks, audit, executor, logs, log
 			return linksOf(guildId);
 		},
 
+		// Copy of the rank's role (from the main server) on every other server that has none: created if missing
+		// (same name, color, display), then linked. Its Discord permissions are copied only if they are harmless.
+		async copyRoleToNetwork(actor, rankId) {
+			if (!actor.can('ranks.manage')) throw new ForbiddenError('Permission manquante : ranks.manage');
+			const rank = ranks.get(rankId);
+			if (!actor.isOwner && rank.level >= actor.level) throw new ForbiddenError('Tu ne peux gérer que des rangs de niveau inférieur au tien.');
+			const mainId = network.getMainId();
+			if (!mainId) throw new ValidationError('Choisis d’abord le serveur principal.');
+			const sourceId = linksOf(mainId).get(rankId)?.[0];
+			if (!sourceId) throw new ValidationError('Lie d’abord ce rang à un rôle du serveur principal.');
+			const source = (await executor.listRoles(mainId)).find(r => r.id === sourceId);
+			if (!source) throw new ValidationError('Le rôle du serveur principal n’existe plus.');
+			const copyPermissions = !source.dangerous || actor.isOwner;
+			const results = [];
+			for (const guildId of satelliteIds()) {
+				const guild = network.find(guildId);
+				if (!guild?.botPresent) continue;
+				if (linksOf(guildId).get(rankId)?.length) {
+					results.push({ guildId, name: guild.name, status: 'already' });
+					continue;
+				}
+				try {
+					const roles = await executor.listRoles(guildId);
+					let role = roles.find(r => r.name.toLowerCase() === source.name.toLowerCase());
+					let status = 'linked';
+					if (!role) {
+						const id = await executor.createRole(guildId, { name: source.name, color: source.color, hoist: false, mentionable: false, permissions: copyPermissions ? source.permissions ?? '0' : '0' });
+						role = { id, editable: true, dangerous: copyPermissions && source.dangerous };
+						status = 'created';
+					}
+					if (!role.editable) throw new Error(`le rôle ${source.name} est au-dessus du bot`);
+					if (role.dangerous && !actor.isOwner) throw new Error(`le rôle ${source.name} a des permissions de modération : seul le chef du réseau peut le lier`);
+					db.transaction(() => q.add.run(rankId, guildId, role.id))();
+					results.push({ guildId, name: guild.name, status, roleId: role.id });
+				}
+				catch (error) {
+					results.push({ guildId, name: guild.name, status: 'error', error: error.message });
+				}
+			}
+			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'staff_sync.copy_role', target: String(rankId), details: { rank: rank.name, role: source.name, servers: results.filter(r => r.status === 'created' || r.status === 'linked').length, permissions: copyPermissions ? 'copiées' : 'aucune (rôle sensible)' } });
+			return { results, copiedPermissions: copyPermissions };
+		},
+
 		// One member, every server (e.g. their roles changed on the main server)
 		async syncUser(userId) {
 			const results = {};
@@ -116,7 +161,7 @@ export function createStaffSync({ db, network, ranks, audit, executor, logs, log
 
 			let changed = 0;
 			for (const guildId of satelliteIds()) {
-				const links = linksOf(guildId);
+				const links = linksOf(guildId, { syncedOnly: true });
 				if (!links.size) continue;
 				const people = new Set(holders);
 				for (const m of await executor.listMembersWithAnyRole(guildId, [...links.values()].flat())) people.add(m.id);

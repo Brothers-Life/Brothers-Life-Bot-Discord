@@ -180,6 +180,19 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 			return getPosition(id);
 		},
 
+		// Applications open or closed in one click; the Discord panel follows (button greyed out, 🔴 fermé)
+		async setOpen(actor, id, open) {
+			need(actor, 'recruitment.manage');
+			const p = getPosition(id);
+			q.updatePosition.run(p.name, p.description, JSON.stringify({ ...p.config, open: Boolean(open) }), p.panelChannelId, id);
+			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: open ? 'recruitment.open' : 'recruitment.close', guildId: p.guildId, target: String(id), details: { name: p.name } });
+			if (p.panelChannelId && p.panelMessageId) {
+				const positions = service.positions(p.guildId).filter(x => x.panelChannelId === p.panelChannelId);
+				await executor.publishRecruitmentPanel(p.panelChannelId, p.panelMessageId, positions).catch(error => logger.warn('Recruitment panel refresh failed:', error.message));
+			}
+			return getPosition(id);
+		},
+
 		deletePosition(actor, id) {
 			need(actor, 'recruitment.manage');
 			const p = getPosition(id);

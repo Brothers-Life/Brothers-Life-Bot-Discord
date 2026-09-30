@@ -24,6 +24,10 @@ export type Permission = { key: string; label: string; category: string }
 
 export type Rank = RankSummary & {
   permissions: string[]
+  inherit: boolean
+  syncRoles: boolean
+  inherited: { permission: string; from: string }[]
+  effectivePermissions: string[]
   roles: { guildId: string; roleId: string }[]
   createdAt: number
   updatedAt: number
