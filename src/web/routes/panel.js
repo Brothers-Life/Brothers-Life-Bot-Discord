@@ -11,6 +11,13 @@ const confirmBody = { type: 'object', properties: { confirm: { type: 'boolean' }
 export function registerPanelRoutes(app, { core, runtime }) {
 	const { network, ranks, logs, audit, sessions, executor } = core;
 
+	// Audit entries only store IDs: add the Discord name of each author for display
+	async function withActorNames(entries) {
+		const ids = [...new Set(entries.map(e => e.actorId).filter(id => /^\d{17,20}$/.test(id)))];
+		const users = new Map(await Promise.all(ids.map(async id => [id, await executor.getUser(id)])));
+		return entries.map(e => ({ ...e, actorName: users.get(e.actorId)?.globalName ?? users.get(e.actorId)?.username ?? null }));
+	}
+
 	// --- Identity & overview ---------------------------------------------------------------
 	app.get('/api/me', { config: { permission: null } }, async (request) => {
 		const { actor, session } = request;
@@ -36,7 +43,7 @@ export function registerPanelRoutes(app, { core, runtime }) {
 				removed: guilds.filter(g => g.status === 'removed').length,
 			},
 			ranks: ranks.list().length,
-			recent: request.actor.can('audit.view') ? audit.query({ limit: 8 }) : null,
+			recent: request.actor.can('audit.view') ? await withActorNames(audit.query({ limit: 8 })) : null,
 		};
 	});
 
@@ -194,7 +201,7 @@ export function registerPanelRoutes(app, { core, runtime }) {
 			},
 		},
 	}, async (request) => {
-		return audit.query(request.query);
+		return withActorNames(audit.query(request.query));
 	});
 
 	// --- Sessions ----------------------------------------------------------------------------

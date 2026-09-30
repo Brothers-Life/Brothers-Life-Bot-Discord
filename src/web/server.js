@@ -40,7 +40,6 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 		logger: false,
 		trustProxy: false,
 		bodyLimit: 256 * 1024,
-		disableRequestLogging: true,
 	});
 
 	app.setErrorHandler(errorHandler(logger));

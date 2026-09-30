@@ -54,7 +54,8 @@ ipc.on('shutdown', () => shutdown(0));
 async function main() {
 	logger.info(`Brothers Life bot v${pkg.version} (${config.ENV})`);
 	if (!await startupChecks(config)) {
-		process.exitCode = 1;
+		// Explicit exit: under launcher.js the IPC channel would keep the process alive
+		await shutdown(1);
 		return;
 	}
 	scheduleLogCleanup();

@@ -38,7 +38,7 @@ export function createFakeExecutor() {
 			return channel && channel.guildId === guildId ? { id: channelId, ...channel } : null;
 		},
 		async listTextChannels(guildId) {
-			return [...channels].filter(([, c]) => c.guildId === guildId).map(([id, c]) => ({ id, ...c }));
+			return [...channels].filter(([, c]) => c.guildId === guildId).map(([id, c]) => ({ id, parent: null, canSend: true, ...c }));
 		},
 		async listRoles() {
 			return [];

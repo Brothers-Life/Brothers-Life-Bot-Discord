@@ -43,3 +43,6 @@ Thumbs.db
 
 # Nodemon / temp
 *.tmp
+
+# Local browser checks
+.playwright-mcp/

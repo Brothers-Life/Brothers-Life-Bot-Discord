@@ -1,0 +1,114 @@
+/*
+ * Brothers Life panel — night-shift moderation console.
+ * Deep navy surfaces, one brass accent (the "staff badge"), status colors kept for status only.
+ */
+:root {
+  --radius: 0.5rem;
+  --background: #f5f6f9;
+  --foreground: #121826;
+  --card: #ffffff;
+  --card-foreground: #121826;
+  --popover: #ffffff;
+  --popover-foreground: #121826;
+  --primary: #9a6a14;
+  --primary-foreground: #ffffff;
+  --secondary: #e9ecf2;
+  --secondary-foreground: #1d2436;
+  --muted: #eceff4;
+  --muted-foreground: #5b6479;
+  --accent: #e9ecf2;
+  --accent-foreground: #1d2436;
+  --destructive: #c9303a;
+  --success: #1f8a5c;
+  --warning: #9a6a14;
+  --border: #dde1ea;
+  --input: #d3d8e3;
+  --ring: #b8862f;
+
+  --sidebar: #eceff4;
+  --sidebar-foreground: #1d2436;
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: #dfe3eb;
+  --sidebar-accent-foreground: #121826;
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+
+  --console: #0b101b;
+  --console-foreground: #cfd6e4;
+}
+
+.dark {
+  --background: #0f1422;
+  --foreground: #e4e8f1;
+  --card: #161c2d;
+  --card-foreground: #e4e8f1;
+  --popover: #1a2134;
+  --popover-foreground: #e4e8f1;
+  --primary: #d6a249;
+  --primary-foreground: #1a1406;
+  --secondary: #1f2739;
+  --secondary-foreground: #e4e8f1;
+  --muted: #1c2335;
+  --muted-foreground: #8f99ae;
+  --accent: #222b40;
+  --accent-foreground: #e4e8f1;
+  --destructive: #e5484d;
+  --success: #3ccb8a;
+  --warning: #e5b25d;
+  --border: #263048;
+  --input: #2c3752;
+  --ring: #d6a249;
+
+  --sidebar: #0c111d;
+  --sidebar-foreground: #c9d0de;
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: #1a2134;
+  --sidebar-accent-foreground: #f2f4f8;
+  --sidebar-border: #1c2438;
+  --sidebar-ring: var(--ring);
+
+  --console: #080c15;
+  --console-foreground: #cfd6e4;
+}
+
+@theme inline {
+  --font-sans: 'Instrument Sans Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-console: var(--console);
+  --color-console-foreground: var(--console-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
