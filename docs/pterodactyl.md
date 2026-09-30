@@ -41,7 +41,7 @@ Si l'egg change (`npm run egg` le régénère), ré-importe-le par-dessus l'anci
 | Client Secret | Developer Portal > OAuth2 |
 | Chef du réseau | Ton ID Discord (déjà rempli) |
 | Mode du panel | `https-selfsigned` |
-| Adresse publique du panel | `https://<IP publique>:<port>`, ou vide pour utiliser l'allocation |
+| Adresse publique du panel | `https://<IP publique>:<port>` : **obligatoire**, le certificat HTTPS est fait pour cette adresse |
 | Dépôt GitHub | `Brothers-Life/Brothers-Life-Bot-Discord` (déjà rempli) |
 | Token GitHub | Vide si le dépôt est public, sinon le token de l'étape 1 |
 | Version à installer | `latest` |
@@ -53,7 +53,10 @@ Si l'egg change (`npm run egg` le régénère), ré-importe-le par-dessus l'anci
 ## 4. Premier accès au panel
 
 1. Ouvre `https://<IP>:<port>`.
-2. Le certificat est auto-signé : le navigateur affiche un avertissement. Avant d'accepter, compare l'empreinte SHA-256 affichée par le navigateur avec celle écrite dans la console Pterodactyl au démarrage (`Panel TLS certificate SHA-256 fingerprint`). Si elles sont identiques, accepte.
+2. Le certificat est auto-signé : le navigateur affiche « Votre connexion n'est pas privée » (`NET::ERR_CERT_AUTHORITY_INVALID`). C'est normal. Avant d'accepter, compare l'empreinte SHA-256 du certificat (clic sur l'avertissement dans la barre d'adresse > certificat) avec celle écrite dans la console Pterodactyl au démarrage (`Panel TLS certificate SHA-256 fingerprint`). Si elles sont identiques : **Paramètres avancés** > **Continuer vers le site**.
+   - `ERR_CERT_COMMON_NAME_INVALID` : l'adresse tapée n'est pas celle de la variable « Adresse publique du panel ». Corrige la variable et redémarre : le certificat est régénéré tout seul.
+   - `ERR_SSL_PROTOCOL_ERROR` : tu es passé en `http://`, ou « Mode du panel » vaut `http`.
+   - Le certificat dure 397 jours (maximum accepté par les navigateurs) et se renouvelle tout seul 30 jours avant la fin ; l'avertissement réapparaît alors une fois.
 3. Connecte-toi avec le compte `OWNER_ID`.
 4. **Serveurs** : choisis le serveur principal, puis ajoute les autres serveurs au réseau.
 5. **Rangs** : crée tes rangs et lie-les aux rôles du serveur principal.

@@ -4,7 +4,7 @@
         "version": "PTDL_v2",
         "update_url": null
     },
-    "exported_at": "2026-09-30T14:32:24.744Z",
+    "exported_at": "2026-09-30T14:45:06.537Z",
     "name": "Brothers Life Bot",
     "author": "bot@brothers-life.invalid",
     "description": "Bot Discord multi-serveurs Brothers Life avec son panel web. Installe une Release du dépôt GitHub privé ; les mises à jour se font ensuite depuis le panel (page Versions).",
@@ -81,12 +81,12 @@
         },
         {
             "name": "Adresse publique du panel",
-            "description": "Ex. https://51.77.1.2:25565. Vide = IP et port de l’allocation. À ajouter aussi dans Discord > OAuth2 > Redirects avec /api/auth/callback.",
+            "description": "https://<IP publique du serveur>:<port de l’allocation>, ex. https://51.77.1.2:25565. Sert au certificat HTTPS et à la connexion Discord : à ajouter aussi dans Discord > OAuth2 > Redirects avec /api/auth/callback.",
             "env_variable": "WEB_PUBLIC_URL",
             "default_value": "",
             "user_viewable": true,
             "user_editable": true,
-            "rules": "nullable|regex:/^https?:\\/\\/[^\\/]+$/",
+            "rules": "required|regex:/^https?:\\/\\/[^\\/]+$/",
             "field_type": "text"
         },
         {

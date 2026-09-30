@@ -6,7 +6,7 @@ import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
 import fastifyStatic from '@fastify/static';
-import { getTlsOptions } from './tls.js';
+import { getTlsOptions, ensureSelfSigned } from './tls.js';
 import { errorHandler, sendError } from './errors.js';
 import { registerGuard } from './guard.js';
 import { registerAuthRoutes } from './auth.js';
@@ -87,12 +87,33 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 		return sendPanel(reply);
 	});
 
+	// The self-signed certificate lives 397 days: renew it in place, without restarting the bot
+	let renewTimer = null;
+	if (https && config.WEB_MODE === 'https-selfsigned') {
+		renewTimer = setInterval(async () => {
+			try {
+				const { cert, key, renewed } = await ensureSelfSigned(config, logger);
+				if (renewed) {
+					app.server.setSecureContext({ cert, key });
+					logger.warn('Panel certificate renewed: browsers will show the warning once more.');
+				}
+			}
+			catch (error) {
+				logger.error('Certificate renewal failed:', error);
+			}
+		}, 24 * 3600_000);
+		renewTimer.unref();
+	}
+
 	return {
 		app,
 		async listen() {
 			await app.listen({ port: config.WEB_PORT, host: '0.0.0.0' });
 			logger.info(`Panel listening on port ${config.WEB_PORT} (${config.WEB_MODE}) → ${config.WEB_PUBLIC_URL}`);
 		},
-		close: () => app.close(),
+		close: () => {
+			clearInterval(renewTimer);
+			return app.close();
+		},
 	};
 }

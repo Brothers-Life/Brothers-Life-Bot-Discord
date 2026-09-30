@@ -53,7 +53,7 @@ const egg = {
 		variable('Client Secret', 'CLIENT_SECRET', 'Developer Portal > OAuth2 > Client Secret (connexion au panel).', 'required|string|max:200'),
 		variable('Chef du réseau (OWNER_ID)', 'OWNER_ID', 'ID Discord du seul compte qui a toutes les permissions.', 'required|regex:/^\\d{17,20}$/', '267235400467218432'),
 		variable('Mode du panel', 'WEB_MODE', 'https-selfsigned (conseillé sans domaine), https-custom (avec TLS_CERT/TLS_KEY) ou http.', 'required|in:https-selfsigned,https-custom,http', 'https-selfsigned'),
-		variable('Adresse publique du panel', 'WEB_PUBLIC_URL', 'Ex. https://51.77.1.2:25565. Vide = IP et port de l’allocation. À ajouter aussi dans Discord > OAuth2 > Redirects avec /api/auth/callback.', 'nullable|regex:/^https?:\\/\\/[^\\/]+$/'),
+		variable('Adresse publique du panel', 'WEB_PUBLIC_URL', 'https://<IP publique du serveur>:<port de l’allocation>, ex. https://51.77.1.2:25565. Sert au certificat HTTPS et à la connexion Discord : à ajouter aussi dans Discord > OAuth2 > Redirects avec /api/auth/callback.', 'required|regex:/^https?:\\/\\/[^\\/]+$/'),
 		variable('Dépôt GitHub', 'GITHUB_REPO', 'owner/repo où la CI publie les versions.', 'required|regex:/^[\\w.-]+\\/[\\w.-]+$/', 'Brothers-Life/Brothers-Life-Bot-Discord'),
 		variable('Token GitHub', 'GITHUB_TOKEN', 'Seulement si le dépôt est privé : fine-grained token, Contents: Read-only sur le dépôt. Vide si le dépôt est public.', 'nullable|string|max:255'),
 		variable('Version à installer', 'BOT_VERSION', 'latest ou un tag (ex. v1.0.0). Utilisée à l’installation et à la réinstallation ; ensuite, les mises à jour se font depuis le panel.', 'required|string|max:20', 'latest'),
