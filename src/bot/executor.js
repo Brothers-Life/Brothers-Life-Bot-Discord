@@ -8,6 +8,19 @@ const COLORS = {
 };
 
 const TEXT_TYPES = new Set([ChannelType.GuildText, ChannelType.GuildAnnouncement]);
+// Roles carrying these can moderate or administrate: only the owner may hand them out from the panel
+const DANGEROUS_PERMISSIONS = [
+	PermissionFlagsBits.Administrator,
+	PermissionFlagsBits.ManageGuild,
+	PermissionFlagsBits.ManageRoles,
+	PermissionFlagsBits.ManageChannels,
+	PermissionFlagsBits.ManageWebhooks,
+	PermissionFlagsBits.BanMembers,
+	PermissionFlagsBits.KickMembers,
+	PermissionFlagsBits.ModerateMembers,
+	PermissionFlagsBits.ManageMessages,
+	PermissionFlagsBits.MentionEveryone,
+];
 const LOG_PERMISSIONS = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks];
 
 export function toEmbed(message) {
@@ -133,7 +146,48 @@ export function createExecutor(client) {
 			return [...guild.roles.cache.values()]
 				.filter(r => r.id !== guild.id && !r.managed)
 				.sort((a, b) => b.position - a.position)
-				.map(r => ({ id: r.id, name: r.name, color: r.hexColor, position: r.position }));
+				.map(r => ({
+					id: r.id,
+					name: r.name,
+					color: r.hexColor,
+					position: r.position,
+					// The bot can only give roles below its own highest role
+					editable: r.editable,
+					dangerous: r.permissions.any(DANGEROUS_PERMISSIONS),
+					permissions: r.permissions.bitfield.toString(),
+				}));
+		},
+
+		async getMemberInfo(guildId, userId) {
+			const member = await memberOf(guildOf(guildId), userId);
+			if (!member) return null;
+			return {
+				nickname: member.nickname,
+				joinedAt: member.joinedTimestamp,
+				timeoutUntil: member.communicationDisabledUntilTimestamp ?? null,
+				roles: [...member.roles.cache.values()]
+					.filter(r => r.id !== guildId)
+					.sort((a, b) => b.position - a.position)
+					.map(r => ({ id: r.id, name: r.name, color: r.hexColor, editable: r.editable && !r.managed })),
+			};
+		},
+
+		async addRole(guildId, userId, roleId, reason) {
+			const member = await memberOf(guildOf(guildId), userId);
+			if (!member) return 'not_member';
+			await member.roles.add(roleId, reason);
+		},
+
+		async removeRole(guildId, userId, roleId, reason) {
+			const member = await memberOf(guildOf(guildId), userId);
+			if (!member) return 'not_member';
+			await member.roles.remove(roleId, reason);
+		},
+
+		async setNickname(guildId, userId, nickname, reason) {
+			const member = await memberOf(guildOf(guildId), userId);
+			if (!member) return 'not_member';
+			await member.setNickname(nickname, reason);
 		},
 
 		// null when the user is not a member of that server

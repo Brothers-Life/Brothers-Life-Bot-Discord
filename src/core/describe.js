@@ -36,6 +36,11 @@ const TITLES = {
 	'automod.trigger': 'Automod déclenché',
 	'automod.config': 'Automod reconfiguré',
 	'automod.reset': 'Automod : retour au réglage réseau',
+	'staff_sync.member': 'Rôles du staff synchronisés',
+	'staff_sync.links': 'Rôles liés à un rang sur un serveur',
+	'members.role_add': 'Rôle ajouté à un membre',
+	'members.role_remove': 'Rôle retiré à un membre',
+	'members.nickname': 'Pseudo modifié',
 };
 
 const COLORS = {

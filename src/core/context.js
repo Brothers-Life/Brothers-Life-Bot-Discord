@@ -7,6 +7,12 @@ import { createSessions } from './sessions.js';
 import { createSanctions } from './sanctions.js';
 import { createEvents } from './events.js';
 import { createAutomod } from './automod/index.js';
+import { createStaffSync } from './staffSync.js';
+import { createMembers } from './members.js';
+import { definePermission } from './permissions.js';
+
+definePermission('members.view', { label: 'Rechercher des membres sur le réseau', category: 'Membres' });
+definePermission('members.manage', { label: 'Modifier les rôles et pseudos des membres', category: 'Membres' });
 import { describeAuditEntry } from './describe.js';
 
 // Wires every core service together. `executor` is the only door to Discord:
@@ -28,6 +34,8 @@ export function createCore({ db, config, executor, logger = console }) {
 	logs.registerCategory('sanctions', 'Sanctions (ban, kick, timeout, warn)');
 	const events = createEvents({ db, network, logs, settings });
 	const automod = createAutomod({ db, network, sanctions, ranks, audit, executor, logs, logger });
+	const staffSync = createStaffSync({ db, network, ranks, audit, executor, logs, logger });
+	const members = createMembers({ db, network, ranks, sanctions, audit, executor });
 
 	// Every audited action is also posted in the log channel of its category
 	audit.onRecord((entry) => {
@@ -39,10 +47,24 @@ export function createCore({ db, config, executor, logger = console }) {
 	// Rank links point to roles of the main server: changing it invalidates every cached permission
 	network.on('mainChanged', () => ranks.invalidate());
 
+	// Any rank change can move staff roles: resync everybody a few seconds later (changes often come in bursts)
+	let resync = null;
+	audit.onRecord((entry) => {
+		if (!entry.action.startsWith('ranks.') && entry.action !== 'staff_sync.links' && entry.action !== 'network.main') return;
+		clearTimeout(resync);
+		resync = setTimeout(() => staffSync.syncAll().catch(error => logger.error('Staff sync failed:', error)), 5000);
+		resync.unref?.();
+	});
+	network.on('activated', () => {
+		clearTimeout(resync);
+		resync = setTimeout(() => staffSync.syncAll().catch(error => logger.error('Staff sync failed:', error)), 5000);
+		resync.unref?.();
+	});
+
 	// A server joining the network gets the network bans and hands over its own ban list
 	network.on('activated', (guild) => {
 		sanctions.syncGuild(guild.id).catch(error => logger.error(`Ban sync failed on ${guild.name}:`, error));
 	});
 
-	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, events, automod };
+	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, events, automod, staffSync, members };
 }

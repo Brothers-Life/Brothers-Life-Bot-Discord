@@ -29,7 +29,7 @@ export type Rank = RankSummary & {
   updatedAt: number
 }
 
-export type Role = { id: string; name: string; color: string; position: number }
+export type Role = { id: string; name: string; color: string; position: number; editable?: boolean; dangerous?: boolean; permissions?: string }
 
 export type RanksPayload = {
   ranks: Rank[]
@@ -186,4 +186,28 @@ export type AutomodPayload = {
   network: AutomodConfig
   guilds: { id: string; name: string; custom: boolean; config: AutomodConfig }[]
   defaults: AutomodConfig
+}
+
+export type PersonProfile = {
+  user: DiscordUser | null
+  ranks: RankSummary[]
+  level: number | null
+  isOwner: boolean
+  guilds: {
+    id: string
+    name: string
+    isMain: boolean
+    member: {
+      nickname: string | null
+      joinedAt: number
+      timeoutUntil: number | null
+      roles: { id: string; name: string; color: string; editable: boolean; linkedToRank: boolean }[]
+    } | null
+  }[]
+  sanctions: { total: number; active: { id: number; type: SanctionType; expiresAt: number | null }[]; warns: number; banned: boolean }
+}
+
+export type StaffRolesPayload = {
+  ranks: RankSummary[]
+  guilds: { id: string; name: string; isMain: boolean; links: Record<string, string[]>; roles: Role[] }[]
 }

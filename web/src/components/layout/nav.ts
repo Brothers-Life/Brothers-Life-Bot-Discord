@@ -11,6 +11,8 @@ import {
   Gavel,
   Activity,
   ShieldAlert,
+  UserSearch,
+  Link2,
 } from 'lucide-react'
 
 export type NavEntry = {
@@ -41,7 +43,9 @@ export const navSections: NavSection[] = [
   {
     title: 'Staff',
     items: [
+      { title: 'Membres du réseau', url: '/people', icon: UserSearch, permission: 'members.view' },
       { title: 'Rangs', url: '/ranks', icon: ShieldHalf, permission: 'ranks.view' },
+      { title: 'Rôles du staff', url: '/staff-roles', icon: Link2, permission: 'ranks.view' },
       { title: 'Membres du panel', url: '/members', icon: Users, permission: 'ranks.view' },
     ],
   },

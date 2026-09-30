@@ -40,8 +40,29 @@ export function createFakeExecutor() {
 		async listTextChannels(guildId) {
 			return [...channels].filter(([, c]) => c.guildId === guildId).map(([id, c]) => ({ id, parent: null, canSend: true, ...c }));
 		},
-		async listRoles() {
-			return [];
+		// guildId -> [{ id, name, editable, dangerous }]
+		roles: new Map(),
+		async listRoles(guildId) {
+			return this.roles.get(guildId) ?? [];
+		},
+		async getMemberInfo(guildId, userId) {
+			const roles = memberRoles.get(`${guildId}:${userId}`);
+			if (!roles) return null;
+			const known = this.roles.get(guildId) ?? [];
+			return { nickname: null, joinedAt: 0, timeoutUntil: null, roles: roles.map(id => ({ id, name: known.find(r => r.id === id)?.name ?? id, color: '#000000', editable: true })) };
+		},
+		async setNickname(guildId, userId, nickname) {
+			this.calls.push(['nickname', guildId, userId, nickname]);
+		},
+		async addRole(guildId, userId, roleId) {
+			const key = `${guildId}:${userId}`;
+			memberRoles.set(key, [...(memberRoles.get(key) ?? []), roleId]);
+			this.calls.push(['addRole', guildId, userId, roleId]);
+		},
+		async removeRole(guildId, userId, roleId) {
+			const key = `${guildId}:${userId}`;
+			memberRoles.set(key, (memberRoles.get(key) ?? []).filter(r => r !== roleId));
+			this.calls.push(['removeRole', guildId, userId, roleId]);
 		},
 		async getMemberRoleIds(guildId, userId) {
 			return memberRoles.get(`${guildId}:${userId}`) ?? null;
