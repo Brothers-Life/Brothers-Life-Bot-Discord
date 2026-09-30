@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedAntiraidRouteImport } from './routes/_authenticated/antiraid'
 import { Route as AuthenticatedAuditRouteImport } from './routes/_authenticated/audit'
 import { Route as AuthenticatedAutomodRouteImport } from './routes/_authenticated/automod'
 import { Route as AuthenticatedCommandsRouteImport } from './routes/_authenticated/commands'
@@ -45,6 +46,11 @@ const LoginRoute = LoginRouteImport.update({
 const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAntiraidRoute = AuthenticatedAntiraidRouteImport.update({
+  id: '/antiraid',
+  path: '/antiraid',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedAuditRoute = AuthenticatedAuditRouteImport.update({
@@ -154,6 +160,7 @@ const AuthenticatedTicketIdRoute = AuthenticatedTicketIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/login': typeof LoginRoute
+  '/antiraid': typeof AuthenticatedAntiraidRoute
   '/audit': typeof AuthenticatedAuditRoute
   '/automod': typeof AuthenticatedAutomodRoute
   '/commands': typeof AuthenticatedCommandsRoute
@@ -177,6 +184,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
+  '/antiraid': typeof AuthenticatedAntiraidRoute
   '/audit': typeof AuthenticatedAuditRoute
   '/automod': typeof AuthenticatedAutomodRoute
   '/commands': typeof AuthenticatedCommandsRoute
@@ -203,6 +211,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/login': typeof LoginRoute
+  '/_authenticated/antiraid': typeof AuthenticatedAntiraidRoute
   '/_authenticated/audit': typeof AuthenticatedAuditRoute
   '/_authenticated/automod': typeof AuthenticatedAutomodRoute
   '/_authenticated/commands': typeof AuthenticatedCommandsRoute
@@ -230,6 +239,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/antiraid'
     | '/audit'
     | '/automod'
     | '/commands'
@@ -253,6 +263,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
+    | '/antiraid'
     | '/audit'
     | '/automod'
     | '/commands'
@@ -278,6 +289,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_authenticated'
     | '/login'
+    | '/_authenticated/antiraid'
     | '/_authenticated/audit'
     | '/_authenticated/automod'
     | '/_authenticated/commands'
@@ -327,6 +339,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/antiraid': {
+      id: '/_authenticated/antiraid'
+      path: '/antiraid'
+      fullPath: '/antiraid'
+      preLoaderRoute: typeof AuthenticatedAntiraidRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/audit': {
@@ -473,6 +492,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAntiraidRoute: typeof AuthenticatedAntiraidRoute
   AuthenticatedAuditRoute: typeof AuthenticatedAuditRoute
   AuthenticatedAutomodRoute: typeof AuthenticatedAutomodRoute
   AuthenticatedCommandsRoute: typeof AuthenticatedCommandsRoute
@@ -497,6 +517,7 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAntiraidRoute: AuthenticatedAntiraidRoute,
   AuthenticatedAuditRoute: AuthenticatedAuditRoute,
   AuthenticatedAutomodRoute: AuthenticatedAutomodRoute,
   AuthenticatedCommandsRoute: AuthenticatedCommandsRoute,

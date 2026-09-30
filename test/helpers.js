@@ -263,6 +263,14 @@ export function createFakeExecutor() {
 			this.calls.push(['rules', channelId, messageId, data.button?.label ?? null]);
 			return messageId ?? '680000000000000001';
 		},
+		raidLocks: [],
+		async setRaidLocks(guildId, options) {
+			this.raidLocks.push(['lock', guildId, options]);
+			return { verificationLevel: 1, invitesDisabled: false };
+		},
+		async restoreRaidLocks(guildId, previous) {
+			this.raidLocks.push(['restore', guildId, previous]);
+		},
 		guard(guildId) {
 			if (this.failOn.has(guildId)) {
 				const error = new Error('Missing Permissions');

@@ -1,4 +1,4 @@
-import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, PermissionFlagsBits, PermissionsBitField, RESTJSONErrorCodes } from 'discord.js';
+import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, GuildVerificationLevel, PermissionFlagsBits, PermissionsBitField, RESTJSONErrorCodes } from 'discord.js';
 import { noticePayload, panelPayload, ratingPayload, welcomePayload } from './ticketsUi.js';
 import { buildEmbeds, emojiOf } from './messages.js';
 
@@ -259,15 +259,32 @@ export function createExecutor(client) {
 		},
 
 		// Message edited in the panel ({ content, embed }), with files (image cards) and allowed user pings
-		async sendMessage(channelId, { payload, files = [], mentionUserIds = [] }) {
+		async sendMessage(channelId, { payload, files = [], mentionUserIds = [], mentionRoleIds = [] }) {
 			const channel = await client.channels.fetch(channelId);
 			const message = await channel.send({
 				content: payload.content || undefined,
 				embeds: buildEmbeds(payload),
 				files: files.map(f => new AttachmentBuilder(f.buffer, { name: f.name })),
-				allowedMentions: { users: mentionUserIds, roles: [] },
+				allowedMentions: { users: mentionUserIds, roles: mentionRoleIds },
 			});
 			return message.id;
+		},
+
+		// Raid mode: pauses invites and/or sets the highest verification level; returns what to restore
+		async setRaidLocks(guildId, { disableInvites, raiseVerification }) {
+			const guild = guildOf(guildId);
+			const previous = { verificationLevel: guild.verificationLevel, invitesDisabled: guild.features.includes('INVITES_DISABLED') };
+			if (raiseVerification && guild.verificationLevel !== GuildVerificationLevel.VeryHigh) {
+				await guild.setVerificationLevel(GuildVerificationLevel.VeryHigh, 'Anti-raid');
+			}
+			if (disableInvites && !previous.invitesDisabled) await guild.disableInvites(true);
+			return previous;
+		},
+
+		async restoreRaidLocks(guildId, previous) {
+			const guild = guildOf(guildId);
+			if (guild.verificationLevel !== previous.verificationLevel) await guild.setVerificationLevel(previous.verificationLevel, 'Fin du raid');
+			if (!previous.invitesDisabled && guild.features.includes('INVITES_DISABLED')) await guild.disableInvites(false);
 		},
 
 		async sendDMPayload(userId, payload) {

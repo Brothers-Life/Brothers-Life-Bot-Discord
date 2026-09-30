@@ -18,6 +18,7 @@ import {
   Megaphone,
   SquareSlash,
   DoorOpen,
+  Siren,
 } from 'lucide-react'
 
 export type NavEntry = {
@@ -43,6 +44,7 @@ export const navSections: NavSection[] = [
     items: [
       { title: 'Sanctions', url: '/sanctions', icon: Gavel, permission: 'sanctions.view' },
       { title: 'Automod', url: '/automod', icon: ShieldAlert, permission: 'automod.view' },
+      { title: 'Anti-raid', url: '/antiraid', icon: Siren, permission: 'antiraid.view' },
       { title: 'Tickets', url: '/tickets', icon: LifeBuoy, permission: 'tickets.view' },
       { title: 'Annonces', url: '/announcements', icon: Megaphone, permission: 'announcements.view' },
       { title: 'Commandes', url: '/commands', icon: SquareSlash, permission: null },
