@@ -85,6 +85,8 @@ function notInGuild(guildId) {
 export function createExecutor(client) {
 	// channelId -> webhook used to answer tickets from the panel
 	const ticketWebhooks = new Map();
+	// guildId -> full member fetch in progress or done (one at a time per server: Discord rate-limits it)
+	const memberFetches = new Map();
 
 	function guildOf(guildId) {
 		const guild = client.guilds.cache.get(guildId);
@@ -947,6 +949,30 @@ export function createExecutor(client) {
 					dangerous: r.permissions.any(DANGEROUS_PERMISSIONS),
 					permissions: r.permissions.bitfield.toString(),
 				}));
+		},
+
+		// Every member of a server (fetched once from Discord, then kept up to date by the gateway events)
+		async listMembers(guildId) {
+			const guild = client.guilds.cache.get(guildId);
+			if (!guild) return [];
+			const last = memberFetches.get(guildId);
+			const stale = !last || (guild.members.cache.size < guild.memberCount * 0.9 && Date.now() - last.at > 10 * 60_000);
+			if (stale || last.pending) {
+				if (!last?.pending) {
+					const fetch = { pending: true, at: Date.now(), promise: guild.members.fetch().finally(() => { fetch.pending = false; }) };
+					memberFetches.set(guildId, fetch);
+				}
+				await memberFetches.get(guildId).promise.catch(() => undefined);
+			}
+			return [...guild.members.cache.values()].map(m => ({
+				id: m.id,
+				username: m.user.username,
+				globalName: m.user.globalName,
+				nickname: m.nickname,
+				avatar: m.displayAvatarURL({ size: 64 }),
+				bot: m.user.bot,
+				joinedAt: m.joinedTimestamp,
+			}));
 		},
 
 		// Discord's member search: beginning of username or nickname

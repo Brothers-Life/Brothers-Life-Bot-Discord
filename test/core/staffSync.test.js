@@ -143,3 +143,25 @@ test('members: search by name across the network, exact names first, or by ID', 
 	assert.equal((await core.members.search('p')).length, 0, 'at least 2 characters');
 	assert.equal((await core.members.search(ALICE))[0].id, ALICE, 'an ID still works');
 });
+
+test('members: the whole network by default, one entry per person, sorted and paginated; bots hidden', async () => {
+	const { core, executor } = await setup();
+	executor.guildMembers.set(MAIN, [
+		{ id: '300000000000000001', username: 'zoe' },
+		{ id: '300000000000000002', username: 'pedro', globalName: 'Pedro' },
+		{ id: '300000000000000009', username: 'robot', bot: true },
+	]);
+	executor.guildMembers.set(OTHER, [
+		{ id: '300000000000000002', username: 'pedro', nickname: 'Chef' },
+		{ id: '300000000000000003', username: 'max' },
+	]);
+	const first = await core.members.directory({ limit: 2 });
+	assert.deepEqual([first.total, first.nextOffset], [3, 2]);
+	assert.deepEqual(first.items.map(m => m.id), ['300000000000000002', '300000000000000003'], 'Chef, max, then zoe');
+	assert.deepEqual(first.items[0].guilds.map(g => g.name), ['Main', 'Other']);
+	const second = await core.members.directory({ offset: 2, limit: 2 });
+	assert.deepEqual([second.items.map(m => m.id), second.nextOffset], [['300000000000000001'], null]);
+	assert.deepEqual((await core.members.directory({ q: 'edr' })).items.map(m => m.id), ['300000000000000002'], 'anywhere in the name');
+	assert.equal((await core.members.directory({ guildId: OTHER })).total, 2);
+	assert.equal((await core.members.directory({ bots: true })).total, 4);
+});

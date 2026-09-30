@@ -50,6 +50,9 @@ export function createFakeExecutor() {
 		},
 		// guildId -> [{ id, username, globalName, nickname }]
 		guildMembers: new Map(),
+		async listMembers(guildId) {
+			return (this.guildMembers.get(guildId) ?? []).map(m => ({ avatar: null, globalName: null, nickname: null, bot: false, joinedAt: 0, ...m }));
+		},
 		async searchMembers(guildId, query, limit) {
 			const q = query.toLowerCase();
 			return (this.guildMembers.get(guildId) ?? [])

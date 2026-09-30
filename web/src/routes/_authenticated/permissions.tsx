@@ -165,9 +165,33 @@ function ProfileEditor({ rankId, rankName, linkedRoles, catalogue, initial, edit
       )}
     >
       <div className='grid gap-5 p-4 md:grid-cols-2'>
-        {groups.map(([group, permissions]) => (
-          <fieldset key={group}>
-            <legend className='mb-2 text-xs font-medium text-muted-foreground'>{group}</legend>
+        {groups.map(([group, permissions]) => {
+          const togglable = permissions.filter((p) => editable && !(p.ownerOnly && !isOwner)).map((p) => p.key)
+          const count = permissions.filter((p) => selected.has(p.key)).length
+          const all = count === permissions.length
+          return (
+          <fieldset key={group} className='rounded-lg border p-3'>
+            <legend className='px-1'>
+              <label className='flex items-center gap-2 text-xs font-medium text-muted-foreground has-disabled:opacity-60'>
+                <Checkbox
+                  checked={all ? true : count > 0 ? 'indeterminate' : false}
+                  disabled={!togglable.length}
+                  aria-label={`Tout cocher : ${group}`}
+                  onCheckedChange={() => setSelected((prev) => {
+                    const next = new Set(prev)
+                    // Everything the editor may change in the group on, or off if it is already all on
+                    const on = !togglable.every((k) => next.has(k))
+                    for (const k of togglable) {
+                      if (on) next.add(k)
+                      else next.delete(k)
+                    }
+                    return next
+                  })}
+                />
+                {group}
+                <span className='tabular-nums'>{count}/{permissions.length}</span>
+              </label>
+            </legend>
             <div className='grid gap-1.5'>
               {permissions.map((p) => {
                 const locked = !editable || (p.ownerOnly && !isOwner)
@@ -190,7 +214,8 @@ function ProfileEditor({ rankId, rankName, linkedRoles, catalogue, initial, edit
               })}
             </div>
           </fieldset>
-        ))}
+          )
+        })}
       </div>
     </Section>
   )

@@ -75,6 +75,30 @@ export function createMembers({ db, network, ranks, sanctions, audit, executor }
 			return [...found.values()].sort((a, b) => score(a) - score(b) || a.username.localeCompare(b.username)).slice(0, limit);
 		},
 
+		// Everyone on the network, one entry per person, sorted by name; `q` matches anywhere in a name or the ID
+		async directory({ q = '', guildId = null, bots = false, offset = 0, limit = 50 } = {}) {
+			const active = network.list().filter(g => g.status === 'active' && g.botPresent);
+			const guilds = active.filter(g => !guildId || g.id === guildId);
+			const lists = await Promise.all(guilds.map(g => executor.listMembers(g.id).then(list => [g, list]).catch(() => [g, []])));
+			const people = new Map();
+			for (const [guild, list] of lists) {
+				for (const member of list) {
+					if (member.bot && !bots) continue;
+					const entry = people.get(member.id) ?? { ...member, guilds: [] };
+					entry.nickname ??= member.nickname;
+					entry.guilds.push({ id: guild.id, name: guild.name });
+					people.set(member.id, entry);
+				}
+			}
+			const text = String(q).trim().replace(/^@/, '').toLowerCase();
+			const nameOf = (m) => (m.nickname || m.globalName || m.username || '').toLowerCase();
+			const all = [...people.values()]
+				.filter(m => !text || m.id === text || [m.username, m.globalName, m.nickname].some(n => n?.toLowerCase().includes(text)))
+				.sort((a, b) => nameOf(a).localeCompare(nameOf(b), 'fr') || a.id.localeCompare(b.id));
+			const items = all.slice(offset, offset + limit);
+			return { guilds: active.map(g => ({ id: g.id, name: g.name })), items, total: all.length, nextOffset: offset + items.length < all.length ? offset + items.length : null };
+		},
+
 		async lookup(userId) {
 			const user = await executor.getUser(userId);
 			const principal = await ranks.resolve(userId);

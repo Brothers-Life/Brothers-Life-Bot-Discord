@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useDeferredValue, useEffect, useRef, useState } from 'react'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Crown, Plus, X } from 'lucide-react'
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft, Crown, Plus, Search, Users, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, errorMessage } from '@/lib/api'
 import type { PersonProfile, Role } from '@/lib/types'
@@ -10,11 +10,13 @@ import { useMe } from '@/hooks/use-me'
 import { Page, Section, EmptyState, Pill, RankBadge, UserAvatar } from '@/components/app/ui'
 import { TempRoles } from '@/features/people/temp-roles'
 import { SanctionDialog } from '@/features/sanctions/sanction-dialog'
-import { UserPicker } from '@/components/app/user-picker'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
+import { cn } from '@/lib/utils'
 
 export const Route = createFileRoute('/_authenticated/people')({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -28,18 +30,112 @@ function PeoplePage() {
   const navigate = useNavigate({ from: '/people' })
 
   return (
-    <Page title='Membres du réseau' description='Retrouve quelqu’un sur tous les serveurs du réseau : ses rôles, ses rangs et ses sanctions.'>
-      <UserPicker
-        className='max-w-xl'
-        value={id ?? ''}
-        autoFocus={!id}
-        placeholder='Pseudo, surnom ou ID Discord'
-        onChange={(userId) => navigate({ search: { id: userId || undefined } })}
-      />
-      {id ? <Profile userId={id} /> : (
-        <EmptyState title='Tape le début d’un pseudo'>La recherche porte sur les membres de tous les serveurs du réseau. Un ID Discord marche aussi.</EmptyState>
-      )}
+    <Page
+      title='Membres du réseau'
+      description='Tous les membres des serveurs du réseau. Clique sur quelqu’un pour voir ses rôles, ses rangs et ses sanctions.'
+      actions={id && <Button variant='outline' onClick={() => navigate({ search: { id: undefined } })}><ArrowLeft /> Tous les membres</Button>}
+    >
+      {id ? <Profile userId={id} /> : <Directory onOpen={(userId) => navigate({ search: { id: userId } })} />}
     </Page>
+  )
+}
+
+type DirectoryMember = { id: string; username: string; globalName: string | null; nickname: string | null; avatar: string | null; bot: boolean; joinedAt: number | null; guilds: { id: string; name: string }[] }
+type DirectoryPage = { guilds: { id: string; name: string }[]; items: DirectoryMember[]; total: number; nextOffset: number | null }
+
+function Directory({ onOpen }: { onOpen: (userId: string) => void }) {
+  const [text, setText] = useState('')
+  const q = useDeferredValue(text.trim())
+  const [guildId, setGuildId] = useState('all')
+  const [bots, setBots] = useState(false)
+  const query = useInfiniteQuery({
+    queryKey: ['people-directory', q, guildId, bots],
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({ offset: String(pageParam), limit: '50' })
+      if (q) params.set('q', q)
+      if (guildId !== 'all') params.set('guildId', guildId)
+      if (bots) params.set('bots', 'true')
+      return api<DirectoryPage>(`/people?${params}`)
+    },
+    getNextPageParam: (last) => last.nextOffset ?? undefined,
+    placeholderData: keepPreviousData,
+  })
+  const pages = query.data?.pages ?? []
+  const members = pages.flatMap((p) => p.items)
+  const total = pages[0]?.total ?? 0
+  const guilds = pages[0]?.guilds ?? []
+
+  // Next page as soon as the end of the list comes into view
+  const sentinel = useRef<HTMLLIElement>(null)
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = query
+  useEffect(() => {
+    const node = sentinel.current
+    if (!node || !hasNextPage) return
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && !isFetchingNextPage) fetchNextPage()
+    }, { rootMargin: '400px' })
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage, members.length])
+
+  return (
+    <Section
+      title={query.isLoading ? 'Chargement des membres…' : `${total.toLocaleString('fr-FR')} membre${total > 1 ? 's' : ''}`}
+      actions={
+        <div className='flex flex-wrap items-center gap-2'>
+          <div className='relative'>
+            <Search className='pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground' />
+            <Input value={text} onChange={(e) => setText(e.target.value)} placeholder='Pseudo, surnom ou ID' aria-label='Filtrer les membres' className='w-56 ps-8' autoFocus />
+          </div>
+          {guilds.length > 1 && (
+            <Select value={guildId} onValueChange={setGuildId}>
+              <SelectTrigger className='w-44' aria-label='Serveur'><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value='all'>Tous les serveurs</SelectItem>
+                {guilds.map((g) => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          <label className='flex items-center gap-2 text-sm'><Switch checked={bots} onCheckedChange={setBots} /> Bots</label>
+        </div>
+      }
+    >
+      {query.isLoading ? (
+        <div className='grid gap-2 p-4'>{Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className='h-12 w-full' />)}</div>
+      ) : query.error ? (
+        <p className='p-4 text-sm text-destructive'>{errorMessage(query.error)}</p>
+      ) : !members.length ? (
+        <EmptyState title='Personne ne correspond' icon={Users}>Essaie une autre partie du pseudo, ou un autre serveur.</EmptyState>
+      ) : (
+        <ul className={cn('divide-y transition-opacity', query.isPlaceholderData && 'opacity-60')}>
+          {members.map((m) => {
+            const name = m.nickname || m.globalName || m.username
+            return (
+              <li key={m.id}>
+                <button type='button' onClick={() => onOpen(m.id)} className='flex w-full items-center gap-3 px-4 py-2.5 text-start transition-colors hover:bg-accent/40 focus-visible:bg-accent/40 focus-visible:outline-none'>
+                  <UserAvatar src={m.avatar} name={name} className='size-9' />
+                  <div className='min-w-0 flex-1'>
+                    <div className='flex items-center gap-2 truncate font-medium'>{name}{m.bot && <Pill tone='info'>Bot</Pill>}</div>
+                    <div className='truncate text-xs text-muted-foreground'>@{m.username}{m.joinedAt ? ` · arrivé le ${new Date(m.joinedAt).toLocaleDateString('fr-FR')}` : ''}</div>
+                  </div>
+                  {guilds.length > 1 && (
+                    <div className='hidden max-w-[40%] flex-wrap justify-end gap-1 sm:flex'>
+                      {m.guilds.map((g) => <Pill key={g.id} tone='neutral'>{g.name}</Pill>)}
+                    </div>
+                  )}
+                </button>
+              </li>
+            )
+          })}
+          {hasNextPage && (
+            <li ref={sentinel} className='grid gap-2 p-4' aria-live='polite'>
+              <Skeleton className='h-12 w-full' /><span className='sr-only'>Chargement de la suite…</span>
+            </li>
+          )}
+        </ul>
+      )}
+    </Section>
   )
 }
 

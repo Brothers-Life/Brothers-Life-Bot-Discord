@@ -11,6 +11,23 @@ export function registerMemberRoutes(app, { core }) {
 		schema: { querystring: { type: 'object', required: ['q'], properties: { q: { type: 'string', maxLength: 100 } } } },
 	}, async (request) => members.search(request.query.q));
 
+	// The whole network, page by page (the panel loads the next page while scrolling)
+	app.get('/api/people', {
+		config: { permission: 'members.view' },
+		schema: {
+			querystring: {
+				type: 'object',
+				properties: {
+					q: { type: 'string', maxLength: 100 },
+					guildId: snowflake,
+					bots: { type: 'boolean' },
+					offset: { type: 'integer', minimum: 0 },
+					limit: { type: 'integer', minimum: 1, maximum: 100 },
+				},
+			},
+		},
+	}, async (request) => members.directory(request.query));
+
 	app.get('/api/people/:userId', { config: { permission: 'members.view' }, schema: { params: personParams } }, async (request) => {
 		return members.lookup(request.params.userId);
 	});
