@@ -5,6 +5,8 @@ import { createRankService } from './ranks.js';
 import { createLogRouting } from './logRouting.js';
 import { createSessions } from './sessions.js';
 import { createSanctions } from './sanctions.js';
+import { createRestrictions } from './restrictions.js';
+import { createModeration } from './moderation.js';
 import { createEvents } from './events.js';
 import { createAutomod } from './automod/index.js';
 import { createStaffSync } from './staffSync.js';
@@ -36,12 +38,14 @@ export function createCore({ db, config, executor, logger = console }) {
 	});
 	const logs = createLogRouting({ db, executor, network, audit, logger });
 	const sessions = createSessions({ db });
-	const sanctions = createSanctions({ db, audit, network, ranks, executor, logger });
+	const restrictions = createRestrictions({ db, network, audit, executor, logger });
+	const sanctions = createSanctions({ db, audit, network, ranks, executor, restrictions, logger });
 	logs.registerCategory('sanctions', 'Sanctions (ban, kick, timeout, warn)');
 	const events = createEvents({ db, network, logs, settings });
 	const automod = createAutomod({ db, network, sanctions, ranks, audit, executor, logs, logger });
 	const staffSync = createStaffSync({ db, network, ranks, audit, executor, logs, logger });
 	const members = createMembers({ db, network, ranks, sanctions, audit, executor });
+	const moderation = createModeration({ db, network, ranks, audit, executor, settings, members, logs, logger });
 	const roleImport = createRoleImport({ db, network, ranks, staffSync, executor, audit });
 	const announcements = createAnnouncements({ db, network, audit, executor, logs, logger });
 	const tickets = createTickets({ db, network, ranks, audit, executor, logs, logger });
@@ -78,5 +82,5 @@ export function createCore({ db, config, executor, logger = console }) {
 		sanctions.syncGuild(guild.id).catch(error => logger.error(`Ban sync failed on ${guild.name}:`, error));
 	});
 
-	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements };
+	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements };
 }

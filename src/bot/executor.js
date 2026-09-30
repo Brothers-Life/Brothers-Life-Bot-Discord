@@ -117,6 +117,124 @@ export function createExecutor(client) {
 			return [...bans.values()].map(b => ({ userId: b.user.id, username: b.user.username, reason: b.reason }));
 		},
 
+		// --- Moderation commands -------------------------------------------------------------
+		// Deletes the last `count` matching messages (Discord only bulk-deletes messages under 14 days)
+		async purgeMessages(channelId, { count, userId, contains, botsOnly }) {
+			const channel = await client.channels.fetch(channelId);
+			const limit = Date.now() - 14 * 86_400_000 + 60_000;
+			let deleted = 0;
+			let before;
+			let scanned = 0;
+			while (deleted < count && scanned < 2000) {
+				const batch = await channel.messages.fetch({ limit: 100, before });
+				if (!batch.size) break;
+				scanned += batch.size;
+				before = batch.last().id;
+				const wanted = [...batch.values()]
+					.filter(m => m.createdTimestamp > limit && !m.pinned)
+					.filter(m => !userId || m.author.id === userId)
+					.filter(m => !botsOnly || m.author.bot)
+					.filter(m => !contains || m.content.toLowerCase().includes(contains.toLowerCase()))
+					.slice(0, count - deleted);
+				if (wanted.length) {
+					const done = await channel.bulkDelete(wanted.map(m => m.id), true);
+					deleted += done.size;
+				}
+				if (batch.last().createdTimestamp <= limit) break;
+			}
+			return deleted;
+		},
+
+		async setChannelLocked(channelId, locked, reason) {
+			const channel = await client.channels.fetch(channelId);
+			await channel.permissionOverwrites.edit(channel.guild.id, { SendMessages: locked ? false : null, SendMessagesInThreads: locked ? false : null, AddReactions: locked ? false : null }, { reason });
+		},
+
+		// Locks every text channel where @everyone can currently write, returns their ids
+		async lockGuild(guildId, reason) {
+			const guild = guildOf(guildId);
+			const everyone = guild.roles.everyone;
+			const locked = [];
+			for (const channel of guild.channels.cache.values()) {
+				if (!TEXT_TYPES.has(channel.type)) continue;
+				const perms = channel.permissionsFor(everyone);
+				if (!perms?.has(PermissionFlagsBits.ViewChannel) || !perms.has(PermissionFlagsBits.SendMessages)) continue;
+				await channel.permissionOverwrites.edit(everyone, { SendMessages: false, SendMessagesInThreads: false, AddReactions: false }, { reason });
+				locked.push(channel.id);
+			}
+			return locked;
+		},
+
+		async unlockChannels(channelIds, reason) {
+			for (const id of channelIds) {
+				const channel = await client.channels.fetch(id).catch(() => null);
+				if (channel) await channel.permissionOverwrites.edit(channel.guild.id, { SendMessages: null, SendMessagesInThreads: null, AddReactions: null }, { reason });
+			}
+		},
+
+		async setSlowmode(channelId, seconds, reason) {
+			const channel = await client.channels.fetch(channelId);
+			await channel.setRateLimitPerUser(seconds, reason);
+		},
+
+		async voiceDisconnect(guildId, userId, reason) {
+			const member = await memberOf(guildOf(guildId), userId);
+			if (!member?.voice.channelId) return 'not_in_voice';
+			await member.voice.disconnect(reason);
+		},
+
+		async voiceMove(guildId, userId, channelId, reason) {
+			const member = await memberOf(guildOf(guildId), userId);
+			if (!member?.voice.channelId) return 'not_in_voice';
+			await member.voice.setChannel(channelId, reason);
+		},
+
+		async voiceMute(guildId, userId, muted, reason) {
+			const member = await memberOf(guildOf(guildId), userId);
+			if (!member?.voice.channelId) return 'not_in_voice';
+			await member.voice.setMute(muted, reason);
+		},
+
+		// Position of the highest role of a member (null if not a member)
+		async getMemberTopRolePosition(guildId, userId) {
+			const member = await memberOf(guildOf(guildId), userId);
+			return member ? member.roles.highest.position : null;
+		},
+
+		// Restriction role: created below the bot's role if missing, denied on every category and unsynced channel
+		async ensureRestrictionRole(guildId, { roleId, name, deny, resync = false }) {
+			const guild = guildOf(guildId);
+			let role = roleId ? guild.roles.cache.get(roleId) : null;
+			const created = !role;
+			if (!role) {
+				role = await guild.roles.create({ name: name.slice(0, 100), permissions: [], mentionable: false, hoist: false, reason: 'Rôle de restriction du réseau' });
+				const top = guild.members.me.roles.highest.position;
+				await role.setPosition(Math.max(top - 1, 1)).catch(() => null);
+			}
+			else if (role.name !== name) {
+				await role.setName(name.slice(0, 100)).catch(() => null);
+			}
+			if (created || resync) {
+				const overwrite = Object.fromEntries(deny.map(p => [p, false]));
+				for (const channel of guild.channels.cache.values()) {
+					if (!('permissionOverwrites' in channel)) continue;
+					if (channel.type !== ChannelType.GuildCategory && channel.permissionsLocked) continue;
+					await channel.permissionOverwrites.create(role, overwrite, { reason: 'Rôle de restriction' }).catch(() => null);
+				}
+			}
+			return role.id;
+		},
+
+		async applyRestrictionOverwrites(channelId, entries) {
+			const channel = await client.channels.fetch(channelId);
+			if (!('permissionOverwrites' in channel)) return;
+			if (channel.type !== ChannelType.GuildCategory && channel.permissionsLocked) return;
+			for (const { roleId, deny } of entries) {
+				if (!channel.guild.roles.cache.has(roleId)) continue;
+				await channel.permissionOverwrites.create(roleId, Object.fromEntries(deny.map(p => [p, false])), { reason: 'Rôle de restriction' });
+			}
+		},
+
 		async deleteMessage(channelId, messageId) {
 			const channel = await client.channels.fetch(channelId);
 			await channel.messages.delete(messageId);

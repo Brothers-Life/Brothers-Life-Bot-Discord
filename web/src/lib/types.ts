@@ -129,13 +129,33 @@ export type VersionsPayload = {
   install: InstallState
 }
 
-export type SanctionType = 'ban' | 'kick' | 'timeout' | 'warn'
+export type SanctionType = 'ban' | 'kick' | 'timeout' | 'warn' | 'restrict'
+
+export type RestrictionProfile = { key: string; label: string; deny: string[]; position: number }
+
+export type TempRole = {
+  id: number
+  guildId: string
+  userId: string
+  roleId: string
+  roleName: string | null
+  expiresAt: number
+  reason: string | null
+  createdBy: string
+  createdAt: number
+  removedAt: number | null
+  removedBy: string | null
+}
+
+export type CommandInfo = { name: string; category: string; description: string; permissions: { key: string; label: string }[] }
 
 export type GuildResult = { ok: boolean; error?: string; code?: string | number | null; skipped?: string }
 
 export type Sanction = {
   id: number
   type: SanctionType
+  profile?: string | null
+  profileLabel?: string | null
   userId: string
   userName: string | null
   moderatorId: string

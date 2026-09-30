@@ -4,8 +4,8 @@ import { ForbiddenError, ValidationError } from './errors.js';
 export function createMembers({ db, network, ranks, sanctions, audit, executor }) {
 	const linkedRoles = db.prepare('SELECT DISTINCT role_id FROM rank_roles WHERE guild_id = ?');
 
-	async function checkTarget(actor, guildId, userId) {
-		if (!actor.can('members.manage')) throw new ForbiddenError('Permission manquante : members.manage');
+	async function checkTarget(actor, guildId, userId, permission = 'members.manage') {
+		if (!actor.can(permission)) throw new ForbiddenError(`Permission manquante : ${permission}`);
 		if (userId === actor.id && !actor.isOwner) throw new ForbiddenError('Tu ne peux pas modifier ton propre profil.');
 		if (network.find(guildId)?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
 		const target = await ranks.resolve(userId);
@@ -39,6 +39,10 @@ export function createMembers({ db, network, ranks, sanctions, audit, executor }
 	}
 
 	return {
+		// Shared with the moderation commands (/role, /nick), which have their own permissions
+		assertCanEdit: checkTarget,
+		assertGivableRole: checkRole,
+
 		// By Discord ID, or by the beginning of a username / display name / nickname on any network server
 		async search(query, limit = 10) {
 			const text = String(query ?? '').trim().replace(/^@/, '');
@@ -104,8 +108,8 @@ export function createMembers({ db, network, ranks, sanctions, audit, executor }
 		addRole: (actor, guildId, userId, roleId) => changeRole(actor, guildId, userId, roleId, true),
 		removeRole: (actor, guildId, userId, roleId) => changeRole(actor, guildId, userId, roleId, false),
 
-		async setNickname(actor, guildId, userId, nickname) {
-			await checkTarget(actor, guildId, userId);
+		async setNickname(actor, guildId, userId, nickname, permission = 'members.manage') {
+			await checkTarget(actor, guildId, userId, permission);
 			if (nickname !== null && (typeof nickname !== 'string' || nickname.length > 32)) throw new ValidationError('Le pseudo fait 32 caractères maximum.');
 			await executor.setNickname(guildId, userId, nickname || null, `Panel : ${actor.id}`);
 			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'members.nickname', guildId, target: userId, details: { nickname: nickname || null } });

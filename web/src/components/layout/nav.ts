@@ -16,6 +16,7 @@ import {
   LifeBuoy,
   KeySquare,
   Megaphone,
+  SquareSlash,
 } from 'lucide-react'
 
 export type NavEntry = {
@@ -43,6 +44,7 @@ export const navSections: NavSection[] = [
       { title: 'Automod', url: '/automod', icon: ShieldAlert, permission: 'automod.view' },
       { title: 'Tickets', url: '/tickets', icon: LifeBuoy, permission: 'tickets.view' },
       { title: 'Annonces', url: '/announcements', icon: Megaphone, permission: 'announcements.view' },
+      { title: 'Commandes', url: '/commands', icon: SquareSlash, permission: null },
     ],
   },
   {

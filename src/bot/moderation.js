@@ -2,8 +2,8 @@ import { EmbedBuilder, InteractionContextType, MessageFlags, PermissionFlagsBits
 import { AppError } from '../core/errors.js';
 import { formatDuration, parseDuration } from '../core/duration.js';
 
-const COLORS = { ban: 0xed4245, kick: 0xed4245, timeout: 0xfee75c, warn: 0xfee75c, revoke: 0x57f287 };
-const TITLES = { ban: 'Bannissement', kick: 'Expulsion', timeout: 'Timeout', warn: 'Avertissement' };
+const COLORS = { ban: 0xed4245, kick: 0xed4245, timeout: 0xfee75c, warn: 0xfee75c, restrict: 0xf0883e, revoke: 0x57f287 };
+const TITLES = { ban: 'Bannissement', kick: 'Expulsion', timeout: 'Timeout', warn: 'Avertissement', restrict: 'Restriction' };
 
 // Base of every moderation command: guild only, hidden for members without "Moderate Members"
 // (server admins can change that in Server settings > Integrations). Ranks decide what is really allowed.
@@ -51,6 +51,7 @@ export function sanctionEmbed(sanction, { revoked = false } = {}) {
 			{ name: 'Membre', value: `<@${sanction.userId}> (${sanction.userName ?? sanction.userId})`, inline: true },
 			{ name: 'Portée', value: sanction.scope === 'network' ? 'Tout le réseau' : 'Ce serveur', inline: true },
 		);
+	if (sanction.profileLabel) embed.addFields({ name: 'Restriction', value: sanction.profileLabel, inline: true });
 	if (sanction.reason) embed.addFields({ name: 'Raison', value: sanction.reason.slice(0, 1000) });
 	if (sanction.expiresAt && !revoked) embed.addFields({ name: 'Fin', value: `<t:${Math.round(sanction.expiresAt / 1000)}:R>`, inline: true });
 	const line = resultsLine(sanction.results);

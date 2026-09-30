@@ -14,6 +14,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedAuditRouteImport } from './routes/_authenticated/audit'
 import { Route as AuthenticatedAutomodRouteImport } from './routes/_authenticated/automod'
+import { Route as AuthenticatedCommandsRouteImport } from './routes/_authenticated/commands'
 import { Route as AuthenticatedConsoleRouteImport } from './routes/_authenticated/console'
 import { Route as AuthenticatedEventsRouteImport } from './routes/_authenticated/events'
 import { Route as AuthenticatedLogsRouteImport } from './routes/_authenticated/logs'
@@ -53,6 +54,11 @@ const AuthenticatedAuditRoute = AuthenticatedAuditRouteImport.update({
 const AuthenticatedAutomodRoute = AuthenticatedAutomodRouteImport.update({
   id: '/automod',
   path: '/automod',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedCommandsRoute = AuthenticatedCommandsRouteImport.update({
+  id: '/commands',
+  path: '/commands',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedConsoleRoute = AuthenticatedConsoleRouteImport.update({
@@ -144,6 +150,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/audit': typeof AuthenticatedAuditRoute
   '/automod': typeof AuthenticatedAutomodRoute
+  '/commands': typeof AuthenticatedCommandsRoute
   '/console': typeof AuthenticatedConsoleRoute
   '/events': typeof AuthenticatedEventsRoute
   '/logs': typeof AuthenticatedLogsRoute
@@ -165,6 +172,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/audit': typeof AuthenticatedAuditRoute
   '/automod': typeof AuthenticatedAutomodRoute
+  '/commands': typeof AuthenticatedCommandsRoute
   '/console': typeof AuthenticatedConsoleRoute
   '/events': typeof AuthenticatedEventsRoute
   '/logs': typeof AuthenticatedLogsRoute
@@ -189,6 +197,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_authenticated/audit': typeof AuthenticatedAuditRoute
   '/_authenticated/automod': typeof AuthenticatedAutomodRoute
+  '/_authenticated/commands': typeof AuthenticatedCommandsRoute
   '/_authenticated/console': typeof AuthenticatedConsoleRoute
   '/_authenticated/events': typeof AuthenticatedEventsRoute
   '/_authenticated/logs': typeof AuthenticatedLogsRoute
@@ -214,6 +223,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/audit'
     | '/automod'
+    | '/commands'
     | '/console'
     | '/events'
     | '/logs'
@@ -235,6 +245,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/audit'
     | '/automod'
+    | '/commands'
     | '/console'
     | '/events'
     | '/logs'
@@ -258,6 +269,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/_authenticated/audit'
     | '/_authenticated/automod'
+    | '/_authenticated/commands'
     | '/_authenticated/console'
     | '/_authenticated/events'
     | '/_authenticated/logs'
@@ -317,6 +329,13 @@ declare module '@tanstack/react-router' {
       path: '/automod'
       fullPath: '/automod'
       preLoaderRoute: typeof AuthenticatedAutomodRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/commands': {
+      id: '/_authenticated/commands'
+      path: '/commands'
+      fullPath: '/commands'
+      preLoaderRoute: typeof AuthenticatedCommandsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/console': {
@@ -437,6 +456,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAuditRoute: typeof AuthenticatedAuditRoute
   AuthenticatedAutomodRoute: typeof AuthenticatedAutomodRoute
+  AuthenticatedCommandsRoute: typeof AuthenticatedCommandsRoute
   AuthenticatedConsoleRoute: typeof AuthenticatedConsoleRoute
   AuthenticatedEventsRoute: typeof AuthenticatedEventsRoute
   AuthenticatedLogsRoute: typeof AuthenticatedLogsRoute
@@ -459,6 +479,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAuditRoute: AuthenticatedAuditRoute,
   AuthenticatedAutomodRoute: AuthenticatedAutomodRoute,
+  AuthenticatedCommandsRoute: AuthenticatedCommandsRoute,
   AuthenticatedConsoleRoute: AuthenticatedConsoleRoute,
   AuthenticatedEventsRoute: AuthenticatedEventsRoute,
   AuthenticatedLogsRoute: AuthenticatedLogsRoute,

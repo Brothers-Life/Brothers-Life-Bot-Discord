@@ -8,6 +8,7 @@ import type { PersonProfile, Role } from '@/lib/types'
 import { dateTime, userName } from '@/lib/format'
 import { useMe } from '@/hooks/use-me'
 import { Page, Section, EmptyState, Pill, RankBadge, UserAvatar } from '@/components/app/ui'
+import { TempRoles } from '@/features/people/temp-roles'
 import { SanctionDialog } from '@/features/sanctions/sanction-dialog'
 import { UserPicker } from '@/components/app/user-picker'
 import { Button } from '@/components/ui/button'
@@ -75,7 +76,7 @@ function Profile({ userId }: { userId: string }) {
               </Link>
             </Button>
           )}
-          {['warn', 'timeout', 'kick', 'ban'].some((t) => can(`sanctions.${t}`)) && !data.isOwner && (
+          {['warn', 'restrict', 'timeout', 'kick', 'ban'].some((t) => can(`sanctions.${t}`)) && !data.isOwner && (
             <Button variant='destructive' onClick={() => setSanctioning(true)}>Sanctionner</Button>
           )}
         </div>
@@ -100,7 +101,7 @@ function GuildMembership({ userId, guild }: { userId: string; guild: PersonProfi
   const roles = useQuery({
     queryKey: ['guild-roles', guild.id],
     queryFn: () => api<{ guilds: { id: string; roles: Role[]; links: Record<string, string[]> }[] }>('/staff-roles').then((d) => d.guilds.find((g) => g.id === guild.id)),
-    enabled: manage && Boolean(guild.member),
+    enabled: (manage || can('commands.roles')) && Boolean(guild.member),
   })
   const linked = new Set(Object.values(roles.data?.links ?? {}).flat())
 
@@ -178,6 +179,7 @@ function GuildMembership({ userId, guild }: { userId: string; guild: PersonProfi
               </Popover>
             )}
           </div>
+          <TempRoles userId={userId} guildId={guild.id} roles={roles.data?.roles ?? []} />
           {manage && <p className='text-xs text-muted-foreground'>Les rôles liés à un rang se gèrent par les rangs. Les rôles de modération ou d’administration ne peuvent être donnés que par le chef du réseau.</p>}
         </div>
       )}

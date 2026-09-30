@@ -9,6 +9,7 @@ import { UserPicker } from '@/components/app/user-picker'
 import { Page, Section } from '@/components/app/ui'
 import { SanctionDialog } from '@/features/sanctions/sanction-dialog'
 import { SanctionList } from '@/features/sanctions/sanction-list'
+import { RestrictionsEditor } from '@/features/sanctions/restrictions-editor'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -31,7 +32,7 @@ function SanctionsPage() {
   const [userId, setUserId] = useState(search.user ?? '')
   const [creating, setCreating] = useState(false)
   const userFilter = /^\d{17,20}$/.test(userId.trim()) ? userId.trim() : ''
-  const canCreate = ['warn', 'timeout', 'kick', 'ban'].some((t) => can(`sanctions.${t}`))
+  const canCreate = ['warn', 'restrict', 'timeout', 'kick', 'ban'].some((t) => can(`sanctions.${t}`))
 
   const query = useInfiniteQuery({
     queryKey: ['sanctions', type, active, userFilter],
@@ -67,6 +68,7 @@ function SanctionsPage() {
                 <SelectItem value='timeout'>Timeouts</SelectItem>
                 <SelectItem value='kick'>Kicks</SelectItem>
                 <SelectItem value='warn'>Warns</SelectItem>
+                <SelectItem value='restrict'>Restrictions</SelectItem>
               </SelectContent>
             </Select>
             <UserPicker value={userFilter} onChange={setUserId} placeholder='Filtrer par membre' className='w-64' />
@@ -86,6 +88,7 @@ function SanctionsPage() {
           </div>
         )}
       </Section>
+      <RestrictionsEditor />
       {creating && <SanctionDialog userId={userFilter} onClose={() => setCreating(false)} />}
     </Page>
   )

@@ -194,6 +194,53 @@ export function createFakeExecutor() {
 		async sendDM(userId, content, files) {
 			this.dms.push([userId, content, files]);
 		},
+		// Moderation commands
+		async purgeMessages(channelId, options) {
+			this.calls.push(['purge', channelId, options]);
+			return Math.min(options.count, 42);
+		},
+		async setChannelLocked(channelId, locked) {
+			this.calls.push([locked ? 'lock' : 'unlock', channelId]);
+		},
+		async lockGuild(guildId) {
+			this.calls.push(['lockGuild', guildId]);
+			return ['610000000000000001', '610000000000000002'];
+		},
+		async unlockChannels(channelIds) {
+			this.calls.push(['unlockChannels', channelIds]);
+		},
+		async setSlowmode(channelId, seconds) {
+			this.calls.push(['slowmode', channelId, seconds]);
+		},
+		inVoice: new Set(),
+		async voiceDisconnect(guildId, userId) {
+			if (!this.inVoice.has(userId)) return 'not_in_voice';
+			this.calls.push(['voiceDisconnect', guildId, userId]);
+		},
+		async voiceMove(guildId, userId, channelId) {
+			if (!this.inVoice.has(userId)) return 'not_in_voice';
+			this.calls.push(['voiceMove', guildId, userId, channelId]);
+		},
+		async voiceMute(guildId, userId, muted) {
+			if (!this.inVoice.has(userId)) return 'not_in_voice';
+			this.calls.push(['voiceMute', guildId, userId, muted]);
+		},
+		topRolePositions: new Map(),
+		async getMemberTopRolePosition(guildId, userId) {
+			return this.topRolePositions.get(`${guildId}:${userId}`) ?? null;
+		},
+		// `${guildId}:${name}` -> roleId of restriction roles created
+		restrictionRoles: new Map(),
+		async ensureRestrictionRole(guildId, { roleId, name }) {
+			this.guard(guildId);
+			if (roleId) return roleId;
+			const id = String(880000000000000000n + BigInt(this.restrictionRoles.size + 1));
+			this.restrictionRoles.set(`${guildId}:${name}`, id);
+			return id;
+		},
+		async applyRestrictionOverwrites(channelId, entries) {
+			this.calls.push(['restrictChannel', channelId, entries.length]);
+		},
 		guard(guildId) {
 			if (this.failOn.has(guildId)) {
 				const error = new Error('Missing Permissions');

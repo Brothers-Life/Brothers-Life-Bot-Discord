@@ -1,0 +1,26 @@
+// What the panel shows on its "Commandes" page: every slash command and the rank permission it checks.
+// Keep in sync with src/bot/commands (a test compares both lists).
+export const COMMANDS = [
+	{ name: 'ban', category: 'Sanctions', description: 'Bannir un membre du réseau (ou de ce serveur), avec une durée', permissions: ['sanctions.ban'] },
+	{ name: 'kick', category: 'Sanctions', description: 'Expulser un membre', permissions: ['sanctions.kick'] },
+	{ name: 'timeout', category: 'Sanctions', description: 'Mettre un membre en timeout', permissions: ['sanctions.timeout'] },
+	{ name: 'warn', category: 'Sanctions', description: 'Avertir un membre', permissions: ['sanctions.warn'] },
+	{ name: 'restreindre', category: 'Sanctions', description: 'Rôle de punition : muet écrit, muet vocal, pas de vocal…', permissions: ['sanctions.restrict'] },
+	{ name: 'lever', category: 'Sanctions', description: 'Lever les restrictions d’un membre', permissions: ['sanctions.revoke'] },
+	{ name: 'unban', category: 'Sanctions', description: 'Débannir', permissions: ['sanctions.revoke'] },
+	{ name: 'untimeout', category: 'Sanctions', description: 'Lever un timeout', permissions: ['sanctions.revoke'] },
+	{ name: 'unwarn', category: 'Sanctions', description: 'Retirer un avertissement', permissions: ['sanctions.revoke'] },
+	{ name: 'sanction', category: 'Sanctions', description: 'Voir, lever ou corriger une sanction par son numéro', permissions: ['sanctions.view', 'sanctions.revoke', 'sanctions.edit'] },
+	{ name: 'historique', category: 'Sanctions', description: 'Sanctions d’un membre sur tout le réseau', permissions: ['sanctions.view'] },
+	{ name: 'clear', category: 'Modération', description: 'Supprimer des messages en masse (filtre membre, texte, bots)', permissions: ['commands.clear'] },
+	{ name: 'lock', category: 'Modération', description: 'Verrouiller un salon', permissions: ['commands.lock'] },
+	{ name: 'unlock', category: 'Modération', description: 'Déverrouiller un salon', permissions: ['commands.lock'] },
+	{ name: 'lockdown', category: 'Modération', description: 'Verrouiller ou rouvrir tout le serveur', permissions: ['commands.lockdown'] },
+	{ name: 'slowmode', category: 'Modération', description: 'Régler le mode lent', permissions: ['commands.slowmode'] },
+	{ name: 'role', category: 'Modération', description: 'Donner ou retirer un rôle, éventuellement temporaire', permissions: ['commands.roles'] },
+	{ name: 'nick', category: 'Modération', description: 'Changer le pseudo d’un membre', permissions: ['commands.nick'] },
+	{ name: 'voc', category: 'Modération', description: 'Déconnecter, déplacer, rendre muet en vocal', permissions: ['commands.voice'] },
+	{ name: 'userinfo', category: 'Modération', description: 'Fiche réseau d’un membre', permissions: ['commands.userinfo'] },
+	{ name: 'ticket', category: 'Tickets', description: 'Gérer le ticket du salon : ajouter, statut, priorité, transférer, fermer…', permissions: ['tickets.handle'] },
+	{ name: 'ping', category: 'Divers', description: 'Latence du bot', permissions: [] },
+];
