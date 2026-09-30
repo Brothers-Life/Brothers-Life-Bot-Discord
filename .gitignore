@@ -16,10 +16,17 @@ pids/
 
 # Env files
 .env
+.env.*
+!.env.example
 
-# Config files
-config.*.json
-!config.example.json
+# Runtime data (database, backups, TLS, installed versions)
+data/
+versions/
+current.json
+
+# Panel build
+web/dist/
+web/node_modules/
 
 # OS / IDE files
 .DS_Store

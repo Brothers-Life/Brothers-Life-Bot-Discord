@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const localesPath = path.join(__dirname, '..', 'locales');
 
 const DEFAULT_LOCALE = 'en';
-const useCache = config.useCacheForTranslations;
+const useCache = config.USE_TRANSLATION_CACHE;
 const localesCache = {};
 
 // Locales that actually have a folder in src/locales

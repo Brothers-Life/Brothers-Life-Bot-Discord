@@ -1,10 +1,10 @@
 // Usage:
-//   node src/tools/deploy-commands.js <env>            -> deploys to DEV_GUILD_ID (instant)
-//   node src/tools/deploy-commands.js <env> --global   -> deploys to every server (can take up to 1h)
+//   node src/bot/deploy-commands.js <env>            -> deploys to DEV_GUILD_ID (instant)
+//   node src/bot/deploy-commands.js <env> --global   -> deploys to every server (can take up to 1h)
 import { REST, Routes } from 'discord.js';
 import config, { env } from '../utils/config.js';
 import logger from '../utils/logger.js';
-import { loadCommands } from '../utils/loadCommands.js';
+import { loadCommands } from './loadCommands.js';
 
 const isGlobal = process.argv.includes('--global');
 

@@ -8,15 +8,20 @@ export async function startupChecks(config) {
 	logger.info(prefix + 'Starting bot checks...');
 
 	if (!config.TOKEN) {
-		logger.error(prefix + 'Token is missing in your config file!');
+		logger.error(prefix + 'TOKEN is missing (.env file or environment variable)!');
 		return false;
 	}
 	else if (config.TOKEN === 'YOUR_BOT_TOKEN') {
-		logger.error(prefix + 'Make sure to replace the config.*.json values!');
+		logger.error(prefix + 'Make sure to fill in your .env file!');
 		return false;
 	}
 
+	if (!config.CLIENT_SECRET) {
+		logger.warn(prefix + 'CLIENT_SECRET is missing: nobody will be able to log in to the panel.');
+	}
+
 	logger.info(prefix + 'Token found');
+	logger.info(prefix + `Owner: ${config.OWNER_ID}`);
 	logger.info(prefix + `Environment: ${env}`);
 
 	try {

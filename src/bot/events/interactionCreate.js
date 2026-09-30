@@ -1,6 +1,6 @@
 import { Events, MessageFlags, Collection } from 'discord.js';
-import logger from '../utils/logger.js';
-import { t } from '../utils/i18n.js';
+import logger from '../../utils/logger.js';
+import { t } from '../../utils/i18n.js';
 
 const DEFAULT_COOLDOWN_SECONDS = 3;
 

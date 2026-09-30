@@ -3,12 +3,17 @@ import path from 'node:path';
 import { format } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import cron from 'node-cron';
-import defaultConfig from '../config/loggerConfig.js';
+import defaultConfig from './loggerConfig.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const LOG_DIR = path.resolve(__dirname, '..', defaultConfig.logs.logDir || '../logs');
-if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+// Launcher sets BOT_ROOT so logs stay in the same place whatever version is running
+const LOG_DIR = process.env.BOT_ROOT
+	? path.join(process.env.BOT_ROOT, 'logs')
+	: path.resolve(__dirname, '..', defaultConfig.logs.logDir || '../logs');
+// Tests stay silent and don't touch the log files
+const SILENT = Boolean(process.env.NODE_TEST_CONTEXT);
+if (!SILENT && !fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
 
 const COLORS = {
 	RESET: '\x1b[0m',
@@ -58,6 +63,7 @@ function formatArgs(args) {
 
 function createLogger(type) {
 	return function(...args) {
+		if (SILENT) return;
 		const message = formatArgs(args);
 		const prefix = `[${type.toUpperCase()}]`;
 		const paddedPrefix = prefix + ' '.repeat(TYPE_WIDTH - type.length);

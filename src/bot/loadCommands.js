@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import logger from './logger.js';
+import logger from '../utils/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const commandsPath = path.join(__dirname, '..', 'commands');
+const commandsPath = path.join(__dirname, 'commands');
 
 // Recursively lists .js files, so commands can live at the root of commands/ or in any sub-folder
 function listJsFiles(dir) {

@@ -1,6 +1,0 @@
-{
-  "TOKEN": "YOUR_BOT_TOKEN",        
-  "APP_ID": "YOUR_APP_ID",          
-  "DEV_GUILD_ID": "YOUR_DEV_GUILD_ID",
-  "useCacheForTranslations": true
-}
