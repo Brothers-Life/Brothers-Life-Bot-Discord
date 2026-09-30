@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { openDb } from '../src/db/index.js';
 import { createCore } from '../src/core/context.js';
 import { parseConfig } from '../src/utils/config.js';
@@ -241,6 +244,25 @@ export function createFakeExecutor() {
 		async applyRestrictionOverwrites(channelId, entries) {
 			this.calls.push(['restrictChannel', channelId, entries.length]);
 		},
+		// Messages from the panel (welcome, leave, boost...)
+		messages: [],
+		async sendMessage(channelId, data) {
+			if (this.failOn.has(channelId)) throw new Error('Missing Access');
+			this.messages.push({ channelId, ...data });
+			return String(670000000000000000n + BigInt(this.messages.length));
+		},
+		dmPayloads: [],
+		async sendDMPayload(userId, payload) {
+			this.dmPayloads.push({ userId, payload });
+		},
+		guildInfo: new Map(),
+		async getGuildInfo(guildId) {
+			return this.guildInfo.get(guildId) ?? { id: guildId, name: 'Serveur', iconUrl: null, memberCount: 100, boosts: 3, tier: 1 };
+		},
+		async publishRules(channelId, messageId, data) {
+			this.calls.push(['rules', channelId, messageId, data.button?.label ?? null]);
+			return messageId ?? '680000000000000001';
+		},
 		guard(guildId) {
 			if (this.failOn.has(guildId)) {
 				const error = new Error('Missing Permissions');
@@ -260,10 +282,12 @@ export function createFakeExecutor() {
 export function createTestCore(overrides = {}) {
 	const db = openDb(':memory:');
 	const executor = createFakeExecutor();
-	const config = { ...parseConfig({ OWNER_ID: OWNER }), ...overrides };
+	const config = { ...parseConfig({ OWNER_ID: OWNER }), DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'brl-test-')), ...overrides };
 	const noop = () => undefined;
 	const silent = { info: noop, warn: noop, error: noop, debug: noop, success: noop };
-	const core = createCore({ db, config, executor, logger: silent });
+	// No network in tests: every remote image is "not found"
+	const fetchImpl = async () => new Response(null, { status: 404 });
+	const core = createCore({ db, config, executor, logger: silent, fetchImpl });
 	return { core, executor, db };
 }
 

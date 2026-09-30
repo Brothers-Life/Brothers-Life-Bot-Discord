@@ -1,6 +1,6 @@
-import { AttachmentBuilder, ChannelType, EmbedBuilder, PermissionFlagsBits, PermissionsBitField, RESTJSONErrorCodes } from 'discord.js';
+import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, PermissionFlagsBits, PermissionsBitField, RESTJSONErrorCodes } from 'discord.js';
 import { noticePayload, panelPayload, ratingPayload, welcomePayload } from './ticketsUi.js';
-import { buildEmbeds } from './messages.js';
+import { buildEmbeds, emojiOf } from './messages.js';
 
 const COLORS = {
 	info: 0x5865f2,
@@ -256,6 +256,56 @@ export function createExecutor(client) {
 			});
 			if (target.publish && channel.type === ChannelType.GuildAnnouncement) await message.crosspost().catch(() => null);
 			return message.id;
+		},
+
+		// Message edited in the panel ({ content, embed }), with files (image cards) and allowed user pings
+		async sendMessage(channelId, { payload, files = [], mentionUserIds = [] }) {
+			const channel = await client.channels.fetch(channelId);
+			const message = await channel.send({
+				content: payload.content || undefined,
+				embeds: buildEmbeds(payload),
+				files: files.map(f => new AttachmentBuilder(f.buffer, { name: f.name })),
+				allowedMentions: { users: mentionUserIds, roles: [] },
+			});
+			return message.id;
+		},
+
+		async sendDMPayload(userId, payload) {
+			const user = await client.users.fetch(userId);
+			await user.send({ content: payload.content || undefined, embeds: buildEmbeds(payload), allowedMentions: { parse: [] } });
+		},
+
+		async getGuildInfo(guildId) {
+			const guild = guildOf(guildId);
+			return {
+				id: guild.id,
+				name: guild.name,
+				iconUrl: guild.iconURL({ extension: 'png', size: 256 }),
+				memberCount: guild.memberCount,
+				boosts: guild.premiumSubscriptionCount ?? 0,
+				tier: guild.premiumTier,
+			};
+		},
+
+		// Rules message with its "I accept" button (updated in place if it still exists)
+		async publishRules(channelId, messageId, { payload, button }) {
+			const channel = await client.channels.fetch(channelId);
+			const components = [];
+			if (button) {
+				const accept = new ButtonBuilder().setCustomId('rules:accept').setLabel(button.label).setStyle({ primary: ButtonStyle.Primary, secondary: ButtonStyle.Secondary, success: ButtonStyle.Success, danger: ButtonStyle.Danger }[button.style]);
+				const emoji = emojiOf(button.emoji);
+				if (emoji) accept.setEmoji(emoji);
+				components.push(new ActionRowBuilder().addComponents(accept));
+			}
+			const message = { content: payload.content || undefined, embeds: buildEmbeds(payload), components, allowedMentions: { parse: [] } };
+			if (messageId) {
+				const existing = await channel.messages.fetch(messageId).catch(() => null);
+				if (existing) {
+					await existing.edit({ ...message, content: payload.content || null });
+					return existing.id;
+				}
+			}
+			return (await channel.send(message)).id;
 		},
 
 		// Server an invite leads to (null if invalid or expired)

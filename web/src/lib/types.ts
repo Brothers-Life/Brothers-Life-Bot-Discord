@@ -445,3 +445,46 @@ export type AnnouncementTargetsPayload = {
   channels: Channel[]
   roles: { id: string; name: string; color: string }[]
 }[]
+
+export type CardLayer =
+  | { id: string; type: 'avatar'; x: number; y: number; size: number; shape: 'circle' | 'rounded' | 'square'; borderWidth: number; borderColor: string }
+  | { id: string; type: 'text'; x: number; y: number; text: string; font: string; size: number; color: string; align: 'left' | 'center' | 'right'; maxWidth: number; shadow: boolean; uppercase: boolean }
+  | { id: string; type: 'rect'; x: number; y: number; w: number; h: number; color: string; opacity: number; radius: number }
+  | { id: string; type: 'image'; x: number; y: number; w: number; h: number; src: string | null; radius: number }
+
+export type CardDesign = {
+  width: number
+  height: number
+  background: { type: 'color' | 'gradient' | 'image'; color: string; color2: string; angle: number; image: string | null; overlay: number }
+  layers: CardLayer[]
+}
+
+export type OnboardingSection = {
+  enabled: boolean
+  channelId: string | null
+  payload: MessagePayload
+  card: { enabled: boolean; design: CardDesign }
+}
+
+export type OnboardingConfig = {
+  welcome: OnboardingSection & { includeBots: boolean; dm: { enabled: boolean; payload: MessagePayload } }
+  leave: OnboardingSection
+  boost: OnboardingSection & { bonusRoleIds: string[]; end: { enabled: boolean; payload: MessagePayload }; dm: { enabled: boolean; payload: MessagePayload } }
+  autoroles: { humanRoleIds: string[]; botRoleIds: string[] }
+  rules: {
+    enabled: boolean
+    channelId: string | null
+    messageId: string | null
+    payload: MessagePayload
+    buttonLabel: string
+    buttonEmoji: string
+    buttonStyle: 'primary' | 'secondary' | 'success' | 'danger'
+    acceptRoleIds: string[]
+    removeRoleIds: string[]
+    autorolesOnAccept: boolean
+    minAccountAgeDays: number
+    acceptedMessage: string
+  }
+}
+
+export type OnboardingPayload = { config: OnboardingConfig; channels: Channel[]; roles: Role[]; fonts: string[] }

@@ -303,3 +303,26 @@ test('announcements through the API: create, send with confirmation', async () =
 	const targets = (await call('GET', '/api/announcements/targets')).json();
 	assert.ok(targets.some(t => t.id === MAIN && t.channels.length));
 });
+
+test('uploads: images only, served back to the panel; card preview is a PNG', async () => {
+	const { app, core, owner } = await setup();
+	const viewer = core.ranks.create(owner, { name: 'Lecteur', level: 5, permissions: ['panel.access'] });
+	await core.ranks.assignDirect(owner, BOB, viewer.id);
+	const call = api(app, await sessionFor(app, OWNER));
+	const svg = await call('POST', '/api/uploads', { data: Buffer.from('<svg/>').toString('base64') });
+	assert.equal(svg.statusCode, 400);
+	const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+	const saved = await call('POST', '/api/uploads', { data: `data:image/png;base64,${png.toString('base64')}` });
+	assert.equal(saved.statusCode, 201);
+	const { id } = saved.json();
+	const back = await call('GET', `/api/uploads/${id}`);
+	assert.equal(back.headers['content-type'], 'image/png');
+	assert.equal((await call('GET', '/api/uploads/..%2Fbot.db')).statusCode, 400);
+
+	const preview = await call('POST', `/api/onboarding/${MAIN}/card/preview`, { design: { width: 300, height: 120, background: { type: 'image', image: `upload:${id}` }, layers: [] } });
+	assert.equal(preview.statusCode, 200);
+	assert.equal(preview.headers['content-type'], 'image/png');
+
+	const bob = api(app, await sessionFor(app, BOB));
+	assert.equal((await bob('POST', '/api/uploads', { data: png.toString('base64') })).statusCode, 403);
+});

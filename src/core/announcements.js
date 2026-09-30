@@ -20,9 +20,12 @@ function str(value, max) {
 	return value;
 }
 
+// Besides https URLs: the avatar / server icon variables of welcome messages, and attached files
+const URL_TOKEN = /^(\{(user\.avatar|server\.icon)\}|attachment:\/\/[\w.-]+)$/;
+
 function url(value, label) {
 	if (!value) return null;
-	if (!HTTPS_URL.test(value)) throw new ValidationError(`${label} : une adresse en https:// est attendue.`);
+	if (!HTTPS_URL.test(value) && !URL_TOKEN.test(value)) throw new ValidationError(`${label} : une adresse en https:// est attendue.`);
 	return value;
 }
 

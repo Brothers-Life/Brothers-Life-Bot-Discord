@@ -55,7 +55,7 @@ fs.writeFileSync('/tmp/bot.tar.gz', Buffer.from(await file.arrayBuffer()));
 NODE
 
 # Replace the code, keep the data. current.json is removed: (re)installing runs this release.
-rm -rf src launcher web/dist node_modules current.json
+rm -rf src assets launcher web/dist node_modules current.json
 tar -xzf /tmp/bot.tar.gz -C /mnt/server
 rm -f /tmp/bot.tar.gz
 

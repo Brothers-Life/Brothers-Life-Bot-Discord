@@ -44,7 +44,7 @@ jobs:
       - name: Package
         run: |
           tar -czf "bot-$GITHUB_REF_NAME.tar.gz" \
-            src launcher launcher.js web/dist package.json package-lock.json .npmrc .env.example README.md docs/pterodactyl.md
+            src assets launcher launcher.js web/dist package.json package-lock.json .npmrc .env.example README.md docs/pterodactyl.md
 
       - name: Release notes
         run: |

@@ -19,6 +19,7 @@ import { registerMemberRoutes } from './routes/members.js';
 import { registerTicketRoutes } from './routes/tickets.js';
 import { registerPermissionRoutes } from './routes/permissions.js';
 import { registerAnnouncementRoutes } from './routes/announcements.js';
+import { registerOnboardingRoutes } from './routes/onboarding.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_STATIC_DIR = path.resolve(__dirname, '..', '..', 'web', 'dist');
@@ -30,8 +31,8 @@ const SECURITY_HEADERS = {
 	'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
 	'Content-Security-Policy': [
 		'default-src \'self\'',
-		// Any https image: announcement previews show pictures hosted anywhere
-		'img-src \'self\' data: https:',
+		// Any https image (announcement previews), blob: for the card previews rendered by the server
+		'img-src \'self\' data: blob: https:',
 		'style-src \'self\' \'unsafe-inline\'',
 		'font-src \'self\' data:',
 		'connect-src \'self\'',
@@ -71,6 +72,7 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	registerTicketRoutes(app, { core });
 	registerPermissionRoutes(app, { core });
 	registerAnnouncementRoutes(app, { core });
+	registerOnboardingRoutes(app, { core });
 
 	const hasPanel = fs.existsSync(path.join(staticDir, 'index.html'));
 	const sendPanel = (reply) => {

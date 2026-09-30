@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { createSettings } from '../db/index.js';
 import { createAudit } from './audit.js';
 import { createNetwork } from './network.js';
@@ -14,6 +15,8 @@ import { createMembers } from './members.js';
 import { createRoleImport } from './roleImport.js';
 import { createAnnouncements } from './announcements.js';
 import { createTickets } from './tickets.js';
+import { createUploads } from './uploads.js';
+import { createOnboarding } from './onboarding.js';
 import { createPermissionSync } from './permissionSync.js';
 import { definePermission } from './permissions.js';
 
@@ -25,7 +28,7 @@ const SELF_LOGGED_ACTIONS = new Set(['tickets.close']);
 
 // Wires every core service together. `executor` is the only door to Discord:
 // the real one lives in src/bot/executor.js, tests use a fake.
-export function createCore({ db, config, executor, logger = console }) {
+export function createCore({ db, config, executor, logger = console, fetchImpl = fetch }) {
 	const settings = createSettings(db);
 	const audit = createAudit({ db });
 	const network = createNetwork({ db, audit });
@@ -49,6 +52,9 @@ export function createCore({ db, config, executor, logger = console }) {
 	const roleImport = createRoleImport({ db, network, ranks, staffSync, executor, audit });
 	const announcements = createAnnouncements({ db, network, audit, executor, logs, logger });
 	const tickets = createTickets({ db, network, ranks, audit, executor, logs, logger });
+	const uploads = createUploads({ dir: path.join(config.DATA_DIR, 'uploads') });
+	const onboarding = createOnboarding({ db, network, audit, executor, uploads, logger, fetchImpl });
+	logs.registerCategory('onboarding', 'Accueil (règlement accepté, boosts, réglages)');
 	const permissionSync = createPermissionSync({ db, network, ranks, audit, executor, logs, settings });
 
 	// Every audited action is also posted in the log channel of its category
@@ -82,5 +88,5 @@ export function createCore({ db, config, executor, logger = console }) {
 		sanctions.syncGuild(guild.id).catch(error => logger.error(`Ban sync failed on ${guild.name}:`, error));
 	});
 
-	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements };
+	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding };
 }

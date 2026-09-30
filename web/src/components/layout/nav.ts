@@ -17,6 +17,7 @@ import {
   KeySquare,
   Megaphone,
   SquareSlash,
+  DoorOpen,
 } from 'lucide-react'
 
 export type NavEntry = {
@@ -45,6 +46,12 @@ export const navSections: NavSection[] = [
       { title: 'Tickets', url: '/tickets', icon: LifeBuoy, permission: 'tickets.view' },
       { title: 'Annonces', url: '/announcements', icon: Megaphone, permission: 'announcements.view' },
       { title: 'Commandes', url: '/commands', icon: SquareSlash, permission: null },
+    ],
+  },
+  {
+    title: 'Communauté',
+    items: [
+      { title: 'Accueil', url: '/onboarding', icon: DoorOpen, permission: 'onboarding.view' },
     ],
   },
   {

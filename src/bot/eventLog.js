@@ -96,6 +96,7 @@ export async function memberJoined(member) {
 		details: { accountCreatedAt: member.user.createdTimestamp, invite: invite?.code ?? null, inviterId: invite?.inviterId ?? null },
 		message: { title: 'Arrivée', description: who(member.user), fields, color: ageDays < 7 ? 'warning' : 'success' },
 	});
+	return invite;
 }
 
 export function memberLeft(member) {
