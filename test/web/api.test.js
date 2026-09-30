@@ -36,6 +36,7 @@ async function setup() {
 	const consoleLog = { lines: () => [], subscribe: () => noop };
 	const versions = { describe: async () => ({ releases: [] }), current: () => ({ version: 'v1.0.0' }), ignore: noop, prepareInstall: async () => ({}) };
 	const config = { ...ctx.core.config, APP_ID: '111111111111111111', CLIENT_SECRET: 'secret', WEB_PUBLIC_URL: 'http://localhost:3000' };
+	ctx.core.config.APP_ID = config.APP_ID;
 	const web = await createWebServer({ config, core: ctx.core, runtime, consoleLog, versions, logger: silent, fetchImpl: fakeDiscord(), staticDir: '/nonexistent', tls: null });
 	return { ...ctx, app: web.app, runtimeCalls };
 }
@@ -274,4 +275,13 @@ test('the panel is served on "/" and on client routes; missing assets are 404', 
 	}
 	assert.equal((await web.app.inject({ method: 'GET', url: '/assets/app.js' })).body, 'console.log(1)');
 	assert.equal((await web.app.inject({ method: 'GET', url: '/assets/missing.js' })).statusCode, 404);
+});
+
+test('invite link carries the application id, the bot permissions and both scopes', async () => {
+	const { app } = await setup();
+	const res = await api(app, await sessionFor(app, OWNER))('GET', '/api/network/invite');
+	const url = new URL(res.json().url);
+	assert.equal(url.searchParams.get('client_id'), '111111111111111111');
+	assert.equal(url.searchParams.get('permissions'), '8');
+	assert.equal(url.searchParams.get('scope'), 'bot applications.commands');
 });

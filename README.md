@@ -27,7 +27,7 @@ La conception détaillée est dans `docs/superpowers/specs/`.
 - Une application Discord ([Developer Portal](https://discord.com/developers/applications)) :
   - **Bot** : activer les intents privilégiés *Server Members* et *Message Content*.
   - **OAuth2 > Redirects** : ajouter `<WEB_PUBLIC_URL>/api/auth/callback` (par exemple `http://localhost:3000/api/auth/callback`).
-  - Inviter le bot sur chaque serveur avec ces permissions : Voir les logs du serveur, Gérer le serveur (suivi des invitations), Gérer les rôles, Gérer les salons, Expulser, Bannir, Exclure temporairement, Gérer les messages, Gérer les pseudos, Voir les salons, Envoyer des messages, Intégrer des liens, Joindre des fichiers, Voir l'historique des messages.
+  - Inviter le bot sur chaque serveur avec la permission **Administrateur** : bouton « Inviter le bot sur un serveur » de la page **Serveurs** du panel.
   - Dans chaque serveur, placer le rôle du bot **au-dessus** des rôles du staff qu'il doit gérer.
 
 ## Développement en local

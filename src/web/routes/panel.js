@@ -7,6 +7,9 @@ const SNOWFLAKE = { type: 'string', pattern: '^\\d{17,20}$' };
 const idParam = { type: 'object', properties: { id: SNOWFLAKE }, required: ['id'] };
 const confirmBody = { type: 'object', properties: { confirm: { type: 'boolean' } } };
 
+// Administrator: the bot moderates, logs, manages staff roles, tickets and role permissions on every server
+export const BOT_PERMISSIONS = '8';
+
 // Routes of the socle: identity, overview, network, ranks, panel members, log routing, audit, sessions
 export function registerPanelRoutes(app, { core, runtime }) {
 	const { network, ranks, logs, audit, sessions, executor } = core;
@@ -50,6 +53,18 @@ export function registerPanelRoutes(app, { core, runtime }) {
 	// --- Network -----------------------------------------------------------------------------
 	app.get('/api/network', { config: { permission: 'network.view' } }, async () => {
 		return network.list().map(g => ({ ...g, icon: executor.guildIcon(g.id) ?? g.icon }));
+	});
+
+	// Invite link with exactly the permissions the bot needs (moderation, logs, staff roles, tickets)
+	app.get('/api/network/invite', { config: { permission: 'network.manage' } }, async () => {
+		const url = new URL('https://discord.com/oauth2/authorize');
+		url.search = new URLSearchParams({
+			client_id: core.config.APP_ID,
+			permissions: BOT_PERMISSIONS,
+			integration_type: '0',
+			scope: 'bot applications.commands',
+		}).toString();
+		return { url: url.toString(), configured: Boolean(core.config.APP_ID) };
 	});
 
 	app.post('/api/network/:id/activate', { config: { permission: 'network.manage' }, schema: { params: idParam } }, async (request) => {

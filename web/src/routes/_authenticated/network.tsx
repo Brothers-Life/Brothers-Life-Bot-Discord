@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Crown } from 'lucide-react'
+import { Crown, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Guild } from '@/lib/types'
@@ -52,6 +52,12 @@ function NetworkPage() {
     },
   })
 
+  const invite = useQuery({
+    queryKey: ['invite'],
+    queryFn: () => api<{ url: string; configured: boolean }>('/network/invite'),
+    enabled: manage,
+  })
+
   const main = guilds?.find((g) => g.isMain)
   const groups = [
     { title: 'Dans le réseau', items: guilds?.filter((g) => g.status === 'active' && g.botPresent) ?? [] },
@@ -62,7 +68,14 @@ function NetworkPage() {
   return (
     <Page
       title='Serveurs'
-      description='Un serveur ne rejoint le réseau que si tu l’ajoutes ici : inviter le bot ne suffit pas. Les rangs du staff se lisent sur les rôles du serveur principal.'
+      description='Invite d’abord le bot sur tes serveurs, puis ajoute-les au réseau ici : inviter le bot ne suffit pas. Les rangs du staff se lisent sur les rôles du serveur principal.'
+      actions={manage && invite.data?.configured && (
+        <Button asChild>
+          <a href={invite.data.url} target='_blank' rel='noreferrer'>
+            <ExternalLink /> Inviter le bot sur un serveur
+          </a>
+        </Button>
+      )}
     >
       {isLoading && <Skeleton className='h-48 w-full' />}
       {guilds && !guilds.length && (
