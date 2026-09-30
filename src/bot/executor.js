@@ -1,4 +1,4 @@
-import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, GuildVerificationLevel, PermissionFlagsBits, PermissionsBitField, RESTJSONErrorCodes } from 'discord.js';
+import { ActionRowBuilder, ActivityType, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, GuildVerificationLevel, PermissionFlagsBits, PermissionsBitField, RESTJSONErrorCodes } from 'discord.js';
 import { noticePayload, panelPayload, ratingPayload, welcomePayload } from './ticketsUi.js';
 import { buildEmbeds, emojiOf } from './messages.js';
 import { roomPanel } from './voiceUi.js';
@@ -6,6 +6,7 @@ import { pollPayload, pollResultsPayload } from './pollsUi.js';
 import { giveawayPayload, winnersPayload } from './giveawaysUi.js';
 import { boxPanelPayload, feedbackPayload, reviewPayload } from './feedbackUi.js';
 import { applicationPayload, recruitmentPanelPayload } from './recruitmentUi.js';
+import { fivemPayload } from './fivemUi.js';
 
 const COLORS = {
 	info: 0x5865f2,
@@ -365,6 +366,26 @@ export function createExecutor(client) {
 				}
 			}
 			return (await channel.send(payload)).id;
+		},
+
+		// --- FiveM ---------------------------------------------------------------------------------
+		// Status message edited in place (sent again if it was deleted); returns its id
+		async upsertFivemMessage(channelId, messageId, data) {
+			const channel = await client.channels.fetch(channelId);
+			const payload = fivemPayload(data);
+			if (messageId) {
+				const existing = await channel.messages.fetch(messageId).catch(() => null);
+				if (existing) {
+					await existing.edit(payload);
+					return existing.id;
+				}
+			}
+			return (await channel.send(payload)).id;
+		},
+
+		// Custom status under the bot's name; null clears it
+		async setBotStatus(text) {
+			client.user.setPresence({ activities: text ? [{ name: 'Statut', type: ActivityType.Custom, state: text.slice(0, 128) }] : [], status: 'online' });
 		},
 
 		// --- Recruitment -----------------------------------------------------------------------

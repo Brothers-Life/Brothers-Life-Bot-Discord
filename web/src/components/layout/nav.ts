@@ -1,5 +1,6 @@
 import {
   Gauge,
+  Gamepad2,
   Radio,
   UserPlus,
   CalendarOff,
@@ -47,6 +48,7 @@ export const navSections: NavSection[] = [
     items: [
       { title: 'Vue d’ensemble', url: '/', icon: Gauge, permission: null },
       { title: 'Serveurs', url: '/network', icon: Network, permission: 'network.view' },
+      { title: 'FiveM', url: '/fivem', icon: Gamepad2, permission: 'fivem.view' },
     ],
   },
   {

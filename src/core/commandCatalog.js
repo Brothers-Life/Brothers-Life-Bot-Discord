@@ -30,5 +30,6 @@ export const COMMANDS = [
 	{ name: 'proposer', category: 'Communauté', description: 'Suggestion, report de bug ou bug interne du staff', permissions: [] },
 	{ name: 'candidature', category: 'Staff', description: 'Postuler dans le staff', permissions: [] },
 	{ name: 'absence', category: 'Staff', description: 'Déclarer une absence, signaler son retour, voir le staff absent', permissions: ['absences.declare'] },
+	{ name: 'fivem', category: 'Communauté', description: 'Statut d’un serveur FiveM et joueurs connectés', permissions: [] },
 	{ name: 'ping', category: 'Divers', description: 'Latence du bot', permissions: [] },
 ];

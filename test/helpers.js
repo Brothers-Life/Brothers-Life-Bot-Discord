@@ -355,6 +355,16 @@ export function createFakeExecutor() {
 		async lockThread(threadId) {
 			this.lockedThreads.push(threadId);
 		},
+		fivemMessages: [],
+		async upsertFivemMessage(channelId, messageId, data) {
+			if (this.failOn.has(channelId)) throw new Error('Missing Access');
+			this.fivemMessages.push({ channelId, messageId, data });
+			return messageId ?? String(840000000000000000n + BigInt(this.fivemMessages.length));
+		},
+		botStatus: null,
+		async setBotStatus(text) {
+			this.botStatus = text;
+		},
 		applications: [],
 		async upsertApplicationMessage(channelId, messageId, view, options = {}) {
 			this.applications.push({ channelId, messageId, status: view.application.status, score: view.application.score });
