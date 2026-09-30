@@ -36,8 +36,25 @@ const queryClient = new QueryClient({
   }),
 })
 
+// Search params stay plain strings: the default JSON parsing would turn Discord IDs
+// (larger than Number.MAX_SAFE_INTEGER) into rounded numbers
+function parseSearch(search: string) {
+  return Object.fromEntries(new URLSearchParams(search))
+}
+
+function stringifySearch(search: Record<string, unknown>) {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(search)) {
+    if (value !== undefined && value !== null && value !== '') params.set(key, String(value))
+  }
+  const text = params.toString()
+  return text ? `?${text}` : ''
+}
+
 const router = createRouter({
   routeTree,
+  parseSearch,
+  stringifySearch,
   context: { queryClient },
   defaultPreload: 'intent',
   defaultPreloadStaleTime: 0,

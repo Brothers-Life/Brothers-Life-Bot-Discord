@@ -71,7 +71,7 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 
 	const hasPanel = fs.existsSync(path.join(staticDir, 'index.html'));
 	if (hasPanel) {
-		await app.register(fastifyStatic, { root: staticDir, wildcard: false, index: false });
+		await app.register(fastifyStatic, { root: staticDir, index: false });
 	}
 
 	// Unknown /api routes answer JSON; everything else is the React app (client-side routing)
