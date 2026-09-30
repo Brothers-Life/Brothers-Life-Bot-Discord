@@ -175,6 +175,7 @@ export function registerPanelRoutes(app, { core, runtime }) {
 		const guilds = network.list().filter(g => g.botPresent && g.status !== 'removed');
 		return {
 			categories: logs.categories(),
+			packs: logs.packs(),
 			mainGuildId: network.getMainId(),
 			guilds: guilds.map(g => ({ id: g.id, name: g.name, isMain: g.isMain, status: g.status, routes: logs.routes(g.id) })),
 			mirror: logs.routes(MIRROR),
@@ -184,13 +185,36 @@ export function registerPanelRoutes(app, { core, runtime }) {
 	app.put('/api/logs/:guildId/:category', {
 		config: { permission: 'logs.manage' },
 		schema: {
-			params: { type: 'object', properties: { guildId: { type: 'string', pattern: '^(\\d{17,20}|\\*)$' }, category: { type: 'string' } }, required: ['guildId', 'category'] },
-			body: { type: 'object', properties: { channelId: { anyOf: [SNOWFLAKE, { type: 'null' }] }, enabled: { type: 'boolean' } }, required: ['channelId'] },
+			params: { type: 'object', properties: { guildId: { type: 'string', pattern: '^(\\d{17,20}|\\*)$' }, category: { type: 'string', maxLength: 80 } }, required: ['guildId', 'category'] },
+			// channelId "0" turns one type ("category:type") off
+			body: { type: 'object', properties: { channelId: { anyOf: [SNOWFLAKE, { type: 'string', const: '0' }, { type: 'null' }] }, enabled: { type: 'boolean' } }, required: ['channelId'] },
 		},
 	}, async (request) => {
 		const { guildId, category } = request.params;
 		return logs.setRoute(request.actor, guildId, category, request.body.channelId, request.body.enabled ?? true);
 	});
+
+	// Ready-made layout: private "Logs" category and its channels, readable by the ranks that see logs
+	app.post('/api/logs/:guildId/pack', {
+		config: { permission: 'logs.manage' },
+		schema: {
+			params: { type: 'object', properties: { guildId: SNOWFLAKE }, required: ['guildId'] },
+			body: { type: 'object', required: ['pack'], properties: { pack: { type: 'string', maxLength: 30 }, categoryName: { type: 'string', maxLength: 100 } } },
+		},
+	}, async (request) => {
+		const { guildId } = request.params;
+		const readers = new Set(ranks.list().filter(r => ['logs.manage', 'events.view', 'audit.view'].some(p => r.effectivePermissions.includes(p))).map(r => r.id));
+		const staffRoleIds = [...new Set([...core.staffSync.linksOf(guildId)].filter(([rankId]) => readers.has(rankId)).flatMap(([, roleIds]) => roleIds))];
+		return logs.applyPack(request.actor, guildId, request.body.pack, { categoryName: request.body.categoryName, staffRoleIds });
+	});
+
+	app.post('/api/logs/:guildId/all', {
+		config: { permission: 'logs.manage' },
+		schema: {
+			params: { type: 'object', properties: { guildId: { type: 'string', pattern: '^(\\d{17,20}|\\*)$' } }, required: ['guildId'] },
+			body: { type: 'object', required: ['channelId'], properties: { channelId: SNOWFLAKE } },
+		},
+	}, async (request) => logs.routeAll(request.actor, request.params.guildId, request.body.channelId));
 
 	// --- Audit -------------------------------------------------------------------------------
 	app.get('/api/audit', {

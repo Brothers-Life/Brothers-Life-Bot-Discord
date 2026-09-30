@@ -473,6 +473,35 @@ export function createExecutor(client) {
 			await channel.edit({ ...options, lockPermissions: false });
 		},
 
+		// Log packs: a private category (hidden from @everyone, read-only for the staff roles) and its channels,
+		// reused when they already exist (same names)
+		async createLogChannels(guildId, { categoryName, channels, staffRoleIds = [] }) {
+			const guild = guildOf(guildId);
+			const me = guild.members.me;
+			const overwrites = [
+				{ id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+				{ id: me.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.ReadMessageHistory] },
+				...staffRoleIds.filter(id => guild.roles.cache.has(id)).map(id => ({ id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] })),
+			];
+			const reason = 'Pack de logs';
+			let createdCount = 0;
+			let category = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase() === categoryName.toLowerCase());
+			if (!category) {
+				category = await guild.channels.create({ name: categoryName, type: ChannelType.GuildCategory, permissionOverwrites: overwrites, reason });
+				createdCount++;
+			}
+			const out = {};
+			for (const name of channels) {
+				let channel = guild.channels.cache.find(c => c.type === ChannelType.GuildText && c.parentId === category.id && c.name === name);
+				if (!channel) {
+					channel = await guild.channels.create({ name, type: ChannelType.GuildText, parent: category.id, permissionOverwrites: overwrites, reason });
+					createdCount++;
+				}
+				out[name] = channel.id;
+			}
+			return { categoryId: category.id, channels: out, createdCount };
+		},
+
 		async removeTemplateChannel(guildId, channelId) {
 			const channel = await guildOf(guildId).channels.fetch(channelId).catch(() => null);
 			if (channel) await channel.delete('Modèle de serveur (réinitialisation)');

@@ -75,3 +75,54 @@ test('removing a route', async () => {
 	await core.logs.setRoute(owner, MAIN, 'ranks', null);
 	assert.deepEqual(core.logs.routes(MAIN), []);
 });
+
+test('point by point: one type sent elsewhere or turned off, the rest of its category follows the category route', async () => {
+	const { core, executor, owner } = await setup();
+	await core.logs.setRoute(owner, MAIN, 'ranks', 'c-main-ranks');
+	await core.logs.setRoute(owner, MAIN, 'ranks:delete', 'c-main-network');
+	await core.logs.setRoute(owner, MAIN, 'ranks:update', '0');
+	executor.sent.length = 0;
+	const rank = core.ranks.create(owner, { name: 'Modo', level: 10, permissions: [] });
+	core.ranks.update(owner, rank.id, { name: 'Modérateur' });
+	core.ranks.remove(owner, rank.id);
+	await core.logs.flush();
+	assert.deepEqual(executor.sent.map(s => [s.channelId, s.message.title]), [['c-main-ranks', 'Rang créé'], ['c-main-network', 'Rang supprimé']]);
+
+	// Server events too, by their type
+	await core.logs.setRoute(owner, MAIN, 'messages', 'c-main-ranks');
+	await core.logs.setRoute(owner, MAIN, 'messages:message_edit', '0');
+	executor.sent.length = 0;
+	core.events.record({ guildId: MAIN, category: 'messages', type: 'message_edit', summary: 'edit' });
+	core.events.record({ guildId: MAIN, category: 'messages', type: 'message_delete', summary: 'delete' });
+	await core.logs.flush();
+	assert.deepEqual(executor.sent.map(s => s.message.title), ['delete']);
+
+	const categories = core.logs.categories();
+	assert.ok(categories.find(c => c.key === 'ranks').types.some(t => t.key === 'delete'), 'panel actions are types');
+	assert.ok(categories.find(c => c.key === 'discord_moderation').types.some(t => t.key === 'member_ban'));
+	await assert.rejects(core.logs.setRoute(owner, MAIN, 'ranks', '0'), ValidationError, 'a whole category is removed, not turned off');
+	await assert.rejects(core.logs.setRoute(owner, MAIN, 'nope:x', 'c-main-ranks'), ValidationError);
+});
+
+test('packs: private channels created once, every category routed, unlisted ones go to the "rest" channel', async () => {
+	const { core, executor, owner } = await setup();
+	await core.logs.setRoute(owner, MAIN, 'messages:message_edit', '0');
+	const first = await core.logs.applyPack(owner, MAIN, 'complet', { staffRoleIds: ['800000000000000001'] });
+	assert.equal(first.created, 8);
+	assert.deepEqual(executor.logPacks[0].staffRoleIds, ['800000000000000001']);
+	const route = (category) => first.routes.find(r => r.category === category)?.channelId;
+	assert.equal(route('sanctions'), first.channels['logs-moderation']);
+	assert.equal(route('messages'), first.channels['logs-messages']);
+	assert.equal(route('network'), first.channels['logs-bot']);
+	assert.equal(route('customcommands'), first.channels['logs-communaute']);
+	assert.equal(route('messages:message_edit'), '0', 'type routes are kept');
+	const routed = new Set(first.routes.map(r => r.category));
+	assert.ok(core.logs.categories().every(c => routed.has(c.key)), 'nothing left without a channel');
+
+	const again = await core.logs.applyPack(owner, MAIN, 'complet');
+	assert.equal(again.created, 0, 'channels reused');
+	const minimal = await core.logs.applyPack(owner, MAIN, 'minimal');
+	assert.ok(minimal.routes.filter(r => !r.category.includes(':')).every(r => r.channelId === minimal.channels.logs));
+	await assert.rejects(core.logs.applyPack(owner, MIRROR, 'minimal'), ValidationError);
+	await assert.rejects(core.logs.applyPack(owner, MAIN, 'nope'), ValidationError);
+});

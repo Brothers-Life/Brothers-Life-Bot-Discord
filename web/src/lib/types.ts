@@ -58,7 +58,8 @@ export type Channel = { id: string; name: string; parent: string | null; canSend
 export type LogRoute = { category: string; channelId: string; enabled: boolean }
 
 export type LogsPayload = {
-  categories: { key: string; label: string }[]
+  categories: { key: string; label: string; types: { key: string; label: string }[] }[]
+  packs: { key: string; label: string; hint: string; channels: string[] }[]
   mainGuildId: string | null
   guilds: { id: string; name: string; isMain: boolean; status: Guild['status']; routes: LogRoute[] }[]
   mirror: LogRoute[]

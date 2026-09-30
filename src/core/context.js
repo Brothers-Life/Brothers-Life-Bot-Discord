@@ -41,7 +41,7 @@ import { definePermission } from './permissions.js';
 
 definePermission('members.view', { label: 'Rechercher des membres sur le réseau', category: 'Membres' });
 definePermission('members.manage', { label: 'Modifier les rôles et pseudos des membres', category: 'Membres' });
-import { describeAuditEntry } from './describe.js';
+import { auditTypes, describeAuditEntry } from './describe.js';
 
 const SELF_LOGGED_ACTIONS = new Set(['tickets.close']);
 
@@ -77,7 +77,6 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const antiraid = createAntiraid({ db, network, audit, executor, sanctions, logs, logger });
 	const stats = createStats({ db, network, audit, executor, logger });
 	const voiceRooms = createVoiceRooms({ db, network, audit, executor, logger });
-	logs.registerCategory('voice', 'Vocaux personnels (créés, transférés, fermés)');
 	const liveMessages = createLiveMessages({ db, network, audit, executor, stats, logger });
 	const changelog = createChangelog({ db, network, audit, executor, logger });
 	logs.registerCategory('changelog', 'Changelog publié');
@@ -103,13 +102,16 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	logs.registerCategory('absences', 'Absences du staff');
 	const permissionSync = createPermissionSync({ db, network, ranks, audit, executor, logs, settings });
 
+	// Panel actions become log types (e.g. "sanctions:ban"), each of which can be routed apart
+	for (const [category, types] of Object.entries(auditTypes())) logs.registerTypes(category, types);
+
 	// Every audited action is also posted in the log channel of its category
 	audit.onRecord((entry) => {
 		// These services post a richer message themselves (e.g. the ticket transcript)
 		if (SELF_LOGGED_ACTIONS.has(entry.action)) return;
 		const category = entry.action.split('.')[0];
 		if (!logs.categories().some(c => c.key === category)) return;
-		logs.log(entry.guildId, category, describeAuditEntry(entry));
+		logs.log(entry.guildId, category, describeAuditEntry(entry), entry.action.split('.')[1] ?? null);
 	});
 
 	// Rank links point to roles of the main server: changing it invalidates every cached permission

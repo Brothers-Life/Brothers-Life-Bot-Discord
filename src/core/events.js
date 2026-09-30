@@ -1,18 +1,10 @@
 import { definePermission } from './permissions.js';
 import { ForbiddenError, ValidationError } from './errors.js';
+import { EVENT_CATEGORIES, EVENT_TYPES } from './logCatalog.js';
 
 definePermission('events.view', { label: 'Voir les événements des serveurs', category: 'Logs' });
 
-export const EVENT_CATEGORIES = {
-	messages: 'Messages (modifiés, supprimés)',
-	members: 'Membres (arrivées, départs, pseudos)',
-	member_roles: 'Rôles donnés ou retirés aux membres',
-	roles: 'Rôles du serveur (créés, modifiés, supprimés)',
-	channels: 'Salons (créés, modifiés, supprimés)',
-	voice: 'Vocal (arrivées, départs, changements)',
-	invites: 'Invitations',
-	server: 'Serveur et émojis',
-};
+export { EVENT_CATEGORIES } from './logCatalog.js';
 
 const DEFAULT_RETENTION_DAYS = 30;
 const DAY = 86_400_000;
@@ -20,7 +12,7 @@ const DAY = 86_400_000;
 // Server events (messages, members, roles, channels...): stored for the panel search
 // and posted in the log channel of their category.
 export function createEvents({ db, network, logs, settings, now = Date.now }) {
-	for (const [key, label] of Object.entries(EVENT_CATEGORIES)) logs.registerCategory(key, label);
+	for (const [key, label] of Object.entries(EVENT_CATEGORIES)) logs.registerCategory(key, label, EVENT_TYPES[key]);
 
 	const insert = db.prepare(`
 		INSERT INTO events (at, guild_id, category, type, user_id, actor_id, channel_id, summary, details)
@@ -62,7 +54,7 @@ export function createEvents({ db, network, logs, settings, now = Date.now }) {
 				summary: summary.slice(0, 500),
 				details: details ? JSON.stringify(details) : null,
 			});
-			logs.log(guildId, category, message ?? { title: summary });
+			logs.log(guildId, category, message ?? { title: summary }, type);
 			return Number(lastInsertRowid);
 		},
 

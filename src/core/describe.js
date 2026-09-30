@@ -223,6 +223,16 @@ function formatValue(value) {
 	return String(value);
 }
 
+// Panel actions as log types: { category: { verb: label } }
+export function auditTypes() {
+	const out = {};
+	for (const [action, title] of Object.entries(TITLES)) {
+		const [category, verb] = action.split('.');
+		if (verb) (out[category] ??= {})[verb] = title;
+	}
+	return out;
+}
+
 export function describeAuditEntry(entry) {
 	const fields = [{ name: 'Par', value: `${actorLabel(entry.actorId)} (${SOURCE_LABELS[entry.source] ?? entry.source})`, inline: true }];
 	if (entry.target) fields.push({ name: 'Cible', value: /^\d{17,20}$/.test(entry.target) && entry.action.startsWith('ranks.') && !entry.action.endsWith('.create') ? `<@${entry.target}> (${entry.target})` : entry.target, inline: true });

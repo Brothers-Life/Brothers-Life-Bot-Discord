@@ -120,7 +120,29 @@ export function memberLeft(member) {
 }
 
 export function memberUpdated(oldMember, member) {
-	if (oldMember.partial || oldMember.nickname === member.nickname) return;
+	if (oldMember.partial) return;
+	if (oldMember.avatar !== member.avatar) {
+		record(member.guild, {
+			category: 'members',
+			type: 'member_avatar',
+			userId: member.id,
+			summary: `Avatar de serveur de ${member.user.username} ${member.avatar ? 'changé' : 'retiré'}`,
+			details: { before: oldMember.avatar, after: member.avatar },
+			message: { title: 'Avatar de serveur modifié', description: who(member.user) },
+		});
+	}
+	if (Boolean(oldMember.premiumSinceTimestamp) !== Boolean(member.premiumSinceTimestamp)) {
+		const started = Boolean(member.premiumSinceTimestamp);
+		record(member.guild, {
+			category: 'members',
+			type: 'member_boost',
+			userId: member.id,
+			summary: `${member.user.username} ${started ? 'boost le serveur' : 'ne boost plus le serveur'}`,
+			details: { boosting: started },
+			message: { title: started ? 'Nouveau boost' : 'Boost terminé', description: who(member.user), color: started ? 'success' : 'warning' },
+		});
+	}
+	if (oldMember.nickname === member.nickname) return;
 	record(member.guild, {
 		category: 'members',
 		type: 'member_nickname',
@@ -138,8 +160,47 @@ export function memberUpdated(oldMember, member) {
 	});
 }
 
+// Pseudo or Discord avatar changed: logged on every server of the network where the person is
+export function userUpdated(oldUser, user) {
+	if (oldUser.partial || user.bot) return;
+	const changes = [];
+	if (oldUser.username !== user.username) changes.push({ name: 'Pseudo', value: `${oldUser.username} → ${user.username}` });
+	if (oldUser.globalName !== user.globalName) changes.push({ name: 'Nom affiché', value: `${oldUser.globalName ?? '—'} → ${user.globalName ?? '—'}` });
+	if (oldUser.avatar !== user.avatar) changes.push({ name: 'Avatar', value: user.avatar ? 'changé' : 'retiré' });
+	if (!changes.length) return;
+	for (const guild of user.client.guilds.cache.values()) {
+		if (!guild.members.cache.has(user.id)) continue;
+		record(guild, {
+			category: 'members',
+			type: 'member_username',
+			userId: user.id,
+			summary: `${oldUser.username} : ${changes.map(c => `${c.name} ${c.value}`).join(', ')}`,
+			details: { changes },
+			message: { title: 'Profil Discord modifié', description: who(user), fields: changes.map(c => ({ ...c, inline: true })) },
+		});
+	}
+}
+
 // --- Voice --------------------------------------------------------------------------------
 export function voiceChanged(oldState, state) {
+	if (oldState.channelId && oldState.channelId === state.channelId) {
+		const user = state.member?.user;
+		const kinds = [['streaming', 'partage son écran', 'arrête de partager son écran'], ['selfVideo', 'allume sa caméra', 'coupe sa caméra']];
+		for (const [key, on, off] of kinds) {
+			if (Boolean(oldState[key]) === Boolean(state[key])) continue;
+			const text = state[key] ? on : off;
+			record(state.guild, {
+				category: 'voice',
+				type: 'voice_stream',
+				userId: state.id,
+				channelId: state.channelId,
+				summary: `${user?.username ?? state.id} ${text}`,
+				details: { [key]: Boolean(state[key]) },
+				message: { title: 'Vocal', description: `${who(user)} ${text} dans <#${state.channelId}>` },
+			});
+		}
+		return;
+	}
 	if (oldState.channelId === state.channelId) return;
 	const user = state.member?.user;
 	const [type, summary, description] = !oldState.channelId
@@ -207,9 +268,51 @@ const AUDIT = {
 	[AuditLogEvent.EmojiCreate]: ['server', 'emoji_create', 'Émoji ajouté'],
 	[AuditLogEvent.EmojiUpdate]: ['server', 'emoji_update', 'Émoji modifié'],
 	[AuditLogEvent.EmojiDelete]: ['server', 'emoji_delete', 'Émoji supprimé'],
+	[AuditLogEvent.StickerCreate]: ['server', 'sticker_create', 'Autocollant ajouté'],
+	[AuditLogEvent.StickerUpdate]: ['server', 'sticker_update', 'Autocollant modifié'],
+	[AuditLogEvent.StickerDelete]: ['server', 'sticker_delete', 'Autocollant supprimé'],
+	[AuditLogEvent.GuildScheduledEventCreate]: ['server', 'event_create', 'Événement programmé créé'],
+	[AuditLogEvent.GuildScheduledEventUpdate]: ['server', 'event_update', 'Événement programmé modifié'],
+	[AuditLogEvent.GuildScheduledEventDelete]: ['server', 'event_delete', 'Événement programmé supprimé'],
+	[AuditLogEvent.AutoModerationRuleCreate]: ['server', 'automod_rule', 'Règle AutoMod créée'],
+	[AuditLogEvent.AutoModerationRuleUpdate]: ['server', 'automod_rule', 'Règle AutoMod modifiée'],
+	[AuditLogEvent.AutoModerationRuleDelete]: ['server', 'automod_rule', 'Règle AutoMod supprimée'],
+	[AuditLogEvent.ThreadCreate]: ['threads', 'thread_create', 'Fil créé'],
+	[AuditLogEvent.ThreadUpdate]: ['threads', 'thread_update', 'Fil modifié'],
+	[AuditLogEvent.ThreadDelete]: ['threads', 'thread_delete', 'Fil supprimé'],
+	[AuditLogEvent.BotAdd]: ['integrations', 'bot_add', 'Bot ajouté'],
+	[AuditLogEvent.IntegrationCreate]: ['integrations', 'integration_create', 'Intégration ajoutée'],
+	[AuditLogEvent.IntegrationUpdate]: ['integrations', 'integration_update', 'Intégration modifiée'],
+	[AuditLogEvent.IntegrationDelete]: ['integrations', 'integration_delete', 'Intégration retirée'],
+	[AuditLogEvent.WebhookCreate]: ['integrations', 'webhook_create', 'Webhook créé'],
+	[AuditLogEvent.WebhookUpdate]: ['integrations', 'webhook_update', 'Webhook modifié'],
+	[AuditLogEvent.WebhookDelete]: ['integrations', 'webhook_delete', 'Webhook supprimé'],
+	[AuditLogEvent.MessagePin]: ['messages', 'message_pin', 'Message épinglé'],
+	[AuditLogEvent.MessageUnpin]: ['messages', 'message_pin', 'Message désépinglé'],
+	// Moderation done in Discord itself (the bot's own sanctions are logged by the sanctions service)
+	[AuditLogEvent.MemberBanAdd]: ['discord_moderation', 'member_ban', 'Membre banni'],
+	[AuditLogEvent.MemberBanRemove]: ['discord_moderation', 'member_unban', 'Membre débanni'],
+	[AuditLogEvent.MemberKick]: ['discord_moderation', 'member_kick', 'Membre expulsé'],
+	[AuditLogEvent.MemberPrune]: ['discord_moderation', 'member_prune', 'Membres inactifs expulsés'],
+	[AuditLogEvent.AutoModerationBlockMessage]: ['discord_moderation', 'automod_block', 'Message bloqué par l’AutoMod'],
 };
 
-const CHANGE_LABELS = { name: 'Nom', color: 'Couleur', permissions: 'Permissions', hoist: 'Affiché séparément', mentionable: 'Mentionnable', topic: 'Sujet', nsfw: 'NSFW', rate_limit_per_user: 'Mode lent', parent_id: 'Catégorie', position: 'Position', bitrate: 'Débit', user_limit: 'Limite d’utilisateurs', icon_hash: 'Icône', verification_level: 'Niveau de vérification', allow: 'Autorisé', deny: 'Refusé' };
+// Kinds of audit entries about a member: their target is a person
+const MEMBER_TARGET = new Set([AuditLogEvent.MemberRoleUpdate, AuditLogEvent.MemberBanAdd, AuditLogEvent.MemberBanRemove, AuditLogEvent.MemberKick, AuditLogEvent.MemberUpdate, AuditLogEvent.AutoModerationBlockMessage]);
+
+// MemberUpdate carries timeouts and voice mutes, told apart by the changed key
+function memberUpdateMapping(entry) {
+	const keys = new Set(entry.changes.map(c => c.key));
+	if (keys.has('communication_disabled_until')) {
+		const change = entry.changes.find(c => c.key === 'communication_disabled_until');
+		return ['discord_moderation', 'member_timeout', change.new ? 'Membre exclu temporairement' : 'Exclusion temporaire levée'];
+	}
+	if (keys.has('mute')) return ['voice', 'voice_server_mute', entry.changes.find(c => c.key === 'mute').new ? 'Micro coupé par la modération' : 'Micro rendu par la modération'];
+	if (keys.has('deaf')) return ['voice', 'voice_server_deaf', entry.changes.find(c => c.key === 'deaf').new ? 'Son coupé par la modération' : 'Son rendu par la modération'];
+	return null;
+}
+
+const CHANGE_LABELS = { communication_disabled_until: 'Exclu jusqu’au', mute: 'Micro coupé', deaf: 'Son coupé', archived: 'Archivé', locked: 'Verrouillé', auto_archive_duration: 'Archivage auto', channel_id: 'Salon', scheduled_start_time: 'Début', entity_type: 'Type', status: 'Statut', description: 'Description', tags: 'Émoji', enabled: 'Activée', actions: 'Actions', trigger_metadata: 'Déclencheur', name: 'Nom', color: 'Couleur', permissions: 'Permissions', hoist: 'Affiché séparément', mentionable: 'Mentionnable', topic: 'Sujet', nsfw: 'NSFW', rate_limit_per_user: 'Mode lent', parent_id: 'Catégorie', position: 'Position', bitrate: 'Débit', user_limit: 'Limite d’utilisateurs', icon_hash: 'Icône', verification_level: 'Niveau de vérification', allow: 'Autorisé', deny: 'Refusé' };
 
 function formatValue(value) {
 	if (value === undefined || value === null || value === '') return '—';
@@ -227,11 +330,14 @@ function targetName(entry) {
 }
 
 export function auditEntry(entry, guild) {
-	const mapping = AUDIT[entry.action];
+	const mapping = entry.action === AuditLogEvent.MemberUpdate ? memberUpdateMapping(entry) : AUDIT[entry.action];
 	if (!mapping) return;
 	const [category, type, title] = mapping;
+	// The bot's own moderation is already logged (with its reason and author) by the sanctions service
+	if (category === 'discord_moderation' && entry.executorId && entry.executorId === guild.client.user?.id) return;
 	const name = targetName(entry);
 	const executor = entry.executor ?? (entry.executorId ? { id: entry.executorId } : null);
+	const aboutMember = MEMBER_TARGET.has(entry.action);
 
 	let description = `Par ${who(executor)}`;
 	let fields = [];
@@ -247,7 +353,23 @@ export function auditEntry(entry, guild) {
 		];
 		summary = `Rôles de ${name} : ${[...added.map(r => `+${r.name}`), ...removed.map(r => `-${r.name}`)].join(' ')}`;
 	}
+	else if (aboutMember || entry.action === AuditLogEvent.MemberPrune) {
+		const target = entry.target ?? (entry.targetId ? { id: entry.targetId } : null);
+		description = entry.action === AuditLogEvent.MemberPrune
+			? `Par ${who(executor)} · ${entry.extra?.removed ?? '?'} membres inactifs depuis ${entry.extra?.days ?? '?'} jours`
+			: `${who(target)} · par ${who(executor)}`;
+		const until = entry.changes.find(c => c.key === 'communication_disabled_until')?.new;
+		fields = [
+			...(until ? [{ name: 'Jusqu’au', value: ts(Date.parse(until), 'f'), inline: true }] : []),
+			...(entry.action === AuditLogEvent.AutoModerationBlockMessage && entry.extra?.channel ? [{ name: 'Salon', value: `<#${entry.extra.channel.id}>`, inline: true }, { name: 'Règle', value: String(entry.extra.autoModerationRuleName ?? '—'), inline: true }] : []),
+			...(entry.reason ? [{ name: 'Raison', value: clip(entry.reason, 500) }] : []),
+		];
+		summary = `${title} : ${name}`;
+	}
 	else {
+		if (entry.action === AuditLogEvent.MessagePin || entry.action === AuditLogEvent.MessageUnpin) {
+			description = `Message de ${who(entry.target)} dans <#${entry.extra?.channel?.id}> · par ${who(executor)}`;
+		}
 		if (category === 'channels' && entry.target?.type !== undefined && entry.target.type !== ChannelType.GuildCategory && entry.action !== AuditLogEvent.ChannelDelete) {
 			description = `<#${entry.targetId}> · par ${who(executor)}`;
 		}
@@ -261,11 +383,11 @@ export function auditEntry(entry, guild) {
 	record(guild, {
 		category,
 		type,
-		userId: entry.action === AuditLogEvent.MemberRoleUpdate ? entry.targetId : null,
+		userId: aboutMember ? entry.targetId : null,
 		actorId: entry.executorId ?? null,
-		channelId: category === 'channels' ? entry.targetId : null,
+		channelId: category === 'channels' || category === 'threads' ? entry.targetId : null,
 		summary,
 		details: { targetId: entry.targetId, changes: entry.changes, reason: entry.reason ?? null },
-		message: { title: `${title}${name && entry.action !== AuditLogEvent.MemberRoleUpdate ? ` : ${name}` : ''}`, description, fields, color: type.endsWith('_delete') ? 'danger' : 'info' },
+		message: { title: `${title}${name && !aboutMember ? ` : ${name}` : ''}`, description, fields, color: type.endsWith('_delete') || category === 'discord_moderation' ? 'danger' : 'info' },
 	});
 }

@@ -422,6 +422,22 @@ export function createFakeExecutor() {
 			this.directs.push({ userId, ...data });
 			return String(850000000000000000n + BigInt(this.directs.length));
 		},
+		logPacks: [],
+		async createLogChannels(guildId, { categoryName, channels: names, staffRoleIds }) {
+			this.logPacks.push({ guildId, categoryName, names, staffRoleIds });
+			const out = {};
+			let createdCount = 0;
+			for (const name of names) {
+				let id = [...channels].find(([, c]) => c.guildId === guildId && c.name === name && c.parent === categoryName)?.[0];
+				if (!id) {
+					id = String(880000000000000000n + BigInt(channels.size + 1));
+					channels.set(id, { guildId, name, parent: categoryName });
+					createdCount++;
+				}
+				out[name] = id;
+			}
+			return { categoryId: '889999999999999999', channels: out, createdCount };
+		},
 		absenceMessages: [],
 		async upsertAbsenceMessage(channelId, messageId, view, options = {}) {
 			if (this.failOn.has(channelId)) throw new Error('Missing Access');
