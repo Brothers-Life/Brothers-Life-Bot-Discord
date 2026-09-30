@@ -53,6 +53,7 @@ test('only the owner can give Administrator; unknown permissions are refused', a
 	await core.ranks.assignDirect(owner, ALICE, admin.id);
 	const alice = await core.ranks.resolve(ALICE);
 	assert.throws(() => core.permissionSync.setProfile(alice, modo.id, ['Administrator']), ForbiddenError);
+	assert.throws(() => core.permissionSync.setProfile(alice, modo.id, ['BanMembers']), ForbiddenError);
 	assert.throws(() => core.permissionSync.setProfile(alice, modo.id, ['FlyAway']), ValidationError);
 	core.permissionSync.setProfile(alice, modo.id, ['ViewChannel']);
 	assert.throws(() => core.permissionSync.setProfile(alice, admin.id, ['ViewChannel']), ForbiddenError, 'own level');

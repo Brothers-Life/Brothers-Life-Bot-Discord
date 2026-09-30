@@ -82,7 +82,7 @@ function StaffRolesPage() {
                                     <label key={role.id} className='flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent has-disabled:opacity-50'>
                                       <Checkbox
                                         checked={checked}
-                                        disabled={!role.editable || save.isPending}
+                                        disabled={!role.editable || (role.dangerous && !me?.isOwner) || save.isPending}
                                         onCheckedChange={() => save.mutate({
                                           rankId: rank.id,
                                           guildId: guild.id,
@@ -92,6 +92,7 @@ function StaffRolesPage() {
                                       <span aria-hidden className='size-2 rounded-full' style={{ background: role.color === '#000000' ? 'var(--muted-foreground)' : role.color }} />
                                       <span className='truncate'>{role.name}</span>
                                       {!role.editable && <span className='ms-auto text-xs text-muted-foreground'>trop haut</span>}
+                                      {role.editable && role.dangerous && !me?.isOwner && <span className='ms-auto text-xs text-muted-foreground'>chef du réseau</span>}
                                     </label>
                                   )
                                 })}

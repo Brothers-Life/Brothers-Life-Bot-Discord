@@ -170,7 +170,7 @@ function ProfileEditor({ rankId, rankName, linkedRoles, catalogue, initial, edit
             <legend className='mb-2 text-xs font-medium text-muted-foreground'>{group}</legend>
             <div className='grid gap-1.5'>
               {permissions.map((p) => {
-                const locked = !editable || (p.key === 'Administrator' && !isOwner)
+                const locked = !editable || (p.ownerOnly && !isOwner)
                 return (
                   <label key={p.key} className='flex items-center gap-2 text-sm has-disabled:opacity-60'>
                     <Checkbox
@@ -184,6 +184,7 @@ function ProfileEditor({ rankId, rankName, linkedRoles, catalogue, initial, edit
                       })}
                     />
                     {p.label}
+                    {p.ownerOnly && !isOwner && <span className='text-xs text-muted-foreground'>(chef du réseau)</span>}
                   </label>
                 )
               })}

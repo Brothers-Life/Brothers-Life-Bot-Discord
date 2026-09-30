@@ -5,6 +5,12 @@ import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
 definePermission('permsync.view', { label: 'Voir les profils de permissions Discord', category: 'Permissions Discord' });
 definePermission('permsync.manage', { label: 'Modifier et appliquer les profils de permissions', category: 'Permissions Discord' });
 
+// Only the owner may put these in a profile: anyone holding a lower rank would otherwise grant them to themselves
+export const OWNER_ONLY_PERMISSIONS = new Set([
+	'Administrator', 'ManageGuild', 'ManageRoles', 'ManageChannels', 'ManageWebhooks', 'ManageGuildExpressions',
+	'BanMembers', 'KickMembers', 'ModerateMembers', 'ManageMessages', 'MentionEveryone',
+]);
+
 // Discord role permissions offered in the panel (names of discord.js PermissionFlagsBits)
 export const DISCORD_PERMISSIONS = [
 	['Administrator', 'Administrateur (toutes les permissions)', 'Administration'],
@@ -51,7 +57,7 @@ export const DISCORD_PERMISSIONS = [
 	['MoveMembers', 'Déplacer des membres', 'Vocal'],
 	['UseSoundboard', 'Soundboard', 'Vocal'],
 	['UseEmbeddedActivities', 'Activités', 'Vocal'],
-].map(([key, label, group]) => ({ key, label, group }));
+].map(([key, label, group]) => ({ key, label, group, ownerOnly: OWNER_ONLY_PERMISSIONS.has(key) }));
 
 const KNOWN = new Set(DISCORD_PERMISSIONS.map(p => p.key));
 
@@ -127,8 +133,9 @@ export function createPermissionSync({ db, network, ranks, audit, executor, logs
 				if (!Array.isArray(permissions)) throw new ValidationError('permissions doit être une liste.');
 				const unknown = permissions.filter(p => !KNOWN.has(p));
 				if (unknown.length) throw new ValidationError(`Permissions Discord inconnues : ${unknown.join(', ')}`);
-				if (permissions.includes('Administrator') && !actor.isOwner) {
-					throw new ForbiddenError('Seul le chef du réseau peut donner la permission Administrateur.');
+				const reserved = permissions.filter(p => OWNER_ONLY_PERMISSIONS.has(p));
+				if (reserved.length && !actor.isOwner) {
+					throw new ForbiddenError(`Seul le chef du réseau peut donner ces permissions : ${reserved.join(', ')}`);
 				}
 				q.upsert.run(rankId, JSON.stringify([...new Set(permissions)]), now(), actor.id);
 			}

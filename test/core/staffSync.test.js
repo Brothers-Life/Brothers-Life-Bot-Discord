@@ -115,3 +115,13 @@ test('members: role changes are guarded', async () => {
 	await core.members.setNickname(alice, OTHER, BOB, 'Bobby');
 	assert.equal(core.audit.query({ action: 'members' }).length, 3);
 });
+
+test('only the owner can link a dangerous role to a rank', async () => {
+	const { core, owner, modo, executor } = await setup();
+	executor.roles.set(OTHER, [{ id: '810000000000000007', name: 'Admin', editable: true, dangerous: true }]);
+	const manager = core.ranks.create(owner, { name: 'Gérant', level: 80, permissions: ['ranks.manage'] });
+	await core.ranks.assignDirect(owner, ALICE, manager.id);
+	const alice = await core.ranks.resolve(ALICE);
+	await assert.rejects(core.staffSync.setLinks(alice, modo.id, OTHER, ['810000000000000007']), ForbiddenError);
+	await core.staffSync.setLinks(owner, modo.id, OTHER, ['810000000000000007']);
+});

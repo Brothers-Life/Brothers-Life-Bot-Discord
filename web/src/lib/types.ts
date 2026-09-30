@@ -255,7 +255,7 @@ export type TicketConfig = {
   ranks: RankSummary[]
 }
 
-export type DiscordPermission = { key: string; label: string; group: string }
+export type DiscordPermission = { key: string; label: string; group: string; ownerOnly: boolean }
 
 export type PermissionsPayload = {
   catalogue: DiscordPermission[]

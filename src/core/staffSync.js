@@ -84,6 +84,10 @@ export function createStaffSync({ db, network, ranks, audit, executor, logs, log
 				const role = roles.find(r => r.id === roleId);
 				if (!role) throw new ValidationError(`Rôle inconnu sur ce serveur : ${roleId}`);
 				if (!role.editable) throw new ValidationError(`Le rôle ${role.name} est au-dessus du rôle du bot : place le rôle du bot plus haut.`);
+				// Otherwise someone holding a lower rank could link it to an admin role and receive it
+				if (role.dangerous && !actor.isOwner) {
+					throw new ForbiddenError(`Le rôle ${role.name} donne des permissions de modération ou d’administration : seul le chef du réseau peut le lier à un rang.`);
+				}
 			}
 
 			db.transaction(() => {
