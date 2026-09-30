@@ -70,15 +70,21 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	registerPermissionRoutes(app, { core });
 
 	const hasPanel = fs.existsSync(path.join(staticDir, 'index.html'));
+	const sendPanel = (reply) => {
+		if (!hasPanel) return reply.type('text/plain').send('Panel not built: run "npm run build" in web/ (or use a release).');
+		return reply.type('text/html').header('Cache-Control', 'no-cache').sendFile('index.html');
+	};
 	if (hasPanel) {
 		await app.register(fastifyStatic, { root: staticDir, index: false });
 	}
+	// "/" is a directory for @fastify/static, which refuses it (403) when index is off: serve the app explicitly
+	app.get('/', (request, reply) => sendPanel(reply));
 
-	// Unknown /api routes answer JSON; everything else is the React app (client-side routing)
+	// Unknown /api routes answer JSON, missing build files a real 404; everything else is the React app
 	app.setNotFoundHandler((request, reply) => {
 		if (request.url.startsWith('/api')) return sendError(reply, 404, 'NOT_FOUND', 'Route d’API inconnue.');
-		if (!hasPanel) return reply.type('text/plain').send('Panel not built: run "npm run build" in web/ (or use a release).');
-		return reply.type('text/html').header('Cache-Control', 'no-cache').sendFile('index.html');
+		if (request.url.startsWith('/assets/')) return reply.code(404).type('text/plain').send('Not found');
+		return sendPanel(reply);
 	});
 
 	return {

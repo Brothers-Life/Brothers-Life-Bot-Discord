@@ -252,3 +252,26 @@ test('sanction permissions are checked per type through the API', async () => {
 	assert.equal((await call('POST', '/api/sanctions', { type: 'warn', userId: '300000000000000001', reason: 'x' })).statusCode, 201);
 	assert.equal((await call('GET', '/api/sanctions')).statusCode, 403, 'listing needs sanctions.view');
 });
+
+test('the panel is served on "/" and on client routes; missing assets are 404', async () => {
+	const fs = await import('node:fs');
+	const os = await import('node:os');
+	const path = await import('node:path');
+	const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), 'brl-panel-'));
+	fs.writeFileSync(path.join(staticDir, 'index.html'), '<!doctype html><title>panel</title>');
+	fs.mkdirSync(path.join(staticDir, 'assets'));
+	fs.writeFileSync(path.join(staticDir, 'assets', 'app.js'), 'console.log(1)');
+
+	const ctx = await withNetwork();
+	const web = await createWebServer({
+		config: ctx.core.config, core: ctx.core, runtime: { info: () => ({}), installState: () => null },
+		consoleLog: { lines: () => [], subscribe: () => noop }, versions: {}, logger: silent, staticDir, tls: null,
+	});
+	for (const url of ['/', '/login', '/network', '/sanctions?user=1']) {
+		const res = await web.app.inject({ method: 'GET', url });
+		assert.equal(res.statusCode, 200, url);
+		assert.match(res.body, /<title>panel<\/title>/, url);
+	}
+	assert.equal((await web.app.inject({ method: 'GET', url: '/assets/app.js' })).body, 'console.log(1)');
+	assert.equal((await web.app.inject({ method: 'GET', url: '/assets/missing.js' })).statusCode, 404);
+});
