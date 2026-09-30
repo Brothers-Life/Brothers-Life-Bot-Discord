@@ -263,6 +263,23 @@ export function createFakeExecutor() {
 			this.calls.push(['rules', channelId, messageId, data.button?.label ?? null]);
 			return messageId ?? '680000000000000001';
 		},
+		guildCounts: new Map(),
+		async getGuildCounts(guildId) {
+			return this.guildCounts.get(guildId) ?? { members: 120, humans: 110, bots: 10, voice: 4, boosts: 3 };
+		},
+		createdCounters: [],
+		async createCounterChannel(guildId, { name }) {
+			const id = String(690000000000000000n + BigInt(this.createdCounters.length + 1));
+			this.createdCounters.push({ guildId, id, name });
+			return id;
+		},
+		renamed: [],
+		async renameChannel(channelId, name) {
+			this.renamed.push([channelId, name]);
+		},
+		async listVoiceChannels() {
+			return [];
+		},
 		raidLocks: [],
 		async setRaidLocks(guildId, options) {
 			this.raidLocks.push(['lock', guildId, options]);

@@ -28,6 +28,7 @@ import { Route as AuthenticatedRanksRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedSanctionsRouteImport } from './routes/_authenticated/sanctions'
 import { Route as AuthenticatedSessionsRouteImport } from './routes/_authenticated/sessions'
 import { Route as AuthenticatedStaffRolesRouteImport } from './routes/_authenticated/staff-roles'
+import { Route as AuthenticatedStatsRouteImport } from './routes/_authenticated/stats'
 import { Route as AuthenticatedTicketsRouteImport } from './routes/_authenticated/tickets'
 import { Route as AuthenticatedVersionsRouteImport } from './routes/_authenticated/versions'
 import { Route as AuthenticatedAnnouncementsIndexRouteImport } from './routes/_authenticated/announcements/index'
@@ -129,6 +130,11 @@ const AuthenticatedStaffRolesRoute = AuthenticatedStaffRolesRouteImport.update({
   path: '/staff-roles',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedStatsRoute = AuthenticatedStatsRouteImport.update({
+  id: '/stats',
+  path: '/stats',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedTicketsRoute = AuthenticatedTicketsRouteImport.update({
   id: '/tickets',
   path: '/tickets',
@@ -176,6 +182,7 @@ export interface FileRoutesByFullPath {
   '/sanctions': typeof AuthenticatedSanctionsRoute
   '/sessions': typeof AuthenticatedSessionsRoute
   '/staff-roles': typeof AuthenticatedStaffRolesRoute
+  '/stats': typeof AuthenticatedStatsRoute
   '/tickets': typeof AuthenticatedTicketsRoute
   '/versions': typeof AuthenticatedVersionsRoute
   '/announcements/$id': typeof AuthenticatedAnnouncementsIdRoute
@@ -200,6 +207,7 @@ export interface FileRoutesByTo {
   '/sanctions': typeof AuthenticatedSanctionsRoute
   '/sessions': typeof AuthenticatedSessionsRoute
   '/staff-roles': typeof AuthenticatedStaffRolesRoute
+  '/stats': typeof AuthenticatedStatsRoute
   '/tickets': typeof AuthenticatedTicketsRoute
   '/versions': typeof AuthenticatedVersionsRoute
   '/': typeof AuthenticatedIndexRoute
@@ -227,6 +235,7 @@ export interface FileRoutesById {
   '/_authenticated/sanctions': typeof AuthenticatedSanctionsRoute
   '/_authenticated/sessions': typeof AuthenticatedSessionsRoute
   '/_authenticated/staff-roles': typeof AuthenticatedStaffRolesRoute
+  '/_authenticated/stats': typeof AuthenticatedStatsRoute
   '/_authenticated/tickets': typeof AuthenticatedTicketsRoute
   '/_authenticated/versions': typeof AuthenticatedVersionsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
@@ -255,6 +264,7 @@ export interface FileRouteTypes {
     | '/sanctions'
     | '/sessions'
     | '/staff-roles'
+    | '/stats'
     | '/tickets'
     | '/versions'
     | '/announcements/$id'
@@ -279,6 +289,7 @@ export interface FileRouteTypes {
     | '/sanctions'
     | '/sessions'
     | '/staff-roles'
+    | '/stats'
     | '/tickets'
     | '/versions'
     | '/'
@@ -305,6 +316,7 @@ export interface FileRouteTypes {
     | '/_authenticated/sanctions'
     | '/_authenticated/sessions'
     | '/_authenticated/staff-roles'
+    | '/_authenticated/stats'
     | '/_authenticated/tickets'
     | '/_authenticated/versions'
     | '/_authenticated/'
@@ -453,6 +465,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStaffRolesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/stats': {
+      id: '/_authenticated/stats'
+      path: '/stats'
+      fullPath: '/stats'
+      preLoaderRoute: typeof AuthenticatedStatsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/tickets': {
       id: '/_authenticated/tickets'
       path: '/tickets'
@@ -508,6 +527,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSanctionsRoute: typeof AuthenticatedSanctionsRoute
   AuthenticatedSessionsRoute: typeof AuthenticatedSessionsRoute
   AuthenticatedStaffRolesRoute: typeof AuthenticatedStaffRolesRoute
+  AuthenticatedStatsRoute: typeof AuthenticatedStatsRoute
   AuthenticatedTicketsRoute: typeof AuthenticatedTicketsRoute
   AuthenticatedVersionsRoute: typeof AuthenticatedVersionsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
@@ -533,6 +553,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSanctionsRoute: AuthenticatedSanctionsRoute,
   AuthenticatedSessionsRoute: AuthenticatedSessionsRoute,
   AuthenticatedStaffRolesRoute: AuthenticatedStaffRolesRoute,
+  AuthenticatedStatsRoute: AuthenticatedStatsRoute,
   AuthenticatedTicketsRoute: AuthenticatedTicketsRoute,
   AuthenticatedVersionsRoute: AuthenticatedVersionsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,

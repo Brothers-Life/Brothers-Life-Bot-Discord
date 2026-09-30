@@ -326,3 +326,16 @@ test('uploads: images only, served back to the panel; card preview is a PNG', as
 	const bob = api(app, await sessionFor(app, BOB));
 	assert.equal((await bob('POST', '/api/uploads', { data: png.toString('base64') })).statusCode, 403);
 });
+
+test('stats: overview for the network, CSV export with a French header', async () => {
+	const { app, core } = await setup();
+	core.stats.message(MAIN, '610000000000000001', ALICE, false);
+	const call = api(app, await sessionFor(app, OWNER));
+	const overview = await call('GET', '/api/stats/overview?guildId=all&days=7');
+	assert.equal(overview.statusCode, 200);
+	assert.equal(overview.json().totals.messages, 1);
+	const csv = await call('GET', `/api/stats/export?kind=members&guildId=${MAIN}&days=7`);
+	assert.match(csv.headers['content-type'], /text\/csv/);
+	assert.match(csv.body, /^\uFEFFMembre;ID;Messages/);
+	assert.equal((await call('GET', '/api/stats/overview?guildId=123')).statusCode, 400);
+});

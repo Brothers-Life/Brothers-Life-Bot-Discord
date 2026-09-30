@@ -84,6 +84,8 @@ async function main() {
 	await web.listen();
 	cleanups.push(() => web.close());
 	cleanups.push(() => core.logs.flush());
+	// Statistics still in memory are written before stopping
+	cleanups.push(() => core.stats.flush());
 
 	await bot.login(config.TOKEN);
 	core.audit.record({ actorId: 'system', source: 'system', action: 'system.start', details: { version: `v${pkg.version}`, supervised: ipc.supervised } });
@@ -94,6 +96,10 @@ async function main() {
 		setInterval(() => core.sanctions.expireDue().catch(error => logger.error('Ban expiry failed:', error)), 30_000),
 		// Scheduled announcements
 		setInterval(() => core.announcements.sendDue().catch(error => logger.error('Announcements failed:', error)), 30_000),
+		// Statistics collected in memory, counter channels, old statistics
+		setInterval(() => core.stats.flush().catch(error => logger.error('Stats flush failed:', error)), 60_000),
+		setInterval(() => core.stats.updateCounters().catch(error => logger.error('Counters failed:', error)), 10 * 60_000),
+		setInterval(() => core.stats.purge(), 24 * HOUR),
 		// Raids that are over
 		setInterval(() => core.antiraid.tick().catch(error => logger.error('Anti-raid tick failed:', error)), 30_000),
 		// Temporary roles reaching their end

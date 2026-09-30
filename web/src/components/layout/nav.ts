@@ -19,6 +19,7 @@ import {
   SquareSlash,
   DoorOpen,
   Siren,
+  ChartColumn,
 } from 'lucide-react'
 
 export type NavEntry = {
@@ -54,6 +55,7 @@ export const navSections: NavSection[] = [
     title: 'Communauté',
     items: [
       { title: 'Accueil', url: '/onboarding', icon: DoorOpen, permission: 'onboarding.view' },
+      { title: 'Statistiques', url: '/stats', icon: ChartColumn, permission: 'stats.view' },
     ],
   },
   {

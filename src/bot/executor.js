@@ -304,6 +304,46 @@ export function createExecutor(client) {
 			};
 		},
 
+		// Live numbers of a server for the counter channels (bots and humans from the member cache)
+		async getGuildCounts(guildId) {
+			const guild = guildOf(guildId);
+			const bots = guild.members.cache.filter(m => m.user.bot).size;
+			const voice = guild.voiceStates.cache.filter(s => s.channelId && !s.member?.user?.bot).size;
+			return { members: guild.memberCount, humans: Math.max(guild.memberCount - bots, 0), bots, voice, boosts: guild.premiumSubscriptionCount ?? 0 };
+		},
+
+		// Voice channel nobody can join, only there to show a number in its name
+		async createCounterChannel(guildId, { name, categoryId }) {
+			const guild = guildOf(guildId);
+			const parent = categoryId ? guild.channels.cache.get(categoryId) : null;
+			const channel = await guild.channels.create({
+				name: name.slice(0, 100),
+				type: ChannelType.GuildVoice,
+				parent: parent?.type === ChannelType.GuildCategory ? parent.id : null,
+				position: 0,
+				permissionOverwrites: [
+					{ id: guild.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.Connect] },
+					{ id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.ManageChannels] },
+				],
+				reason: 'Salon compteur',
+			});
+			return channel.id;
+		},
+
+		async renameChannel(channelId, name) {
+			const channel = await client.channels.fetch(channelId);
+			if (channel.name !== name) await channel.setName(name.slice(0, 100));
+		},
+
+		async listVoiceChannels(guildId) {
+			const guild = client.guilds.cache.get(guildId);
+			if (!guild) return [];
+			return [...guild.channels.cache.values()]
+				.filter(c => c.type === ChannelType.GuildVoice || c.type === ChannelType.GuildStageVoice)
+				.sort((a, b) => a.rawPosition - b.rawPosition)
+				.map(c => ({ id: c.id, name: c.name, parent: c.parent?.name ?? null }));
+		},
+
 		// Rules message with its "I accept" button (updated in place if it still exists)
 		async publishRules(channelId, messageId, { payload, button }) {
 			const channel = await client.channels.fetch(channelId);

@@ -23,5 +23,6 @@ export const COMMANDS = [
 	{ name: 'userinfo', category: 'Modération', description: 'Fiche réseau d’un membre', permissions: ['commands.userinfo'] },
 	{ name: 'raid', category: 'Modération', description: 'Activer ou arrêter le mode raid', permissions: ['antiraid.manage'] },
 	{ name: 'ticket', category: 'Tickets', description: 'Gérer le ticket du salon : ajouter, statut, priorité, transférer, fermer…', permissions: ['tickets.handle'] },
+	{ name: 'stats', category: 'Communauté', description: 'Statistiques du serveur, d’un membre, classements', permissions: [] },
 	{ name: 'ping', category: 'Divers', description: 'Latence du bot', permissions: [] },
 ];

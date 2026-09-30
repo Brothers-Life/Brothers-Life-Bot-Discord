@@ -40,6 +40,16 @@ export async function execute(client) {
 	if (!mainId) logger.warn('No main server yet: log in to the panel with OWNER_ID to choose it.');
 	if (pending.length) logger.info(`${pending.length} server(s) waiting to be added to the network from the panel.`);
 
+	// People already in voice when the bot starts
+	const states = [];
+	for (const guildId of network.activeIds()) {
+		const guild = client.guilds.cache.get(guildId);
+		for (const state of guild?.voiceStates.cache.values() ?? []) {
+			if (state.channelId) states.push({ guildId, userId: state.id, channelId: state.channelId, bot: Boolean(state.member?.user?.bot), afk: state.channelId === guild.afkChannelId });
+		}
+	}
+	client.core.stats.seedVoice(states);
+
 	await syncCommands(client, client.core);
 
 	client.emit('botSynced');

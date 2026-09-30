@@ -95,6 +95,8 @@ const TITLES = {
 	'antiraid.config': 'Anti-raid configuré',
 	'antiraid.start': 'Mode raid activé',
 	'antiraid.end': 'Fin du mode raid',
+	'stats.counter_add': 'Salon compteur ajouté',
+	'stats.counter_delete': 'Salon compteur supprimé',
 	'permissions.profile': 'Profil de permissions modifié',
 	'permissions.apply': 'Profils de permissions appliqués',
 	'permissions.drift': 'Écart de permissions détecté',

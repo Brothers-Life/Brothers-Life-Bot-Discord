@@ -18,6 +18,7 @@ import { createTickets } from './tickets.js';
 import { createUploads } from './uploads.js';
 import { createOnboarding } from './onboarding.js';
 import { createAntiraid } from './antiraid.js';
+import { createStats } from './stats.js';
 import { createPermissionSync } from './permissionSync.js';
 import { definePermission } from './permissions.js';
 
@@ -57,6 +58,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const onboarding = createOnboarding({ db, network, audit, executor, uploads, logger, fetchImpl });
 	logs.registerCategory('onboarding', 'Accueil (règlement accepté, boosts, réglages)');
 	const antiraid = createAntiraid({ db, network, audit, executor, sanctions, logs, logger });
+	const stats = createStats({ db, network, audit, executor, logger });
 	const permissionSync = createPermissionSync({ db, network, ranks, audit, executor, logs, settings });
 
 	// Every audited action is also posted in the log channel of its category
@@ -90,5 +92,5 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 		sanctions.syncGuild(guild.id).catch(error => logger.error(`Ban sync failed on ${guild.name}:`, error));
 	});
 
-	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid };
+	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats };
 }
