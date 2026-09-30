@@ -155,20 +155,20 @@ function Items({ box }: { box: Box }) {
             return (
               <li key={i.id} className='flex animate-in flex-wrap items-start gap-3 px-4 py-3 fade-in-0'>
                 <span aria-hidden className='mt-1 h-10 w-1 shrink-0 rounded-full' style={{ background: u && !s?.final ? u.color : s?.color }} />
-                <div className='min-w-56 flex-1'>
+                <div className='min-w-0 flex-1 basis-56'>
                   <div className='flex flex-wrap items-center gap-2'>
-                    <span className='font-medium'>#{i.number} · {i.title}</span>
+                    <span className='min-w-0 font-medium [overflow-wrap:anywhere]'>#{i.number} · {i.title}</span>
                     <Pill style={{ color: s?.color }}>{s?.emoji} {s?.label}</Pill>
                     {u && <Pill style={{ color: u.color }}>{u.label}</Pill>}
                     {!i.approved && <Pill tone='warning'>À valider</Pill>}
                   </div>
-                  {i.answers.length > 0 && <p className='mt-1 line-clamp-2 text-sm text-muted-foreground'>{i.answers.map((a) => a.value).join(' · ')}</p>}
+                  {i.answers.length > 0 && <Answers answers={i.answers} />}
                   <div className='mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground'>
                     <span className='flex items-center gap-1'>{i.author ? <><UserAvatar src={i.author.avatar} name={i.author.name ?? '?'} className='size-4' />{i.author.name}</> : 'anonyme'}</span>
                     <span>{ago(i.createdAt)}</span>
                     {box.config.votes && <span className='flex items-center gap-2'><ThumbsUp className='size-3 text-success' />{i.up}<ThumbsDown className='size-3 text-destructive' />{i.down}</span>}
                     {i.assignee && <span>pris par {i.assignee.name}</span>}
-                    {i.statusReason && <span className='italic'>« {i.statusReason} »</span>}
+                    {i.statusReason && <span className='min-w-0 italic [overflow-wrap:anywhere]'>« {i.statusReason} »</span>}
                   </div>
                 </div>
                 {handle && (
@@ -193,6 +193,29 @@ function Items({ box }: { box: Box }) {
   )
 }
 
+// Answers of the form: two lines, the rest on demand; long words wrap instead of overflowing
+function Answers({ answers }: { answers: Item['answers'] }) {
+  const [open, setOpen] = useState(false)
+  const long = answers.length > 1 || answers.some((a) => a.value.length > 160 || a.value.includes('\n'))
+  return (
+    <div className='mt-1 text-sm text-muted-foreground'>
+      {open ? (
+        <dl className='grid gap-2'>
+          {answers.map((a) => (
+            <div key={a.id}>
+              <dt className='text-xs font-medium text-foreground/80'>{a.label}</dt>
+              <dd className='whitespace-pre-line [overflow-wrap:anywhere]'>{a.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p className='line-clamp-2 [overflow-wrap:anywhere]'>{answers.map((a) => a.value).join(' · ')}</p>
+      )}
+      {long && <button type='button' className='mt-0.5 text-xs text-primary hover:underline' aria-expanded={open} onClick={() => setOpen(!open)}>{open ? 'Réduire' : 'Tout afficher'}</button>}
+    </div>
+  )
+}
+
 function StatusDialog({ box, item, onClose }: { box: Box; item: Item; onClose: () => void }) {
   const [status, setStatus] = useState(item.status)
   const [reason, setReason] = useState(item.statusReason ?? '')
@@ -204,7 +227,7 @@ function StatusDialog({ box, item, onClose }: { box: Box; item: Item; onClose: (
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className='sm:max-w-md'>
-        <DialogHeader><DialogTitle>#{item.number} · {item.title}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle className='[overflow-wrap:anywhere]'>#{item.number} · {item.title}</DialogTitle></DialogHeader>
         <div className='grid gap-4'>
           <div className='grid gap-1.5'>
             <Label>Statut</Label>
