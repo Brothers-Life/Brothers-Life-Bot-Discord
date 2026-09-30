@@ -1,5 +1,6 @@
 import { AttachmentBuilder, ChannelType, EmbedBuilder, PermissionFlagsBits, PermissionsBitField, RESTJSONErrorCodes } from 'discord.js';
-import { panelPayload, welcomePayload } from './ticketsUi.js';
+import { noticePayload, panelPayload, ratingPayload, welcomePayload } from './ticketsUi.js';
+import { buildEmbeds } from './messages.js';
 
 const COLORS = {
 	info: 0x5865f2,
@@ -45,10 +46,6 @@ function toFiles(files = []) {
 	return files.map(f => new AttachmentBuilder(Buffer.from(f.content, 'utf8'), { name: f.name }));
 }
 
-function slug(text) {
-	return text.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^a-z0-9-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 90) || 'ticket';
-}
-
 const TICKET_MEMBER = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks];
 
 function canSend(channel) {
@@ -64,6 +61,9 @@ function notInGuild(guildId) {
 
 // The only piece of code that talks to Discord on behalf of src/core
 export function createExecutor(client) {
+	// channelId -> webhook used to answer tickets from the panel
+	const ticketWebhooks = new Map();
+
 	function guildOf(guildId) {
 		const guild = client.guilds.cache.get(guildId);
 		if (!guild) throw notInGuild(guildId);
@@ -125,21 +125,7 @@ export function createExecutor(client) {
 		// Announcement: text + embed, pings of the target, optional crosspost in announcement channels
 		async sendAnnouncement(channelId, payload, target) {
 			const channel = await client.channels.fetch(channelId);
-			const e = payload.embed;
-			const embeds = [];
-			if (e.enabled) {
-				const embed = new EmbedBuilder().setColor(e.color);
-				if (e.title) embed.setTitle(e.title);
-				if (e.url && e.title) embed.setURL(e.url);
-				if (e.description) embed.setDescription(e.description);
-				if (e.authorName) embed.setAuthor({ name: e.authorName, iconURL: e.authorIconUrl ?? undefined });
-				if (e.thumbnailUrl) embed.setThumbnail(e.thumbnailUrl);
-				if (e.imageUrl) embed.setImage(e.imageUrl);
-				if (e.footerText) embed.setFooter({ text: e.footerText, iconURL: e.footerIconUrl ?? undefined });
-				if (e.timestamp) embed.setTimestamp(new Date());
-				if (e.fields.length) embed.addFields(e.fields);
-				embeds.push(embed);
-			}
+			const embeds = buildEmbeds(payload);
 			const ping = { everyone: '@everyone', here: '@here', roles: target.roleIds.map(id => `<@&${id}>`).join(' '), none: '' }[target.ping];
 			const content = [ping, payload.content].filter(Boolean).join('\n');
 			const message = await channel.send({
@@ -189,6 +175,7 @@ export function createExecutor(client) {
 				.map(c => ({ id: c.id, name: c.name }));
 		},
 
+		// panel: { id, payload, style, placeholder, categories }
 		async publishTicketPanel(channelId, messageId, panel) {
 			const channel = await client.channels.fetch(channelId);
 			const payload = panelPayload(panel);
@@ -206,7 +193,7 @@ export function createExecutor(client) {
 			const guild = guildOf(guildId);
 			const parent = parentId ? guild.channels.cache.get(parentId) : null;
 			const channel = await guild.channels.create({
-				name: slug(name),
+				name: name.slice(0, 100),
 				type: ChannelType.GuildText,
 				parent: parent?.type === ChannelType.GuildCategory ? parent.id : null,
 				permissionOverwrites: [
@@ -223,6 +210,59 @@ export function createExecutor(client) {
 		async sendTicketWelcome(channelId, data) {
 			const channel = await client.channels.fetch(channelId);
 			await channel.send(welcomePayload(data));
+		},
+
+		async updateTicketChannel(channelId, { name, parentId }) {
+			const channel = await client.channels.fetch(channelId).catch(() => null);
+			if (!channel) return;
+			const parent = parentId ? channel.guild.channels.cache.get(parentId) : null;
+			const edit = {};
+			if (name && name !== channel.name) edit.name = name.slice(0, 100);
+			if (parent?.type === ChannelType.GuildCategory && channel.parentId !== parent.id) {
+				edit.parent = parent.id;
+				// Keep the ticket's own permissions, not the ones of the new category
+				edit.lockPermissions = false;
+			}
+			if (Object.keys(edit).length) await channel.edit(edit);
+		},
+
+		// Claimed with "only the claimer writes": staff roles read only, the claimer writes
+		async setTicketWriters(channelId, { claimerId, previousClaimerId, staffRoleIds }) {
+			const channel = await client.channels.fetch(channelId);
+			for (const roleId of staffRoleIds) {
+				if (channel.guild.roles.cache.has(roleId)) await channel.permissionOverwrites.edit(roleId, { ViewChannel: true, SendMessages: false });
+			}
+			if (previousClaimerId && previousClaimerId !== claimerId) await channel.permissionOverwrites.delete(previousClaimerId).catch(() => null);
+			await channel.permissionOverwrites.edit(claimerId, Object.fromEntries(TICKET_MEMBER.map(flag => [new PermissionsBitField(flag).toArray()[0], true])));
+		},
+
+		// Answer written in the panel: a webhook of the channel shows the panel user's name and avatar
+		async sendTicketReply(channelId, { content, username, avatarUrl }) {
+			const channel = await client.channels.fetch(channelId);
+			let webhook = ticketWebhooks.get(channelId);
+			if (!webhook) {
+				const existing = await channel.fetchWebhooks().catch(() => null);
+				webhook = existing?.find(w => w.owner?.id === client.user.id && w.name === 'Panel tickets')
+					?? await channel.createWebhook({ name: 'Panel tickets', reason: 'Réponses aux tickets depuis le panel' });
+				ticketWebhooks.set(channelId, webhook);
+			}
+			const message = await webhook.send({ content, username: username.slice(0, 80), avatarURL: avatarUrl ?? undefined, allowedMentions: { parse: ['users'] } });
+			return message.id;
+		},
+
+		async removeChannelMember(channelId, userId) {
+			const channel = await client.channels.fetch(channelId);
+			await channel.permissionOverwrites.delete(userId);
+		},
+
+		async sendTicketNotice(channelId, data) {
+			const channel = await client.channels.fetch(channelId);
+			await channel.send(noticePayload(data));
+		},
+
+		async sendTicketRating(userId, ticket) {
+			const user = await client.users.fetch(userId);
+			await user.send(ratingPayload(ticket));
 		},
 
 		async addChannelMember(channelId, userId) {

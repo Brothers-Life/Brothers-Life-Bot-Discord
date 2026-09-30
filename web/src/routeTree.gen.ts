@@ -29,6 +29,7 @@ import { Route as AuthenticatedTicketsRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedVersionsRouteImport } from './routes/_authenticated/versions'
 import { Route as AuthenticatedAnnouncementsIndexRouteImport } from './routes/_authenticated/announcements/index'
 import { Route as AuthenticatedAnnouncementsIdRouteImport } from './routes/_authenticated/announcements/$id'
+import { Route as AuthenticatedTicketIdRouteImport } from './routes/_authenticated/ticket.$id'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -132,6 +133,11 @@ const AuthenticatedAnnouncementsIdRoute =
     path: '/announcements/$id',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedTicketIdRoute = AuthenticatedTicketIdRouteImport.update({
+  id: '/ticket/$id',
+  path: '/ticket/$id',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -152,6 +158,7 @@ export interface FileRoutesByFullPath {
   '/tickets': typeof AuthenticatedTicketsRoute
   '/versions': typeof AuthenticatedVersionsRoute
   '/announcements/$id': typeof AuthenticatedAnnouncementsIdRoute
+  '/ticket/$id': typeof AuthenticatedTicketIdRoute
   '/announcements/': typeof AuthenticatedAnnouncementsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -173,6 +180,7 @@ export interface FileRoutesByTo {
   '/versions': typeof AuthenticatedVersionsRoute
   '/': typeof AuthenticatedIndexRoute
   '/announcements/$id': typeof AuthenticatedAnnouncementsIdRoute
+  '/ticket/$id': typeof AuthenticatedTicketIdRoute
   '/announcements': typeof AuthenticatedAnnouncementsIndexRoute
 }
 export interface FileRoutesById {
@@ -196,6 +204,7 @@ export interface FileRoutesById {
   '/_authenticated/versions': typeof AuthenticatedVersionsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/announcements/$id': typeof AuthenticatedAnnouncementsIdRoute
+  '/_authenticated/ticket/$id': typeof AuthenticatedTicketIdRoute
   '/_authenticated/announcements/': typeof AuthenticatedAnnouncementsIndexRoute
 }
 export interface FileRouteTypes {
@@ -219,6 +228,7 @@ export interface FileRouteTypes {
     | '/tickets'
     | '/versions'
     | '/announcements/$id'
+    | '/ticket/$id'
     | '/announcements/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -240,6 +250,7 @@ export interface FileRouteTypes {
     | '/versions'
     | '/'
     | '/announcements/$id'
+    | '/ticket/$id'
     | '/announcements'
   id:
     | '__root__'
@@ -262,6 +273,7 @@ export interface FileRouteTypes {
     | '/_authenticated/versions'
     | '/_authenticated/'
     | '/_authenticated/announcements/$id'
+    | '/_authenticated/ticket/$id'
     | '/_authenticated/announcements/'
   fileRoutesById: FileRoutesById
 }
@@ -412,6 +424,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAnnouncementsIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/ticket/$id': {
+      id: '/_authenticated/ticket/$id'
+      path: '/ticket/$id'
+      fullPath: '/ticket/$id'
+      preLoaderRoute: typeof AuthenticatedTicketIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
@@ -433,6 +452,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedVersionsRoute: typeof AuthenticatedVersionsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedAnnouncementsIdRoute: typeof AuthenticatedAnnouncementsIdRoute
+  AuthenticatedTicketIdRoute: typeof AuthenticatedTicketIdRoute
   AuthenticatedAnnouncementsIndexRoute: typeof AuthenticatedAnnouncementsIndexRoute
 }
 
@@ -454,6 +474,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedVersionsRoute: AuthenticatedVersionsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedAnnouncementsIdRoute: AuthenticatedAnnouncementsIdRoute,
+  AuthenticatedTicketIdRoute: AuthenticatedTicketIdRoute,
   AuthenticatedAnnouncementsIndexRoute: AuthenticatedAnnouncementsIndexRoute,
 }
 

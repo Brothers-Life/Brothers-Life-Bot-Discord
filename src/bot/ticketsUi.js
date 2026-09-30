@@ -1,64 +1,123 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder } from 'discord.js';
+import {
+	ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder, UserSelectMenuBuilder,
+} from 'discord.js';
+import { buildEmbeds, emojiOf } from './messages.js';
+import { formModal } from './forms.js';
 
 const COLOR = 0xd6a249;
+const STYLES = { primary: ButtonStyle.Primary, secondary: ButtonStyle.Secondary, success: ButtonStyle.Success, danger: ButtonStyle.Danger };
+const PRIORITY_EMOJI = { low: '⚪', normal: '🔵', high: '🟠', urgent: '🔴' };
 
-function emojiOf(value) {
-	if (!value) return undefined;
-	const custom = /^<a?:\w+:(\d+)>$/.exec(value);
-	return custom ? { id: custom[1] } : value;
-}
-
-export function panelPayload({ title, text, categories }) {
-	const embed = new EmbedBuilder().setColor(COLOR).setTitle(title).setDescription(
-		[text, '', ...categories.map(c => `${c.emoji ? `${c.emoji} ` : ''}**${c.name}**${c.description ? ` — ${c.description}` : ''}`)].join('\n'),
-	);
-	const rows = [];
-	for (let i = 0; i < Math.min(categories.length, 25); i += 5) {
-		rows.push(new ActionRowBuilder().addComponents(categories.slice(i, i + 5).map((c) => {
-			const button = new ButtonBuilder().setCustomId(`ticket:open:${c.id}`).setLabel(c.name.slice(0, 80)).setStyle(ButtonStyle.Secondary);
-			const emoji = emojiOf(c.emoji);
-			if (emoji) button.setEmoji(emoji);
-			return button;
-		})));
+// Panel: the embed chosen in the panel, then buttons (one per type) or a menu
+export function panelPayload({ id, payload, style, placeholder, categories }) {
+	const components = [];
+	if (style === 'select') {
+		const menu = new StringSelectMenuBuilder()
+			.setCustomId(`ticket:pick:${id}`)
+			.setPlaceholder((placeholder || 'Choisis le type de demande').slice(0, 150))
+			.addOptions(categories.slice(0, 25).map((c) => {
+				const option = { label: c.name.slice(0, 100), value: String(c.id) };
+				if (c.description) option.description = c.description.slice(0, 100);
+				const emoji = emojiOf(c.emoji);
+				if (emoji) option.emoji = emoji;
+				return option;
+			}));
+		components.push(new ActionRowBuilder().addComponents(menu));
 	}
-	return { embeds: [embed], components: rows };
+	else {
+		for (let i = 0; i < Math.min(categories.length, 25); i += 5) {
+			components.push(new ActionRowBuilder().addComponents(categories.slice(i, i + 5).map((c) => {
+				const button = new ButtonBuilder().setCustomId(`ticket:open:${c.id}`).setLabel(c.name.slice(0, 80)).setStyle(STYLES[c.config?.buttonStyle] ?? ButtonStyle.Secondary);
+				const emoji = emojiOf(c.emoji);
+				if (emoji) button.setEmoji(emoji);
+				return button;
+			})));
+		}
+	}
+	return { content: payload.content || undefined, embeds: buildEmbeds(payload), components, allowedMentions: { parse: [] } };
 }
 
-export function welcomePayload({ ticket, category, staffRoleIds }) {
+// Discord does not chain modals: an ephemeral "continue" button opens the next one
+export function nextStepPayload(prefix, id, next, total) {
+	return {
+		content: `Réponses enregistrées. Encore un peu : étape ${next + 1}/${total}.`,
+		components: [new ActionRowBuilder().addComponents(
+			new ButtonBuilder().setCustomId(`${prefix}:next:${id}:${next}`).setLabel(`Continuer (${next + 1}/${total})`).setStyle(ButtonStyle.Primary),
+		)],
+	};
+}
+
+export function welcomePayload({ ticket, title, message, color, answers, pingRoleIds, statuses, priorities }) {
 	const embed = new EmbedBuilder()
-		.setColor(COLOR)
-		.setTitle(`Ticket #${ticket.number} · ${category.name}`)
-		.setDescription(`Bonjour <@${ticket.openerId}>, l’équipe va te répondre ici. Explique ta demande en détail.`)
-		.addFields(ticket.subject ? [{ name: 'Sujet', value: ticket.subject }] : []);
-	const row = new ActionRowBuilder().addComponents(
+		.setColor(Number.parseInt(color.slice(1), 16) || COLOR)
+		.setTitle(title)
+		.setDescription(message)
+		.addFields(answers.slice(0, 25).map(a => ({ name: a.label.slice(0, 256), value: a.value.slice(0, 1024) || '—' })));
+	const buttons = new ActionRowBuilder().addComponents(
 		new ButtonBuilder().setCustomId(`ticket:claim:${ticket.id}`).setLabel('Prendre en charge').setStyle(ButtonStyle.Primary),
 		new ButtonBuilder().setCustomId(`ticket:add:${ticket.id}`).setLabel('Ajouter un membre').setStyle(ButtonStyle.Secondary),
 		new ButtonBuilder().setCustomId(`ticket:close:${ticket.id}`).setLabel('Fermer').setStyle(ButtonStyle.Danger),
 	);
+	const status = new StringSelectMenuBuilder()
+		.setCustomId(`ticket:status:${ticket.id}`)
+		.setPlaceholder('Changer le statut (staff)')
+		.addOptions(statuses.slice(0, 25).map((s) => {
+			const option = { label: s.label.slice(0, 100), value: s.key };
+			const emoji = emojiOf(s.emoji);
+			if (emoji) option.emoji = emoji;
+			return option;
+		}));
+	const priority = new StringSelectMenuBuilder()
+		.setCustomId(`ticket:priority:${ticket.id}`)
+		.setPlaceholder('Priorité (staff)')
+		.addOptions(priorities.map(p => ({ label: p.label, value: p.key, emoji: PRIORITY_EMOJI[p.key] })));
 	return {
-		content: [`<@${ticket.openerId}>`, ...staffRoleIds.map(id => `<@&${id}>`)].join(' '),
+		content: [`<@${ticket.openerId}>`, ...pingRoleIds.map(id => `<@&${id}>`)].join(' '),
 		embeds: [embed],
-		components: [row],
-		allowedMentions: { users: [ticket.openerId], roles: staffRoleIds },
+		components: [buttons, new ActionRowBuilder().addComponents(status), new ActionRowBuilder().addComponents(priority)],
+		allowedMentions: { users: [ticket.openerId], roles: pingRoleIds },
 	};
 }
 
-export function openModal(categoryId, categoryName) {
-	return new ModalBuilder()
-		.setCustomId(`ticket:openform:${categoryId}`)
-		.setTitle(`Ticket · ${categoryName}`.slice(0, 45))
-		.addComponents(new ActionRowBuilder().addComponents(
-			new TextInputBuilder().setCustomId('subject').setLabel('Sujet de ta demande').setStyle(TextInputStyle.Paragraph).setMaxLength(200).setRequired(true),
-		));
+export function noticePayload({ kind, ticket, reason, by, closeInHours }) {
+	if (kind === 'archived') {
+		return {
+			embeds: [new EmbedBuilder().setColor(0x8b8b8b).setTitle(`Ticket #${ticket.number} archivé`).setDescription(reason ? `Raison : ${reason}` : 'Le ticket est fermé. Le staff peut le rouvrir ou le supprimer.')],
+			components: [new ActionRowBuilder().addComponents(
+				new ButtonBuilder().setCustomId(`ticket:reopen:${ticket.id}`).setLabel('Rouvrir').setStyle(ButtonStyle.Success),
+				new ButtonBuilder().setCustomId(`ticket:transcript:${ticket.id}`).setLabel('Transcript').setStyle(ButtonStyle.Secondary),
+				new ButtonBuilder().setCustomId(`ticket:delete:${ticket.id}`).setLabel('Supprimer').setStyle(ButtonStyle.Danger),
+			)],
+		};
+	}
+	if (kind === 'reopened') {
+		return { content: `Ticket rouvert par <@${by}>. <@${ticket.openerId}>`, allowedMentions: { users: [ticket.openerId] } };
+	}
+	return {
+		content: `<@${ticket.openerId}> ce ticket est sans nouvelles depuis un moment.${closeInHours ? ` Sans réponse, il sera fermé automatiquement dans environ ${closeInHours} h.` : ''}`,
+		allowedMentions: { users: [ticket.openerId] },
+	};
 }
 
-export function closeModal(ticketId) {
-	return new ModalBuilder()
-		.setCustomId(`ticket:closeform:${ticketId}`)
-		.setTitle('Fermer le ticket')
-		.addComponents(new ActionRowBuilder().addComponents(
-			new TextInputBuilder().setCustomId('reason').setLabel('Raison (facultatif)').setStyle(TextInputStyle.Short).setMaxLength(200).setRequired(false),
-		));
+export function ratingPayload(ticket) {
+	return {
+		content: `Comment s’est passé ton ticket #${ticket.number} ? Donne une note de 1 à 5.`,
+		components: [new ActionRowBuilder().addComponents([1, 2, 3, 4, 5].map(n =>
+			new ButtonBuilder().setCustomId(`ticket:rate:${ticket.id}:${n}`).setLabel('★'.repeat(n)).setStyle(n >= 4 ? ButtonStyle.Success : n <= 2 ? ButtonStyle.Danger : ButtonStyle.Secondary),
+		))],
+	};
+}
+
+export function ratingCommentModal(ticketId) {
+	return formModal(`ticket:ratecomment:${ticketId}`, 'Un commentaire ?', {
+		questions: [{ id: 'comment', type: 'paragraph', label: 'Ton avis (facultatif)', required: false, maxLength: 1000 }],
+	});
+}
+
+export function closeModal(ticketId, { requireReason }) {
+	return formModal(`ticket:closeform:${ticketId}`, 'Fermer le ticket', {
+		questions: [{ id: 'reason', type: 'short', label: requireReason ? 'Raison' : 'Raison (facultatif)', required: requireReason, maxLength: 200 }],
+	});
 }
 
 export function addMemberMenu(ticketId) {

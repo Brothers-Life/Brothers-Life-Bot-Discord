@@ -9,6 +9,10 @@ export async function execute(interaction) {
 	if (interaction.isButton() || interaction.isModalSubmit() || interaction.isAnySelectMenu()) {
 		return handleComponent(interaction);
 	}
+	if (interaction.isAutocomplete()) {
+		const command = interaction.client.commands.get(interaction.commandName);
+		return command?.autocomplete?.(interaction).catch(error => logger.error(`Autocomplete of /${interaction.commandName} failed:`, error));
+	}
 	if (!interaction.isChatInputCommand()) return;
 
 	const command = interaction.client.commands.get(interaction.commandName);

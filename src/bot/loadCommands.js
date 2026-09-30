@@ -25,6 +25,7 @@ export async function loadCommands() {
 			commands.push({
 				data: commandModule.data,
 				execute: commandModule.execute,
+				autocomplete: commandModule.autocomplete,
 				cooldown: commandModule.cooldown,
 			});
 		}

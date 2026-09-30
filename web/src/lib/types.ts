@@ -212,26 +212,109 @@ export type StaffRolesPayload = {
   guilds: { id: string; name: string; isMain: boolean; links: Record<string, string[]>; roles: Role[] }[]
 }
 
+export type TicketPriority = 'low' | 'normal' | 'high' | 'urgent'
+
+export type TicketAnswer = { id: string; label: string; value: string }
+
 export type Ticket = {
   id: number
   guildId: string
   guildName: string
   number: number
   categoryId: number | null
+  categoryName: string | null
+  categoryEmoji: string | null
   channelId: string | null
   openerId: string
   openerName: string | null
   subject: string | null
+  answers: TicketAnswer[]
   status: 'open' | 'closed'
+  statusKey: string
+  statusHistory: { key: string; by: string; at: number }[]
+  priority: TicketPriority
+  archived: boolean
   claimedBy: string | null
   createdAt: number
+  lastActivityAt: number | null
   closedAt: number | null
   closedBy: string | null
   closeReason: string | null
+  rating: number | null
+  ratingComment: string | null
   hasTranscript?: boolean
   transcript?: string | null
   opener: { name: string | null; avatar: string | null } | null
   claimer: { name: string | null; avatar: string | null } | null
+}
+
+export type TicketMessage = {
+  id: string
+  ticketId: number
+  authorId: string | null
+  authorName: string | null
+  authorAvatar: string | null
+  bot: boolean
+  panelUser: string | null
+  content: string
+  attachments: { name: string; url: string; contentType: string | null; size?: number }[]
+  embeds: { title: string | null; description: string | null; color: string | null; fields: { name: string; value: string }[] }[]
+  internal: boolean
+  createdAt: number
+  editedAt: number | null
+  deletedAt: number | null
+}
+
+export type TicketDetail = Ticket & {
+  messages: TicketMessage[]
+  statuses: TicketStatus[]
+  priorities: { key: TicketPriority; label: string }[]
+}
+
+export type FormFieldType = 'short' | 'paragraph' | 'select' | 'user' | 'role' | 'channel' | 'file'
+
+export type FormField = {
+  id: string
+  type: FormFieldType
+  label: string
+  description: string
+  required: boolean
+  placeholder?: string
+  minLength?: number
+  maxLength?: number
+  defaultValue?: string
+  options?: { label: string; value: string; description: string; emoji: string }[]
+  minValues?: number
+  maxValues?: number
+}
+
+export type FormStep = { title: string; when: { field: string; equals: string } | null; questions: FormField[] }
+export type FormDef = { steps: FormStep[] }
+
+export type TicketHoursDay = { open: boolean; from: string; to: string }
+
+export type TicketCategoryConfig = {
+  buttonStyle: 'primary' | 'secondary' | 'success' | 'danger'
+  form: FormDef
+  nameTemplate: string
+  ping: 'staff' | 'none' | 'roles'
+  pingRoleIds: string[]
+  welcome: { title: string; message: string; color: string; showAnswers: boolean }
+  access: {
+    requiredRoleIds: string[]
+    requiredMode: 'any' | 'all'
+    blockedRoleIds: string[]
+    maxOpen: number
+    cooldownMinutes: number
+    minAccountAgeDays: number
+    hours: { enabled: boolean; timezone: string; days: TicketHoursDay[]; closedMessage: string }
+  }
+  claim: { exclusiveWrite: boolean }
+  close: { requireReason: boolean; openerCanClose: boolean; confirm: boolean; mode: 'delete' | 'archive'; deleteDelaySeconds: number }
+  inactivity: { reminderHours: number; closeHours: number }
+  rating: { enabled: boolean }
+  transcriptDm: boolean
+  statusParents: Record<string, string>
 }
 
 export type TicketCategory = {
@@ -245,11 +328,30 @@ export type TicketCategory = {
   rankIds: number[]
   roleIds: string[]
   position: number
+  config: TicketCategoryConfig
+}
+
+export type TicketStatus = { key: string; label: string; emoji: string | null; color: string; parentChannelId: string | null; position: number; builtin: boolean }
+
+export type MessagePayload = { content: string; embed: AnnouncementEmbed }
+
+export type TicketPanel = {
+  id: number
+  guildId: string
+  name: string
+  channelId: string | null
+  messageId: string | null
+  payload: MessagePayload
+  style: 'buttons' | 'select'
+  placeholder: string | null
+  categoryIds: number[]
 }
 
 export type TicketConfig = {
-  settings: { guildId: string; panelChannelId: string | null; panelMessageId: string | null; panelTitle: string; panelText: string; maxOpen: number }
+  settings: { guildId: string; maxOpen: number; statusPrefix: boolean }
   categories: TicketCategory[]
+  panels: TicketPanel[]
+  statuses: TicketStatus[]
   channels: Channel[]
   categoryChannels: { id: string; name: string }[]
   roles: Role[]

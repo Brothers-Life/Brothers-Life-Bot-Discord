@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, CalendarClock, Copy, Plus, Send, Trash2, X } from 'lucide-react'
+import { ArrowLeft, CalendarClock, Copy, Send, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Announcement, AnnouncementEmbed, AnnouncementTarget, AnnouncementTargetsPayload } from '@/lib/types'
@@ -12,8 +12,8 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import { DiscordPreview } from '@/features/announcements/discord-preview'
 import { TargetsEditor } from '@/features/announcements/targets-editor'
 import { STATUS } from '@/features/announcements/status'
+import { EMPTY_EMBED, EmbedFields, cleanEmbed } from '@/features/announcements/embed-editor'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -24,11 +24,6 @@ import { Textarea } from '@/components/ui/textarea'
 export const Route = createFileRoute('/_authenticated/announcements/$id')({
   component: AnnouncementEditor,
 })
-
-const EMPTY_EMBED: AnnouncementEmbed = {
-  enabled: true, title: '', url: null, description: '', color: '#d6a249', authorName: '', authorIconUrl: null,
-  thumbnailUrl: null, imageUrl: null, footerText: '', footerIconUrl: null, timestamp: false, fields: [],
-}
 
 type Draft = { name: string; content: string; embed: AnnouncementEmbed; targets: AnnouncementTarget[] }
 
@@ -64,7 +59,7 @@ function Editor({ announcement, guilds }: { announcement: Announcement | null; g
   const setEmbed = (patch: Partial<AnnouncementEmbed>) => setDraft((d) => ({ ...d, embed: { ...d.embed, ...patch } }))
   const body = () => ({
     name: draft.name,
-    payload: { content: draft.content, embed: { ...draft.embed, url: draft.embed.url || null, authorIconUrl: draft.embed.authorIconUrl || null, thumbnailUrl: draft.embed.thumbnailUrl || null, imageUrl: draft.embed.imageUrl || null, footerIconUrl: draft.embed.footerIconUrl || null } },
+    payload: { content: draft.content, embed: cleanEmbed(draft.embed) },
     targets: draft.targets,
   })
 
@@ -159,78 +154,8 @@ function Editor({ announcement, guilds }: { announcement: Announcement | null; g
 
           <Section title='Embed' actions={<Switch checked={e.enabled} onCheckedChange={(v) => setEmbed({ enabled: v })} disabled={!editable} aria-label='Activer l’embed' />}>
             {e.enabled && (
-              <div className='grid gap-4 p-4'>
-                <div className='grid gap-4 sm:grid-cols-[1fr_8rem]'>
-                  <div className='grid gap-1.5'>
-                    <Label htmlFor='e-title'>Titre</Label>
-                    <Input id='e-title' value={e.title} maxLength={256} disabled={!editable} onChange={(ev) => setEmbed({ title: ev.target.value })} />
-                  </div>
-                  <div className='grid gap-1.5'>
-                    <Label htmlFor='e-color'>Couleur</Label>
-                    <div className='flex gap-2'>
-                      <Input id='e-color' type='color' value={e.color} className='h-9 w-12 p-1' disabled={!editable} onChange={(ev) => setEmbed({ color: ev.target.value })} />
-                      <Input value={e.color} maxLength={7} disabled={!editable} onChange={(ev) => setEmbed({ color: ev.target.value })} aria-label='Code couleur' />
-                    </div>
-                  </div>
-                </div>
-                <div className='grid gap-1.5'>
-                  <Label htmlFor='e-url'>Lien du titre (facultatif)</Label>
-                  <Input id='e-url' value={e.url ?? ''} placeholder='https://…' disabled={!editable} onChange={(ev) => setEmbed({ url: ev.target.value })} />
-                </div>
-                <div className='grid gap-1.5'>
-                  <Label htmlFor='e-desc'>Description <span className='text-muted-foreground'>({e.description.length}/4096)</span></Label>
-                  <Textarea id='e-desc' rows={6} maxLength={4096} value={e.description} disabled={!editable} onChange={(ev) => setEmbed({ description: ev.target.value })} />
-                </div>
-                <div className='grid gap-4 sm:grid-cols-2'>
-                  <div className='grid gap-1.5'>
-                    <Label htmlFor='e-author'>Auteur</Label>
-                    <Input id='e-author' value={e.authorName} maxLength={256} disabled={!editable} onChange={(ev) => setEmbed({ authorName: ev.target.value })} placeholder='Équipe Brothers Life' />
-                  </div>
-                  <div className='grid gap-1.5'>
-                    <Label htmlFor='e-author-icon'>Icône de l’auteur</Label>
-                    <Input id='e-author-icon' value={e.authorIconUrl ?? ''} placeholder='https://…' disabled={!editable} onChange={(ev) => setEmbed({ authorIconUrl: ev.target.value })} />
-                  </div>
-                  <div className='grid gap-1.5'>
-                    <Label htmlFor='e-thumb'>Miniature (en haut à droite)</Label>
-                    <Input id='e-thumb' value={e.thumbnailUrl ?? ''} placeholder='https://…' disabled={!editable} onChange={(ev) => setEmbed({ thumbnailUrl: ev.target.value })} />
-                  </div>
-                  <div className='grid gap-1.5'>
-                    <Label htmlFor='e-image'>Grande image</Label>
-                    <Input id='e-image' value={e.imageUrl ?? ''} placeholder='https://…' disabled={!editable} onChange={(ev) => setEmbed({ imageUrl: ev.target.value })} />
-                  </div>
-                  <div className='grid gap-1.5'>
-                    <Label htmlFor='e-footer'>Pied de page</Label>
-                    <Input id='e-footer' value={e.footerText} maxLength={2048} disabled={!editable} onChange={(ev) => setEmbed({ footerText: ev.target.value })} />
-                  </div>
-                  <div className='grid gap-1.5'>
-                    <Label htmlFor='e-footer-icon'>Icône du pied de page</Label>
-                    <Input id='e-footer-icon' value={e.footerIconUrl ?? ''} placeholder='https://…' disabled={!editable} onChange={(ev) => setEmbed({ footerIconUrl: ev.target.value })} />
-                  </div>
-                </div>
-                <label className='flex items-center gap-2 text-sm'>
-                  <Checkbox checked={e.timestamp} onCheckedChange={(v) => setEmbed({ timestamp: v === true })} disabled={!editable} />
-                  Afficher la date d’envoi dans le pied de page
-                </label>
-
-                <fieldset className='grid gap-2'>
-                  <legend className='mb-1 text-sm font-medium'>Champs ({e.fields.length}/25)</legend>
-                  {e.fields.map((f, i) => (
-                    <div key={i} className='grid gap-2 rounded-md border p-2 sm:grid-cols-[1fr_1.5fr_auto_auto] sm:items-center'>
-                      <Input value={f.name} maxLength={256} placeholder='Titre du champ' aria-label={`Titre du champ ${i + 1}`} disabled={!editable} onChange={(ev) => setEmbed({ fields: e.fields.map((x, j) => (j === i ? { ...x, name: ev.target.value } : x)) })} />
-                      <Input value={f.value} maxLength={1024} placeholder='Contenu' aria-label={`Contenu du champ ${i + 1}`} disabled={!editable} onChange={(ev) => setEmbed({ fields: e.fields.map((x, j) => (j === i ? { ...x, value: ev.target.value } : x)) })} />
-                      <label className='flex items-center gap-1.5 text-xs'>
-                        <Checkbox checked={f.inline} disabled={!editable} onCheckedChange={(v) => setEmbed({ fields: e.fields.map((x, j) => (j === i ? { ...x, inline: v === true } : x)) })} />
-                        Côte à côte
-                      </label>
-                      <Button type='button' size='icon' variant='ghost' aria-label={`Supprimer le champ ${i + 1}`} disabled={!editable} onClick={() => setEmbed({ fields: e.fields.filter((_, j) => j !== i) })}><X /></Button>
-                    </div>
-                  ))}
-                  {editable && e.fields.length < 25 && (
-                    <Button type='button' variant='outline' size='sm' className='justify-self-start' onClick={() => setEmbed({ fields: [...e.fields, { name: '', value: '', inline: false }] })}>
-                      <Plus /> Ajouter un champ
-                    </Button>
-                  )}
-                </fieldset>
+              <div className='p-4'>
+                <EmbedFields embed={e} onChange={setEmbed} disabled={!editable} />
               </div>
             )}
           </Section>

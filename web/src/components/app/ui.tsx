@@ -74,9 +74,9 @@ const tones: Record<Tone, string> = {
   accent: 'bg-primary/15 text-primary',
 }
 
-export function Pill({ tone = 'neutral', children, className }: { tone?: Tone; children: React.ReactNode; className?: string }) {
+export function Pill({ tone = 'neutral', children, className, style }: { tone?: Tone; children: React.ReactNode; className?: string; style?: React.CSSProperties }) {
   return (
-    <span className={cn('inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap', tones[tone], className)}>
+    <span style={style} className={cn('inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap', tones[tone], className)}>
       {children}
     </span>
   )

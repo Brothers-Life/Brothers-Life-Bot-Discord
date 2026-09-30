@@ -131,8 +131,34 @@ export function createFakeExecutor() {
 			this.ticketChannels.set(id, { ...options, members: [options.openerId], messages: [] });
 			return id;
 		},
-		async sendTicketWelcome(channelId) {
+		async sendTicketWelcome(channelId, data) {
 			this.ticketChannels.get(channelId).messages.push('welcome');
+			this.ticketChannels.get(channelId).welcome = data;
+		},
+		async updateTicketChannel(channelId, edit) {
+			const channel = this.ticketChannels.get(channelId);
+			if (channel) Object.assign(channel, edit.name ? { name: edit.name } : {}, edit.parentId ? { parentId: edit.parentId } : {});
+			this.calls.push(['updateTicket', channelId, edit]);
+		},
+		async setTicketWriters(channelId, data) {
+			this.calls.push(['writers', channelId, data.claimerId]);
+		},
+		async removeChannelMember(channelId, userId) {
+			const channel = this.ticketChannels.get(channelId);
+			if (channel) channel.members = channel.members.filter(m => m !== userId);
+		},
+		notices: [],
+		async sendTicketNotice(channelId, data) {
+			this.notices.push({ channelId, kind: data.kind });
+		},
+		ratings: [],
+		async sendTicketRating(userId, ticket) {
+			this.ratings.push([userId, ticket.id]);
+		},
+		replies: [],
+		async sendTicketReply(channelId, data) {
+			this.replies.push({ channelId, ...data });
+			return String(660000000000000000n + BigInt(this.replies.length));
 		},
 		// `${guildId}:${roleId}` -> { name, permissions, editable }
 		rolePermissions: new Map(),
@@ -148,7 +174,8 @@ export function createFakeExecutor() {
 		async listCategoryChannels() {
 			return [];
 		},
-		async publishTicketPanel(channelId, messageId) {
+		async publishTicketPanel(channelId, messageId, panel) {
+			this.lastPanel = panel;
 			this.calls.push(['panel', channelId, messageId]);
 			return messageId ?? '600000000000000001';
 		},

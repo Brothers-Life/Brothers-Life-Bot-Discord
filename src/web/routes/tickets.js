@@ -1,8 +1,11 @@
 import { NotFoundError } from '../../core/errors.js';
+import { authenticate } from '../guard.js';
 import { resolveNames, snowflake } from './helpers.js';
 
 const guildParam = { type: 'object', properties: { guildId: snowflake }, required: ['guildId'] };
 const idParam = { type: 'object', properties: { id: { type: 'integer' } }, required: ['id'] };
+const guildIdParam = { type: 'object', properties: { guildId: snowflake, id: { type: 'integer' } }, required: ['guildId', 'id'] };
+const PERMISSION_RECHECK_MS = 30_000;
 
 export function registerTicketRoutes(app, { core }) {
 	const { tickets, executor, network, ranks } = core;
@@ -10,12 +13,19 @@ export function registerTicketRoutes(app, { core }) {
 	async function withNames(list) {
 		const names = await resolveNames(executor, list.flatMap(t => [t.openerId, t.claimedBy, t.closedBy]));
 		const guilds = new Map(network.list().map(g => [g.id, g.name]));
-		return list.map(t => ({
-			...t,
-			guildName: guilds.get(t.guildId) ?? t.guildId,
-			opener: names.get(t.openerId) ?? { name: t.openerName, avatar: null },
-			claimer: t.claimedBy ? names.get(t.claimedBy) ?? null : null,
-		}));
+		const categories = new Map();
+		return list.map((t) => {
+			if (!categories.has(t.guildId)) categories.set(t.guildId, new Map(tickets.describe(t.guildId).categories.map(c => [c.id, c])));
+			const category = categories.get(t.guildId).get(t.categoryId);
+			return {
+				...t,
+				guildName: guilds.get(t.guildId) ?? t.guildId,
+				categoryName: category?.name ?? null,
+				categoryEmoji: category?.emoji ?? null,
+				opener: names.get(t.openerId) ?? { name: t.openerName, avatar: null },
+				claimer: t.claimedBy ? names.get(t.claimedBy) ?? null : null,
+			};
+		});
 	}
 
 	app.get('/api/tickets', {
@@ -24,16 +34,77 @@ export function registerTicketRoutes(app, { core }) {
 			querystring: {
 				type: 'object',
 				properties: {
-					guildId: { type: 'string' }, status: { type: 'string', enum: ['open', 'closed'] }, openerId: { type: 'string' },
+					guildId: { type: 'string' }, status: { type: 'string', enum: ['open', 'closed'] }, statusKey: { type: 'string', maxLength: 30 },
+					categoryId: { type: 'integer' }, priority: { type: 'string', enum: ['low', 'normal', 'high', 'urgent'] },
+					claimedBy: { type: 'string' }, openerId: { type: 'string' },
 					before: { type: 'integer' }, limit: { type: 'integer', minimum: 1, maximum: 200 },
 				},
 			},
 		},
 	}, async (request) => withNames(tickets.list(request.query)));
 
-	app.get('/api/tickets/:id', { config: { permission: 'tickets.view' }, schema: { params: idParam } }, async (request) => {
-		return (await withNames([tickets.get(request.params.id, { withTranscript: true })]))[0];
+	// Live updates of tickets and their conversations (new messages, statuses, claims...)
+	app.get('/api/tickets/live', { websocket: true, config: { permission: 'tickets.view' } }, (socket, request) => {
+		const send = (payload) => {
+			if (socket.readyState === 1) socket.send(JSON.stringify(payload));
+		};
+		const unsubscribe = tickets.subscribe((event) => {
+			// Internal notes are panel-only, but still only for people who can see tickets: fine to forward
+			if (event.type === 'ticket') withNames([event.ticket]).then(([ticket]) => send({ ...event, ticket })).catch(() => null);
+			else send(event);
+		});
+		const recheck = setInterval(async () => {
+			const actor = await authenticate(request, core).catch(() => null);
+			if (!actor?.can('panel.access') || !actor.can('tickets.view')) socket.close(4003, 'Forbidden');
+		}, PERMISSION_RECHECK_MS);
+		socket.on('close', () => {
+			clearInterval(recheck);
+			unsubscribe();
+		});
+		socket.on('message', () => undefined);
 	});
+
+	app.get('/api/tickets/:id', { config: { permission: 'tickets.view' }, schema: { params: idParam } }, async (request) => {
+		const [ticket] = await withNames([tickets.get(request.params.id, { withTranscript: true })]);
+		return {
+			...ticket,
+			messages: tickets.messages(ticket.id),
+			statuses: tickets.statuses(ticket.guildId),
+			priorities: tickets.priorities(),
+		};
+	});
+
+	const handle = { permission: 'tickets.handle' };
+
+	app.post('/api/tickets/:id/reply', {
+		config: handle,
+		schema: {
+			params: idParam,
+			body: { type: 'object', required: ['content'], properties: { content: { type: 'string', maxLength: 2000 }, internal: { type: 'boolean' } }, additionalProperties: false },
+		},
+	}, async (request) => tickets.reply(request.actor, request.params.id, request.body));
+
+	app.post('/api/tickets/:id/claim', { config: handle, schema: { params: idParam } }, async (request) => tickets.claim(request.actor.id, request.params.id, 'panel'));
+
+	app.post('/api/tickets/:id/status', {
+		config: handle,
+		schema: { params: idParam, body: { type: 'object', required: ['key'], properties: { key: { type: 'string', maxLength: 30 } } } },
+	}, async (request) => tickets.setStatus(request.actor.id, request.params.id, request.body.key, 'panel'));
+
+	app.post('/api/tickets/:id/priority', {
+		config: handle,
+		schema: { params: idParam, body: { type: 'object', required: ['priority'], properties: { priority: { type: 'string', enum: ['low', 'normal', 'high', 'urgent'] } } } },
+	}, async (request) => tickets.setPriority(request.actor.id, request.params.id, request.body.priority, 'panel'));
+
+	app.post('/api/tickets/:id/members', {
+		config: handle,
+		schema: { params: idParam, body: { type: 'object', required: ['userId'], properties: { userId: snowflake } } },
+	}, async (request) => {
+		await tickets.addMember(request.actor.id, request.params.id, request.body.userId, 'panel');
+		return { ok: true };
+	});
+
+	app.post('/api/tickets/:id/reopen', { config: handle, schema: { params: idParam } }, async (request) => tickets.reopen(request.actor.id, request.params.id, 'panel'));
 
 	app.post('/api/tickets/:id/close', {
 		config: { permission: 'tickets.handle', confirm: true },
@@ -62,18 +133,14 @@ export function registerTicketRoutes(app, { core }) {
 		config: { permission: 'tickets.manage' },
 		schema: {
 			params: guildParam,
-			body: {
-				type: 'object',
-				properties: {
-					panelChannelId: { anyOf: [snowflake, { type: 'null' }] },
-					panelTitle: { type: 'string', maxLength: 100 },
-					panelText: { type: 'string', maxLength: 1000 },
-					maxOpen: { type: 'integer' },
-				},
-				additionalProperties: false,
-			},
+			body: { type: 'object', properties: { maxOpen: { type: 'integer' }, statusPrefix: { type: 'boolean' } }, additionalProperties: false },
 		},
 	}, async (request) => tickets.saveSettings(request.actor, request.params.guildId, request.body));
+
+	app.put('/api/tickets/config/:guildId/statuses', {
+		config: { permission: 'tickets.manage' },
+		schema: { params: guildParam, body: { type: 'array', maxItems: 20, items: { type: 'object' } } },
+	}, async (request) => tickets.saveStatuses(request.actor, request.params.guildId, request.body));
 
 	app.put('/api/tickets/config/:guildId/categories', {
 		config: { permission: 'tickets.manage' },
@@ -92,6 +159,7 @@ export function registerTicketRoutes(app, { core }) {
 					rankIds: { type: 'array', items: { type: 'integer' }, maxItems: 50 },
 					roleIds: { type: 'array', items: snowflake, maxItems: 50 },
 					position: { type: 'integer' },
+					config: { type: 'object' },
 				},
 				additionalProperties: false,
 			},
@@ -100,13 +168,42 @@ export function registerTicketRoutes(app, { core }) {
 
 	app.delete('/api/tickets/config/:guildId/categories/:id', {
 		config: { permission: 'tickets.manage', confirm: true },
-		schema: { params: { type: 'object', properties: { guildId: snowflake, id: { type: 'integer' } }, required: ['guildId', 'id'] } },
+		schema: { params: guildIdParam },
 	}, async (request) => {
 		tickets.deleteCategory(request.actor, request.params.guildId, request.params.id);
 		return { ok: true };
 	});
 
-	app.post('/api/tickets/config/:guildId/publish', { config: { permission: 'tickets.manage' }, schema: { params: guildParam } }, async (request) => {
-		return tickets.publishPanel(request.actor, request.params.guildId);
+	app.put('/api/tickets/config/:guildId/panels', {
+		config: { permission: 'tickets.manage' },
+		schema: {
+			params: guildParam,
+			body: {
+				type: 'object',
+				required: ['name'],
+				properties: {
+					id: { type: 'integer' },
+					name: { type: 'string', maxLength: 50 },
+					channelId: { anyOf: [snowflake, { type: 'null' }] },
+					payload: { type: 'object' },
+					style: { type: 'string', enum: ['buttons', 'select'] },
+					placeholder: { type: ['string', 'null'], maxLength: 150 },
+					categoryIds: { type: 'array', items: { type: 'integer' }, maxItems: 25 },
+				},
+				additionalProperties: false,
+			},
+		},
+	}, async (request) => tickets.savePanel(request.actor, request.params.guildId, request.body));
+
+	app.delete('/api/tickets/config/:guildId/panels/:id', {
+		config: { permission: 'tickets.manage', confirm: true },
+		schema: { params: guildIdParam },
+	}, async (request) => {
+		await tickets.deletePanel(request.actor, request.params.guildId, request.params.id);
+		return { ok: true };
+	});
+
+	app.post('/api/tickets/config/:guildId/panels/:id/publish', { config: { permission: 'tickets.manage' }, schema: { params: guildIdParam } }, async (request) => {
+		return tickets.publishPanel(request.actor, request.params.guildId, request.params.id);
 	});
 }

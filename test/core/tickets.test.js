@@ -23,7 +23,7 @@ test('opening a ticket creates a private channel with the category staff', async
 	assert.equal(ticket.number, 1);
 	assert.equal(ticket.status, 'open');
 	const channel = executor.ticketChannels.get(ticket.channelId);
-	assert.equal(channel.name, 'ticket-0001-bob');
+	assert.equal(channel.name, '🟢┃ticket-0001-bob');
 	assert.deepEqual(channel.staffRoleIds.sort(), ['800000000000000001', '800000000000000009']);
 	assert.deepEqual(channel.messages, ['welcome']);
 	assert.equal(core.audit.query({ action: 'tickets.open' }).length, 1);
@@ -83,11 +83,15 @@ test('configuration needs tickets.manage and a network server', async () => {
 	await assert.rejects(core.tickets.saveCategory(owner, MAIN, { name: '' }), ValidationError);
 });
 
-test('publishing the panel stores the message and reuses it', async () => {
-	const { core, owner, executor } = await setup();
-	await core.tickets.publishPanel(owner, MAIN);
-	await core.tickets.publishPanel(owner, MAIN);
+test('publishing a panel stores the message and reuses it', async () => {
+	const { core, owner, executor, category } = await setup();
+	executor.channels.set('610000000000000001', { guildId: MAIN, name: 'support' });
+	const panel = await core.tickets.savePanel(owner, MAIN, { name: 'Support', channelId: '610000000000000001', style: 'select', categoryIds: [category.id] });
+	await core.tickets.publishPanel(owner, MAIN, panel.id);
+	await core.tickets.publishPanel(owner, MAIN, panel.id);
 	assert.deepEqual(executor.calls.filter(c => c[0] === 'panel').map(c => c[2]), [null, '600000000000000001']);
+	assert.equal(executor.lastPanel.style, 'select');
+	assert.deepEqual(executor.lastPanel.categories.map(c => c.id), [category.id]);
 });
 
 test('a manually deleted ticket channel closes the ticket', async () => {
