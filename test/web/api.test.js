@@ -221,3 +221,34 @@ test('security headers are set', async () => {
 	assert.equal(res.headers['x-frame-options'], 'DENY');
 	assert.match(res.headers['content-security-policy'], /frame-ancestors 'none'/);
 });
+
+test('sanctions through the API: create with a duration, list, revoke', async () => {
+	const { app, core, executor } = await setup();
+	const call = api(app, await sessionFor(app, OWNER));
+	const created = await call('POST', '/api/sanctions', { type: 'ban', userId: '300000000000000001', reason: 'Raid', duration: '7j' });
+	assert.equal(created.statusCode, 201, created.body);
+	const ban = created.json();
+	assert.ok(ban.expiresAt - ban.createdAt >= 7 * 86_400_000 - 1000);
+	assert.equal(executor.calls.filter(c => c[0] === 'ban').length, 1);
+
+	const bad = await call('POST', '/api/sanctions', { type: 'ban', userId: '300000000000000001', duration: 'demain' });
+	assert.equal(bad.statusCode, 400);
+
+	const list = (await call('GET', '/api/sanctions?active=true')).json();
+	assert.equal(list.length, 1);
+	assert.equal(list[0].moderator.name.startsWith('user-'), true);
+
+	assert.equal((await call('POST', `/api/sanctions/${ban.id}/revoke`, {})).statusCode, 400, 'needs confirmation');
+	assert.equal((await call('POST', `/api/sanctions/${ban.id}/revoke`, { confirm: true, reason: 'Appel' })).statusCode, 200);
+	assert.equal(core.sanctions.isBanned('300000000000000001'), false);
+});
+
+test('sanction permissions are checked per type through the API', async () => {
+	const { app, core, owner } = await setup();
+	const modo = core.ranks.create(owner, { name: 'Modo', level: 10, permissions: ['panel.access', 'sanctions.warn'] });
+	await core.ranks.assignDirect(owner, ALICE, modo.id);
+	const call = api(app, await sessionFor(app, ALICE));
+	assert.equal((await call('POST', '/api/sanctions', { type: 'ban', userId: '300000000000000001' })).statusCode, 403);
+	assert.equal((await call('POST', '/api/sanctions', { type: 'warn', userId: '300000000000000001', reason: 'x' })).statusCode, 201);
+	assert.equal((await call('GET', '/api/sanctions')).statusCode, 403, 'listing needs sanctions.view');
+});

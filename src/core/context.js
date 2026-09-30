@@ -4,6 +4,7 @@ import { createNetwork } from './network.js';
 import { createRankService } from './ranks.js';
 import { createLogRouting } from './logRouting.js';
 import { createSessions } from './sessions.js';
+import { createSanctions } from './sanctions.js';
 import { describeAuditEntry } from './describe.js';
 
 // Wires every core service together. `executor` is the only door to Discord:
@@ -21,6 +22,8 @@ export function createCore({ db, config, executor, logger = console }) {
 	});
 	const logs = createLogRouting({ db, executor, network, audit, logger });
 	const sessions = createSessions({ db });
+	const sanctions = createSanctions({ db, audit, network, ranks, executor, logger });
+	logs.registerCategory('sanctions', 'Sanctions (ban, kick, timeout, warn)');
 
 	// Every audited action is also posted in the log channel of its category
 	audit.onRecord((entry) => {
@@ -32,5 +35,10 @@ export function createCore({ db, config, executor, logger = console }) {
 	// Rank links point to roles of the main server: changing it invalidates every cached permission
 	network.on('mainChanged', () => ranks.invalidate());
 
-	return { db, config, executor, settings, audit, network, ranks, logs, sessions };
+	// A server joining the network gets the network bans and hands over its own ban list
+	network.on('activated', (guild) => {
+		sanctions.syncGuild(guild.id).catch(error => logger.error(`Ban sync failed on ${guild.name}:`, error));
+	});
+
+	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions };
 }

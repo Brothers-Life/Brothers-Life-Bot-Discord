@@ -23,17 +23,17 @@ export function registerGuard(app, core) {
 
 		// Browsers can't send this header cross-site without a CORS preflight, which we never allow
 		if (MUTATING.has(request.method) && request.headers['x-requested-with'] !== 'panel') {
-			return sendError(reply, 403, 'CSRF', 'Missing X-Requested-With header.');
+			return sendError(reply, 403, 'CSRF', 'En-tête X-Requested-With manquant.');
 		}
 
 		const actor = await authenticate(request, core);
-		if (!actor) return sendError(reply, 401, 'UNAUTHENTICATED', 'Please log in.');
-		if (!actor.can('panel.access')) return sendError(reply, 403, 'FORBIDDEN', 'You no longer have access to the panel.');
+		if (!actor) return sendError(reply, 401, 'UNAUTHENTICATED', 'Connecte-toi.');
+		if (!actor.can('panel.access')) return sendError(reply, 403, 'FORBIDDEN', 'Tu n’as plus accès au panel.');
 		if (config.permission && !actor.can(config.permission)) {
-			return sendError(reply, 403, 'FORBIDDEN', `Missing permission: ${config.permission}`);
+			return sendError(reply, 403, 'FORBIDDEN', `Permission manquante : ${config.permission}`);
 		}
 		if (config.confirm && request.body?.confirm !== true) {
-			return sendError(reply, 400, 'CONFIRMATION_REQUIRED', 'This action must be confirmed (confirm: true).');
+			return sendError(reply, 400, 'CONFIRMATION_REQUIRED', 'Cette action doit être confirmée.');
 		}
 	});
 }

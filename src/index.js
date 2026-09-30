@@ -90,6 +90,8 @@ async function main() {
 
 	const timers = [
 		setInterval(() => core.sessions.purgeExpired(), HOUR),
+		// Temporary bans reaching their end
+		setInterval(() => core.sanctions.expireDue().catch(error => logger.error('Ban expiry failed:', error)), 30_000),
 	];
 	if (config.GITHUB_REPO) {
 		const check = () => versions.checkForUpdate().catch(error => logger.warn('Version check failed:', error.message));

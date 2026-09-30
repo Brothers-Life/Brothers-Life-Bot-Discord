@@ -55,6 +55,43 @@ export function createFakeExecutor() {
 		guildIcon() {
 			return null;
 		},
+		// Moderation: records calls, `members` decides who is on which server, `failOn` makes a server fail
+		calls: [],
+		dms: [],
+		members: new Map(),
+		bans: new Map(),
+		failOn: new Set(),
+		async ban(guildId, userId, options) {
+			this.guard(guildId);
+			this.calls.push(['ban', guildId, userId, options?.reason]);
+		},
+		async unban(guildId, userId) {
+			this.guard(guildId);
+			this.calls.push(['unban', guildId, userId]);
+		},
+		async kick(guildId, userId) {
+			this.guard(guildId);
+			if (!this.members.get(guildId)?.has(userId)) return 'not_member';
+			this.calls.push(['kick', guildId, userId]);
+		},
+		async timeout(guildId, userId, ms) {
+			this.guard(guildId);
+			if (!this.members.get(guildId)?.has(userId)) return 'not_member';
+			this.calls.push(['timeout', guildId, userId, ms]);
+		},
+		async fetchBans(guildId) {
+			return this.bans.get(guildId) ?? [];
+		},
+		async sendDM(userId, content) {
+			this.dms.push([userId, content]);
+		},
+		guard(guildId) {
+			if (this.failOn.has(guildId)) {
+				const error = new Error('Missing Permissions');
+				error.code = 50013;
+				throw error;
+			}
+		},
 		async getUser(userId) {
 			return users.get(userId) ?? { id: userId, username: `user-${userId.slice(-4)}`, avatar: null };
 		},

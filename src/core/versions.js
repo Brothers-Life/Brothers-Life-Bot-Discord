@@ -51,16 +51,16 @@ export function createVersionService({ config, settings, audit, appVersion, dbSc
 	}
 
 	async function listReleases(force = false) {
-		if (!config.GITHUB_REPO) throw new AppError('NOT_CONFIGURED', 'GITHUB_REPO is not set in the .env file.', 503);
+		if (!config.GITHUB_REPO) throw new AppError('NOT_CONFIGURED', 'GITHUB_REPO n’est pas défini dans le fichier .env.', 503);
 		if (!force && cache && now() - cache.at < CACHE_MS) return cache.releases;
 
 		const headers = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'brl-bot' };
 		if (config.GITHUB_TOKEN) headers.Authorization = `Bearer ${config.GITHUB_TOKEN}`;
 		const res = await fetchImpl(`https://api.github.com/repos/${config.GITHUB_REPO}/releases?per_page=50`, { headers });
 		if (res.status === 404 || res.status === 401) {
-			throw new AppError('GITHUB', 'Repository not found: check GITHUB_REPO and GITHUB_TOKEN (the repo is private).', 502);
+			throw new AppError('GITHUB', 'Dépôt introuvable : vérifie GITHUB_REPO et GITHUB_TOKEN (le dépôt est privé).', 502);
 		}
-		if (!res.ok) throw new AppError('GITHUB', `GitHub answered ${res.status}.`, 502);
+		if (!res.ok) throw new AppError('GITHUB', `GitHub a répondu ${res.status}.`, 502);
 
 		const releases = (await res.json())
 			.filter(r => !r.draft && /^v\d+\.\d+\.\d+$/.test(r.tag_name))
@@ -110,10 +110,10 @@ export function createVersionService({ config, settings, audit, appVersion, dbSc
 
 		async prepareInstall(version) {
 			const release = (await listReleases(true)).find(r => r.version === version);
-			if (!release) throw new ValidationError(`Unknown version ${version}.`);
+			if (!release) throw new ValidationError(`Version inconnue : ${version}.`);
 			const target = plan(release);
 			if (!target.compatible && !target.restoreBackup) {
-				throw new ValidationError(`${version} expects an older database (schema ${release.schemaVersion}) and no compatible backup exists.`);
+				throw new ValidationError(`${version} attend une base plus ancienne (schéma ${release.schemaVersion}) et aucune sauvegarde compatible n’existe.`);
 			}
 			return { release, ...target };
 		},

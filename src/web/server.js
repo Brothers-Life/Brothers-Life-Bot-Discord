@@ -12,6 +12,7 @@ import { registerGuard } from './guard.js';
 import { registerAuthRoutes } from './auth.js';
 import { registerPanelRoutes } from './routes/panel.js';
 import { registerSystemRoutes } from './routes/system.js';
+import { registerSanctionRoutes } from './routes/sanctions.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_STATIC_DIR = path.resolve(__dirname, '..', '..', 'web', 'dist');
@@ -56,6 +57,7 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	registerAuthRoutes(app, { config, core, fetchImpl });
 	registerPanelRoutes(app, { core, runtime });
 	registerSystemRoutes(app, { core, runtime, consoleLog, versions });
+	registerSanctionRoutes(app, { core });
 
 	const hasPanel = fs.existsSync(path.join(staticDir, 'index.html'));
 	if (hasPanel) {
@@ -64,7 +66,7 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 
 	// Unknown /api routes answer JSON; everything else is the React app (client-side routing)
 	app.setNotFoundHandler((request, reply) => {
-		if (request.url.startsWith('/api')) return sendError(reply, 404, 'NOT_FOUND', 'Unknown API route.');
+		if (request.url.startsWith('/api')) return sendError(reply, 404, 'NOT_FOUND', 'Route d’API inconnue.');
 		if (!hasPanel) return reply.type('text/plain').send('Panel not built: run "npm run build" in web/ (or use a release).');
 		return reply.type('text/html').header('Cache-Control', 'no-cache').sendFile('index.html');
 	});

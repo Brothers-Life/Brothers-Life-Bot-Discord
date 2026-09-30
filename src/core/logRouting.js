@@ -106,18 +106,18 @@ export function createLogRouting({ db, executor, network, audit, logger = consol
 
 		// channelId null removes the route
 		async setRoute(actor, guildId, category, channelId, enabled = true) {
-			if (!actor.can('logs.manage')) throw new ForbiddenError('Missing permission: logs.manage');
-			if (!categories.has(category)) throw new ValidationError(`Unknown log category: ${category}`);
+			if (!actor.can('logs.manage')) throw new ForbiddenError('Permission manquante : logs.manage');
+			if (!categories.has(category)) throw new ValidationError(`Catégorie de logs inconnue : ${category}`);
 			const ownerGuild = guildId === MIRROR ? network.getMainId() : guildId;
-			if (!ownerGuild) throw new ValidationError('Choose the main server first.');
-			if (guildId !== MIRROR && !network.find(guildId)) throw new ValidationError('Unknown server.');
+			if (!ownerGuild) throw new ValidationError('Choisis d’abord le serveur principal.');
+			if (guildId !== MIRROR && !network.find(guildId)) throw new ValidationError('Serveur inconnu.');
 
 			if (channelId === null) {
 				q.delete.run(guildId, category);
 			}
 			else {
 				const channel = await executor.getTextChannel(ownerGuild, channelId);
-				if (!channel) throw new ValidationError('This channel does not exist on this server or the bot cannot write in it.');
+				if (!channel) throw new ValidationError('Ce salon n’existe pas sur ce serveur, ou le bot ne peut pas y écrire.');
 				q.upsert.run(guildId, category, channelId, enabled ? 1 : 0);
 			}
 

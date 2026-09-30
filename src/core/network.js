@@ -36,12 +36,12 @@ export function createNetwork({ db, audit, now = Date.now }) {
 
 	function getOrThrow(id) {
 		const guild = toGuild(q.get.get(String(id)));
-		if (!guild) throw new NotFoundError('Server not found.');
+		if (!guild) throw new NotFoundError('Serveur introuvable.');
 		return guild;
 	}
 
 	function requireManage(actor) {
-		if (!actor.can('network.manage')) throw new ForbiddenError('Missing permission: network.manage');
+		if (!actor.can('network.manage')) throw new ForbiddenError('Permission manquante : network.manage');
 	}
 
 	function emit(event, payload) {
@@ -108,7 +108,7 @@ export function createNetwork({ db, audit, now = Date.now }) {
 		activate(actor, id) {
 			requireManage(actor);
 			const guild = getOrThrow(id);
-			if (!guild.botPresent) throw new ValidationError('The bot is not on this server anymore.');
+			if (!guild.botPresent) throw new ValidationError('Le bot n’est plus sur ce serveur.');
 			if (guild.status === 'active') return guild;
 			q.status.run('active', now(), now(), guild.id);
 			mainCache = undefined;
@@ -121,7 +121,7 @@ export function createNetwork({ db, audit, now = Date.now }) {
 		remove(actor, id) {
 			requireManage(actor);
 			const guild = getOrThrow(id);
-			if (guild.isMain) throw new ValidationError('The main server cannot be removed. Choose another main server first.');
+			if (guild.isMain) throw new ValidationError('Le serveur principal ne peut pas être retiré. Choisis d’abord un autre serveur principal.');
 			if (guild.status === 'removed') return guild;
 			const wasActive = guild.status === 'active';
 			q.status.run('removed', guild.joinedNetworkAt, now(), guild.id);
@@ -135,7 +135,7 @@ export function createNetwork({ db, audit, now = Date.now }) {
 		setMain(actor, id) {
 			requireManage(actor);
 			const guild = getOrThrow(id);
-			if (!guild.botPresent) throw new ValidationError('The bot is not on this server anymore.');
+			if (!guild.botPresent) throw new ValidationError('Le bot n’est plus sur ce serveur.');
 			const previous = this.getMain();
 			if (previous?.id === guild.id) return guild;
 

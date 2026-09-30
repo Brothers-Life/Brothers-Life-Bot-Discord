@@ -128,3 +128,28 @@ export type VersionsPayload = {
   supervised: boolean
   install: InstallState
 }
+
+export type SanctionType = 'ban' | 'kick' | 'timeout' | 'warn'
+
+export type GuildResult = { ok: boolean; error?: string; code?: string | number | null; skipped?: string }
+
+export type Sanction = {
+  id: number
+  type: SanctionType
+  userId: string
+  userName: string | null
+  moderatorId: string
+  source: 'bot' | 'panel' | 'native' | 'automod' | 'system'
+  originGuildId: string | null
+  scope: 'network' | 'local'
+  reason: string | null
+  createdAt: number
+  expiresAt: number | null
+  revokedAt: number | null
+  revokedBy: string | null
+  revokeReason: string | null
+  results: Record<string, GuildResult>
+  active: boolean
+  user: { name: string | null; avatar: string | null } | null
+  moderator: { name: string | null; avatar: string | null } | null
+}

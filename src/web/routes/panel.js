@@ -65,7 +65,7 @@ export function registerPanelRoutes(app, { core, runtime }) {
 	});
 
 	app.get('/api/network/:id/channels', { config: { permission: 'logs.manage' }, schema: { params: idParam } }, async (request) => {
-		if (!network.find(request.params.id)) throw new NotFoundError('Server not found.');
+		if (!network.find(request.params.id)) throw new NotFoundError('Serveur introuvable.');
 		return executor.listTextChannels(request.params.id);
 	});
 
@@ -162,7 +162,7 @@ export function registerPanelRoutes(app, { core, runtime }) {
 
 	app.get('/api/users/:id', { config: { permission: 'ranks.view' }, schema: { params: idParam } }, async (request) => {
 		const user = await executor.getUser(request.params.id);
-		if (!user) throw new NotFoundError('Unknown Discord user.');
+		if (!user) throw new NotFoundError('Utilisateur Discord inconnu.');
 		return user;
 	});
 
@@ -212,11 +212,11 @@ export function registerPanelRoutes(app, { core, runtime }) {
 
 	app.delete('/api/sessions/:key', { config: { permission: null } }, async (request) => {
 		const target = sessions.list().find(s => sessionKey(s.id) === request.params.key);
-		if (!target) throw new NotFoundError('Session not found.');
+		if (!target) throw new NotFoundError('Session introuvable.');
 		if (target.discordId !== request.actor.id) {
-			if (!request.actor.can('sessions.manage')) throw new ForbiddenError('Missing permission: sessions.manage');
+			if (!request.actor.can('sessions.manage')) throw new ForbiddenError('Permission manquante : sessions.manage');
 			const owner = await ranks.resolve(target.discordId);
-			if (!request.actor.isOwner && owner.level >= request.actor.level) throw new ForbiddenError('You cannot revoke sessions of someone at or above your level.');
+			if (!request.actor.isOwner && owner.level >= request.actor.level) throw new ForbiddenError('Tu ne peux pas révoquer les sessions de quelqu’un de niveau égal ou supérieur au tien.');
 		}
 		sessions.revoke(target.id);
 		audit.record({ actorId: request.actor.id, source: 'panel', action: 'panel.session_revoked', target: target.discordId, details: { username: target.username } });

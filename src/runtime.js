@@ -41,10 +41,10 @@ export function createRuntime({ ipc, logger, appVersion, shutdown }) {
 
 		install(payload) {
 			if (!ipc.supervised) {
-				throw new AppError('NOT_SUPERVISED', 'Versions can only be installed when the bot runs with launcher.js (npm start).', 409);
+				throw new AppError('NOT_SUPERVISED', 'Les versions ne peuvent être installées que si le bot tourne avec launcher.js (npm start).', 409);
 			}
 			if (install && !install.done && !install.error && Date.now() - install.at < 15 * 60_000) {
-				throw new AppError('BUSY', `Version ${install.version} is already being installed.`, 409);
+				throw new AppError('BUSY', `La version ${install.version} est déjà en cours d’installation.`, 409);
 			}
 			install = { version: payload.version, step: 'requested', at: Date.now() };
 			ipc.send({ type: 'install', ...payload });

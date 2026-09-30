@@ -14,13 +14,13 @@ export class ValidationError extends AppError {
 }
 
 export class ForbiddenError extends AppError {
-	constructor(message = 'You are not allowed to do that.') {
+	constructor(message = 'Action non autorisée.') {
 		super('FORBIDDEN', message, 403);
 	}
 }
 
 export class NotFoundError extends AppError {
-	constructor(message = 'Not found.') {
+	constructor(message = 'Introuvable.') {
 		super('NOT_FOUND', message, 404);
 	}
 }

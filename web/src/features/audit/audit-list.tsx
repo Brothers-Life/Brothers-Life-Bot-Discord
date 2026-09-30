@@ -27,6 +27,14 @@ export const ACTION_LABELS: Record<string, string> = {
   'system.stop': 'Arrêt demandé',
   'system.install': 'Installation d’une version',
   'system.version_available': 'Nouvelle version disponible',
+  'sanctions.ban': 'Bannissement',
+  'sanctions.unban': 'Débannissement',
+  'sanctions.kick': 'Expulsion',
+  'sanctions.timeout': 'Timeout',
+  'sanctions.untimeout': 'Fin de timeout',
+  'sanctions.warn': 'Avertissement',
+  'sanctions.unwarn': 'Avertissement retiré',
+  'sanctions.sync': 'Bans synchronisés sur un serveur',
 }
 
 const SOURCE_LABELS: Record<AuditEntry['source'], string> = {
@@ -36,7 +44,7 @@ const SOURCE_LABELS: Record<AuditEntry['source'], string> = {
   system: 'Système',
 }
 
-const DANGER = new Set(['network.bot_left', 'network.remove', 'ranks.delete', 'panel.login_denied', 'system.stop'])
+const DANGER = new Set(['network.bot_left', 'network.remove', 'ranks.delete', 'panel.login_denied', 'system.stop', 'sanctions.ban', 'sanctions.kick'])
 
 function describe(entry: AuditEntry) {
   const d = entry.details ?? {}
@@ -47,6 +55,8 @@ function describe(entry: AuditEntry) {
   if (entry.action.startsWith('ranks.') && entry.target && /^\d{17,20}$/.test(entry.target)) parts.push(`utilisateur ${entry.target}`)
   if (entry.action === 'system.install' && entry.target) parts.push(entry.target)
   if (typeof d.username === 'string') parts.push(d.username)
+  if (entry.action.startsWith('sanctions.') && typeof d.user === 'string') parts.push(d.user)
+  if (entry.action.startsWith('sanctions.') && typeof d.reason === 'string' && d.reason) parts.push(`« ${d.reason} »`)
   return parts.join(' · ')
 }
 

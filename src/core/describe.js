@@ -25,6 +25,14 @@ const TITLES = {
 	'system.stop': 'Arrêt demandé',
 	'system.install': 'Installation d\'une version',
 	'system.version_available': 'Nouvelle version disponible',
+	'sanctions.ban': 'Bannissement',
+	'sanctions.unban': 'Débannissement',
+	'sanctions.kick': 'Expulsion',
+	'sanctions.timeout': 'Timeout',
+	'sanctions.untimeout': 'Fin de timeout',
+	'sanctions.warn': 'Avertissement',
+	'sanctions.unwarn': 'Avertissement retiré',
+	'sanctions.sync': 'Bans synchronisés sur un serveur',
 };
 
 const COLORS = {
@@ -36,6 +44,13 @@ const COLORS = {
 	'panel.session_revoked': 'warning',
 	'system.stop': 'danger',
 	'system.restart': 'warning',
+	'sanctions.ban': 'danger',
+	'sanctions.kick': 'danger',
+	'sanctions.timeout': 'warning',
+	'sanctions.warn': 'warning',
+	'sanctions.unban': 'success',
+	'sanctions.untimeout': 'success',
+	'sanctions.unwarn': 'success',
 };
 
 function actorLabel(actorId) {
@@ -54,6 +69,12 @@ export function describeAuditEntry(entry) {
 
 	for (const [key, value] of Object.entries(entry.details ?? {})) {
 		fields.push({ name: key, value: formatValue(value).slice(0, 1000), inline: typeof value !== 'object' });
+	}
+
+	if (entry.results && Object.keys(entry.results).length) {
+		const values = Object.values(entry.results);
+		const failed = values.filter(r => !r.ok).length;
+		fields.push({ name: 'Serveurs', value: failed ? `${values.length - failed}/${values.length} OK, ${failed} en échec` : `${values.length}/${values.length} OK`, inline: true });
 	}
 
 	return {

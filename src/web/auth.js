@@ -101,7 +101,7 @@ export function registerAuthRoutes(app, { config, core, fetchImpl = fetch }) {
 
 	app.post('/api/auth/logout', { config: { public: true } }, async (request, reply) => {
 		const sessionId = request.cookies?.[SESSION_COOKIE];
-		if (request.headers['x-requested-with'] !== 'panel') return reply.code(403).send({ error: { code: 'CSRF', message: 'Missing X-Requested-With header.' } });
+		if (request.headers['x-requested-with'] !== 'panel') return reply.code(403).send({ error: { code: 'CSRF', message: 'En-tête X-Requested-With manquant.' } });
 		const session = sessionId ? core.sessions.get(sessionId) : null;
 		if (session) {
 			core.sessions.revoke(sessionId);

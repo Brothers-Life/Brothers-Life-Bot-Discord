@@ -70,14 +70,14 @@ export function registerSystemRoutes(app, { core, runtime, consoleLog, versions 
 	}, async (request, reply) => {
 		const { version, acceptDataLoss } = request.body;
 		if (!runtime.info().supervised) {
-			return reply.code(409).send({ error: { code: 'NOT_SUPERVISED', message: 'Versions can only be installed when the bot runs with launcher.js (npm start).' } });
+			return reply.code(409).send({ error: { code: 'NOT_SUPERVISED', message: 'Les versions ne peuvent être installées que si le bot tourne avec launcher.js (npm start).' } });
 		}
 		const target = await versions.prepareInstall(version);
 		if (target.restoreBackup && acceptDataLoss !== true) {
 			return reply.code(409).send({
 				error: {
 					code: 'DATA_LOSS',
-					message: `Installing ${version} requires restoring the backup of ${new Date(target.restoreBackup.at).toISOString()}: changes made since then will be lost.`,
+					message: `Installer ${version} demande de restaurer la sauvegarde du ${new Date(target.restoreBackup.at).toLocaleString('fr-FR')} : les changements faits depuis seront perdus.`,
 					backup: target.restoreBackup,
 				},
 			});

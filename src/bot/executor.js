@@ -31,9 +31,72 @@ function canSend(channel) {
 	return Boolean(me && channel.permissionsFor(me)?.has(LOG_PERMISSIONS));
 }
 
+function notInGuild(guildId) {
+	const error = new Error(`The bot is not on server ${guildId}`);
+	error.code = 'NO_GUILD';
+	return error;
+}
+
 // The only piece of code that talks to Discord on behalf of src/core
 export function createExecutor(client) {
+	function guildOf(guildId) {
+		const guild = client.guilds.cache.get(guildId);
+		if (!guild) throw notInGuild(guildId);
+		return guild;
+	}
+
+	async function memberOf(guild, userId) {
+		try {
+			return guild.members.cache.get(userId) ?? await guild.members.fetch(userId);
+		}
+		catch (error) {
+			if (error.code === RESTJSONErrorCodes.UnknownMember || error.code === RESTJSONErrorCodes.UnknownUser) return null;
+			throw error;
+		}
+	}
+
 	return {
+		botUserId() {
+			return client.user?.id ?? null;
+		},
+
+		// --- Moderation (a return value of 'not_member' means "nothing to do there") -------
+		async ban(guildId, userId, { reason, deleteMessageSeconds = 0 } = {}) {
+			await guildOf(guildId).bans.create(userId, { reason, deleteMessageSeconds });
+		},
+
+		async unban(guildId, userId, reason) {
+			try {
+				await guildOf(guildId).bans.remove(userId, reason);
+			}
+			catch (error) {
+				if (error.code === RESTJSONErrorCodes.UnknownBan) return 'not_member';
+				throw error;
+			}
+		},
+
+		async kick(guildId, userId, reason) {
+			const member = await memberOf(guildOf(guildId), userId);
+			if (!member) return 'not_member';
+			await member.kick(reason);
+		},
+
+		async timeout(guildId, userId, ms, reason) {
+			const member = await memberOf(guildOf(guildId), userId);
+			if (!member) return 'not_member';
+			await member.timeout(ms, reason);
+		},
+
+		async fetchBans(guildId) {
+			const bans = await guildOf(guildId).bans.fetch();
+			return [...bans.values()].map(b => ({ userId: b.user.id, username: b.user.username, reason: b.reason }));
+		},
+
+		async sendDM(userId, content) {
+			const user = await client.users.fetch(userId);
+			await user.send({ content, allowedMentions: { parse: [] } });
+		},
+
 		async sendLog(channelId, message) {
 			const channel = await client.channels.fetch(channelId);
 			if (!channel?.isTextBased()) {

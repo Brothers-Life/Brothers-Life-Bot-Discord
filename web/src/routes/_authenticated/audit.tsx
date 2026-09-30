@@ -18,6 +18,7 @@ const CATEGORIES = [
   { value: 'network', label: 'Réseau' },
   { value: 'ranks', label: 'Rangs' },
   { value: 'panel', label: 'Panel' },
+  { value: 'sanctions', label: 'Sanctions' },
   { value: 'logs', label: 'Salons de logs' },
   { value: 'system', label: 'Système' },
 ]

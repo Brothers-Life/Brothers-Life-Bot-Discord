@@ -42,45 +42,45 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 
 	function getOrThrow(id) {
 		const row = q.get.get(id);
-		if (!row) throw new NotFoundError('Rank not found.');
+		if (!row) throw new NotFoundError('Rang introuvable.');
 		return hydrate(row);
 	}
 
 	function validate({ name, level, color, permissions }) {
 		if (name !== undefined && (typeof name !== 'string' || !name.trim() || name.length > 50)) {
-			throw new ValidationError('Rank name must be 1 to 50 characters.');
+			throw new ValidationError('Le nom du rang doit faire 1 à 50 caractères.');
 		}
 		if (level !== undefined && (!Number.isInteger(level) || level < 0 || level > 100)) {
-			throw new ValidationError('Rank level must be an integer between 0 and 100.');
+			throw new ValidationError('Le niveau doit être un entier entre 0 et 100.');
 		}
 		if (color !== undefined && color !== null && !/^#[0-9a-f]{6}$/i.test(color)) {
-			throw new ValidationError('Rank color must look like #5865f2.');
+			throw new ValidationError('La couleur doit ressembler à #5865f2.');
 		}
 		if (permissions !== undefined) {
-			if (!Array.isArray(permissions)) throw new ValidationError('permissions must be an array.');
+			if (!Array.isArray(permissions)) throw new ValidationError('permissions doit être une liste.');
 			const unknown = permissions.filter(p => !isKnownPermission(p));
-			if (unknown.length) throw new ValidationError(`Unknown permissions: ${unknown.join(', ')}`);
+			if (unknown.length) throw new ValidationError(`Permissions inconnues : ${unknown.join(', ')}`);
 		}
 	}
 
 	// --- Anti-escalation rules -------------------------------------------------------------
 	function requirePermission(actor, permission) {
-		if (!actor.can(permission)) throw new ForbiddenError(`Missing permission: ${permission}`);
+		if (!actor.can(permission)) throw new ForbiddenError(`Permission manquante : ${permission}`);
 	}
 
 	function requireBelow(actor, level, what) {
 		if (!actor.isOwner && level >= actor.level) {
-			throw new ForbiddenError(`You can only manage ${what} below your own level (${actor.level}).`);
+			throw new ForbiddenError(`Tu ne peux gérer que des rangs de niveau inférieur au tien (${actor.level}).`);
 		}
 	}
 
 	function requireHeld(actor, permissions) {
 		const missing = permissions.filter(p => !actor.can(p));
-		if (missing.length) throw new ForbiddenError(`You cannot grant permissions you do not have: ${missing.join(', ')}`);
+		if (missing.length) throw new ForbiddenError(`Tu ne peux pas donner des permissions que tu n’as pas : ${missing.join(', ')}`);
 	}
 
 	function assertUniqueName(name, id = -1) {
-		if (q.byName.get(name.trim(), id)) throw new ConflictError(`A rank named "${name.trim()}" already exists.`);
+		if (q.byName.get(name.trim(), id)) throw new ConflictError(`Un rang nommé « ${name.trim()} » existe déjà.`);
 	}
 
 	function record(actor, action, target, details) {
@@ -214,12 +214,12 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 			const rank = getOrThrow(id);
 			requireBelow(actor, rank.level, 'ranks');
 			const mainGuildId = getMainGuildId();
-			if (!mainGuildId) throw new ValidationError('Choose the main server first.');
+			if (!mainGuildId) throw new ValidationError('Choisis d’abord le serveur principal.');
 			if (!Array.isArray(roleIds) || roleIds.some(r => typeof r !== 'string' || !r)) {
-				throw new ValidationError('roleIds must be an array of role IDs.');
+				throw new ValidationError('roleIds doit être une liste d’ID de rôles.');
 			}
 			// @everyone has the server's id: linking it would give the rank to every member
-			if (roleIds.includes(mainGuildId)) throw new ValidationError('The @everyone role cannot grant a rank.');
+			if (roleIds.includes(mainGuildId)) throw new ValidationError('Le rôle @everyone ne peut pas donner de rang.');
 
 			db.transaction(() => {
 				q.clearRoles.run(id, mainGuildId);
@@ -246,9 +246,9 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 	async function changeDirect(actor, userId, rankId, assign) {
 		userId = String(userId);
 		requirePermission(actor, 'members.assign');
-		if (!/^\d{17,20}$/.test(userId)) throw new ValidationError('Invalid Discord user ID.');
-		if (userId === actor.id && !actor.isOwner) throw new ForbiddenError('You cannot change your own ranks.');
-		if (userId === ownerId) throw new ForbiddenError('The owner has every permission already.');
+		if (!/^\d{17,20}$/.test(userId)) throw new ValidationError('ID Discord invalide.');
+		if (userId === actor.id && !actor.isOwner) throw new ForbiddenError('Tu ne peux pas modifier tes propres rangs.');
+		if (userId === ownerId) throw new ForbiddenError('Le chef du réseau a déjà toutes les permissions.');
 		const rank = getOrThrow(rankId);
 		requireBelow(actor, rank.level, 'ranks');
 
@@ -256,7 +256,7 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 			// Resolve without cache: the target's level must be strictly below ours
 			invalidate(userId);
 			const target = await service.resolve(userId);
-			if (target.level >= actor.level) throw new ForbiddenError('You cannot change the ranks of someone at or above your level.');
+			if (target.level >= actor.level) throw new ForbiddenError('Tu ne peux pas modifier les rangs de quelqu’un de niveau égal ou supérieur au tien.');
 		}
 
 		if (assign) q.assign.run(userId, rankId, actor.id, now());
