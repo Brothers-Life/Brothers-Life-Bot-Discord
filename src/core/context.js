@@ -7,6 +7,7 @@ import { createLogRouting } from './logRouting.js';
 import { createSessions } from './sessions.js';
 import { createSanctions } from './sanctions.js';
 import { createSanctionTemplates } from './sanctionTemplates.js';
+import { createMusic } from './music/index.js';
 import { createRestrictions } from './restrictions.js';
 import { createModeration } from './moderation.js';
 import { createEvents } from './events.js';
@@ -102,6 +103,8 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const backups = createBackups({ db, network, audit, executor, settings, templates, logs, logger });
 	const customCommands = createCustomCommands({ db, network, ranks, audit, executor, logs, members, moderation, sanctions, reservedNames: COMMANDS.map(c => c.name), logger });
 	logs.registerCategory('absences', 'Absences du staff');
+	const music = createMusic({ network, audit, settings, backend: executor.music, resolver: executor.musicResolver, executor, logger });
+	logs.registerCategory('music', 'Musique (lancée, arrêtée, réglages)');
 	const permissionSync = createPermissionSync({ db, network, ranks, audit, executor, logs, settings });
 
 	// Panel actions become log types (e.g. "sanctions:ban"), each of which can be routed apart
@@ -138,5 +141,5 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 		sanctions.syncGuild(guild.id).catch(error => logger.error(`Ban sync failed on ${guild.name}:`, error));
 	});
 
-	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, sanctionTemplates, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents };
+	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, sanctionTemplates, music, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents };
 }

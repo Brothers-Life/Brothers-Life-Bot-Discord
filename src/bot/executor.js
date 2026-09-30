@@ -9,6 +9,7 @@ import { applicationPayload, recruitmentPanelPayload } from './recruitmentUi.js'
 import { fivemPayload } from './fivemUi.js';
 import { rpEventPayload } from './rpEventsUi.js';
 import { absencePayload } from './absencesUi.js';
+import { musicPayload } from './musicUi.js';
 
 const COLORS = {
 	info: 0x5865f2,
@@ -335,6 +336,24 @@ export function createExecutor(client) {
 		async announceGiveawayWinners(channelId, messageId, data) {
 			const channel = await client.channels.fetch(channelId);
 			await channel.send({ ...winnersPayload(data), reply: { messageReference: messageId, failIfNotExists: false } });
+		},
+
+		// --- Music -----------------------------------------------------------------------------
+		// The now-playing message: edited in place while it is among the last messages, re-sent at the bottom otherwise
+		async upsertMusicMessage(channelId, messageId, view, { keepPlace = false } = {}) {
+			const channel = await client.channels.fetch(channelId);
+			const payload = musicPayload(view);
+			if (messageId) {
+				const recent = await channel.messages.fetch({ limit: 5 }).catch(() => null);
+				const existing = recent?.get(messageId);
+				if (existing || view.ended || keepPlace) {
+					const target = existing ?? await channel.messages.fetch(messageId).catch(() => null);
+					if (target) await target.edit(payload);
+					return messageId;
+				}
+				await channel.messages.delete(messageId).catch(() => null);
+			}
+			return (await channel.send(payload)).id;
 		},
 
 		// --- Absences ------------------------------------------------------------------------
@@ -723,7 +742,7 @@ export function createExecutor(client) {
 			return [...guild.channels.cache.values()]
 				.filter(c => c.type === ChannelType.GuildVoice || c.type === ChannelType.GuildStageVoice)
 				.sort((a, b) => a.rawPosition - b.rawPosition)
-				.map(c => ({ id: c.id, name: c.name, parent: c.parent?.name ?? null }));
+				.map(c => ({ id: c.id, name: c.name, parent: c.parent?.name ?? null, members: c.members.filter(m => !m.user.bot).size }));
 		},
 
 		// --- Personal voice channels ---------------------------------------------------------

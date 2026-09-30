@@ -29,6 +29,7 @@ import { Route as AuthenticatedGiveawaysRouteImport } from './routes/_authentica
 import { Route as AuthenticatedLogsRouteImport } from './routes/_authenticated/logs'
 import { Route as AuthenticatedMembersRouteImport } from './routes/_authenticated/members'
 import { Route as AuthenticatedMessagesRouteImport } from './routes/_authenticated/messages'
+import { Route as AuthenticatedMusicRouteImport } from './routes/_authenticated/music'
 import { Route as AuthenticatedNetworkRouteImport } from './routes/_authenticated/network'
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
 import { Route as AuthenticatedPeopleRouteImport } from './routes/_authenticated/people'
@@ -149,6 +150,11 @@ const AuthenticatedMembersRoute = AuthenticatedMembersRouteImport.update({
 const AuthenticatedMessagesRoute = AuthenticatedMessagesRouteImport.update({
   id: '/messages',
   path: '/messages',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedMusicRoute = AuthenticatedMusicRouteImport.update({
+  id: '/music',
+  path: '/music',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedNetworkRoute = AuthenticatedNetworkRouteImport.update({
@@ -282,6 +288,7 @@ export interface FileRoutesByFullPath {
   '/logs': typeof AuthenticatedLogsRoute
   '/members': typeof AuthenticatedMembersRoute
   '/messages': typeof AuthenticatedMessagesRoute
+  '/music': typeof AuthenticatedMusicRoute
   '/network': typeof AuthenticatedNetworkRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/people': typeof AuthenticatedPeopleRoute
@@ -323,6 +330,7 @@ export interface FileRoutesByTo {
   '/logs': typeof AuthenticatedLogsRoute
   '/members': typeof AuthenticatedMembersRoute
   '/messages': typeof AuthenticatedMessagesRoute
+  '/music': typeof AuthenticatedMusicRoute
   '/network': typeof AuthenticatedNetworkRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/people': typeof AuthenticatedPeopleRoute
@@ -367,6 +375,7 @@ export interface FileRoutesById {
   '/_authenticated/logs': typeof AuthenticatedLogsRoute
   '/_authenticated/members': typeof AuthenticatedMembersRoute
   '/_authenticated/messages': typeof AuthenticatedMessagesRoute
+  '/_authenticated/music': typeof AuthenticatedMusicRoute
   '/_authenticated/network': typeof AuthenticatedNetworkRoute
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
   '/_authenticated/people': typeof AuthenticatedPeopleRoute
@@ -412,6 +421,7 @@ export interface FileRouteTypes {
     | '/logs'
     | '/members'
     | '/messages'
+    | '/music'
     | '/network'
     | '/onboarding'
     | '/people'
@@ -453,6 +463,7 @@ export interface FileRouteTypes {
     | '/logs'
     | '/members'
     | '/messages'
+    | '/music'
     | '/network'
     | '/onboarding'
     | '/people'
@@ -496,6 +507,7 @@ export interface FileRouteTypes {
     | '/_authenticated/logs'
     | '/_authenticated/members'
     | '/_authenticated/messages'
+    | '/_authenticated/music'
     | '/_authenticated/network'
     | '/_authenticated/onboarding'
     | '/_authenticated/people'
@@ -667,6 +679,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedMessagesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/music': {
+      id: '/_authenticated/music'
+      path: '/music'
+      fullPath: '/music'
+      preLoaderRoute: typeof AuthenticatedMusicRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/network': {
       id: '/_authenticated/network'
       path: '/network'
@@ -835,6 +854,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedLogsRoute: typeof AuthenticatedLogsRoute
   AuthenticatedMembersRoute: typeof AuthenticatedMembersRoute
   AuthenticatedMessagesRoute: typeof AuthenticatedMessagesRoute
+  AuthenticatedMusicRoute: typeof AuthenticatedMusicRoute
   AuthenticatedNetworkRoute: typeof AuthenticatedNetworkRoute
   AuthenticatedOnboardingRoute: typeof AuthenticatedOnboardingRoute
   AuthenticatedPeopleRoute: typeof AuthenticatedPeopleRoute
@@ -877,6 +897,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedLogsRoute: AuthenticatedLogsRoute,
   AuthenticatedMembersRoute: AuthenticatedMembersRoute,
   AuthenticatedMessagesRoute: AuthenticatedMessagesRoute,
+  AuthenticatedMusicRoute: AuthenticatedMusicRoute,
   AuthenticatedNetworkRoute: AuthenticatedNetworkRoute,
   AuthenticatedOnboardingRoute: AuthenticatedOnboardingRoute,
   AuthenticatedPeopleRoute: AuthenticatedPeopleRoute,

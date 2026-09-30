@@ -66,7 +66,7 @@ async function main() {
 		logger.info(`Database migrated from schema v${db.migration.from} to v${db.migration.to}`);
 	}
 
-	const bot = createBot();
+	const bot = createBot({ dataDir: config.DATA_DIR });
 	const core = createCore({ db, config, executor: bot.executor, logger });
 	const versions = createVersionService({
 		config,
@@ -119,6 +119,8 @@ async function main() {
 		setInterval(() => core.fivem.presenceTick().catch(error => logger.error('Bot status failed:', error)), 30_000),
 		// Streams and videos to announce
 		setInterval(() => core.streams.tick().catch(error => logger.error('Streams failed:', error)), 60_000),
+		// Music: leaves when alone or with nothing to play, refreshes the now-playing message
+		setInterval(() => core.music.tick().catch(error => logger.error('Music tick failed:', error)), 30_000),
 		// Staff absences that start or end
 		setInterval(() => core.absences.tick().catch(error => logger.error('Absences failed:', error)), 60_000),
 		// Raids that are over

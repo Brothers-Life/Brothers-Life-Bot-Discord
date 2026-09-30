@@ -8,6 +8,7 @@ import {
   Mail,
   Gamepad2,
   Radio,
+  Music,
   UserPlus,
   CalendarOff,
   Network,
@@ -76,6 +77,7 @@ export const navSections: NavSection[] = [
     items: [
       { title: 'Accueil', url: '/onboarding', icon: DoorOpen, permission: 'onboarding.view' },
       { title: 'Statistiques', url: '/stats', icon: ChartColumn, permission: 'stats.view' },
+      { title: 'Musique', url: '/music', icon: Music, permission: 'music.use' },
       { title: 'Vocaux perso', url: '/voice', icon: Headphones, permission: 'voice.view' },
       { title: 'Événements RP', url: '/rp-events', icon: CalendarDays, permission: 'rpevents.view' },
       { title: 'Sondages', url: '/polls', icon: Vote, permission: 'polls.view' },

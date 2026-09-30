@@ -422,6 +422,42 @@ export function createFakeExecutor() {
 			this.directs.push({ userId, ...data });
 			return String(850000000000000000n + BigInt(this.directs.length));
 		},
+		// Music: fake voice backend (records what it is asked) and fake link resolver
+		music: {
+			played: [],
+			joined: new Map(),
+			positions: new Map(),
+			volumes: new Map(),
+			listenerCount: new Map(),
+			async join(guildId, channelId) { this.joined.set(guildId, channelId); },
+			async leave(guildId) { this.joined.delete(guildId); },
+			async play(guildId, options) { this.played.push({ guildId, ...options }); this.positions.set(guildId, options.seekMs ?? 0); },
+			async stop(guildId) { this.played.push({ guildId, stopped: true }); },
+			async pause(guildId) { this.played.push({ guildId, paused: true }); },
+			async resume(guildId) { this.played.push({ guildId, resumed: true }); },
+			async setVolume(guildId, volume) { this.volumes.set(guildId, volume); },
+			position(guildId) { return this.positions.get(guildId) ?? 0; },
+			async listeners(guildId) { return this.listenerCount.get(guildId) ?? 1; },
+		},
+		musicResolver: {
+			async resolve(text) {
+				const list = text.startsWith('playlist:') ? text.slice(9).split(',') : [text];
+				return {
+					playlist: text.startsWith('playlist:') ? { title: 'Ma playlist' } : null,
+					tracks: list.map(title => ({ title, author: 'Artiste', url: `https://youtu.be/${title}`, durationMs: 180_000, thumbnail: null, source: 'youtube', live: title.includes('live') })),
+				};
+			},
+			async search(text) { return [{ title: text, url: `https://youtu.be/${text}`, durationMs: 180_000 }]; },
+			async stream(track) {
+				if (track.title.includes('broken')) throw new Error('Vidéo indisponible');
+				return { target: `https://audio.example/${track.title}`, track: {} };
+			},
+		},
+		musicMessages: [],
+		async upsertMusicMessage(channelId, messageId, view) {
+			this.musicMessages.push({ channelId, messageId, view });
+			return messageId ?? '890000000000000001';
+		},
 		logPacks: [],
 		async createLogChannels(guildId, { categoryName, channels: names, staffRoleIds }) {
 			this.logPacks.push({ guildId, categoryName, names, staffRoleIds });

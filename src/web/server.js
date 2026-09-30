@@ -36,6 +36,7 @@ import { registerCustomCommandRoutes } from './routes/customCommands.js';
 import { registerBackupRoutes } from './routes/backups.js';
 import { registerStaffActivityRoutes } from './routes/staffActivity.js';
 import { registerRpEventRoutes } from './routes/rpEvents.js';
+import { registerMusicRoutes } from './routes/music.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_STATIC_DIR = path.resolve(__dirname, '..', '..', 'web', 'dist');
@@ -52,6 +53,8 @@ const SECURITY_HEADERS = {
 		'style-src \'self\' \'unsafe-inline\'',
 		'font-src \'self\' data:',
 		'connect-src \'self\'',
+		// Music page: the clip of the song being played
+		'frame-src https://www.youtube-nocookie.com',
 		'frame-ancestors \'none\'',
 		'base-uri \'self\'',
 		'form-action \'self\'',
@@ -105,6 +108,7 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	registerBackupRoutes(app, { core });
 	registerStaffActivityRoutes(app, { core });
 	registerRpEventRoutes(app, { core });
+	registerMusicRoutes(app, { core });
 
 	const hasPanel = fs.existsSync(path.join(staticDir, 'index.html'));
 	const sendPanel = (reply) => {

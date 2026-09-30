@@ -20,6 +20,7 @@
   "author": "Arthur Corbères",
   "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
+    "@discordjs/voice": "^0.19.2",
     "@fastify/cookie": "^11.1.2",
     "@fastify/rate-limit": "^11.2.0",
     "@fastify/static": "^10.1.5",
@@ -29,6 +30,7 @@
     "discord.js": "^14.25.1",
     "fastify": "^5.12.5",
     "node-cron": "^4.2.1",
+    "opusscript": "^0.1.1",
     "selfsigned": "^5.5.0"
   },
   "devDependencies": {

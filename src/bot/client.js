@@ -6,12 +6,16 @@ import { createExecutor } from './executor.js';
 import { loadCommands } from './loadCommands.js';
 import logger from '../utils/logger.js';
 import { cacheGuildInvites } from './invites.js';
+import { createYtDlp } from './music/ytdlp.js';
+import { createFfmpeg } from './music/ffmpeg.js';
+import { createMusicResolver } from './music/resolver.js';
+import { createMusicBackend } from './music/player.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // The client is created before the core (the core needs the executor);
 // the core is attached afterwards with attachCore().
-export function createBot() {
+export function createBot({ dataDir = path.join(__dirname, '..', '..', 'data') } = {}) {
 	const client = new Client({
 		intents: [
 			GatewayIntentBits.Guilds,
@@ -34,6 +38,10 @@ export function createBot() {
 	client.components = new Collection();
 
 	const executor = createExecutor(client);
+	// Music: yt-dlp and ffmpeg are fetched into data/bin the first time they are needed
+	const ytdlp = createYtDlp({ dataDir, logger });
+	executor.music = createMusicBackend(client, { ytdlp, ffmpeg: createFfmpeg({ dataDir, logger }), logger });
+	executor.musicResolver = createMusicResolver({ ytdlp });
 
 	return {
 		client,
@@ -41,6 +49,10 @@ export function createBot() {
 
 		async attachCore(core) {
 			client.core = core;
+			executor.music.setHandlers({
+				onEnd: (guildId, error) => core.music.trackEnded(guildId, { error }).catch(e => logger.error('Music failed:', e)),
+				onLeft: (guildId) => core.music.leave(guildId, { reason: 'déconnecté du vocal' }).catch(() => undefined),
+			});
 
 			for (const command of await loadCommands()) {
 				client.commands.set(command.data.name, command);
@@ -91,6 +103,7 @@ export function createBot() {
 		},
 
 		async destroy() {
+			executor.music.destroyAll();
 			await client.destroy();
 		},
 	};
