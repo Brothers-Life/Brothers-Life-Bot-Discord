@@ -19,6 +19,7 @@ import { Route as AuthenticatedAutomodRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedChangelogRouteImport } from './routes/_authenticated/changelog'
 import { Route as AuthenticatedCommandsRouteImport } from './routes/_authenticated/commands'
 import { Route as AuthenticatedConsoleRouteImport } from './routes/_authenticated/console'
+import { Route as AuthenticatedCustomCommandsRouteImport } from './routes/_authenticated/custom-commands'
 import { Route as AuthenticatedDmsRouteImport } from './routes/_authenticated/dms'
 import { Route as AuthenticatedEventsRouteImport } from './routes/_authenticated/events'
 import { Route as AuthenticatedFeedbackRouteImport } from './routes/_authenticated/feedback'
@@ -96,6 +97,12 @@ const AuthenticatedConsoleRoute = AuthenticatedConsoleRouteImport.update({
   path: '/console',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedCustomCommandsRoute =
+  AuthenticatedCustomCommandsRouteImport.update({
+    id: '/custom-commands',
+    path: '/custom-commands',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedDmsRoute = AuthenticatedDmsRouteImport.update({
   id: '/dms',
   path: '/dms',
@@ -246,6 +253,7 @@ export interface FileRoutesByFullPath {
   '/changelog': typeof AuthenticatedChangelogRoute
   '/commands': typeof AuthenticatedCommandsRoute
   '/console': typeof AuthenticatedConsoleRoute
+  '/custom-commands': typeof AuthenticatedCustomCommandsRoute
   '/dms': typeof AuthenticatedDmsRoute
   '/events': typeof AuthenticatedEventsRoute
   '/feedback': typeof AuthenticatedFeedbackRoute
@@ -283,6 +291,7 @@ export interface FileRoutesByTo {
   '/changelog': typeof AuthenticatedChangelogRoute
   '/commands': typeof AuthenticatedCommandsRoute
   '/console': typeof AuthenticatedConsoleRoute
+  '/custom-commands': typeof AuthenticatedCustomCommandsRoute
   '/dms': typeof AuthenticatedDmsRoute
   '/events': typeof AuthenticatedEventsRoute
   '/feedback': typeof AuthenticatedFeedbackRoute
@@ -323,6 +332,7 @@ export interface FileRoutesById {
   '/_authenticated/changelog': typeof AuthenticatedChangelogRoute
   '/_authenticated/commands': typeof AuthenticatedCommandsRoute
   '/_authenticated/console': typeof AuthenticatedConsoleRoute
+  '/_authenticated/custom-commands': typeof AuthenticatedCustomCommandsRoute
   '/_authenticated/dms': typeof AuthenticatedDmsRoute
   '/_authenticated/events': typeof AuthenticatedEventsRoute
   '/_authenticated/feedback': typeof AuthenticatedFeedbackRoute
@@ -364,6 +374,7 @@ export interface FileRouteTypes {
     | '/changelog'
     | '/commands'
     | '/console'
+    | '/custom-commands'
     | '/dms'
     | '/events'
     | '/feedback'
@@ -401,6 +412,7 @@ export interface FileRouteTypes {
     | '/changelog'
     | '/commands'
     | '/console'
+    | '/custom-commands'
     | '/dms'
     | '/events'
     | '/feedback'
@@ -440,6 +452,7 @@ export interface FileRouteTypes {
     | '/_authenticated/changelog'
     | '/_authenticated/commands'
     | '/_authenticated/console'
+    | '/_authenticated/custom-commands'
     | '/_authenticated/dms'
     | '/_authenticated/events'
     | '/_authenticated/feedback'
@@ -545,6 +558,13 @@ declare module '@tanstack/react-router' {
       path: '/console'
       fullPath: '/console'
       preLoaderRoute: typeof AuthenticatedConsoleRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/custom-commands': {
+      id: '/_authenticated/custom-commands'
+      path: '/custom-commands'
+      fullPath: '/custom-commands'
+      preLoaderRoute: typeof AuthenticatedCustomCommandsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/dms': {
@@ -747,6 +767,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedChangelogRoute: typeof AuthenticatedChangelogRoute
   AuthenticatedCommandsRoute: typeof AuthenticatedCommandsRoute
   AuthenticatedConsoleRoute: typeof AuthenticatedConsoleRoute
+  AuthenticatedCustomCommandsRoute: typeof AuthenticatedCustomCommandsRoute
   AuthenticatedDmsRoute: typeof AuthenticatedDmsRoute
   AuthenticatedEventsRoute: typeof AuthenticatedEventsRoute
   AuthenticatedFeedbackRoute: typeof AuthenticatedFeedbackRoute
@@ -785,6 +806,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedChangelogRoute: AuthenticatedChangelogRoute,
   AuthenticatedCommandsRoute: AuthenticatedCommandsRoute,
   AuthenticatedConsoleRoute: AuthenticatedConsoleRoute,
+  AuthenticatedCustomCommandsRoute: AuthenticatedCustomCommandsRoute,
   AuthenticatedDmsRoute: AuthenticatedDmsRoute,
   AuthenticatedEventsRoute: AuthenticatedEventsRoute,
   AuthenticatedFeedbackRoute: AuthenticatedFeedbackRoute,

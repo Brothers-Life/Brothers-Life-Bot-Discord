@@ -1,5 +1,6 @@
 import {
   Gauge,
+  Wand2,
   LayoutTemplate,
   Mail,
   Gamepad2,
@@ -63,6 +64,7 @@ export const navSections: NavSection[] = [
       { title: 'Tickets', url: '/tickets', icon: LifeBuoy, permission: 'tickets.view' },
       { title: 'Annonces', url: '/announcements', icon: Megaphone, permission: 'announcements.view' },
       { title: 'Commandes', url: '/commands', icon: SquareSlash, permission: null },
+      { title: 'Commandes perso', url: '/custom-commands', icon: Wand2, permission: 'customcommands.view' },
     ],
   },
   {

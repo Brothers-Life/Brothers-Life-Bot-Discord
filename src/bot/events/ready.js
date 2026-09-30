@@ -2,6 +2,7 @@ import { Events } from 'discord.js';
 import logger from '../../utils/logger.js';
 import { cacheGuildInvites } from '../invites.js';
 import { syncCommands } from '../syncCommands.js';
+import { syncCustomCommands } from '../customCommands.js';
 
 export const name = Events.ClientReady;
 export const once = true;
@@ -51,7 +52,17 @@ export async function execute(client) {
 	client.core.stats.seedVoice(states);
 	await client.core.voiceRooms.cleanup().catch(error => logger.warn('Voice rooms cleanup failed:', error.message));
 
-	await syncCommands(client, client.core);
+	const builtinChanged = await syncCommands(client, client.core);
+	// On the dev server the bot's own commands and the custom ones share one list: a new built-in list means sending both again
+	if (builtinChanged && client.core.config.DEV_GUILD_ID) client.core.settings.set(`commands.custom.${client.core.config.DEV_GUILD_ID}`, null);
+	await syncCustomCommands(client).catch(error => logger.warn('Custom commands sync failed:', error.message));
+	// Again after each change in the panel (grouped), and now and then for servers that joined the network
+	let customSync = null;
+	client.core.customCommands.onChange(() => {
+		clearTimeout(customSync);
+		customSync = setTimeout(() => syncCustomCommands(client).catch(error => logger.warn('Custom commands sync failed:', error.message)), 2000);
+	});
+	setInterval(() => syncCustomCommands(client).catch(() => null), 10 * 60_000).unref();
 
 	client.emit('botSynced');
 }

@@ -31,6 +31,8 @@ import { createStreams } from './streams.js';
 import { createFivem } from './fivem.js';
 import { createDms } from './dms.js';
 import { createTemplates } from './templates/index.js';
+import { createCustomCommands } from './customCommands/index.js';
+import { COMMANDS } from './commandCatalog.js';
 import { createPermissionSync } from './permissionSync.js';
 import { definePermission } from './permissions.js';
 
@@ -90,6 +92,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	stats.addVariables(async () => fivem.variables());
 	const dms = createDms({ db, audit, executor, settings, logs, uploads, logger });
 	const templates = createTemplates({ db, network, audit, executor, events, automod, tickets, logs, settings, logger });
+	const customCommands = createCustomCommands({ db, network, ranks, audit, executor, logs, members, moderation, sanctions, reservedNames: COMMANDS.map(c => c.name), logger });
 	logs.registerCategory('absences', 'Absences du staff');
 	const permissionSync = createPermissionSync({ db, network, ranks, audit, executor, logs, settings });
 
@@ -124,5 +127,5 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 		sanctions.syncGuild(guild.id).catch(error => logger.error(`Ban sync failed on ${guild.name}:`, error));
 	});
 
-	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates };
+	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands };
 }
