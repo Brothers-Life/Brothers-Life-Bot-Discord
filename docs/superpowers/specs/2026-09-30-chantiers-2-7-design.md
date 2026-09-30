@@ -116,3 +116,12 @@ Configuration par serveur. Le réglage « réseau » sert de valeur par défaut,
 - **Détection des écarts** : une vérification toutes les 6 heures signale les différences dans la catégorie de logs `permissions`, sans corriger automatiquement.
 - Les permissions des salons ne sont pas touchées : chaque serveur a ses propres salons.
 - Permissions `permsync.view` et `permsync.manage`. La permission `Administrator` ne peut être donnée que par `OWNER_ID`.
+
+---
+
+## Décisions ajoutées pendant l'implémentation
+
+- **Sécurité** : les rôles Discord qui donnent des permissions de modération ou d'administration ne peuvent être liés à un rang (chantier 5), ni donnés à la main depuis le panel, que par `OWNER_ID`. Même règle pour les permissions correspondantes dans les profils du chantier 7. Sans cette règle, quelqu'un qui gère les rangs et possède aussi un rang inférieur pourrait se donner ces droits par la synchronisation.
+- **Commandes slash** : enregistrées automatiquement au démarrage quand elles changent. En prod, elles sont globales ; en dev, elles vont sur `DEV_GUILD_ID`.
+- **Détection des sosies (automod)** : une distance d'édition entre le domaine et les noms de marque (discord, steamcommunity, steampowered), en ignorant les domaines qui contiennent le nom exact (discordjs.guide, steamcommunity-fans.net…).
+- **Actions de l'automod** : enregistrées dans le journal avec l'auteur `automod` et la source `system`.
