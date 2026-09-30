@@ -193,12 +193,14 @@ export function createAbsences({ db, network, ranks, audit, executor, settings, 
 		async end(actor, id) {
 			const absence = getOrThrow(id);
 			if (absence.userId !== actor.id && !actor.can('absences.manage')) throw new ForbiddenError('Tu ne peux terminer que tes propres absences.');
-			if (absence.status === 'active') await finish(absence);
-			else if (['pending', 'approved'].includes(absence.status)) {
+			if (!['active', 'pending', 'approved'].includes(absence.status)) throw new ValidationError('Cette absence est déjà terminée.');
+			if (absence.status === 'active') {
+				await finish(absence);
+			}
+			else {
 				q.setStatus.run('cancelled', null, null, id);
 				await syncReview(getOrThrow(id));
 			}
-			else throw new ValidationError('Cette absence est déjà terminée.');
 			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'absences.end', target: absence.userId, details: { member: `<@${absence.userId}>` } });
 			return getOrThrow(id);
 		},
