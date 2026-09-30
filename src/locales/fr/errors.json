@@ -1,0 +1,4 @@
+{
+  "cooldown": "Veuillez patienter, vous êtes en cooldown pour `{command}`. Vous pouvez l'utiliser à nouveau {timestamp}.",
+  "command_execution": "Une erreur est survenue lors de l'exécution de cette commande !"
+}
