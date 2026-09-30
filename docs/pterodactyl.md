@@ -2,7 +2,9 @@
 
 ## 1. Préparer GitHub
 
-Le repo est privé : le bot a besoin d'un token en lecture seule pour voir et télécharger les versions.
+**Dépôt public** : rien à faire, laisse la variable « Token GitHub » vide.
+
+**Dépôt privé** : le bot a besoin d'un token en lecture seule pour voir et télécharger les versions.
 
 1. GitHub > Settings > Developer settings > **Fine-grained tokens** > Generate new token.
 2. Connecté avec le compte `Brothers-Life` (propriétaire du dépôt), Resource owner : `Brothers-Life`. Repository access : **Only select repositories**, puis `Brothers-Life-Bot-Discord`.
@@ -41,7 +43,7 @@ Si l'egg change (`npm run egg` le régénère), ré-importe-le par-dessus l'anci
 | Mode du panel | `https-selfsigned` |
 | Adresse publique du panel | `https://<IP publique>:<port>`, ou vide pour utiliser l'allocation |
 | Dépôt GitHub | `Brothers-Life/Brothers-Life-Bot-Discord` (déjà rempli) |
-| Token GitHub | Le token de l'étape 1 |
+| Token GitHub | Vide si le dépôt est public, sinon le token de l'étape 1 |
 | Version à installer | `latest` |
 
 5. Crée le serveur : l'installation se lance toute seule (environ une minute).

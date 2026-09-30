@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const installScript = fs.readFileSync(path.join(dir, 'install.sh'), 'utf8').replace(/\r\n/g, '\n');
 
+// Rules are split on "|" by Pterodactyl: never put "|" inside a regex rule
 const variable = (name, env, description, rules, defaultValue = '', { viewable = true, editable = true } = {}) => ({
 	name,
 	description,
@@ -54,8 +55,8 @@ const egg = {
 		variable('Mode du panel', 'WEB_MODE', 'https-selfsigned (conseillé sans domaine), https-custom (avec TLS_CERT/TLS_KEY) ou http.', 'required|in:https-selfsigned,https-custom,http', 'https-selfsigned'),
 		variable('Adresse publique du panel', 'WEB_PUBLIC_URL', 'Ex. https://51.77.1.2:25565. Vide = IP et port de l’allocation. À ajouter aussi dans Discord > OAuth2 > Redirects avec /api/auth/callback.', 'nullable|regex:/^https?:\\/\\/[^\\/]+$/'),
 		variable('Dépôt GitHub', 'GITHUB_REPO', 'owner/repo où la CI publie les versions.', 'required|regex:/^[\\w.-]+\\/[\\w.-]+$/', 'Brothers-Life/Brothers-Life-Bot-Discord'),
-		variable('Token GitHub', 'GITHUB_TOKEN', 'Fine-grained token, Contents: Read-only sur le dépôt (installation et page Versions).', 'required|string|max:255'),
-		variable('Version à installer', 'BOT_VERSION', 'latest ou un tag (ex. v1.0.0). Utilisée à l’installation et à la réinstallation ; ensuite, les mises à jour se font depuis le panel.', 'required|regex:/^(latest|v\\d+\\.\\d+\\.\\d+)$/', 'latest'),
+		variable('Token GitHub', 'GITHUB_TOKEN', 'Seulement si le dépôt est privé : fine-grained token, Contents: Read-only sur le dépôt. Vide si le dépôt est public.', 'nullable|string|max:255'),
+		variable('Version à installer', 'BOT_VERSION', 'latest ou un tag (ex. v1.0.0). Utilisée à l’installation et à la réinstallation ; ensuite, les mises à jour se font depuis le panel.', 'required|string|max:20', 'latest'),
 		variable('Certificat TLS (https-custom)', 'TLS_CERT', 'Chemin du certificat, relatif au dossier du serveur.', 'nullable|string|max:255'),
 		variable('Clé TLS (https-custom)', 'TLS_KEY', 'Chemin de la clé privée, relatif au dossier du serveur.', 'nullable|string|max:255'),
 	],

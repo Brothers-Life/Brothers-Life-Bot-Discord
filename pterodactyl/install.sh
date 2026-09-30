@@ -1,12 +1,12 @@
 #!/bin/bash
 # Pterodactyl installation script (runs in node:22-bookworm-slim, server files mounted on /mnt/server).
-# Downloads a release of the bot from the private GitHub repo and installs its production dependencies.
+# Downloads a release of the bot from GitHub (GITHUB_TOKEN only needed for a private repo) and installs its production dependencies.
 # Kept on reinstall: .env.prod, data/ (database, backups, certificate), logs/.
 set -euo pipefail
 cd /mnt/server
 
-if [ -z "${GITHUB_REPO:-}" ] || [ -z "${GITHUB_TOKEN:-}" ]; then
-	echo "GITHUB_REPO et GITHUB_TOKEN sont obligatoires (onglet Startup du serveur)."
+if [ -z "${GITHUB_REPO:-}" ]; then
+	echo "GITHUB_REPO est obligatoire (onglet Startup du serveur)."
 	exit 1
 fi
 
@@ -15,8 +15,13 @@ import fs from 'node:fs';
 
 const { GITHUB_REPO: repo, GITHUB_TOKEN: token } = process.env;
 const wanted = (process.env.BOT_VERSION || 'latest').trim();
+if (!/^(latest|v\d+\.\d+\.\d+)$/.test(wanted)) {
+	console.error(`BOT_VERSION doit valoir latest ou un tag comme v1.0.0 (reçu : ${wanted}).`);
+	process.exit(1);
+}
 const headers = {
-	Authorization: `Bearer ${token}`,
+	// Only needed when the repository is private
+	...(token ? { Authorization: `Bearer ${token}` } : {}),
 	Accept: 'application/vnd.github+json',
 	'User-Agent': 'brl-pterodactyl-installer',
 	'X-GitHub-Api-Version': '2022-11-28',
@@ -28,7 +33,7 @@ const url = wanted === 'latest'
 const res = await fetch(url, { headers });
 if (!res.ok) {
 	console.error(`GitHub a répondu ${res.status} pour ${url}.`);
-	console.error('Vérifie GITHUB_REPO, GITHUB_TOKEN (lecture du contenu du dépôt) et BOT_VERSION.');
+	console.error('Vérifie GITHUB_REPO, BOT_VERSION, et GITHUB_TOKEN si le dépôt est privé.');
 	process.exit(1);
 }
 const release = await res.json();
