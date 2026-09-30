@@ -5,11 +5,11 @@ import { Plus } from 'lucide-react'
 import { api } from '@/lib/api'
 import type { Sanction } from '@/lib/types'
 import { useMe } from '@/hooks/use-me'
+import { UserPicker } from '@/components/app/user-picker'
 import { Page, Section } from '@/components/app/ui'
 import { SanctionDialog } from '@/features/sanctions/sanction-dialog'
 import { SanctionList } from '@/features/sanctions/sanction-list'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
@@ -69,7 +69,7 @@ function SanctionsPage() {
                 <SelectItem value='warn'>Warns</SelectItem>
               </SelectContent>
             </Select>
-            <Input value={userId} onChange={(e) => setUserId(e.target.value)} placeholder='ID Discord du membre' aria-label='Filtrer par membre' className='w-52' inputMode='numeric' />
+            <UserPicker value={userFilter} onChange={setUserId} placeholder='Filtrer par membre' className='w-64' />
             <div className='flex items-center gap-2'>
               <Switch id='only-active' checked={active} onCheckedChange={setActive} />
               <Label htmlFor='only-active'>En cours</Label>

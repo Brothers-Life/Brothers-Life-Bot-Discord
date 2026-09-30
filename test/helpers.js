@@ -45,6 +45,15 @@ export function createFakeExecutor() {
 		async listRoles(guildId) {
 			return this.roles.get(guildId) ?? [];
 		},
+		// guildId -> [{ id, username, globalName, nickname }]
+		guildMembers: new Map(),
+		async searchMembers(guildId, query, limit) {
+			const q = query.toLowerCase();
+			return (this.guildMembers.get(guildId) ?? [])
+				.filter(m => [m.username, m.globalName, m.nickname].some(n => n?.toLowerCase().startsWith(q)))
+				.slice(0, limit)
+				.map(m => ({ avatar: null, globalName: null, nickname: null, ...m }));
+		},
 		async getMemberInfo(guildId, userId) {
 			const roles = memberRoles.get(`${guildId}:${userId}`);
 			if (!roles) return null;

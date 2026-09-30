@@ -5,6 +5,12 @@ const personParams = { type: 'object', properties: { userId: snowflake, guildId:
 export function registerMemberRoutes(app, { core }) {
 	const { members, staffSync, ranks, executor } = core;
 
+	// Autocomplete of the "member" fields of the panel (any panel user: the staff needs it everywhere)
+	app.get('/api/people/search', {
+		config: { permission: null },
+		schema: { querystring: { type: 'object', required: ['q'], properties: { q: { type: 'string', maxLength: 100 } } } },
+	}, async (request) => members.search(request.query.q));
+
 	app.get('/api/people/:userId', { config: { permission: 'members.view' }, schema: { params: personParams } }, async (request) => {
 		return members.lookup(request.params.userId);
 	});
@@ -46,6 +52,17 @@ export function registerMemberRoutes(app, { core }) {
 		await staffSync.setLinks(request.actor, request.params.rankId, request.params.guildId, request.body.roleIds);
 		return { ok: true };
 	});
+
+	app.post('/api/staff-roles/link-by-name', { config: { permission: 'ranks.manage' } }, async (request) => {
+		return core.roleImport.linkByName(request.actor);
+	});
+
+	app.get('/api/ranks/import', { config: { permission: 'ranks.view' } }, async () => core.roleImport.candidates());
+
+	app.post('/api/ranks/import', {
+		config: { permission: 'ranks.manage' },
+		schema: { body: { type: 'object', required: ['roleIds'], properties: { roleIds: { type: 'array', items: snowflake, minItems: 1, maxItems: 100 } } } },
+	}, async (request) => core.roleImport.importMainRoles(request.actor, request.body.roleIds));
 
 	app.post('/api/staff-roles/sync', { config: { permission: 'ranks.manage' } }, async () => staffSync.syncAll());
 }

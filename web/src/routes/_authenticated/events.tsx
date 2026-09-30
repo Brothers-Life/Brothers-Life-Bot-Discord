@@ -6,6 +6,7 @@ import { api } from '@/lib/api'
 import type { Guild, NetworkEvent } from '@/lib/types'
 import { ago, dateTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { UserPicker } from '@/components/app/user-picker'
 import { Page, Section, EmptyState, Pill } from '@/components/app/ui'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -106,7 +107,7 @@ function EventsPage() {
             {Object.entries(CATEGORY_LABELS).map(([key, label]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Input value={userId} onChange={(e) => setUserId(e.target.value)} placeholder='ID Discord' aria-label='Filtrer par membre' className='w-48' inputMode='numeric' />
+        <UserPicker value={userFilter} onChange={setUserId} placeholder='Filtrer par membre' className='w-64' />
       </div>
 
       <Section title={`${events.length}${query.hasNextPage ? '+' : ''} événement${events.length > 1 ? 's' : ''}`}>

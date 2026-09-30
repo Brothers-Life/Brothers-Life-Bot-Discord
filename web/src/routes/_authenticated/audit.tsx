@@ -3,10 +3,10 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import type { AuditEntry } from '@/lib/types'
+import { UserPicker } from '@/components/app/user-picker'
 import { Page, Section } from '@/components/app/ui'
 import { AuditList } from '@/features/audit/audit-list'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 export const Route = createFileRoute('/_authenticated/audit')({
@@ -60,14 +60,7 @@ function AuditPage() {
                 {CATEGORIES.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Input
-              value={actorId}
-              onChange={(e) => setActorId(e.target.value)}
-              placeholder='ID Discord de l’auteur'
-              aria-label='Filtrer par auteur'
-              className='w-52'
-              inputMode='numeric'
-            />
+            <UserPicker value={actorFilter} onChange={setActorId} placeholder='Filtrer par auteur' className='w-64' />
           </div>
         }
       >

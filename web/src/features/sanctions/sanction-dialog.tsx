@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { api, errorMessage } from '@/lib/api'
-import type { DiscordUser, Guild, Sanction, SanctionType } from '@/lib/types'
-import { userName } from '@/lib/format'
+import { api } from '@/lib/api'
+import type { Guild, Sanction, SanctionType } from '@/lib/types'
 import { useMe } from '@/hooks/use-me'
-import { UserAvatar } from '@/components/app/ui'
+import { UserPicker } from '@/components/app/user-picker'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -27,7 +26,6 @@ export function SanctionDialog({ userId: initialUserId = '', onClose }: { userId
   const [guildId, setGuildId] = useState('')
 
   const validId = /^\d{17,20}$/.test(userId.trim())
-  const user = useQuery({ queryKey: ['user', userId.trim()], queryFn: () => api<DiscordUser>(`/users/${userId.trim()}`), enabled: validId, retry: false })
   const guilds = useQuery({ queryKey: ['network'], queryFn: () => api<Guild[]>('/network'), enabled: scope === 'local' })
   const active = guilds.data?.filter((g) => g.status === 'active' && g.botPresent) ?? []
 
@@ -74,17 +72,9 @@ export function SanctionDialog({ userId: initialUserId = '', onClose }: { userId
           }}
         >
           <div className='grid gap-1.5'>
-            <Label htmlFor='sanction-user'>ID Discord du membre</Label>
-            <Input id='sanction-user' inputMode='numeric' value={userId} onChange={(e) => setUserId(e.target.value)} placeholder='300000000000000001' />
-            <div className='min-h-7 text-sm'>
-              {user.data && (
-                <span className='flex items-center gap-2'>
-                  <UserAvatar src={user.data.avatar} name={userName(user.data)} className='size-6' />
-                  {userName(user.data)}
-                </span>
-              )}
-              {user.isError && <span className='text-destructive'>{errorMessage(user.error)}</span>}
-            </div>
+            <Label htmlFor='sanction-user'>Membre</Label>
+            <UserPicker id='sanction-user' value={userId} onChange={setUserId} autoFocus={!initialUserId} />
+            <p className='text-xs text-muted-foreground'>Pour quelqu’un qui a quitté tous les serveurs, colle son ID Discord.</p>
           </div>
 
           <div className='grid gap-4 sm:grid-cols-2'>

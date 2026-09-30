@@ -39,6 +39,38 @@ export function createMembers({ db, network, ranks, sanctions, audit, executor }
 	}
 
 	return {
+		// By Discord ID, or by the beginning of a username / display name / nickname on any network server
+		async search(query, limit = 10) {
+			const text = String(query ?? '').trim().replace(/^@/, '');
+			if (!text) return [];
+			if (/^\d{17,20}$/.test(text)) {
+				const user = await executor.getUser(text).catch(() => null);
+				return user ? [{ ...user, nickname: null, guilds: [] }] : [];
+			}
+			if (text.length < 2) return [];
+
+			const guilds = network.list().filter(g => g.status === 'active' && g.botPresent);
+			const found = new Map();
+			const results = await Promise.all(guilds.map(g => executor.searchMembers(g.id, text, limit).then(list => [g, list]).catch(() => [g, []])));
+			for (const [guild, list] of results) {
+				for (const member of list) {
+					const entry = found.get(member.id) ?? { ...member, guilds: [] };
+					entry.guilds.push(guild.name);
+					found.set(member.id, entry);
+				}
+			}
+
+			// Exact names first, then names starting with the text
+			const lower = text.toLowerCase();
+			const score = (m) => {
+				const names = [m.username, m.globalName, m.nickname].filter(Boolean).map(n => n.toLowerCase());
+				if (names.includes(lower)) return 0;
+				if (names.some(n => n.startsWith(lower))) return 1;
+				return 2;
+			};
+			return [...found.values()].sort((a, b) => score(a) - score(b) || a.username.localeCompare(b.username)).slice(0, limit);
+		},
+
 		async lookup(userId) {
 			const user = await executor.getUser(userId);
 			const principal = await ranks.resolve(userId);

@@ -3,14 +3,14 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { UserPlus, X } from 'lucide-react'
 import { toast } from 'sonner'
-import { api, errorMessage } from '@/lib/api'
-import type { DiscordUser, PanelMember, RanksPayload } from '@/lib/types'
+import { api } from '@/lib/api'
+import type { PanelMember, RanksPayload } from '@/lib/types'
 import { userName } from '@/lib/format'
 import { useMe } from '@/hooks/use-me'
 import { Page, Section, EmptyState, RankBadge, UserAvatar } from '@/components/app/ui'
+import { UserPicker } from '@/components/app/user-picker'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -100,13 +100,6 @@ function AssignDialog({ ranks, onClose }: { ranks: RanksPayload['ranks']; onClos
   const [rankId, setRankId] = useState<string>(ranks[0] ? String(ranks[0].id) : '')
   const validId = /^\d{17,20}$/.test(userId.trim())
 
-  const user = useQuery({
-    queryKey: ['user', userId.trim()],
-    queryFn: () => api<DiscordUser>(`/users/${userId.trim()}`),
-    enabled: validId,
-    retry: false,
-  })
-
   const assign = useMutation({
     mutationFn: () => api(`/members/${userId.trim()}/ranks`, { method: 'POST', body: { rankId: Number(rankId) } }),
     onSuccess: () => {
@@ -122,7 +115,7 @@ function AssignDialog({ ranks, onClose }: { ranks: RanksPayload['ranks']; onClos
         <DialogHeader>
           <DialogTitle>Attribuer un rang</DialogTitle>
           <DialogDescription>
-            Dans Discord : clic droit sur la personne puis « Copier l’identifiant » (mode développeur activé).
+            Pour donner l’accès au panel à quelqu’un sans lui donner de rôle Discord.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -134,17 +127,8 @@ function AssignDialog({ ranks, onClose }: { ranks: RanksPayload['ranks']; onClos
           }}
         >
           <div className='grid gap-1.5'>
-            <Label htmlFor='assign-user'>ID Discord</Label>
-            <Input id='assign-user' inputMode='numeric' value={userId} onChange={(e) => setUserId(e.target.value)} placeholder='267235400467218432' />
-            <div className='min-h-9 text-sm'>
-              {user.data && (
-                <span className='flex items-center gap-2'>
-                  <UserAvatar src={user.data.avatar} name={userName(user.data)} className='size-7' />
-                  {userName(user.data)}
-                </span>
-              )}
-              {user.isError && <span className='text-destructive'>{errorMessage(user.error)}</span>}
-            </div>
+            <Label htmlFor='assign-user'>Membre</Label>
+            <UserPicker id='assign-user' value={userId} onChange={setUserId} autoFocus />
           </div>
           <div className='grid gap-1.5'>
             <Label>Rang</Label>

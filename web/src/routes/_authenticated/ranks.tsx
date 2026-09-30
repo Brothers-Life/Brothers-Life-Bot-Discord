@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus } from 'lucide-react'
+import { Download, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import type { Rank, RanksPayload } from '@/lib/types'
+import type { Rank, RanksPayload, Role } from '@/lib/types'
 import { useMe } from '@/hooks/use-me'
 import { Page, Section, EmptyState, RankBadge } from '@/components/app/ui'
 import { ConfirmDialog } from '@/components/confirm-dialog'
@@ -30,6 +30,7 @@ function RanksPage() {
   const { data, isLoading } = useQuery({ queryKey: ['ranks'], queryFn: () => api<RanksPayload>('/ranks') })
   const [draft, setDraft] = useState<Draft | null>(null)
   const [toDelete, setToDelete] = useState<Rank | null>(null)
+  const [importing, setImporting] = useState(false)
 
   const myLevel = me?.isOwner ? Infinity : (me?.level ?? 0)
   const editable = (rank: { level: number }) => manage && rank.level < myLevel
@@ -72,9 +73,16 @@ function RanksPage() {
       title='Rangs'
       description='Un rang regroupe des permissions. On l’obtient avec un rôle du serveur principal ou par attribution directe. Tu ne peux gérer que les rangs de niveau inférieur au tien, avec des permissions que tu as toi-même.'
       actions={manage && (
-        <Button onClick={() => setDraft({ ...EMPTY, level: Math.min(10, Number.isFinite(myLevel) ? myLevel - 1 : 10) })}>
-          <Plus /> Nouveau rang
-        </Button>
+        <>
+          {data?.mainGuildId && (
+            <Button variant='outline' onClick={() => setImporting(true)}>
+              <Download /> Importer les rôles du serveur principal
+            </Button>
+          )}
+          <Button onClick={() => setDraft({ ...EMPTY, level: Math.min(10, Number.isFinite(myLevel) ? myLevel - 1 : 10) })}>
+            <Plus /> Nouveau rang
+          </Button>
+        </>
       )}
     >
       {isLoading && <Skeleton className='h-48 w-full' />}
@@ -131,6 +139,8 @@ function RanksPage() {
           onSave={(d) => save.mutate(d)}
         />
       )}
+
+      {importing && <ImportDialog onClose={() => setImporting(false)} onDone={refresh} />}
 
       <ConfirmDialog
         open={Boolean(toDelete)}
@@ -249,6 +259,78 @@ function RankDialog({ draft, payload, maxLevel, canGrant, saving, onClose, onSav
           <Button variant='outline' onClick={onClose}>Annuler</Button>
           <Button type='submit' form='rank-form' disabled={!valid || saving}>
             {saving ? 'Enregistrement…' : d.id ? 'Enregistrer' : 'Créer le rang'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+type ImportCandidate = Role & { linkedRankId: number | null; sameNameRankId: number | null }
+type ImportResult = { roleId: string; name: string; status: 'created' | 'linked' | 'already_linked' | 'error'; error?: string }
+
+function ImportDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const { data } = useQuery({ queryKey: ['ranks-import'], queryFn: () => api<{ roles: ImportCandidate[] }>('/ranks/import') })
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const available = (data?.roles ?? []).filter((r) => !r.linkedRankId)
+
+  const run = useMutation({
+    mutationFn: () => api<ImportResult[]>('/ranks/import', { method: 'POST', body: { roleIds: [...selected] } }),
+    onSuccess: (results) => {
+      const created = results.filter((r) => r.status === 'created').length
+      const linked = results.filter((r) => r.status === 'linked').length
+      toast.success(`${created} rang(s) créé(s), ${linked} lié(s) à un rang existant. Coche maintenant leurs permissions.`)
+      results.filter((r) => r.status === 'error').forEach((f) => toast.error(`${f.name} : ${f.error}`))
+      onDone()
+      onClose()
+    },
+  })
+
+  const toggle = (id: string) => setSelected((prev) => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
+  const allSelected = available.length > 0 && selected.size === available.length
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className='max-h-[90svh] overflow-y-auto sm:max-w-lg'>
+        <DialogHeader>
+          <DialogTitle>Importer les rôles du serveur principal</DialogTitle>
+          <DialogDescription>
+            Chaque rôle coché devient un rang du même nom, lié à ce rôle. Si un rang du même nom existe déjà, le rôle y est simplement lié.
+            Les nouveaux rangs n’ont aucune permission : coche-les ensuite.
+          </DialogDescription>
+        </DialogHeader>
+        {!data ? <Skeleton className='h-40 w-full' /> : !available.length ? (
+          <EmptyState title='Rien à importer'>Tous les rôles du serveur principal sont déjà liés à un rang.</EmptyState>
+        ) : (
+          <div className='grid gap-3'>
+            <div className='flex justify-between text-sm'>
+              <span className='text-muted-foreground'>{selected.size} rôle(s) sélectionné(s)</span>
+              <button type='button' className='text-primary hover:underline' onClick={() => setSelected(allSelected ? new Set() : new Set(available.map((r) => r.id)))}>
+                {allSelected ? 'Tout décocher' : 'Tout cocher'}
+              </button>
+            </div>
+            <div className='grid max-h-80 gap-1 overflow-y-auto rounded-md border p-2'>
+              {available.map((role) => (
+                <label key={role.id} className='flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent/50'>
+                  <Checkbox checked={selected.has(role.id)} onCheckedChange={() => toggle(role.id)} />
+                  <span aria-hidden className='size-2 rounded-full' style={{ background: role.color === '#000000' ? 'var(--muted-foreground)' : role.color }} />
+                  <span className='truncate'>{role.name}</span>
+                  {role.sameNameRankId && <span className='ms-auto text-xs text-muted-foreground'>rang existant</span>}
+                </label>
+              ))}
+            </div>
+            <p className='text-xs text-muted-foreground'>Le rôle le plus haut du serveur obtient le niveau le plus élevé. Tu pourras ajuster les niveaux ensuite.</p>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant='outline' onClick={onClose}>Annuler</Button>
+          <Button onClick={() => run.mutate()} disabled={!selected.size || run.isPending}>
+            {run.isPending ? 'Import…' : 'Importer'}
           </Button>
         </DialogFooter>
       </DialogContent>

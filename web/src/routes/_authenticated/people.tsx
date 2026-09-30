@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Crown, Plus, Search, X } from 'lucide-react'
+import { Crown, Plus, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, errorMessage } from '@/lib/api'
 import type { PersonProfile, Role } from '@/lib/types'
@@ -9,6 +9,7 @@ import { dateTime, userName } from '@/lib/format'
 import { useMe } from '@/hooks/use-me'
 import { Page, Section, EmptyState, Pill, RankBadge, UserAvatar } from '@/components/app/ui'
 import { SanctionDialog } from '@/features/sanctions/sanction-dialog'
+import { UserPicker } from '@/components/app/user-picker'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -24,25 +25,18 @@ export const Route = createFileRoute('/_authenticated/people')({
 function PeoplePage() {
   const { id } = Route.useSearch()
   const navigate = useNavigate({ from: '/people' })
-  const [input, setInput] = useState(id ?? '')
 
   return (
     <Page title='Membres du réseau' description='Retrouve quelqu’un sur tous les serveurs du réseau : ses rôles, ses rangs et ses sanctions.'>
-      <form
-        className='flex max-w-xl gap-2'
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (/^\d{17,20}$/.test(input.trim())) navigate({ search: { id: input.trim() } })
-        }}
-      >
-        <div className='relative flex-1'>
-          <Search className='pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground' />
-          <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder='ID Discord du membre' aria-label='ID Discord' inputMode='numeric' className='ps-8' />
-        </div>
-        <Button type='submit' disabled={!/^\d{17,20}$/.test(input.trim())}>Rechercher</Button>
-      </form>
+      <UserPicker
+        className='max-w-xl'
+        value={id ?? ''}
+        autoFocus={!id}
+        placeholder='Pseudo, surnom ou ID Discord'
+        onChange={(userId) => navigate({ search: { id: userId || undefined } })}
+      />
       {id ? <Profile userId={id} /> : (
-        <EmptyState title='Entre un ID Discord'>Dans Discord : clic droit sur la personne, puis « Copier l’identifiant » (mode développeur activé dans les paramètres).</EmptyState>
+        <EmptyState title='Tape le début d’un pseudo'>La recherche porte sur les membres de tous les serveurs du réseau. Un ID Discord marche aussi.</EmptyState>
       )}
     </Page>
   )

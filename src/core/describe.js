@@ -15,6 +15,7 @@ const TITLES = {
 	'ranks.roles': 'Rôles liés à un rang modifiés',
 	'ranks.assign': 'Rang attribué',
 	'ranks.unassign': 'Rang retiré',
+	'ranks.import': 'Rangs importés depuis les rôles du serveur principal',
 	'panel.login': 'Connexion au panel',
 	'panel.login_denied': 'Connexion au panel refusée',
 	'panel.logout': 'Déconnexion du panel',

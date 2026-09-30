@@ -259,6 +259,20 @@ export function createExecutor(client) {
 				}));
 		},
 
+		// Discord's member search: beginning of username or nickname
+		async searchMembers(guildId, query, limit = 10) {
+			const guild = client.guilds.cache.get(guildId);
+			if (!guild) return [];
+			const members = await guild.members.search({ query, limit });
+			return [...members.values()].map(m => ({
+				id: m.id,
+				username: m.user.username,
+				globalName: m.user.globalName,
+				nickname: m.nickname,
+				avatar: m.displayAvatarURL({ size: 64 }),
+			}));
+		},
+
 		async getMemberInfo(guildId, userId) {
 			const member = await memberOf(guildOf(guildId), userId);
 			if (!member) return null;

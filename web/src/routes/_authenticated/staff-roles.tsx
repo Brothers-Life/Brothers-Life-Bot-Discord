@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Crown, RefreshCw } from 'lucide-react'
+import { Crown, RefreshCw, Wand2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { StaffRolesPayload } from '@/lib/types'
@@ -31,6 +31,16 @@ function StaffRolesPage() {
       qc.invalidateQueries({ queryKey: ['ranks'] })
     },
   })
+  const linkByName = useMutation({
+    mutationFn: () => api<{ guild: string; rank: string; role: string; status: string; error?: string }[]>('/staff-roles/link-by-name', { method: 'POST' }),
+    onSuccess: (results) => {
+      const linked = results.filter((r) => r.status === 'linked')
+      if (linked.length) toast.success(`${linked.length} liaison(s) : ${linked.map((l) => `${l.rank} → @${l.role} (${l.guild})`).join(', ')}`)
+      else toast.info('Aucun rôle du même nom à relier sur les autres serveurs.')
+      results.filter((r) => r.status === 'error').forEach((r) => toast.error(`${r.guild} · @${r.role} : ${r.error}`))
+      qc.invalidateQueries({ queryKey: ['staff-roles'] })
+    },
+  })
   const sync = useMutation({
     mutationFn: () => api<{ changed: number }>('/staff-roles/sync', { method: 'POST' }),
     onSuccess: (r) => toast.success(r.changed ? `${r.changed} membre(s) mis à jour` : 'Tout est déjà à jour'),
@@ -39,8 +49,17 @@ function StaffRolesPage() {
   return (
     <Page
       title='Rôles du staff'
-      description='Pour chaque rang, choisis le rôle qui le représente sur chaque serveur. Sur le serveur principal, ce rôle donne le rang ; sur les autres, le bot donne ou retire automatiquement le rôle selon le rang de chacun.'
-      actions={manage && <Button variant='outline' onClick={() => sync.mutate()} disabled={sync.isPending}><RefreshCw className={sync.isPending ? 'animate-spin' : undefined} /> Tout resynchroniser</Button>}
+      description='Pour chaque rang, choisis le rôle qui le représente sur chaque serveur. Sur le serveur principal, ce rôle donne le rang ; sur les autres, le bot donne ou retire automatiquement le rôle selon le rang de chacun. « Associer par nom » relie chaque rang au rôle du même nom sur les serveurs où il n’a pas encore de rôle.'
+      actions={manage && (
+        <>
+          <Button variant='outline' onClick={() => linkByName.mutate()} disabled={linkByName.isPending}>
+            <Wand2 /> Associer par nom
+          </Button>
+          <Button variant='outline' onClick={() => sync.mutate()} disabled={sync.isPending}>
+            <RefreshCw className={sync.isPending ? 'animate-spin' : undefined} /> Tout resynchroniser
+          </Button>
+        </>
+      )}
     >
       {isLoading && <Skeleton className='h-64 w-full' />}
       {data && !data.ranks.length && <Section title='Aucun rang'><EmptyState title='Crée d’abord des rangs'>Page « Rangs ».</EmptyState></Section>}

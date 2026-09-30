@@ -125,3 +125,21 @@ test('only the owner can link a dangerous role to a rank', async () => {
 	await assert.rejects(core.staffSync.setLinks(alice, modo.id, OTHER, ['810000000000000007']), ForbiddenError);
 	await core.staffSync.setLinks(owner, modo.id, OTHER, ['810000000000000007']);
 });
+
+test('members: search by name across the network, exact names first, or by ID', async () => {
+	const { core, executor } = await setup();
+	executor.guildMembers.set(MAIN, [
+		{ id: '300000000000000001', username: 'pedro_fan' },
+		{ id: '300000000000000002', username: 'pedro', globalName: 'Pedro' },
+	]);
+	executor.guildMembers.set(OTHER, [
+		{ id: '300000000000000002', username: 'pedro', nickname: 'Chef' },
+		{ id: '300000000000000003', username: 'max' },
+	]);
+	const found = await core.members.search('Pedro');
+	assert.deepEqual(found.map(m => m.id), ['300000000000000002', '300000000000000001']);
+	assert.deepEqual(found[0].guilds, ['Main', 'Other']);
+	assert.deepEqual((await core.members.search('@max')).map(m => m.id), ['300000000000000003']);
+	assert.equal((await core.members.search('p')).length, 0, 'at least 2 characters');
+	assert.equal((await core.members.search(ALICE))[0].id, ALICE, 'an ID still works');
+});
