@@ -88,6 +88,7 @@ export function registerTicketRoutes(app, { core }) {
 					emoji: { type: ['string', 'null'], maxLength: 64 },
 					description: { type: ['string', 'null'], maxLength: 100 },
 					parentChannelId: { anyOf: [snowflake, { type: 'null' }] },
+					transcriptChannelId: { anyOf: [snowflake, { type: 'null' }] },
 					rankIds: { type: 'array', items: { type: 'integer' }, maxItems: 50 },
 					roleIds: { type: 'array', items: snowflake, maxItems: 50 },
 					position: { type: 'integer' },

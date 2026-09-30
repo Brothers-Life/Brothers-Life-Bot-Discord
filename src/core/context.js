@@ -17,6 +17,8 @@ definePermission('members.view', { label: 'Rechercher des membres sur le réseau
 definePermission('members.manage', { label: 'Modifier les rôles et pseudos des membres', category: 'Membres' });
 import { describeAuditEntry } from './describe.js';
 
+const SELF_LOGGED_ACTIONS = new Set(['tickets.close']);
+
 // Wires every core service together. `executor` is the only door to Discord:
 // the real one lives in src/bot/executor.js, tests use a fake.
 export function createCore({ db, config, executor, logger = console }) {
@@ -43,6 +45,8 @@ export function createCore({ db, config, executor, logger = console }) {
 
 	// Every audited action is also posted in the log channel of its category
 	audit.onRecord((entry) => {
+		// These services post a richer message themselves (e.g. the ticket transcript)
+		if (SELF_LOGGED_ACTIONS.has(entry.action)) return;
 		const category = entry.action.split('.')[0];
 		if (!logs.categories().some(c => c.key === category)) return;
 		logs.log(entry.guildId, category, describeAuditEntry(entry));

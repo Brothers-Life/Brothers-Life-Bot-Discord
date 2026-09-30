@@ -241,6 +241,7 @@ export type TicketCategory = {
   emoji: string | null
   description: string | null
   parentChannelId: string | null
+  transcriptChannelId: string | null
   rankIds: number[]
   roleIds: string[]
   position: number

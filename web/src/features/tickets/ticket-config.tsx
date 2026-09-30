@@ -103,7 +103,10 @@ export function TicketConfigPanel({ guildId }: { guildId: string }) {
                 <span className='w-6 text-center text-lg'>{c.emoji}</span>
                 <div className='min-w-48 flex-1'>
                   <div className='font-medium'>{c.name}</div>
-                  <div className='text-xs text-muted-foreground'>{c.description ?? 'Sans description'}</div>
+                  <div className='text-xs text-muted-foreground'>
+                    {c.description ?? 'Sans description'}
+                    {' · '}transcripts : {c.transcriptChannelId ? `#${data.channels.find((ch) => ch.id === c.transcriptChannelId)?.name ?? 'salon supprimé'}` : 'salon de logs « Tickets »'}
+                  </div>
                   <div className='mt-1 flex flex-wrap gap-1'>
                     {c.rankIds.map((id) => { const r = data.ranks.find((x) => x.id === id); return r ? <RankBadge key={id} name={r.name} color={r.color} /> : null })}
                     {c.roleIds.map((id) => <span key={id} className='rounded-md border px-2 py-0.5 text-xs'>@{data.roles.find((r) => r.id === id)?.name ?? id}</span>)}
@@ -154,6 +157,7 @@ function CategoryDialog({ guildId, config, initial, onClose }: { guildId: string
         emoji: c.emoji || null,
         description: c.description || null,
         parentChannelId: c.parentChannelId || null,
+        transcriptChannelId: c.transcriptChannelId || null,
         rankIds: c.rankIds ?? [],
         roleIds: c.roleIds ?? [],
         position: c.position ?? 0,
@@ -194,6 +198,19 @@ function CategoryDialog({ guildId, config, initial, onClose }: { guildId: string
                 {config.categoryChannels.map((ch) => <SelectItem key={ch.id} value={ch.id}>{ch.name}</SelectItem>)}
               </SelectContent>
             </Select>
+          </div>
+          <div className='grid gap-1.5'>
+            <Label>Salon des transcripts</Label>
+            <Select value={c.transcriptChannelId ?? NONE} onValueChange={(v) => setC({ ...c, transcriptChannelId: v === NONE ? null : v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE}>Aucun (seulement le salon de logs « Tickets »)</SelectItem>
+                {config.channels.map((ch) => (
+                  <SelectItem key={ch.id} value={ch.id} disabled={!ch.canSend}>#{ch.name}{ch.parent ? ` · ${ch.parent}` : ''}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className='text-xs text-muted-foreground'>À la fermeture, la conversation y est envoyée en fichier texte.</p>
           </div>
           <fieldset>
             <legend className='mb-2 text-sm font-medium'>Rangs du staff qui voient ces tickets</legend>

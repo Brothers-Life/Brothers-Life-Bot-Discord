@@ -21,11 +21,11 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 		categories: db.prepare('SELECT * FROM ticket_categories WHERE guild_id = ? ORDER BY position, id'),
 		category: db.prepare('SELECT * FROM ticket_categories WHERE id = ?'),
 		insertCategory: db.prepare(`
-			INSERT INTO ticket_categories (guild_id, name, emoji, description, parent_channel_id, rank_ids, role_ids, position, created_at)
-			VALUES (@guildId, @name, @emoji, @description, @parentChannelId, @rankIds, @roleIds, @position, @createdAt)
+			INSERT INTO ticket_categories (guild_id, name, emoji, description, parent_channel_id, transcript_channel_id, rank_ids, role_ids, position, created_at)
+			VALUES (@guildId, @name, @emoji, @description, @parentChannelId, @transcriptChannelId, @rankIds, @roleIds, @position, @createdAt)
 		`),
 		updateCategory: db.prepare(`
-			UPDATE ticket_categories SET name = @name, emoji = @emoji, description = @description, parent_channel_id = @parentChannelId,
+			UPDATE ticket_categories SET name = @name, emoji = @emoji, description = @description, parent_channel_id = @parentChannelId, transcript_channel_id = @transcriptChannelId,
 				rank_ids = @rankIds, role_ids = @roleIds, position = @position WHERE id = @id
 		`),
 		deleteCategory: db.prepare('DELETE FROM ticket_categories WHERE id = ?'),
@@ -52,6 +52,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			emoji: row.emoji,
 			description: row.description,
 			parentChannelId: row.parent_channel_id,
+			transcriptChannelId: row.transcript_channel_id,
 			rankIds: JSON.parse(row.rank_ids),
 			roleIds: JSON.parse(row.role_ids),
 			position: row.position,
@@ -153,15 +154,19 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			return settingsOf(guildId);
 		},
 
-		saveCategory(actor, guildId, input) {
+		async saveCategory(actor, guildId, input) {
 			requireManage(actor, guildId);
 			validateCategory(input);
+			if (input.transcriptChannelId && !await executor.getTextChannel(guildId, input.transcriptChannelId)) {
+				throw new ValidationError('Le salon des transcripts n’existe pas sur ce serveur, ou le bot ne peut pas y écrire.');
+			}
 			const values = {
 				guildId,
 				name: input.name.trim(),
 				emoji: input.emoji?.trim() || null,
 				description: input.description?.trim() || null,
 				parentChannelId: input.parentChannelId || null,
+				transcriptChannelId: input.transcriptChannelId || null,
 				rankIds: JSON.stringify((input.rankIds ?? []).map(Number).filter(Number.isInteger)),
 				roleIds: JSON.stringify((input.roleIds ?? []).filter(r => /^\d{17,20}$/.test(r))),
 				position: Number.isInteger(input.position) ? input.position : 0,
@@ -268,15 +273,24 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			if (!q.close.run(now(), userId, reason || null, text, ticketId).changes) throw new ValidationError('Ce ticket est déjà fermé.');
 
 			const file = { name: `ticket-${ticket.number}.txt`, content: text };
-			logs.log(ticket.guildId, 'tickets', {
+			const categoryRow = ticket.categoryId ? q.category.get(ticket.categoryId) : null;
+			const summary = {
 				title: `Ticket #${ticket.number} fermé`,
 				description: `Ouvert par <@${ticket.openerId}> · fermé par <@${userId}>`,
 				fields: [
+					...(categoryRow ? [{ name: 'Catégorie', value: categoryRow.name, inline: true }] : []),
 					...(ticket.subject ? [{ name: 'Sujet', value: ticket.subject }] : []),
 					...(reason ? [{ name: 'Raison', value: reason }] : []),
 				],
 				files: [file],
-			});
+			};
+			// The category's own transcript channel, unless it is already the "tickets" log channel
+			const transcriptChannelId = categoryRow?.transcript_channel_id;
+			const logChannelId = logs.routes(ticket.guildId).find(r => r.category === 'tickets' && r.enabled)?.channelId;
+			if (transcriptChannelId && transcriptChannelId !== logChannelId) {
+				executor.sendLog(transcriptChannelId, summary).catch(error => logger.warn(`Transcript of ticket #${ticket.number} not sent:`, error.message));
+			}
+			logs.log(ticket.guildId, 'tickets', summary);
 			executor.sendDM(ticket.openerId, `Ton ticket #${ticket.number} a été fermé${reason ? ` : ${reason}` : ''}. Voici la conversation.`, [file]).catch(() => null);
 			record(userId, source, 'tickets.close', ticket, { reason: reason || null });
 
