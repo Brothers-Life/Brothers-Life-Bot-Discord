@@ -20,6 +20,10 @@ const CATEGORIES = [
   { value: 'panel', label: 'Panel' },
   { value: 'sanctions', label: 'Sanctions' },
   { value: 'automod', label: 'Automod' },
+  { value: 'members', label: 'Membres' },
+  { value: 'staff_sync', label: 'Rôles du staff' },
+  { value: 'tickets', label: 'Tickets' },
+  { value: 'permissions', label: 'Permissions Discord' },
   { value: 'logs', label: 'Salons de logs' },
   { value: 'system', label: 'Système' },
 ]

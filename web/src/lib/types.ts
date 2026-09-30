@@ -254,3 +254,24 @@ export type TicketConfig = {
   roles: Role[]
   ranks: RankSummary[]
 }
+
+export type DiscordPermission = { key: string; label: string; group: string }
+
+export type PermissionsPayload = {
+  catalogue: DiscordPermission[]
+  profiles: Record<string, { permissions: string[]; updatedAt: number; updatedBy: string }>
+  ranks: (RankSummary & { linkedRoles: number })[]
+}
+
+export type PermissionRow = {
+  rankId: number
+  rankName: string
+  guildId: string
+  guildName: string
+  roleId: string
+  roleName: string | null
+  missing: string[]
+  extra: string[]
+  editable: boolean
+  error?: string
+}

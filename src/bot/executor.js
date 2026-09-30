@@ -127,6 +127,20 @@ export function createExecutor(client) {
 			await user.send({ content, files: toFiles(files), allowedMentions: { parse: [] } });
 		},
 
+		// --- Role permissions (names of PermissionFlagsBits) --------------------------------
+		async getRolePermissions(guildId, roleId) {
+			const role = guildOf(guildId).roles.cache.get(roleId);
+			if (!role) return null;
+			return { name: role.name, permissions: role.permissions.toArray(), editable: role.editable };
+		},
+
+		async setRolePermissions(guildId, roleId, names, reason) {
+			const role = guildOf(guildId).roles.cache.get(roleId);
+			if (!role) throw new Error('Rôle introuvable');
+			const flags = names.filter(name => name in PermissionFlagsBits).map(name => PermissionFlagsBits[name]);
+			await role.setPermissions(flags, reason);
+		},
+
 		// --- Tickets -----------------------------------------------------------------------
 		async listCategoryChannels(guildId) {
 			const guild = client.guilds.cache.get(guildId);

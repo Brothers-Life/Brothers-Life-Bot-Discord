@@ -114,6 +114,17 @@ export function createFakeExecutor() {
 		async sendTicketWelcome(channelId) {
 			this.ticketChannels.get(channelId).messages.push('welcome');
 		},
+		// `${guildId}:${roleId}` -> { name, permissions, editable }
+		rolePermissions: new Map(),
+		async getRolePermissions(guildId, roleId) {
+			return this.rolePermissions.get(`${guildId}:${roleId}`) ?? null;
+		},
+		async setRolePermissions(guildId, roleId, permissions) {
+			this.guard(guildId);
+			const role = this.rolePermissions.get(`${guildId}:${roleId}`);
+			this.rolePermissions.set(`${guildId}:${roleId}`, { ...role, permissions: [...permissions] });
+			this.calls.push(['setPermissions', guildId, roleId]);
+		},
 		async listCategoryChannels() {
 			return [];
 		},

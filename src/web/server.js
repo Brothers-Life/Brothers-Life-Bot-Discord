@@ -17,6 +17,7 @@ import { registerEventRoutes } from './routes/events.js';
 import { registerAutomodRoutes } from './routes/automod.js';
 import { registerMemberRoutes } from './routes/members.js';
 import { registerTicketRoutes } from './routes/tickets.js';
+import { registerPermissionRoutes } from './routes/permissions.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_STATIC_DIR = path.resolve(__dirname, '..', '..', 'web', 'dist');
@@ -66,6 +67,7 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	registerAutomodRoutes(app, { core });
 	registerMemberRoutes(app, { core });
 	registerTicketRoutes(app, { core });
+	registerPermissionRoutes(app, { core });
 
 	const hasPanel = fs.existsSync(path.join(staticDir, 'index.html'));
 	if (hasPanel) {

@@ -51,6 +51,9 @@ export const ACTION_LABELS: Record<string, string> = {
   'tickets.category': 'Catégorie de tickets enregistrée',
   'tickets.category_delete': 'Catégorie de tickets supprimée',
   'tickets.panel': 'Panneau des tickets publié',
+  'permissions.profile': 'Profil de permissions modifié',
+  'permissions.apply': 'Profils de permissions appliqués',
+  'permissions.drift': 'Écart de permissions détecté',
 }
 
 const SOURCE_LABELS: Record<AuditEntry['source'], string> = {
