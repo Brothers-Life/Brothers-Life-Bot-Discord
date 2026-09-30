@@ -1,4 +1,5 @@
-import { ChannelType, EmbedBuilder, PermissionFlagsBits, RESTJSONErrorCodes } from 'discord.js';
+import { AttachmentBuilder, ChannelType, EmbedBuilder, PermissionFlagsBits, PermissionsBitField, RESTJSONErrorCodes } from 'discord.js';
+import { panelPayload, welcomePayload } from './ticketsUi.js';
 
 const COLORS = {
 	info: 0x5865f2,
@@ -38,6 +39,17 @@ export function toEmbed(message) {
 	embed.setTimestamp(message.timestamp ? new Date(message.timestamp) : new Date());
 	return embed;
 }
+
+// [{ name, content }] -> attachments
+function toFiles(files = []) {
+	return files.map(f => new AttachmentBuilder(Buffer.from(f.content, 'utf8'), { name: f.name }));
+}
+
+function slug(text) {
+	return text.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^a-z0-9-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 90) || 'ticket';
+}
+
+const TICKET_MEMBER = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks];
 
 function canSend(channel) {
 	const me = channel.guild.members.me;
@@ -110,9 +122,84 @@ export function createExecutor(client) {
 			await channel.messages.delete(messageId);
 		},
 
-		async sendDM(userId, content) {
+		async sendDM(userId, content, files) {
 			const user = await client.users.fetch(userId);
-			await user.send({ content, allowedMentions: { parse: [] } });
+			await user.send({ content, files: toFiles(files), allowedMentions: { parse: [] } });
+		},
+
+		// --- Tickets -----------------------------------------------------------------------
+		async listCategoryChannels(guildId) {
+			const guild = client.guilds.cache.get(guildId);
+			if (!guild) return [];
+			return [...guild.channels.cache.values()]
+				.filter(c => c.type === ChannelType.GuildCategory)
+				.sort((a, b) => a.rawPosition - b.rawPosition)
+				.map(c => ({ id: c.id, name: c.name }));
+		},
+
+		async publishTicketPanel(channelId, messageId, panel) {
+			const channel = await client.channels.fetch(channelId);
+			const payload = panelPayload(panel);
+			if (messageId) {
+				const existing = await channel.messages.fetch(messageId).catch(() => null);
+				if (existing) {
+					await existing.edit(payload);
+					return existing.id;
+				}
+			}
+			return (await channel.send(payload)).id;
+		},
+
+		async createTicketChannel({ guildId, parentId, name, openerId, staffRoleIds }) {
+			const guild = guildOf(guildId);
+			const parent = parentId ? guild.channels.cache.get(parentId) : null;
+			const channel = await guild.channels.create({
+				name: slug(name),
+				type: ChannelType.GuildText,
+				parent: parent?.type === ChannelType.GuildCategory ? parent.id : null,
+				permissionOverwrites: [
+					{ id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+					{ id: openerId, allow: TICKET_MEMBER },
+					{ id: client.user.id, allow: [...TICKET_MEMBER, PermissionFlagsBits.ManageChannels] },
+					...staffRoleIds.filter(id => guild.roles.cache.has(id)).map(id => ({ id, allow: TICKET_MEMBER })),
+				],
+				reason: 'Ouverture d’un ticket',
+			});
+			return channel.id;
+		},
+
+		async sendTicketWelcome(channelId, data) {
+			const channel = await client.channels.fetch(channelId);
+			await channel.send(welcomePayload(data));
+		},
+
+		async addChannelMember(channelId, userId) {
+			const channel = await client.channels.fetch(channelId);
+			await channel.permissionOverwrites.edit(userId, Object.fromEntries(TICKET_MEMBER.map(flag => [new PermissionsBitField(flag).toArray()[0], true])));
+		},
+
+		// Whole conversation, oldest first (up to 2000 messages)
+		async fetchTranscript(channelId) {
+			const channel = await client.channels.fetch(channelId);
+			const messages = [];
+			let before;
+			while (messages.length < 2000) {
+				const batch = await channel.messages.fetch({ limit: 100, before });
+				if (!batch.size) break;
+				messages.push(...batch.values());
+				before = batch.last().id;
+			}
+			return messages.reverse().map((m) => {
+				const time = new Date(m.createdTimestamp).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+				const files = m.attachments.map(a => a.url);
+				const embeds = m.embeds.map(e => [e.title, e.description].filter(Boolean).join(' — ')).filter(Boolean);
+				return `[${time}] ${m.author.username}: ${[m.content, ...embeds.map(e => `[embed] ${e}`), ...files].filter(Boolean).join(' ')}`;
+			}).join('\n');
+		},
+
+		async deleteChannel(channelId, reason) {
+			const channel = await client.channels.fetch(channelId).catch(() => null);
+			if (channel) await channel.delete(reason);
 		},
 
 		async sendLog(channelId, message) {
@@ -122,7 +209,7 @@ export function createExecutor(client) {
 				error.code = RESTJSONErrorCodes.UnknownChannel;
 				throw error;
 			}
-			await channel.send({ embeds: [toEmbed(message)], allowedMentions: { parse: [] } });
+			await channel.send({ embeds: [toEmbed(message)], files: toFiles(message.files), allowedMentions: { parse: [] } });
 		},
 
 		async getTextChannel(guildId, channelId) {

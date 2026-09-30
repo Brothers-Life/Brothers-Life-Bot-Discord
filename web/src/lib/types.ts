@@ -211,3 +211,46 @@ export type StaffRolesPayload = {
   ranks: RankSummary[]
   guilds: { id: string; name: string; isMain: boolean; links: Record<string, string[]>; roles: Role[] }[]
 }
+
+export type Ticket = {
+  id: number
+  guildId: string
+  guildName: string
+  number: number
+  categoryId: number | null
+  channelId: string | null
+  openerId: string
+  openerName: string | null
+  subject: string | null
+  status: 'open' | 'closed'
+  claimedBy: string | null
+  createdAt: number
+  closedAt: number | null
+  closedBy: string | null
+  closeReason: string | null
+  hasTranscript?: boolean
+  transcript?: string | null
+  opener: { name: string | null; avatar: string | null } | null
+  claimer: { name: string | null; avatar: string | null } | null
+}
+
+export type TicketCategory = {
+  id: number
+  guildId: string
+  name: string
+  emoji: string | null
+  description: string | null
+  parentChannelId: string | null
+  rankIds: number[]
+  roleIds: string[]
+  position: number
+}
+
+export type TicketConfig = {
+  settings: { guildId: string; panelChannelId: string | null; panelMessageId: string | null; panelTitle: string; panelText: string; maxOpen: number }
+  categories: TicketCategory[]
+  channels: Channel[]
+  categoryChannels: { id: string; name: string }[]
+  roles: Role[]
+  ranks: RankSummary[]
+}

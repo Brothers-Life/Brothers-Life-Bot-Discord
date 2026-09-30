@@ -24,6 +24,7 @@ import { Route as AuthenticatedRanksRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedSanctionsRouteImport } from './routes/_authenticated/sanctions'
 import { Route as AuthenticatedSessionsRouteImport } from './routes/_authenticated/sessions'
 import { Route as AuthenticatedStaffRolesRouteImport } from './routes/_authenticated/staff-roles'
+import { Route as AuthenticatedTicketsRouteImport } from './routes/_authenticated/tickets'
 import { Route as AuthenticatedVersionsRouteImport } from './routes/_authenticated/versions'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
@@ -100,6 +101,11 @@ const AuthenticatedStaffRolesRoute = AuthenticatedStaffRolesRouteImport.update({
   path: '/staff-roles',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedTicketsRoute = AuthenticatedTicketsRouteImport.update({
+  id: '/tickets',
+  path: '/tickets',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedVersionsRoute = AuthenticatedVersionsRouteImport.update({
   id: '/versions',
   path: '/versions',
@@ -121,6 +127,7 @@ export interface FileRoutesByFullPath {
   '/sanctions': typeof AuthenticatedSanctionsRoute
   '/sessions': typeof AuthenticatedSessionsRoute
   '/staff-roles': typeof AuthenticatedStaffRolesRoute
+  '/tickets': typeof AuthenticatedTicketsRoute
   '/versions': typeof AuthenticatedVersionsRoute
 }
 export interface FileRoutesByTo {
@@ -137,6 +144,7 @@ export interface FileRoutesByTo {
   '/sanctions': typeof AuthenticatedSanctionsRoute
   '/sessions': typeof AuthenticatedSessionsRoute
   '/staff-roles': typeof AuthenticatedStaffRolesRoute
+  '/tickets': typeof AuthenticatedTicketsRoute
   '/versions': typeof AuthenticatedVersionsRoute
   '/': typeof AuthenticatedIndexRoute
 }
@@ -156,6 +164,7 @@ export interface FileRoutesById {
   '/_authenticated/sanctions': typeof AuthenticatedSanctionsRoute
   '/_authenticated/sessions': typeof AuthenticatedSessionsRoute
   '/_authenticated/staff-roles': typeof AuthenticatedStaffRolesRoute
+  '/_authenticated/tickets': typeof AuthenticatedTicketsRoute
   '/_authenticated/versions': typeof AuthenticatedVersionsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
 }
@@ -176,6 +185,7 @@ export interface FileRouteTypes {
     | '/sanctions'
     | '/sessions'
     | '/staff-roles'
+    | '/tickets'
     | '/versions'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -192,6 +202,7 @@ export interface FileRouteTypes {
     | '/sanctions'
     | '/sessions'
     | '/staff-roles'
+    | '/tickets'
     | '/versions'
     | '/'
   id:
@@ -210,6 +221,7 @@ export interface FileRouteTypes {
     | '/_authenticated/sanctions'
     | '/_authenticated/sessions'
     | '/_authenticated/staff-roles'
+    | '/_authenticated/tickets'
     | '/_authenticated/versions'
     | '/_authenticated/'
   fileRoutesById: FileRoutesById
@@ -326,6 +338,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStaffRolesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/tickets': {
+      id: '/_authenticated/tickets'
+      path: '/tickets'
+      fullPath: '/tickets'
+      preLoaderRoute: typeof AuthenticatedTicketsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/versions': {
       id: '/_authenticated/versions'
       path: '/versions'
@@ -349,6 +368,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSanctionsRoute: typeof AuthenticatedSanctionsRoute
   AuthenticatedSessionsRoute: typeof AuthenticatedSessionsRoute
   AuthenticatedStaffRolesRoute: typeof AuthenticatedStaffRolesRoute
+  AuthenticatedTicketsRoute: typeof AuthenticatedTicketsRoute
   AuthenticatedVersionsRoute: typeof AuthenticatedVersionsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
 }
@@ -366,6 +386,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSanctionsRoute: AuthenticatedSanctionsRoute,
   AuthenticatedSessionsRoute: AuthenticatedSessionsRoute,
   AuthenticatedStaffRolesRoute: AuthenticatedStaffRolesRoute,
+  AuthenticatedTicketsRoute: AuthenticatedTicketsRoute,
   AuthenticatedVersionsRoute: AuthenticatedVersionsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
 }

@@ -13,6 +13,7 @@ import {
   ShieldAlert,
   UserSearch,
   Link2,
+  LifeBuoy,
 } from 'lucide-react'
 
 export type NavEntry = {
@@ -38,6 +39,7 @@ export const navSections: NavSection[] = [
     items: [
       { title: 'Sanctions', url: '/sanctions', icon: Gavel, permission: 'sanctions.view' },
       { title: 'Automod', url: '/automod', icon: ShieldAlert, permission: 'automod.view' },
+      { title: 'Tickets', url: '/tickets', icon: LifeBuoy, permission: 'tickets.view' },
     ],
   },
   {

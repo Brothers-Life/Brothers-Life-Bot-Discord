@@ -6,6 +6,9 @@ const DEFAULT_COOLDOWN_SECONDS = 3;
 
 export const name = Events.InteractionCreate;
 export async function execute(interaction) {
+	if (interaction.isButton() || interaction.isModalSubmit() || interaction.isAnySelectMenu()) {
+		return handleComponent(interaction);
+	}
 	if (!interaction.isChatInputCommand()) return;
 
 	const command = interaction.client.commands.get(interaction.commandName);
@@ -46,6 +49,18 @@ export async function execute(interaction) {
 	catch (error) {
 		const where = interaction.guildId ? `guild ${interaction.guildId}` : 'DM';
 		logger.error(`Error while executing /${command.data.name} (${where}, user ${interaction.user.id}):`, error);
+		await safeReply(interaction, t('errors.command_execution', interaction.locale));
+	}
+}
+
+async function handleComponent(interaction) {
+	const handler = interaction.client.components.get(interaction.customId.split(':')[0]);
+	if (!handler) return;
+	try {
+		await handler.execute(interaction);
+	}
+	catch (error) {
+		logger.error(`Error while handling ${interaction.customId}:`, error);
 		await safeReply(interaction, t('errors.command_execution', interaction.locale));
 	}
 }

@@ -41,6 +41,14 @@ const TITLES = {
 	'members.role_add': 'Rôle ajouté à un membre',
 	'members.role_remove': 'Rôle retiré à un membre',
 	'members.nickname': 'Pseudo modifié',
+	'tickets.open': 'Ticket ouvert',
+	'tickets.claim': 'Ticket pris en charge',
+	'tickets.close': 'Ticket fermé',
+	'tickets.add_member': 'Membre ajouté à un ticket',
+	'tickets.settings': 'Réglages des tickets modifiés',
+	'tickets.category': 'Catégorie de tickets enregistrée',
+	'tickets.category_delete': 'Catégorie de tickets supprimée',
+	'tickets.panel': 'Panneau des tickets publié',
 };
 
 const COLORS = {

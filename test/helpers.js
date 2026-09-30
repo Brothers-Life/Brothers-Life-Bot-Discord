@@ -104,11 +104,37 @@ export function createFakeExecutor() {
 			return this.bans.get(guildId) ?? [];
 		},
 		deleted: [],
+		// Tickets
+		ticketChannels: new Map(),
+		async createTicketChannel(options) {
+			const id = String(700000000000000000n + BigInt(this.ticketChannels.size + 1));
+			this.ticketChannels.set(id, { ...options, members: [options.openerId], messages: [] });
+			return id;
+		},
+		async sendTicketWelcome(channelId) {
+			this.ticketChannels.get(channelId).messages.push('welcome');
+		},
+		async listCategoryChannels() {
+			return [];
+		},
+		async publishTicketPanel(channelId, messageId) {
+			this.calls.push(['panel', channelId, messageId]);
+			return messageId ?? '600000000000000001';
+		},
+		async addChannelMember(channelId, userId) {
+			this.ticketChannels.get(channelId).members.push(userId);
+		},
+		async fetchTranscript() {
+			return '[10:00] alice: bonjour';
+		},
+		async deleteChannel(channelId) {
+			this.ticketChannels.delete(channelId);
+		},
 		async deleteMessage(channelId, messageId) {
 			this.deleted.push([channelId, messageId]);
 		},
-		async sendDM(userId, content) {
-			this.dms.push([userId, content]);
+		async sendDM(userId, content, files) {
+			this.dms.push([userId, content, files]);
 		},
 		guard(guildId) {
 			if (this.failOn.has(guildId)) {

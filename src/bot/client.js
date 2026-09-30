@@ -28,6 +28,8 @@ export function createBot() {
 	});
 	client.commands = new Collection();
 	client.cooldowns = new Collection();
+	// Buttons, select menus and modals, by customId prefix ("ticket:open:3" -> components/tickets.js)
+	client.components = new Collection();
 
 	const executor = createExecutor(client);
 
@@ -40,6 +42,12 @@ export function createBot() {
 
 			for (const command of await loadCommands()) {
 				client.commands.set(command.data.name, command);
+			}
+
+			const componentsPath = path.join(__dirname, 'components');
+			for (const file of fs.readdirSync(componentsPath).filter(f => f.endsWith('.js'))) {
+				const component = await import(pathToFileURL(path.join(componentsPath, file)).href);
+				client.components.set(component.prefix, component);
 			}
 
 			const eventsPath = path.join(__dirname, 'events');

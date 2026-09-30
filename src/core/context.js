@@ -9,6 +9,7 @@ import { createEvents } from './events.js';
 import { createAutomod } from './automod/index.js';
 import { createStaffSync } from './staffSync.js';
 import { createMembers } from './members.js';
+import { createTickets } from './tickets.js';
 import { definePermission } from './permissions.js';
 
 definePermission('members.view', { label: 'Rechercher des membres sur le réseau', category: 'Membres' });
@@ -36,6 +37,7 @@ export function createCore({ db, config, executor, logger = console }) {
 	const automod = createAutomod({ db, network, sanctions, ranks, audit, executor, logs, logger });
 	const staffSync = createStaffSync({ db, network, ranks, audit, executor, logs, logger });
 	const members = createMembers({ db, network, ranks, sanctions, audit, executor });
+	const tickets = createTickets({ db, network, ranks, audit, executor, logs, logger });
 
 	// Every audited action is also posted in the log channel of its category
 	audit.onRecord((entry) => {
@@ -66,5 +68,5 @@ export function createCore({ db, config, executor, logger = console }) {
 		sanctions.syncGuild(guild.id).catch(error => logger.error(`Ban sync failed on ${guild.name}:`, error));
 	});
 
-	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, events, automod, staffSync, members };
+	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, events, automod, staffSync, members, tickets };
 }
