@@ -1,11 +1,11 @@
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
+import { format } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import cron from 'node-cron';
-import { fileURLToPath } from 'url';
 import defaultConfig from '../config/loggerConfig.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const LOG_DIR = path.resolve(__dirname, '..', defaultConfig.logs.logDir || '../logs');
 if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
@@ -28,20 +28,37 @@ function getTime() {
 	return new Date().toLocaleString(LANG, { timeZone: TIMEZONE });
 }
 
-function prependFile(filePath, content) {
+// en-CA => YYYY-MM-DD
+const dayFormatter = new Intl.DateTimeFormat('en-CA', {
+	timeZone: TIMEZONE,
+	year: 'numeric',
+	month: '2-digit',
+	day: '2-digit',
+});
+
+function getDay() {
+	return dayFormatter.format(new Date());
+}
+
+// Appending is O(1) per line; sync so nothing is lost on process.exit()
+function appendLine(filePath, line) {
 	try {
-		let existing = '';
-		if (fs.existsSync(filePath)) existing = fs.readFileSync(filePath, 'utf8');
-		fs.writeFileSync(filePath, content + '\n' + existing, 'utf8');
+		fs.appendFileSync(filePath, line + '\n', 'utf8');
 	}
 	catch (err) {
+		// Never go through the logger here, it would recurse
 		console.error(`Unable to write to ${filePath}: ${err.message}`);
 	}
 }
 
+// Errors are printed with their stack, objects are inspected
+function formatArgs(args) {
+	return format(...args.map(arg => (arg instanceof Error ? arg.stack ?? arg.message : arg)));
+}
+
 function createLogger(type) {
-	return function(message) {
-		const time = getTime();
+	return function(...args) {
+		const message = formatArgs(args);
 		const prefix = `[${type.toUpperCase()}]`;
 		const paddedPrefix = prefix + ' '.repeat(TYPE_WIDTH - type.length);
 		const coloredPrefix = `${COLORS[type.toUpperCase()]}${paddedPrefix}${COLORS.RESET}`;
@@ -49,42 +66,11 @@ function createLogger(type) {
 		// Console
 		console.log(`${coloredPrefix} ${message}`);
 
-		// Folders
-		try {
-			// YYYY-MM-DD
-			const day = formatDateInTimezone(TIMEZONE);
-			const allFile = path.join(LOG_DIR, `${day}_all.txt`);
-			const typeFile = path.join(LOG_DIR, `all_${type.toLowerCase()}.txt`);
-
-			const line = `[${time}] ${prefix} ${message}`;
-			prependFile(allFile, line);
-			if (type != 'error') return;
-			prependFile(typeFile, line);
-		}
-		catch (e) {
-			logger.error(e);
-		}
+		// Files
+		const line = `[${getTime()}] ${prefix} ${message}`;
+		appendLine(path.join(LOG_DIR, `${getDay()}_all.txt`), line);
+		if (type === 'error') appendLine(path.join(LOG_DIR, 'all_error.txt'), line);
 	};
-}
-
-function formatDateInTimezone(timezone) {
-	const now = new Date();
-
-	const parts = new Intl.DateTimeFormat('en-CA', { // en-CA => YYYY-MM-DD
-		timeZone: timezone,
-		year: 'numeric',
-		month: '2-digit',
-		day: '2-digit',
-	}).formatToParts(now);
-
-	let year, month, day;
-	for (const part of parts) {
-		if (part.type === 'year') year = part.value;
-		else if (part.type === 'month') month = part.value;
-		else if (part.type === 'day') day = part.value;
-	}
-
-	return `${year}-${month}-${day}`;
 }
 
 const logger = {
@@ -96,25 +82,28 @@ const logger = {
 };
 
 function cleanOldLogs() {
-	const files = fs.readdirSync(LOG_DIR);
 	const now = Date.now();
-	const maxAge = MAX_AGE;
 
-	for (const file of files) {
+	for (const file of fs.readdirSync(LOG_DIR)) {
 		const filePath = path.join(LOG_DIR, file);
-		const stats = fs.statSync(filePath);
-		if (now - stats.mtimeMs > maxAge) {
-			fs.unlinkSync(filePath);
-			logger.info(`Deleted log file : ${file}`);
+		try {
+			if (now - fs.statSync(filePath).mtimeMs > MAX_AGE) {
+				fs.unlinkSync(filePath);
+				logger.info(`Deleted log file: ${file}`);
+			}
+		}
+		catch (err) {
+			logger.error(`Unable to clean log file ${file}:`, err);
 		}
 	}
 }
 
+// Only called by the bot process: a cron job keeps the event loop alive,
+// so scheduling it at import time would prevent the deploy scripts from exiting.
 // See https://crontab.cronhub.io/
-cron.schedule('0 3 * * *', () => {
-	console.info('Checking old logs...');
+export function scheduleLogCleanup() {
 	cleanOldLogs();
-	console.info('Verification of old logs completed!');
-});
+	cron.schedule('0 3 * * *', cleanOldLogs, { timezone: TIMEZONE });
+}
 
 export default logger;

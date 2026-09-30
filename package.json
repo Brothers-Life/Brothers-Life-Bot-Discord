@@ -1,34 +1,30 @@
 {
-  "name": "discordjs-bot-template",
+  "name": "bot-discord-brl",
   "version": "1.0.0",
-  "description": "A clean and modern Discord bot template for discord.js (JavaScript). Includes command and event handlers, slash command support, environment configuration, and a modular structure to help you build scalable bots quickly. Perfect for beginners and advanced developers alike.",
+  "description": "Bot Discord BRL (based on arthurcorberes/discordjs-bot-template)",
   "main": "src/index.js",
   "type": "module",
   "scripts": {
     "dev": "nodemon",
     "start": "node src/index.js prod",
     "lint": "eslint src/ --fix",
-    "deploy:dev": "node src/tools/deploy-local-commands.js",
-    "deploy:global": "node src/tools/deploy-global-commands.js"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/arthurcorberes/discordjs-bot-template.git"
+    "deploy:dev": "node src/tools/deploy-commands.js dev",
+    "deploy:prod:guild": "node src/tools/deploy-commands.js prod",
+    "deploy:global": "node src/tools/deploy-commands.js prod --global"
   },
   "author": "Arthur Corbères",
   "license": "SEE LICENSE IN LICENSE",
-  "bugs": {
-    "url": "https://github.com/arthurcorberes/discordjs-bot-template/issues"
-  },
-  "homepage": "https://github.com/arthurcorberes/discordjs-bot-template#readme",
   "dependencies": {
     "discord.js": "^14.25.1",
-    "node-cron": "^4.2.1",
-    "node-fetch": "^3.3.2"
+    "node-cron": "^4.2.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "eslint": "^9.39.1",
     "nodemon": "^3.1.11"
-  }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "private": true
 }

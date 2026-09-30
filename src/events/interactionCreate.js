@@ -2,6 +2,8 @@ import { Events, MessageFlags, Collection } from 'discord.js';
 import logger from '../utils/logger.js';
 import { t } from '../utils/i18n.js';
 
+const DEFAULT_COOLDOWN_SECONDS = 3;
+
 export const name = Events.InteractionCreate;
 export async function execute(interaction) {
 	if (!interaction.isChatInputCommand()) return;
@@ -15,28 +17,23 @@ export async function execute(interaction) {
 
 	const { cooldowns } = interaction.client;
 
-
 	if (!cooldowns.has(command.data.name)) {
 		cooldowns.set(command.data.name, new Collection());
 	}
 
 	const now = Date.now();
 	const timestamps = cooldowns.get(command.data.name);
-	const defaultCooldownDuration = 3;
-	const cooldownAmount = (command.cooldown ?? defaultCooldownDuration) * 1_000;
+	const cooldownAmount = (command.cooldown ?? DEFAULT_COOLDOWN_SECONDS) * 1_000;
 
 	if (timestamps.has(interaction.user.id)) {
 		const expirationTime = timestamps.get(interaction.user.id) + cooldownAmount;
 
 		if (now < expirationTime) {
 			const expiredTimestamp = Math.round(expirationTime / 1_000);
-			return interaction.reply({
-				content: t('errors.cooldown', interaction.locale, {
-					command: command.data.name,
-					timestamp: `<t:${expiredTimestamp}:R>`,
-				}),
-				flags: MessageFlags.Ephemeral,
-			});
+			return safeReply(interaction, t('errors.cooldown', interaction.locale, {
+				command: command.data.name,
+				timestamp: `<t:${expiredTimestamp}:R>`,
+			}));
 		}
 	}
 
@@ -47,18 +44,24 @@ export async function execute(interaction) {
 		await command.execute(interaction);
 	}
 	catch (error) {
-		logger.error(error);
+		const where = interaction.guildId ? `guild ${interaction.guildId}` : 'DM';
+		logger.error(`Error while executing /${command.data.name} (${where}, user ${interaction.user.id}):`, error);
+		await safeReply(interaction, t('errors.command_execution', interaction.locale));
+	}
+}
+
+// Replying can itself fail (expired interaction, missing permissions...): never let it crash the handler
+async function safeReply(interaction, content) {
+	try {
+		const payload = { content, flags: MessageFlags.Ephemeral };
 		if (interaction.replied || interaction.deferred) {
-			await interaction.followUp({
-				content: 'There was an error while executing this command!',
-				flags: MessageFlags.Ephemeral,
-			});
+			await interaction.followUp(payload);
 		}
 		else {
-			await interaction.reply({
-				content: 'There was an error while executing this command!',
-				flags: MessageFlags.Ephemeral,
-			});
+			await interaction.reply(payload);
 		}
+	}
+	catch (error) {
+		logger.error('Unable to send the reply to the interaction:', error);
 	}
 }

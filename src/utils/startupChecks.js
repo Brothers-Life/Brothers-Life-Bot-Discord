@@ -1,21 +1,23 @@
-import fetch from 'node-fetch';
 import logger from './logger.js';
+import { env } from './config.js';
 
+// Returns false when the bot must not start. No process.exit() here: exiting while
+// fetch is still closing its socket crashes Node on Windows (libuv assertion).
 export async function startupChecks(config) {
 	const prefix = 'STARTUP CHECKS | ';
 	logger.info(prefix + 'Starting bot checks...');
 
 	if (!config.TOKEN) {
 		logger.error(prefix + 'Token is missing in your config file!');
-		process.exit(1);
+		return false;
 	}
 	else if (config.TOKEN === 'YOUR_BOT_TOKEN') {
 		logger.error(prefix + 'Make sure to replace the config.*.json values!');
-		process.exit(1);
+		return false;
 	}
 
 	logger.info(prefix + 'Token found');
-	logger.info(prefix + `Environment: ${process.argv[2]}`);
+	logger.info(prefix + `Environment: ${env}`);
 
 	try {
 		const res = await fetch('https://discord.com/api/v10/users/@me', {
@@ -27,12 +29,15 @@ export async function startupChecks(config) {
 			logger.success(prefix + 'Token is valid!');
 			logger.info(prefix + 'Bot info:');
 			logger.info(prefix + `Username: ${botData.username}`);
-			logger.info(prefix + `Discriminator: #${botData.discriminator}`);
 			logger.info(prefix + `Bot ID: ${botData.id}`);
+
+			if (config.APP_ID && config.APP_ID !== botData.id) {
+				logger.warn(prefix + `APP_ID (${config.APP_ID}) does not match the bot ID (${botData.id}).`);
+			}
 		}
 		else if (res.status === 401) {
 			logger.error(prefix + 'Token is invalid (Unauthorized)');
-			process.exit(1);
+			return false;
 		}
 		else {
 			logger.warn(prefix + `Unexpected Discord API response: ${res.status}`);
@@ -40,8 +45,9 @@ export async function startupChecks(config) {
 	}
 	catch (err) {
 		logger.error(prefix + 'Error checking token:', err);
-		process.exit(1);
+		return false;
 	}
 
 	logger.info(prefix + 'All startup checks passed...');
+	return true;
 }

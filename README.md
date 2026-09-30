@@ -49,7 +49,7 @@ Getting Started
 
 ### Prerequisites
 
-*   [Node.js](https://nodejs.org/) (v16.9.0 or higher)
+*   [Node.js](https://nodejs.org/) (v20 or higher)
     
 *   A Discord Bot Token from the [Discord Developer Portal](https://discord.com/developers/applications)
     
@@ -84,6 +84,14 @@ npm run start
 For development with auto-reload (using nodemon):
 ```bash
 npm run dev
+```
+
+5.  **Deploy the slash commands**
+
+```bash
+npm run deploy:dev          # dev config, to DEV_GUILD_ID only (instant)
+npm run deploy:prod:guild   # prod config, to DEV_GUILD_ID only
+npm run deploy:global       # prod config, to every server the bot is in (can take up to 1h)
 ```
 
 

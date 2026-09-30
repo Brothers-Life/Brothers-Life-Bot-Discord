@@ -29,9 +29,6 @@ Thumbs.db
 *.sublime-project
 *.sublime-workspace
 
-# npm package locks
-package-lock.json
-yarn.lock
 
 # Prettier / ESLint cache
 .prettiercache
