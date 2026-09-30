@@ -8,7 +8,7 @@ import type { Channel, Role } from '@/lib/types'
 import { dateTime } from '@/lib/format'
 import { useMe } from '@/hooks/use-me'
 import { Page, Section, EmptyState, Pill, StatCards, UserAvatar } from '@/components/app/ui'
-import { ChannelSelect } from '@/components/app/pickers'
+import { ChannelSelect, RolesPicker } from '@/components/app/pickers'
 import { UserPicker } from '@/components/app/user-picker'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -28,7 +28,9 @@ type Absence = {
   id: number; userId: string; startAt: number; endAt: number; reason: string | null; status: Status; declaredBy: string; reviewedBy: string | null
   names: { userId: Person; declaredBy: Person; reviewedBy: Person }
 }
-type Config = { requireApproval: boolean; roleByGuild: Record<string, string>; nicknamePrefix: string; announce: { guildId: string; channelId: string } | null; remindBeforeEnd: boolean }
+type Config = { requireApproval: boolean; roleByGuild: Record<string, string>; nicknamePrefix: string; announce: { guildId: string; channelId: string } | null; remindBeforeEnd: boolean
+  review: { guildId: string; channelId: string } | null; reviewerRoleIds: string[]; pingReviewers: boolean
+}
 type Payload = { absences: Absence[]; config: Config; guilds: { id: string; name: string }[]; roles: Record<string, Role[]>; channels: Record<string, Channel[]> }
 
 const STATUS: Record<Status, { label: string; tone: 'neutral' | 'success' | 'warning' | 'danger' | 'accent' }> = {
@@ -169,11 +171,12 @@ function Settings({ data }: { data: Payload }) {
   const [c, setC] = useState(data.config)
   const save = useMutation({ mutationFn: () => api('/absences/config', { method: 'PUT', body: c }), onSuccess: () => { toast.success('Réglages enregistrés'); qc.invalidateQueries({ queryKey: ['absences'] }) } })
   const [announceGuild, setAnnounceGuild] = useState(c.announce?.guildId ?? data.guilds[0]?.id)
+  const [reviewGuild, setReviewGuild] = useState(c.review?.guildId ?? data.guilds[0]?.id)
   return (
     <Section title='Réglages' actions={<Button size='sm' onClick={() => save.mutate()} disabled={save.isPending}><Save /> Enregistrer</Button>}>
       <div className='grid gap-5 p-4'>
         <div className='flex flex-wrap gap-6'>
-          <label className='flex items-center gap-2 text-sm'><Switch checked={c.requireApproval} onCheckedChange={(v) => setC({ ...c, requireApproval: v })} /> Validation par un rang supérieur</label>
+          <label className='flex items-center gap-2 text-sm'><Switch checked={c.requireApproval} onCheckedChange={(v) => setC({ ...c, requireApproval: v })} /> Les absences doivent être validées</label>
           <label className='flex items-center gap-2 text-sm'><Switch checked={c.remindBeforeEnd} onCheckedChange={(v) => setC({ ...c, remindBeforeEnd: v })} /> Rappel en MP la veille du retour</label>
         </div>
         <div className='grid gap-1.5 sm:max-w-xs'><Label htmlFor='abs-prefix'>Préfixe de pseudo pendant l’absence</Label><Input id='abs-prefix' maxLength={10} value={c.nicknamePrefix} onChange={(e) => setC({ ...c, nicknamePrefix: e.target.value })} placeholder='[ABS]' /></div>
@@ -191,6 +194,26 @@ function Settings({ data }: { data: Payload }) {
             ))}
           </div>
         </div>
+        {c.requireApproval && (
+          <div className='grid gap-3 rounded-lg border p-3'>
+            <div>
+              <Label>Validation sur Discord</Label>
+              <p className='text-xs text-muted-foreground'>Chaque demande est postée avec les boutons Valider et Refuser. Seuls les rôles choisis peuvent décider (sans rôle choisi : les rangs qui gèrent les absences). Personne ne valide sa propre absence.</p>
+            </div>
+            <div className='grid gap-3 sm:grid-cols-2'>
+              <Select value={reviewGuild} onValueChange={(v) => { setReviewGuild(v); setC({ ...c, review: null, reviewerRoleIds: [] }) }}>
+                <SelectTrigger aria-label='Serveur de validation'><SelectValue /></SelectTrigger>
+                <SelectContent>{data.guilds.map((g) => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
+              </Select>
+              <ChannelSelect channels={data.channels[reviewGuild ?? ''] ?? []} value={c.review?.channelId ?? null} onChange={(v) => setC({ ...c, review: v && reviewGuild ? { guildId: reviewGuild, channelId: v } : null })} label='Salon des demandes' noneLabel='Validation dans le panel seulement' />
+            </div>
+            <div className='grid gap-1.5'>
+              <span className='text-xs text-muted-foreground'>Rôles qui peuvent valider</span>
+              <RolesPicker roles={data.roles[reviewGuild ?? ''] ?? []} value={c.reviewerRoleIds} onChange={(reviewerRoleIds) => setC({ ...c, reviewerRoleIds })} label='Rôles qui peuvent valider' placeholder='Rangs qui gèrent les absences' disabled={!c.review} />
+            </div>
+            <label className='flex items-center gap-2 text-sm'><Switch checked={c.pingReviewers} disabled={!c.review || !c.reviewerRoleIds.length} onCheckedChange={(pingReviewers) => setC({ ...c, pingReviewers })} /> Mentionner ces rôles à chaque demande</label>
+          </div>
+        )}
         <div className='grid gap-2'>
           <Label>Annonce des départs et retours</Label>
           <div className='grid gap-3 sm:grid-cols-2'>

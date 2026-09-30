@@ -422,6 +422,12 @@ export function createFakeExecutor() {
 			this.directs.push({ userId, ...data });
 			return String(850000000000000000n + BigInt(this.directs.length));
 		},
+		absenceMessages: [],
+		async upsertAbsenceMessage(channelId, messageId, view, options = {}) {
+			if (this.failOn.has(channelId)) throw new Error('Missing Access');
+			this.absenceMessages.push({ channelId, messageId, view, options });
+			return messageId ?? String(870000000000000000n + BigInt(this.absenceMessages.length));
+		},
 		eventMessages: [],
 		async upsertEventMessage(channelId, messageId, event, options = {}) {
 			if (this.failOn.has(channelId)) throw new Error('Missing Access');

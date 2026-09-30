@@ -8,6 +8,7 @@ import { boxPanelPayload, feedbackPayload, reviewPayload } from './feedbackUi.js
 import { applicationPayload, recruitmentPanelPayload } from './recruitmentUi.js';
 import { fivemPayload } from './fivemUi.js';
 import { rpEventPayload } from './rpEventsUi.js';
+import { absencePayload } from './absencesUi.js';
 
 const COLORS = {
 	info: 0x5865f2,
@@ -334,6 +335,21 @@ export function createExecutor(client) {
 		async announceGiveawayWinners(channelId, messageId, data) {
 			const channel = await client.channels.fetch(channelId);
 			await channel.send({ ...winnersPayload(data), reply: { messageReference: messageId, failIfNotExists: false } });
+		},
+
+		// --- Absences ------------------------------------------------------------------------
+		async upsertAbsenceMessage(channelId, messageId, view, { pingRoleIds = [] } = {}) {
+			const channel = await client.channels.fetch(channelId);
+			const payload = absencePayload(view);
+			if (messageId) {
+				const existing = await channel.messages.fetch(messageId).catch(() => null);
+				if (existing) {
+					await existing.edit(payload);
+					return messageId;
+				}
+			}
+			const content = pingRoleIds.length ? pingRoleIds.map(id => `<@&${id}>`).join(' ') : undefined;
+			return (await channel.send({ ...payload, content, allowedMentions: { roles: pingRoleIds, users: [] } })).id;
 		},
 
 		// --- Suggestions and bugs ------------------------------------------------------------

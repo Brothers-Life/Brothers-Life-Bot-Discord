@@ -4,6 +4,7 @@ import { withNetwork, ALICE, BOB, MAIN } from '../helpers.js';
 import { ForbiddenError } from '../../src/core/errors.js';
 import { createRecruitment } from '../../src/core/recruitment.js';
 import { createAbsences } from '../../src/core/absences.js';
+import { absencePayload } from '../../src/bot/absencesUi.js';
 
 const CANDIDATE = '300000000000000001';
 const REVIEW = '610000000000000005';
@@ -95,7 +96,7 @@ test('absences: pending then approved by a higher rank, applied then ended autom
 	assert.equal(approved.status, 'active');
 	assert.ok(executor.memberRoles.get(`${MAIN}:${BOB}`).includes('800000000000000066'));
 	assert.ok(executor.calls.some(c => c[0] === 'nickname' && c[3].startsWith('[ABS]')));
-	assert.match(executor.messages.at(-1).payload.content, /est absent/);
+	assert.equal(executor.absenceMessages.at(-1).view.kind, 'away');
 	assert.equal(absences.current().length, 1);
 
 	advance(2 * 86_400_000 + 3600_000);
@@ -105,7 +106,7 @@ test('absences: pending then approved by a higher rank, applied then ended autom
 	await absences.tick();
 	assert.equal(absences.current().length, 0);
 	assert.ok(!executor.memberRoles.get(`${MAIN}:${BOB}`).includes('800000000000000066'));
-	assert.match(executor.messages.at(-1).payload.content, /de retour/);
+	assert.equal(executor.absenceMessages.at(-1).view.kind, 'back');
 });
 
 test('a position can be closed and reopened in one click; its Discord panel follows', async () => {
@@ -117,4 +118,34 @@ test('a position can be closed and reopened in one click; its Discord panel foll
 	await assert.rejects(recruitment.startApplication(position.id, CANDIDATE, MAIN), /fermées/);
 	assert.equal((await recruitment.setOpen(owner, position.id, true)).config.open, true);
 	await recruitment.startApplication(position.id, CANDIDATE, MAIN);
+});
+
+test('absences: request posted as an embed with Valider / Refuser, only the reviewer roles can decide, never for oneself', async () => {
+	const { core, absences, owner, executor } = await setup();
+	const STAFF = '610000000000000010';
+	const REVIEWER_ROLE = '800000000000000077';
+	absences.setConfig(owner, { requireApproval: true, review: { guildId: MAIN, channelId: STAFF }, reviewerRoleIds: [REVIEWER_ROLE], pingReviewers: true });
+	const bob = await core.ranks.resolve(BOB);
+	const absence = await absences.declare(bob, { endAt: Date.now() + 2 * 86_400_000, reason: 'Examens' });
+	const posted = executor.absenceMessages.at(-1);
+	assert.deepEqual([posted.channelId, posted.messageId, posted.view.kind, posted.options.pingRoleIds], [STAFF, null, 'review', [REVIEWER_ROLE]]);
+	assert.equal(absences.list(owner, {})[0].reviewMessageId, '870000000000000001');
+
+	await assert.rejects(absences.reviewByButton(ALICE, [], absence.id, true), /Seuls les rôles/, 'absences.manage is not enough once roles are set');
+	await assert.rejects(absences.reviewByButton(BOB, [REVIEWER_ROLE], absence.id, true), /propre absence/);
+	const done = await absences.reviewByButton(ALICE, [REVIEWER_ROLE], absence.id, false);
+	assert.equal(done.status, 'rejected');
+	const edited = executor.absenceMessages.at(-1);
+	assert.deepEqual([edited.messageId, edited.view.absence.status, edited.view.absence.reviewedBy, edited.options.pingRoleIds], ['870000000000000001', 'rejected', ALICE, []]);
+	await assert.rejects(absences.reviewByButton(ALICE, [REVIEWER_ROLE], absence.id, true), /déjà été traitée/);
+	const buttons = (a) => absencePayload({ kind: 'review', absence: a }).components.flatMap(row => row.toJSON().components.map(c => c.custom_id));
+	assert.deepEqual(buttons(absence), [`abs:approve:${absence.id}`, `abs:reject:${absence.id}`]);
+	assert.deepEqual(buttons(done), [], 'no buttons once decided');
+	assert.match(absencePayload({ kind: 'review', absence: done }).embeds[0].toJSON().fields.at(-1).value, /Refusée par/);
+
+	// Without reviewer roles: whoever has absences.manage
+	absences.setConfig(owner, { requireApproval: true, review: { guildId: MAIN, channelId: STAFF } });
+	const next = await absences.declare(bob, { startAt: Date.now() + 5 * 86_400_000, endAt: Date.now() + 6 * 86_400_000 });
+	assert.equal((await absences.reviewByButton(ALICE, [], next.id, true)).status, 'approved');
+	assert.match(executor.dms.at(-1)[1], /validée/);
 });
