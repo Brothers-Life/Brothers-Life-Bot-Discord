@@ -1,185 +1,88 @@
-Discord.js Bot Template
-=======================
+# Brothers Life — Bot Discord
 
-A clean and modern Discord bot template built with **discord.js** (JavaScript). This template includes command and event handlers, slash command support, environment configuration, and a modular structure designed to help you build scalable Discord bots quickly. Perfect for both beginners and advanced developers.
+Bot qui gère plusieurs serveurs Discord comme un seul **réseau**, piloté depuis un **panel web**.
 
-![License MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+Ce qui existe aujourd'hui (chantier 1, le socle) :
 
+- **Réseau de serveurs** : un serveur principal et des serveurs ajoutés au réseau depuis le panel. Inviter le bot ne suffit jamais.
+- **Permissions fines** : des rangs regroupent des permissions. On obtient un rang par un rôle du serveur principal, ou par attribution directe dans le panel. Un utilisateur ne peut pas donner plus de droits qu'il n'en a.
+- **Panel web** : connexion via Discord, vue d'ensemble, serveurs, rangs, membres, salons de logs, journal, sessions, console en direct, versions.
+- **Salons de logs** : chaque catégorie de logs peut aller dans son propre salon, sur chaque serveur, avec en option un miroir vers le serveur principal.
+- **Versions** : les versions sont publiées sur GitHub par la CI. Depuis le panel, on installe n'importe quelle version ; la base est sauvegardée avant, et en cas d'échec la version précédente revient toute seule.
 
-Features
---------
+Prévu ensuite : sanctions synchronisées, logs complets des serveurs, automod (anti-spam, anti-arnaque, anti-envoi massif), gestion des rôles et des membres, tickets, synchronisation des permissions.
 
-*   **Modular Architecture** – Well-organized project structure for easy scalability
-    
-*   **Command & Event Handlers** – Automatically loads commands and events from their respective directories
-    
-*   **Slash Command Support** – Built-in support for Discord's application commands (slash commands)
-    
-*   **Environment Configuration** – Uses .json files for secure and flexible configuration
-    
-*   **Colorized Logging System** – Console output with daily file storage for persistent logs
-    
-*   **Full i18n (Internationalization)** – Ready-to-use translation system for multi-language support
-    
-*   **MIT Licensed** – Free to use, modify, and distribute
-    
+La conception détaillée est dans `docs/superpowers/specs/`.
 
-Project Structure
---------------------
+## Prérequis
 
-```plaintext
-discordjs-bot-template/
-├── src/
-│   ├── commands/           # Slash and text commands
-│   ├── config/             # Configuration files
-│   ├── events/             # Discord event handlers
-│   ├── locales/            # Translation files
-│   ├── tools/              # Some tools for you to build faster
-│   ├── utils/              # Utilities and helpers
-│   └── index.js            # Main bot entry point
-├── logs/                   # Daily log files
-├── nodemon.json            # Auto-restart during development
-├── package.json
-└── README.md
-```
+- Node.js 22 ou plus
+- Une application Discord ([Developer Portal](https://discord.com/developers/applications)) :
+  - **Bot** : activer les intents *Server Members* et *Message Content*.
+  - **OAuth2 > Redirects** : ajouter `<WEB_PUBLIC_URL>/api/auth/callback` (par exemple `http://localhost:3000/api/auth/callback`).
 
-
-Getting Started
-------------------
-
-### Prerequisites
-
-*   [Node.js](https://nodejs.org/) (v20 or higher)
-    
-*   A Discord Bot Token from the [Discord Developer Portal](https://discord.com/developers/applications)
-    
-
-### Installation
-
-1.  **Clone the repository**
-
-```bash
-git clone https://github.com/arthurcorberes/discordjs-bot-template.git
-cd discordjs-bot-template 
-```
-
-2.  **Install dependencies**
+## Développement en local
 
 ```bash
 npm install
+cp .env.example .env.dev      # puis remplir TOKEN, APP_ID, CLIENT_SECRET, OWNER_ID
+npm run deploy:dev            # commandes slash sur DEV_GUILD_ID
+npm run dev                   # bot + API sur http://localhost:3000
 ```
 
-3.  **Configure environment**
-
-*   Copy `config.example.json` to `config.dev.json` and `config.prod.json`
-    
-*   Fill in your Discord bot token and other settings
-
-4.  **Start the bot**
+Pour travailler sur le panel avec rechargement à chaud :
 
 ```bash
-npm run start
+npm --prefix web install
+npm run dev:web               # http://localhost:5173 (l'API est relayée vers :3000)
 ```
 
-For development with auto-reload (using nodemon):
+Pour servir le panel compilé directement par le bot : `npm run build:web`.
+
+La première connexion au panel se fait avec le compte `OWNER_ID`. Choisis ensuite le serveur principal dans « Serveurs ».
+
+## Commandes
+
+| Commande | Rôle |
+|---|---|
+| `npm run dev` | Bot en local avec rechargement (config `.env.dev`) |
+| `npm start` | Lanceur de production (`launcher.js`, config `.env.prod`) |
+| `npm test` | Tests (`node --test`) |
+| `npm run lint` | ESLint |
+| `npm run deploy:dev` | Commandes slash sur le serveur de test |
+| `npm run deploy:global` | Commandes slash sur tous les serveurs (config prod) |
+| `npm run dev:web` / `build:web` | Panel : développement / compilation |
+
+## Configuration
+
+Tout passe par `.env.dev` / `.env.prod` (modèle : `.env.example`). Les variables d'environnement réelles, par exemple les variables de démarrage Pterodactyl, passent avant le fichier.
+
+`OWNER_ID` est le **seul** compte qui a toutes les permissions. Il ne peut pas être modifié depuis le panel : pour changer de chef, on modifie le `.env` et on redémarre.
+
+## Publier une version
+
 ```bash
-npm run dev
+npm version minor             # ou patch / major : met à jour package.json et crée le tag
+git push --follow-tags
 ```
 
-5.  **Deploy the slash commands**
+La CI vérifie le lint et les tests, compile le panel et publie la Release GitHub. La version apparaît ensuite dans le panel, page **Versions**.
 
-```bash
-npm run deploy:dev          # dev config, to DEV_GUILD_ID only (instant)
-npm run deploy:prod:guild   # prod config, to DEV_GUILD_ID only
-npm run deploy:global       # prod config, to every server the bot is in (can take up to 1h)
+## Production
+
+Voir [docs/pterodactyl.md](docs/pterodactyl.md).
+
+## Structure
+
+```
+launcher.js, launcher/   superviseur de production : redémarrage, versions, retour arrière
+src/index.js             démarrage : config, base, core, bot, web
+src/core/                logique métier (réseau, rangs, permissions, logs, audit, sessions, versions)
+src/db/                  SQLite et migrations
+src/bot/                 discord.js : événements, commandes, exécuteur Discord
+src/web/                 Fastify : OAuth2, API, console WebSocket
+web/                     panel React (basé sur satnaing/shadcn-admin, MIT)
+test/                    tests
 ```
 
-
-Usage
---------
-
-### Creating Commands
-
-Add new commands in `src/commands/`. Each command file should export a data object (for slash commands) and an execute function.
-
-Example (ping.js):
-
-```javascript
-import { SlashCommandBuilder } from 'discord.js';
-
-export const cooldown = 1;
-
-export const data = new SlashCommandBuilder()
-	.setName('ping')
-	.setDescription('Replies with Pong!');
-
-export async function execute(interaction) {
-	await interaction.reply('Pong!');
-}
-```
-
-### Creating Events
-
-Add new event handlers in `src/events/`. File names should match Discord.js event names.
-
-Example (ready.js):
-
-```javascript
-import { Events } from 'discord.js';
-
-export const name = Events.ClientReady;
-export const once = true;
-export function execute(client) {
-	console.log(`Ready! Logged in as ${client.user.tag}`);
-}
-```
-
-### Using i18n (Translations)
-
-The template includes a translation system. Add locale files in `src/locales` and use them in your code.
-
-### Logging
-
-Use the built-in logger for consistent output:
-
-```javascript
-import logger from './src/utils/logger.js';
-logger.info('Bot is starting...');
-logger.error('Something went wrong!');
-```
-
-
-License
-----------
-
-This project is licensed under the MIT License. See the LICENSE file for details.
-
-
-Contributing
----------------
-
-Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/arthurcorberes/discordjs-bot-template/issues).
-
-1.  Fork the project
-    
-2.  Create your feature branch (`git checkout -b feature/AmazingFeature`)
-    
-3.  Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-    
-4.  Push to the branch (`git push origin feature/AmazingFeature`)
-    
-5.  Open a Pull Request
-    
-
-Acknowledgments
-------------------
-
-*   [discord.js](https://discord.js.org/) for the powerful Discord API library
-    
-*   All contributors and users of this template
-    
-
-Support
-----------
-
-For support, please open an issue in the GitHub repository.
+Basé sur [arthurcorberes/discordjs-bot-template](https://github.com/arthurcorberes/discordjs-bot-template) (MIT).

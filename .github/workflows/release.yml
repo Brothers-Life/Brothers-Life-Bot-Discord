@@ -1,0 +1,68 @@
+name: Release
+
+# Push a tag vX.Y.Z (matching package.json) to publish a version installable from the panel
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Check the tag matches package.json
+        run: |
+          expected="v$(node -p "require('./package.json').version")"
+          if [ "$GITHUB_REF_NAME" != "$expected" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json version ($expected). Run: npm version <x.y.z>"
+            exit 1
+          fi
+
+      - name: Lint and test the bot
+        run: |
+          npm ci
+          npm run lint
+          npm test
+
+      - name: Build the panel
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Package
+        run: |
+          tar -czf "bot-$GITHUB_REF_NAME.tar.gz" \
+            src launcher launcher.js web/dist package.json package-lock.json .npmrc .env.example README.md docs/pterodactyl.md
+
+      - name: Release notes
+        run: |
+          schema=$(ls src/db/migrations | grep -E '^[0-9]+_.*\.sql$' | sort | tail -1 | cut -d_ -f1 | sed 's/^0*//')
+          previous=$(git describe --tags --abbrev=0 "$GITHUB_REF_NAME^" 2>/dev/null || true)
+          {
+            if [ -n "$previous" ]; then
+              echo "Changements depuis $previous :"
+              git log --pretty='- %s' "$previous..$GITHUB_REF_NAME" --no-merges
+            else
+              echo "Première version."
+            fi
+            echo
+            echo "<!-- schema:${schema:-0} -->"
+          } > notes.md
+          cat notes.md
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "bot-$GITHUB_REF_NAME.tar.gz" --title "$GITHUB_REF_NAME" --notes-file notes.md

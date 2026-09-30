@@ -12,7 +12,9 @@
     "test": "node --test \"test/**/*.test.js\"",
     "deploy:dev": "node src/bot/deploy-commands.js dev",
     "deploy:prod:guild": "node src/bot/deploy-commands.js prod",
-    "deploy:global": "node src/bot/deploy-commands.js prod --global"
+    "deploy:global": "node src/bot/deploy-commands.js prod --global",
+    "dev:web": "npm --prefix web run dev",
+    "build:web": "npm --prefix web ci && npm --prefix web run build"
   },
   "author": "Arthur Corbères",
   "license": "SEE LICENSE IN LICENSE",

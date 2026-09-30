@@ -82,7 +82,7 @@ export async function installVersion({ root, version, assetId, repo, token, fetc
 		if (!fs.existsSync(path.join(tmpDir, 'src', 'index.js'))) throw new Error('The archive does not contain src/index.js');
 
 		onStep('installing dependencies');
-		await runImpl('npm', ['ci', '--omit=dev', '--no-audit', '--no-fund'], { cwd: tmpDir });
+		await runImpl('npm', ['ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: tmpDir });
 
 		fs.rmSync(finalDir, { recursive: true, force: true });
 		fs.renameSync(tmpDir, finalDir);
