@@ -20,6 +20,7 @@ import {
   DoorOpen,
   Siren,
   ChartColumn,
+  Headphones,
 } from 'lucide-react'
 
 export type NavEntry = {
@@ -56,6 +57,7 @@ export const navSections: NavSection[] = [
     items: [
       { title: 'Accueil', url: '/onboarding', icon: DoorOpen, permission: 'onboarding.view' },
       { title: 'Statistiques', url: '/stats', icon: ChartColumn, permission: 'stats.view' },
+      { title: 'Vocaux perso', url: '/voice', icon: Headphones, permission: 'voice.view' },
     ],
   },
   {

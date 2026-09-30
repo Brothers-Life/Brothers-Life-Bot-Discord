@@ -1,6 +1,7 @@
 import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, GuildVerificationLevel, PermissionFlagsBits, PermissionsBitField, RESTJSONErrorCodes } from 'discord.js';
 import { noticePayload, panelPayload, ratingPayload, welcomePayload } from './ticketsUi.js';
 import { buildEmbeds, emojiOf } from './messages.js';
+import { roomPanel } from './voiceUi.js';
 
 const COLORS = {
 	info: 0x5865f2,
@@ -51,6 +52,21 @@ const TICKET_MEMBER = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Send
 function canSend(channel) {
 	const me = channel.guild.members.me;
 	return Boolean(me && channel.permissionsFor(me)?.has(LOG_PERMISSIONS));
+}
+
+// Permissions of a personal voice channel from its state
+function roomOverwrites(guild, { ownerId, locked, hidden, permitted = [], rejected = [] }) {
+	const everyone = { id: guild.id, allow: [], deny: [] };
+	if (locked) everyone.deny.push(PermissionFlagsBits.Connect);
+	if (hidden) everyone.deny.push(PermissionFlagsBits.ViewChannel);
+	const people = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect];
+	return [
+		everyone,
+		{ id: guild.client.user.id, allow: [...people, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.MoveMembers, PermissionFlagsBits.SendMessages] },
+		{ id: ownerId, allow: [...people, PermissionFlagsBits.Speak, PermissionFlagsBits.Stream] },
+		...permitted.filter(id => id !== ownerId).map(id => ({ id, allow: people })),
+		...rejected.filter(id => id !== ownerId).map(id => ({ id, deny: people })),
+	];
 }
 
 function notInGuild(guildId) {
@@ -342,6 +358,58 @@ export function createExecutor(client) {
 				.filter(c => c.type === ChannelType.GuildVoice || c.type === ChannelType.GuildStageVoice)
 				.sort((a, b) => a.rawPosition - b.rawPosition)
 				.map(c => ({ id: c.id, name: c.name, parent: c.parent?.name ?? null }));
+		},
+
+		// --- Personal voice channels ---------------------------------------------------------
+		async createHubChannel(guildId, { name, categoryId }) {
+			const guild = guildOf(guildId);
+			const parent = categoryId ? guild.channels.cache.get(categoryId) : null;
+			const channel = await guild.channels.create({ name, type: ChannelType.GuildVoice, parent: parent?.type === ChannelType.GuildCategory ? parent.id : null, reason: 'Salon « créer un vocal »' });
+			return channel.id;
+		},
+
+		async parentOf(channelId) {
+			const channel = await client.channels.fetch(channelId).catch(() => null);
+			return channel?.parentId ?? null;
+		},
+
+		async createVoiceRoom(guildId, { parentId, ownerId, name, userLimit, bitrate, region, ...state }) {
+			const guild = guildOf(guildId);
+			const channel = await guild.channels.create({
+				name: name.slice(0, 100),
+				type: ChannelType.GuildVoice,
+				parent: parentId && guild.channels.cache.get(parentId)?.type === ChannelType.GuildCategory ? parentId : null,
+				userLimit,
+				bitrate: bitrate ? Math.min(bitrate * 1000, guild.maximumBitrate) : undefined,
+				rtcRegion: region ?? null,
+				permissionOverwrites: roomOverwrites(guild, { ownerId, ...state }),
+				reason: 'Vocal personnel',
+			});
+			return channel.id;
+		},
+
+		async applyVoiceRoom(channelId, { ownerId, name, userLimit, bitrate, region, ...state }) {
+			const channel = await client.channels.fetch(channelId);
+			const edit = {
+				userLimit,
+				rtcRegion: region ?? null,
+				permissionOverwrites: roomOverwrites(channel.guild, { ownerId, ...state }),
+			};
+			if (name && name !== channel.name) edit.name = name.slice(0, 100);
+			if (bitrate) edit.bitrate = Math.min(bitrate * 1000, channel.guild.maximumBitrate);
+			await channel.edit(edit);
+		},
+
+		// Humans in a voice channel (null if the channel no longer exists)
+		async voiceChannelMembers(channelId) {
+			const channel = await client.channels.fetch(channelId).catch(() => null);
+			if (!channel) return null;
+			return [...channel.members.values()].filter(m => !m.user.bot).map(m => m.id);
+		},
+
+		async sendRoomPanel(channelId, data) {
+			const channel = await client.channels.fetch(channelId);
+			await channel.send(roomPanel(channelId, data));
 		},
 
 		// Rules message with its "I accept" button (updated in place if it still exists)

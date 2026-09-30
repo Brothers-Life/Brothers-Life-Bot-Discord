@@ -6,4 +6,5 @@ export const name = Events.ChannelDelete;
 export function execute(channel) {
 	channel.client.core.tickets.markChannelDeleted(channel.id);
 	channel.client.core.stats.counterDeleted(channel.id);
+	channel.client.core.voiceRooms.channelDeleted(channel.id);
 }

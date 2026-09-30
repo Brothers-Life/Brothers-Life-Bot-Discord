@@ -31,6 +31,7 @@ import { Route as AuthenticatedStaffRolesRouteImport } from './routes/_authentic
 import { Route as AuthenticatedStatsRouteImport } from './routes/_authenticated/stats'
 import { Route as AuthenticatedTicketsRouteImport } from './routes/_authenticated/tickets'
 import { Route as AuthenticatedVersionsRouteImport } from './routes/_authenticated/versions'
+import { Route as AuthenticatedVoiceRouteImport } from './routes/_authenticated/voice'
 import { Route as AuthenticatedAnnouncementsIndexRouteImport } from './routes/_authenticated/announcements/index'
 import { Route as AuthenticatedAnnouncementsIdRouteImport } from './routes/_authenticated/announcements/$id'
 import { Route as AuthenticatedTicketIdRouteImport } from './routes/_authenticated/ticket.$id'
@@ -145,6 +146,11 @@ const AuthenticatedVersionsRoute = AuthenticatedVersionsRouteImport.update({
   path: '/versions',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedVoiceRoute = AuthenticatedVoiceRouteImport.update({
+  id: '/voice',
+  path: '/voice',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedAnnouncementsIndexRoute =
   AuthenticatedAnnouncementsIndexRouteImport.update({
     id: '/announcements/',
@@ -185,6 +191,7 @@ export interface FileRoutesByFullPath {
   '/stats': typeof AuthenticatedStatsRoute
   '/tickets': typeof AuthenticatedTicketsRoute
   '/versions': typeof AuthenticatedVersionsRoute
+  '/voice': typeof AuthenticatedVoiceRoute
   '/announcements/$id': typeof AuthenticatedAnnouncementsIdRoute
   '/ticket/$id': typeof AuthenticatedTicketIdRoute
   '/announcements/': typeof AuthenticatedAnnouncementsIndexRoute
@@ -210,6 +217,7 @@ export interface FileRoutesByTo {
   '/stats': typeof AuthenticatedStatsRoute
   '/tickets': typeof AuthenticatedTicketsRoute
   '/versions': typeof AuthenticatedVersionsRoute
+  '/voice': typeof AuthenticatedVoiceRoute
   '/': typeof AuthenticatedIndexRoute
   '/announcements/$id': typeof AuthenticatedAnnouncementsIdRoute
   '/ticket/$id': typeof AuthenticatedTicketIdRoute
@@ -238,6 +246,7 @@ export interface FileRoutesById {
   '/_authenticated/stats': typeof AuthenticatedStatsRoute
   '/_authenticated/tickets': typeof AuthenticatedTicketsRoute
   '/_authenticated/versions': typeof AuthenticatedVersionsRoute
+  '/_authenticated/voice': typeof AuthenticatedVoiceRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/announcements/$id': typeof AuthenticatedAnnouncementsIdRoute
   '/_authenticated/ticket/$id': typeof AuthenticatedTicketIdRoute
@@ -267,6 +276,7 @@ export interface FileRouteTypes {
     | '/stats'
     | '/tickets'
     | '/versions'
+    | '/voice'
     | '/announcements/$id'
     | '/ticket/$id'
     | '/announcements/'
@@ -292,6 +302,7 @@ export interface FileRouteTypes {
     | '/stats'
     | '/tickets'
     | '/versions'
+    | '/voice'
     | '/'
     | '/announcements/$id'
     | '/ticket/$id'
@@ -319,6 +330,7 @@ export interface FileRouteTypes {
     | '/_authenticated/stats'
     | '/_authenticated/tickets'
     | '/_authenticated/versions'
+    | '/_authenticated/voice'
     | '/_authenticated/'
     | '/_authenticated/announcements/$id'
     | '/_authenticated/ticket/$id'
@@ -486,6 +498,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedVersionsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/voice': {
+      id: '/_authenticated/voice'
+      path: '/voice'
+      fullPath: '/voice'
+      preLoaderRoute: typeof AuthenticatedVoiceRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/announcements/': {
       id: '/_authenticated/announcements/'
       path: '/announcements'
@@ -530,6 +549,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedStatsRoute: typeof AuthenticatedStatsRoute
   AuthenticatedTicketsRoute: typeof AuthenticatedTicketsRoute
   AuthenticatedVersionsRoute: typeof AuthenticatedVersionsRoute
+  AuthenticatedVoiceRoute: typeof AuthenticatedVoiceRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedAnnouncementsIdRoute: typeof AuthenticatedAnnouncementsIdRoute
   AuthenticatedTicketIdRoute: typeof AuthenticatedTicketIdRoute
@@ -556,6 +576,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedStatsRoute: AuthenticatedStatsRoute,
   AuthenticatedTicketsRoute: AuthenticatedTicketsRoute,
   AuthenticatedVersionsRoute: AuthenticatedVersionsRoute,
+  AuthenticatedVoiceRoute: AuthenticatedVoiceRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedAnnouncementsIdRoute: AuthenticatedAnnouncementsIdRoute,
   AuthenticatedTicketIdRoute: AuthenticatedTicketIdRoute,

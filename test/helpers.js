@@ -280,6 +280,32 @@ export function createFakeExecutor() {
 		async listVoiceChannels() {
 			return [];
 		},
+		// Personal voice channels: channelId -> { guildId, parentId, members: [], state }
+		voiceChannels: new Map(),
+		async createHubChannel(guildId, { name }) {
+			const id = String(710000000000000000n + BigInt(this.voiceChannels.size + 1));
+			this.voiceChannels.set(id, { guildId, name, parentId: null, members: [] });
+			return id;
+		},
+		async parentOf(channelId) {
+			return this.voiceChannels.get(channelId)?.parentId ?? null;
+		},
+		async createVoiceRoom(guildId, options) {
+			const id = String(720000000000000000n + BigInt(this.voiceChannels.size + 1));
+			this.voiceChannels.set(id, { guildId, name: options.name, parentId: options.parentId, members: [], state: options });
+			return id;
+		},
+		async applyVoiceRoom(channelId, state) {
+			const channel = this.voiceChannels.get(channelId);
+			if (channel) channel.state = state;
+		},
+		async voiceChannelMembers(channelId) {
+			return this.voiceChannels.get(channelId)?.members ?? null;
+		},
+		roomPanels: [],
+		async sendRoomPanel(channelId, data) {
+			this.roomPanels.push({ channelId, ...data });
+		},
 		raidLocks: [],
 		async setRaidLocks(guildId, options) {
 			this.raidLocks.push(['lock', guildId, options]);

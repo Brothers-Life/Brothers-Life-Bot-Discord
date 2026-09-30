@@ -49,6 +49,7 @@ export async function execute(client) {
 		}
 	}
 	client.core.stats.seedVoice(states);
+	await client.core.voiceRooms.cleanup().catch(error => logger.warn('Voice rooms cleanup failed:', error.message));
 
 	await syncCommands(client, client.core);
 

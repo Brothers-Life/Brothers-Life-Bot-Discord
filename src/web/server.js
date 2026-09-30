@@ -22,6 +22,7 @@ import { registerAnnouncementRoutes } from './routes/announcements.js';
 import { registerOnboardingRoutes } from './routes/onboarding.js';
 import { registerAntiraidRoutes } from './routes/antiraid.js';
 import { registerStatsRoutes } from './routes/stats.js';
+import { registerVoiceRoutes } from './routes/voice.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_STATIC_DIR = path.resolve(__dirname, '..', '..', 'web', 'dist');
@@ -77,6 +78,7 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	registerOnboardingRoutes(app, { core });
 	registerAntiraidRoutes(app, { core });
 	registerStatsRoutes(app, { core });
+	registerVoiceRoutes(app, { core });
 
 	const hasPanel = fs.existsSync(path.join(staticDir, 'index.html'));
 	const sendPanel = (reply) => {
