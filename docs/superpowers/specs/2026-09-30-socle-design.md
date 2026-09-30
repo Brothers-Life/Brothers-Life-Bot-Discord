@@ -54,7 +54,7 @@ src/
 ├── db/                 # connexion, migrations SQL numérotées
 ├── bot/                # discord.js : commandes, events, exécuteur Discord
 ├── web/                # Fastify : OAuth2, sessions, API JSON, WebSocket console, sert web/dist
-└── utils/              # logger, config, i18n (repris du template corrigé)
+└── utils/              # logger, config (.env), i18n (repris du template corrigé)
 web/                    # interface React (shadcn-admin), compilée dans web/dist par la CI
 data/                   # bot.db, backups/, certificat auto-signé (non versionné)
 versions/               # versions installées (non versionné)
@@ -107,7 +107,7 @@ Exemples de permissions ajoutées plus tard : `sanctions.warn`, `sanctions.ban`,
   - ses rangs directs (`user_ranks`), qui permettent de donner l'accès au panel à quelqu'un sans lui donner de rôle Discord.
 - Ses **permissions effectives** sont l'union des permissions de tous ses rangs. Son **niveau** est le `level` le plus haut parmi ses rangs.
 - Recalcul quand les rôles changent (`GuildMemberUpdate`) ou quand un rang est modifié. Le résultat est gardé en cache mémoire. Une session ouverte perd immédiatement les permissions retirées.
-- `OWNER_ID` (config) a **toutes** les permissions, y compris celles des chantiers futurs, et ne peut pas être restreint depuis le panel. C'est la garantie qu'on ne se verrouille jamais dehors.
+- `OWNER_ID` (`.env`) a **toutes** les permissions, y compris celles des chantiers futurs, et ne peut pas être restreint depuis le panel. C'est la garantie qu'on ne se verrouille jamais dehors.
 
 ### Anti-escalade
 
@@ -143,12 +143,12 @@ Chaque log a une **catégorie**. Pour chaque serveur, chaque catégorie peut êt
 - `WEB_MODE` :
   - `http` : dev local ;
   - `https-selfsigned` : un certificat est généré au premier démarrage dans `data/tls/` et valable 10 ans. Son empreinte SHA-256 est affichée dans la console pour vérification ;
-  - `https-custom` : chemins `TLS_CERT` et `TLS_KEY` dans la config.
+  - `https-custom` : chemins `TLS_CERT` et `TLS_KEY` dans le `.env`.
 - Sert `/api/*` et le WebSocket `/api/console`. Tout le reste renvoie `web/dist/index.html` (routage côté client).
 
 ### Authentification
 
-- Discord OAuth2 (code grant), scope `identify` uniquement. L'URL de retour vient de `WEB_PUBLIC_URL` dans la config. Un paramètre `state` aléatoire, lié à un cookie temporaire, protège contre le CSRF de connexion.
+- Discord OAuth2 (code grant), scope `identify` uniquement. L'URL de retour vient de `WEB_PUBLIC_URL` dans le `.env`. Un paramètre `state` aléatoire, lié à un cookie temporaire, protège contre le CSRF de connexion.
 - Au retour, l'utilisateur doit avoir `panel.access` (ou être `OWNER_ID`). En cas de refus, on affiche une page d'erreur et on écrit `panel.login_denied` dans le journal.
 - Sessions côté serveur (table `sessions`), avec un cookie `sid` `HttpOnly`, `SameSite=Strict`, et `Secure` si HTTPS.
 - Durée de vie de 12h, et expiration après 2h d'inactivité. Page « Sessions » : liste et révocation.
@@ -222,20 +222,37 @@ Chaque archive contient `schema_version` (le numéro de la dernière migration).
 - Sinon, le panel propose de restaurer la sauvegarde la plus récente compatible avec cette version (`user_version` inférieur ou égal au `schema_version` cible), en affichant « Les données modifiées depuis le JJ/MM HH:MM seront perdues ». Il faut confirmer. Sans sauvegarde compatible, le retour est refusé.
 - Les 10 dernières sauvegardes sont conservées.
 
-## Configuration (`config.<env>.json`)
+## Configuration
 
-```json
-{
-  "TOKEN": "", "APP_ID": "", "CLIENT_SECRET": "", "DEV_GUILD_ID": "",
-  "OWNER_ID": "",
-  "WEB_PORT": 3000, "WEB_MODE": "http", "WEB_PUBLIC_URL": "http://localhost:3000",
-  "TLS_CERT": "", "TLS_KEY": "",
-  "GITHUB_REPO": "", "GITHUB_TOKEN": "",
-  "useCacheForTranslations": true
-}
+Toute la configuration passe par des fichiers `.env`, qui remplacent les `config.<env>.json` du template : `.env.dev` en local, `.env.prod` en prod. Le fichier est choisi par l'argument `dev` ou `prod`, et chargé avec `process.loadEnvFile` (intégré à Node, aucune dépendance). Sur Pterodactyl, les mêmes clés peuvent être définies comme variables de démarrage, qui passent alors avant le fichier. Seul `.env.example` est versionné.
+
+```dotenv
+# Discord
+TOKEN=
+APP_ID=
+CLIENT_SECRET=
+DEV_GUILD_ID=
+
+# Chef du réseau : seul compte qui a TOUTES les permissions, non modifiable depuis le panel
+OWNER_ID=267235400467218432
+
+# Panel web
+WEB_PORT=3000
+WEB_MODE=http                 # http | https-selfsigned | https-custom
+WEB_PUBLIC_URL=http://localhost:3000
+TLS_CERT=
+TLS_KEY=
+
+# Versions
+GITHUB_REPO=                  # owner/repo
+GITHUB_TOKEN=                 # lecture seule, seulement si le repo est privé
+
+USE_TRANSLATION_CACHE=true
 ```
 
-Au démarrage, `startupChecks` vérifie en plus `CLIENT_SECRET`, `OWNER_ID`, `WEB_PUBLIC_URL`, et la cohérence de `WEB_MODE` avec le protocole de `WEB_PUBLIC_URL`.
+`OWNER_ID` contient **un seul ID**. C'est la seule source des pleins pouvoirs : ni le panel ni la base ne peuvent en créer un second ou le modifier. Pour changer de chef, on modifie le `.env` et on redémarre.
+
+Au démarrage, `startupChecks` vérifie en plus `CLIENT_SECRET`, `OWNER_ID` (un ID Discord valide : 17 à 20 chiffres), `WEB_PUBLIC_URL`, et la cohérence de `WEB_MODE` avec le protocole de `WEB_PUBLIC_URL`.
 
 Intents Discord : `Guilds`, `GuildMembers` (privilégié) et `GuildModeration`. `MessageContent` et `GuildMessages` arriveront aux chantiers 3 et 4.
 
