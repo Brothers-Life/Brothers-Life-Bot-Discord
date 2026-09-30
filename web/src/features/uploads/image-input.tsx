@@ -55,7 +55,7 @@ export function ImageInput({ id, value, onChange, disabled, uploads = true, clas
   const uploaded = value?.startsWith('upload:')
   return (
     <div className={cn('flex min-w-0 items-center gap-2', className)}>
-      {value && <img src={imageUrl(value) ?? undefined} alt='' className='size-9 shrink-0 rounded border object-cover' />}
+      {value && /^(https:|upload:)/.test(value) && <img src={imageUrl(value) ?? undefined} alt='' className='size-9 shrink-0 rounded border object-cover' />}
       {uploaded
         ? <span id={id} className='flex h-9 min-w-0 flex-1 items-center truncate rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground'>Image envoyée</span>
         : <Input id={id} value={value ?? ''} placeholder='https://…' disabled={disabled} onChange={(ev) => onChange(ev.target.value || null)} className='min-w-0 flex-1' />}

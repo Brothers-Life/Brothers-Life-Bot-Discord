@@ -36,6 +36,7 @@ import { Route as AuthenticatedSanctionsRouteImport } from './routes/_authentica
 import { Route as AuthenticatedSessionsRouteImport } from './routes/_authenticated/sessions'
 import { Route as AuthenticatedStaffRolesRouteImport } from './routes/_authenticated/staff-roles'
 import { Route as AuthenticatedStatsRouteImport } from './routes/_authenticated/stats'
+import { Route as AuthenticatedStreamsRouteImport } from './routes/_authenticated/streams'
 import { Route as AuthenticatedTicketsRouteImport } from './routes/_authenticated/tickets'
 import { Route as AuthenticatedVersionsRouteImport } from './routes/_authenticated/versions'
 import { Route as AuthenticatedVoiceRouteImport } from './routes/_authenticated/voice'
@@ -179,6 +180,11 @@ const AuthenticatedStatsRoute = AuthenticatedStatsRouteImport.update({
   path: '/stats',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedStreamsRoute = AuthenticatedStreamsRouteImport.update({
+  id: '/streams',
+  path: '/streams',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedTicketsRoute = AuthenticatedTicketsRouteImport.update({
   id: '/tickets',
   path: '/tickets',
@@ -239,6 +245,7 @@ export interface FileRoutesByFullPath {
   '/sessions': typeof AuthenticatedSessionsRoute
   '/staff-roles': typeof AuthenticatedStaffRolesRoute
   '/stats': typeof AuthenticatedStatsRoute
+  '/streams': typeof AuthenticatedStreamsRoute
   '/tickets': typeof AuthenticatedTicketsRoute
   '/versions': typeof AuthenticatedVersionsRoute
   '/voice': typeof AuthenticatedVoiceRoute
@@ -272,6 +279,7 @@ export interface FileRoutesByTo {
   '/sessions': typeof AuthenticatedSessionsRoute
   '/staff-roles': typeof AuthenticatedStaffRolesRoute
   '/stats': typeof AuthenticatedStatsRoute
+  '/streams': typeof AuthenticatedStreamsRoute
   '/tickets': typeof AuthenticatedTicketsRoute
   '/versions': typeof AuthenticatedVersionsRoute
   '/voice': typeof AuthenticatedVoiceRoute
@@ -308,6 +316,7 @@ export interface FileRoutesById {
   '/_authenticated/sessions': typeof AuthenticatedSessionsRoute
   '/_authenticated/staff-roles': typeof AuthenticatedStaffRolesRoute
   '/_authenticated/stats': typeof AuthenticatedStatsRoute
+  '/_authenticated/streams': typeof AuthenticatedStreamsRoute
   '/_authenticated/tickets': typeof AuthenticatedTicketsRoute
   '/_authenticated/versions': typeof AuthenticatedVersionsRoute
   '/_authenticated/voice': typeof AuthenticatedVoiceRoute
@@ -345,6 +354,7 @@ export interface FileRouteTypes {
     | '/sessions'
     | '/staff-roles'
     | '/stats'
+    | '/streams'
     | '/tickets'
     | '/versions'
     | '/voice'
@@ -378,6 +388,7 @@ export interface FileRouteTypes {
     | '/sessions'
     | '/staff-roles'
     | '/stats'
+    | '/streams'
     | '/tickets'
     | '/versions'
     | '/voice'
@@ -413,6 +424,7 @@ export interface FileRouteTypes {
     | '/_authenticated/sessions'
     | '/_authenticated/staff-roles'
     | '/_authenticated/stats'
+    | '/_authenticated/streams'
     | '/_authenticated/tickets'
     | '/_authenticated/versions'
     | '/_authenticated/voice'
@@ -618,6 +630,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStatsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/streams': {
+      id: '/_authenticated/streams'
+      path: '/streams'
+      fullPath: '/streams'
+      preLoaderRoute: typeof AuthenticatedStreamsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/tickets': {
       id: '/_authenticated/tickets'
       path: '/tickets'
@@ -688,6 +707,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSessionsRoute: typeof AuthenticatedSessionsRoute
   AuthenticatedStaffRolesRoute: typeof AuthenticatedStaffRolesRoute
   AuthenticatedStatsRoute: typeof AuthenticatedStatsRoute
+  AuthenticatedStreamsRoute: typeof AuthenticatedStreamsRoute
   AuthenticatedTicketsRoute: typeof AuthenticatedTicketsRoute
   AuthenticatedVersionsRoute: typeof AuthenticatedVersionsRoute
   AuthenticatedVoiceRoute: typeof AuthenticatedVoiceRoute
@@ -722,6 +742,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSessionsRoute: AuthenticatedSessionsRoute,
   AuthenticatedStaffRolesRoute: AuthenticatedStaffRolesRoute,
   AuthenticatedStatsRoute: AuthenticatedStatsRoute,
+  AuthenticatedStreamsRoute: AuthenticatedStreamsRoute,
   AuthenticatedTicketsRoute: AuthenticatedTicketsRoute,
   AuthenticatedVersionsRoute: AuthenticatedVersionsRoute,
   AuthenticatedVoiceRoute: AuthenticatedVoiceRoute,

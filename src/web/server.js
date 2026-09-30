@@ -28,6 +28,7 @@ import { registerPollRoutes } from './routes/polls.js';
 import { registerGiveawayRoutes } from './routes/giveaways.js';
 import { registerFeedbackRoutes } from './routes/feedback.js';
 import { registerStaffRoutes } from './routes/staff.js';
+import { registerStreamRoutes } from './routes/streams.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_STATIC_DIR = path.resolve(__dirname, '..', '..', 'web', 'dist');
@@ -89,6 +90,7 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	registerGiveawayRoutes(app, { core });
 	registerFeedbackRoutes(app, { core });
 	registerStaffRoutes(app, { core });
+	registerStreamRoutes(app, { core });
 
 	const hasPanel = fs.existsSync(path.join(staticDir, 'index.html'));
 	const sendPanel = (reply) => {

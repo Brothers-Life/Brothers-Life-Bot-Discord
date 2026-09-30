@@ -1,5 +1,6 @@
 import {
   Gauge,
+  Radio,
   UserPlus,
   CalendarOff,
   Network,
@@ -68,6 +69,7 @@ export const navSections: NavSection[] = [
       { title: 'Sondages', url: '/polls', icon: Vote, permission: 'polls.view' },
       { title: 'Giveaways', url: '/giveaways', icon: Gift, permission: 'giveaways.view' },
       { title: 'Suggestions et bugs', url: '/feedback', icon: Lightbulb, permission: null },
+      { title: 'Streams et vidéos', url: '/streams', icon: Radio, permission: 'notifications.view' },
       { title: 'Messages dynamiques', url: '/messages', icon: MessagesSquare, permission: 'messages.view' },
       { title: 'Changelog', url: '/changelog', icon: ChangelogIcon, permission: 'changelog.view' },
     ],
