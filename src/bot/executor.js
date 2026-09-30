@@ -4,6 +4,7 @@ import { buildEmbeds, emojiOf } from './messages.js';
 import { roomPanel } from './voiceUi.js';
 import { pollPayload, pollResultsPayload } from './pollsUi.js';
 import { giveawayPayload, winnersPayload } from './giveawaysUi.js';
+import { boxPanelPayload, feedbackPayload, reviewPayload } from './feedbackUi.js';
 
 const COLORS = {
 	info: 0x5865f2,
@@ -307,6 +308,46 @@ export function createExecutor(client) {
 		async announceGiveawayWinners(channelId, messageId, data) {
 			const channel = await client.channels.fetch(channelId);
 			await channel.send({ ...winnersPayload(data), reply: { messageReference: messageId, failIfNotExists: false } });
+		},
+
+		// --- Suggestions and bugs ------------------------------------------------------------
+		async upsertFeedbackMessage(channelId, messageId, view, { thread = false, pingRoleIds = [] } = {}) {
+			const channel = await client.channels.fetch(channelId);
+			const payload = feedbackPayload(view);
+			if (messageId) {
+				const existing = await channel.messages.fetch(messageId).catch(() => null);
+				if (existing) await existing.edit(payload);
+				return { messageId };
+			}
+			const message = await channel.send({ ...payload, content: pingRoleIds.length ? pingRoleIds.map(id => `<@&${id}>`).join(' ') : undefined, allowedMentions: { roles: pingRoleIds } });
+			let threadId = null;
+			if (thread && channel.type === ChannelType.GuildText) {
+				threadId = (await message.startThread({ name: `#${view.item.number} ${view.item.title}`.slice(0, 100), reason: 'Discussion' }).catch(() => null))?.id ?? null;
+			}
+			return { messageId: message.id, threadId };
+		},
+
+		async sendFeedbackReview(channelId, view) {
+			const channel = await client.channels.fetch(channelId);
+			return (await channel.send(reviewPayload(view))).id;
+		},
+
+		async publishFeedbackPanel(channelId, messageId, box) {
+			const channel = await client.channels.fetch(channelId);
+			const payload = boxPanelPayload(box);
+			if (messageId) {
+				const existing = await channel.messages.fetch(messageId).catch(() => null);
+				if (existing) {
+					await existing.edit(payload);
+					return existing.id;
+				}
+			}
+			return (await channel.send(payload)).id;
+		},
+
+		async lockThread(threadId) {
+			const thread = await client.channels.fetch(threadId).catch(() => null);
+			if (thread?.isThread()) await thread.edit({ locked: true, archived: true });
 		},
 
 		async sendPollResults(channelId, messageId, data) {

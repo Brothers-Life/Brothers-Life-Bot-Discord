@@ -27,5 +27,6 @@ export const COMMANDS = [
 	{ name: 'changelog', category: 'Communauté', description: 'Voir les dernières nouveautés', permissions: [] },
 	{ name: 'sondage', category: 'Communauté', description: 'Créer un sondage rapide, fermer un sondage', permissions: ['polls.manage'] },
 	{ name: 'giveaway', category: 'Communauté', description: 'Lancer, finir, relancer un giveaway, voir ceux en cours', permissions: ['giveaways.manage'] },
+	{ name: 'proposer', category: 'Communauté', description: 'Suggestion, report de bug ou bug interne du staff', permissions: [] },
 	{ name: 'ping', category: 'Divers', description: 'Latence du bot', permissions: [] },
 ];

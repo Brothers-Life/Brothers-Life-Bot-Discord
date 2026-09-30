@@ -337,6 +337,24 @@ export function createFakeExecutor() {
 		async announceGiveawayWinners(channelId, messageId, data) {
 			this.winnerAnnouncements.push({ channelId, messageId, userIds: data.userIds, text: data.text });
 		},
+		feedbackMessages: [],
+		async upsertFeedbackMessage(channelId, messageId, view, options = {}) {
+			if (this.failOn.has(channelId)) throw new Error('Missing Access');
+			this.feedbackMessages.push({ channelId, messageId, status: view.status.key, up: view.item.up, pingRoleIds: options.pingRoleIds ?? [] });
+			return { messageId: messageId ?? String(760000000000000000n + BigInt(this.feedbackMessages.length)), threadId: options.thread ? '770000000000000001' : null };
+		},
+		reviews: [],
+		async sendFeedbackReview(channelId, view) {
+			this.reviews.push({ channelId, itemId: view.item.id });
+			return String(780000000000000000n + BigInt(this.reviews.length));
+		},
+		async publishFeedbackPanel(channelId, messageId) {
+			return messageId ?? '790000000000000001';
+		},
+		lockedThreads: [],
+		async lockThread(threadId) {
+			this.lockedThreads.push(threadId);
+		},
 		raidLocks: [],
 		async setRaidLocks(guildId, options) {
 			this.raidLocks.push(['lock', guildId, options]);
