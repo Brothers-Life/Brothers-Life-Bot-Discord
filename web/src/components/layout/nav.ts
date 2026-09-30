@@ -1,5 +1,6 @@
 import {
   Gauge,
+  Trophy,
   DatabaseBackup,
   Wand2,
   LayoutTemplate,
@@ -94,6 +95,7 @@ export const navSections: NavSection[] = [
       { title: 'Membres du panel', url: '/members', icon: Users, permission: 'ranks.view' },
       { title: 'Recrutement', url: '/recruitment', icon: UserPlus, permission: 'recruitment.view' },
       { title: 'Absences', url: '/absences', icon: CalendarOff, permission: null },
+      { title: 'Activité du staff', url: '/staff-activity', icon: Trophy, permission: 'staffactivity.view' },
     ],
   },
   {

@@ -143,6 +143,8 @@ const TITLES = {
 	'absences.reject': 'Absence refusée',
 	'absences.end': 'Fin d’absence',
 	'absences.extend': 'Absence prolongée',
+	'staffactivity.config': 'Réglages du rapport du staff modifiés',
+	'staffactivity.report': 'Rapport mensuel du staff publié',
 	'backups.create': 'Sauvegarde du serveur faite',
 	'backups.auto': 'Sauvegardes automatiques de la nuit',
 	'backups.delete': 'Sauvegarde supprimée',

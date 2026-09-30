@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { listPermissions } from '../../core/permissions.js';
 import { NotFoundError, ForbiddenError } from '../../core/errors.js';
 import { MIRROR } from '../../core/logRouting.js';
+import { listStaff } from '../../core/staffActivity.js';
 
 const SNOWFLAKE = { type: 'string', pattern: '^\\d{17,20}$' };
 const idParam = { type: 'object', properties: { id: SNOWFLAKE }, required: ['id'] };
@@ -129,36 +130,7 @@ export function registerPanelRoutes(app, { core, runtime }) {
 	});
 
 	// --- Panel members: who has which rank, and how ------------------------------------------
-	app.get('/api/members', { config: { permission: 'ranks.view' } }, async () => {
-		const mainId = network.getMainId();
-		const allRanks = ranks.list();
-		const members = new Map();
-		const entry = (id, user) => {
-			if (!members.has(id)) members.set(id, { id, username: user?.username ?? null, globalName: user?.globalName ?? null, avatar: user?.avatar ?? null, ranks: [] });
-			return members.get(id);
-		};
-
-		if (mainId) {
-			const links = allRanks.flatMap(r => r.roles.filter(l => l.guildId === mainId).map(l => ({ rank: r, roleId: l.roleId })));
-			const withRoles = await executor.listMembersWithAnyRole(mainId, [...new Set(links.map(l => l.roleId))]);
-			for (const member of withRoles) {
-				for (const link of links.filter(l => member.roleIds.includes(l.roleId))) {
-					entry(member.id, member).ranks.push({ id: link.rank.id, name: link.rank.name, level: link.rank.level, color: link.rank.color, via: 'role', roleId: link.roleId });
-				}
-			}
-		}
-
-		for (const assignment of ranks.listDirectAssignments()) {
-			const rank = allRanks.find(r => r.id === assignment.rankId);
-			if (!rank) continue;
-			const member = members.get(assignment.discordId) ?? entry(assignment.discordId, await executor.getUser(assignment.discordId));
-			member.ranks.push({ id: rank.id, name: rank.name, level: rank.level, color: rank.color, via: 'direct', addedBy: assignment.addedBy, addedAt: assignment.addedAt });
-		}
-
-		return [...members.values()]
-			.map(m => ({ ...m, level: Math.max(0, ...m.ranks.map(r => r.level)) }))
-			.sort((a, b) => b.level - a.level);
-	});
+	app.get('/api/members', { config: { permission: 'ranks.view' } }, async () => listStaff({ ranks, network, executor }));
 
 	const memberParams = { type: 'object', properties: { userId: SNOWFLAKE, rankId: { type: 'integer' } }, required: ['userId'] };
 
