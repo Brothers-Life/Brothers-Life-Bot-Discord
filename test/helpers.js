@@ -327,6 +327,16 @@ export function createFakeExecutor() {
 		async sendPollResults(channelId, messageId, data) {
 			this.pollResults.push({ channelId, messageId, data });
 		},
+		giveawayMessages: [],
+		async upsertGiveawayMessage(channelId, messageId, data) {
+			if (this.failOn.has(channelId)) throw new Error('Missing Access');
+			this.giveawayMessages.push({ channelId, messageId, data });
+			return messageId ?? String(750000000000000000n + BigInt(this.giveawayMessages.length));
+		},
+		winnerAnnouncements: [],
+		async announceGiveawayWinners(channelId, messageId, data) {
+			this.winnerAnnouncements.push({ channelId, messageId, userIds: data.userIds, text: data.text });
+		},
 		raidLocks: [],
 		async setRaidLocks(guildId, options) {
 			this.raidLocks.push(['lock', guildId, options]);

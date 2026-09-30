@@ -3,6 +3,7 @@ import { noticePayload, panelPayload, ratingPayload, welcomePayload } from './ti
 import { buildEmbeds, emojiOf } from './messages.js';
 import { roomPanel } from './voiceUi.js';
 import { pollPayload, pollResultsPayload } from './pollsUi.js';
+import { giveawayPayload, winnersPayload } from './giveawaysUi.js';
 
 const COLORS = {
 	info: 0x5865f2,
@@ -290,6 +291,22 @@ export function createExecutor(client) {
 			const message = await channel.send({ ...payload, content: payload.content || undefined });
 			if (data.poll.settings.pin) await message.pin().catch(() => null);
 			return message.id;
+		},
+
+		async upsertGiveawayMessage(channelId, messageId, data, { target } = {}) {
+			const channel = await client.channels.fetch(channelId);
+			const payload = giveawayPayload(data, { target });
+			if (messageId) {
+				const existing = await channel.messages.fetch(messageId).catch(() => null);
+				if (existing) await existing.edit({ ...payload, content: existing.content || null });
+				return messageId;
+			}
+			return (await channel.send({ ...payload, content: payload.content || undefined })).id;
+		},
+
+		async announceGiveawayWinners(channelId, messageId, data) {
+			const channel = await client.channels.fetch(channelId);
+			await channel.send({ ...winnersPayload(data), reply: { messageReference: messageId, failIfNotExists: false } });
 		},
 
 		async sendPollResults(channelId, messageId, data) {

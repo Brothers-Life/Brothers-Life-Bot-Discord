@@ -19,6 +19,7 @@ import { Route as AuthenticatedChangelogRouteImport } from './routes/_authentica
 import { Route as AuthenticatedCommandsRouteImport } from './routes/_authenticated/commands'
 import { Route as AuthenticatedConsoleRouteImport } from './routes/_authenticated/console'
 import { Route as AuthenticatedEventsRouteImport } from './routes/_authenticated/events'
+import { Route as AuthenticatedGiveawaysRouteImport } from './routes/_authenticated/giveaways'
 import { Route as AuthenticatedLogsRouteImport } from './routes/_authenticated/logs'
 import { Route as AuthenticatedMembersRouteImport } from './routes/_authenticated/members'
 import { Route as AuthenticatedMessagesRouteImport } from './routes/_authenticated/messages'
@@ -86,6 +87,11 @@ const AuthenticatedConsoleRoute = AuthenticatedConsoleRouteImport.update({
 const AuthenticatedEventsRoute = AuthenticatedEventsRouteImport.update({
   id: '/events',
   path: '/events',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedGiveawaysRoute = AuthenticatedGiveawaysRouteImport.update({
+  id: '/giveaways',
+  path: '/giveaways',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedLogsRoute = AuthenticatedLogsRouteImport.update({
@@ -197,6 +203,7 @@ export interface FileRoutesByFullPath {
   '/commands': typeof AuthenticatedCommandsRoute
   '/console': typeof AuthenticatedConsoleRoute
   '/events': typeof AuthenticatedEventsRoute
+  '/giveaways': typeof AuthenticatedGiveawaysRoute
   '/logs': typeof AuthenticatedLogsRoute
   '/members': typeof AuthenticatedMembersRoute
   '/messages': typeof AuthenticatedMessagesRoute
@@ -226,6 +233,7 @@ export interface FileRoutesByTo {
   '/commands': typeof AuthenticatedCommandsRoute
   '/console': typeof AuthenticatedConsoleRoute
   '/events': typeof AuthenticatedEventsRoute
+  '/giveaways': typeof AuthenticatedGiveawaysRoute
   '/logs': typeof AuthenticatedLogsRoute
   '/members': typeof AuthenticatedMembersRoute
   '/messages': typeof AuthenticatedMessagesRoute
@@ -258,6 +266,7 @@ export interface FileRoutesById {
   '/_authenticated/commands': typeof AuthenticatedCommandsRoute
   '/_authenticated/console': typeof AuthenticatedConsoleRoute
   '/_authenticated/events': typeof AuthenticatedEventsRoute
+  '/_authenticated/giveaways': typeof AuthenticatedGiveawaysRoute
   '/_authenticated/logs': typeof AuthenticatedLogsRoute
   '/_authenticated/members': typeof AuthenticatedMembersRoute
   '/_authenticated/messages': typeof AuthenticatedMessagesRoute
@@ -291,6 +300,7 @@ export interface FileRouteTypes {
     | '/commands'
     | '/console'
     | '/events'
+    | '/giveaways'
     | '/logs'
     | '/members'
     | '/messages'
@@ -320,6 +330,7 @@ export interface FileRouteTypes {
     | '/commands'
     | '/console'
     | '/events'
+    | '/giveaways'
     | '/logs'
     | '/members'
     | '/messages'
@@ -351,6 +362,7 @@ export interface FileRouteTypes {
     | '/_authenticated/commands'
     | '/_authenticated/console'
     | '/_authenticated/events'
+    | '/_authenticated/giveaways'
     | '/_authenticated/logs'
     | '/_authenticated/members'
     | '/_authenticated/messages'
@@ -448,6 +460,13 @@ declare module '@tanstack/react-router' {
       path: '/events'
       fullPath: '/events'
       preLoaderRoute: typeof AuthenticatedEventsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/giveaways': {
+      id: '/_authenticated/giveaways'
+      path: '/giveaways'
+      fullPath: '/giveaways'
+      preLoaderRoute: typeof AuthenticatedGiveawaysRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/logs': {
@@ -594,6 +613,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCommandsRoute: typeof AuthenticatedCommandsRoute
   AuthenticatedConsoleRoute: typeof AuthenticatedConsoleRoute
   AuthenticatedEventsRoute: typeof AuthenticatedEventsRoute
+  AuthenticatedGiveawaysRoute: typeof AuthenticatedGiveawaysRoute
   AuthenticatedLogsRoute: typeof AuthenticatedLogsRoute
   AuthenticatedMembersRoute: typeof AuthenticatedMembersRoute
   AuthenticatedMessagesRoute: typeof AuthenticatedMessagesRoute
@@ -624,6 +644,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCommandsRoute: AuthenticatedCommandsRoute,
   AuthenticatedConsoleRoute: AuthenticatedConsoleRoute,
   AuthenticatedEventsRoute: AuthenticatedEventsRoute,
+  AuthenticatedGiveawaysRoute: AuthenticatedGiveawaysRoute,
   AuthenticatedLogsRoute: AuthenticatedLogsRoute,
   AuthenticatedMembersRoute: AuthenticatedMembersRoute,
   AuthenticatedMessagesRoute: AuthenticatedMessagesRoute,

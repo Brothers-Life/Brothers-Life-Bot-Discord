@@ -23,6 +23,7 @@ import {
   Headphones,
   MessagesSquare,
   Vote,
+  Gift,
   ScrollText as ChangelogIcon,
 } from 'lucide-react'
 
@@ -62,6 +63,7 @@ export const navSections: NavSection[] = [
       { title: 'Statistiques', url: '/stats', icon: ChartColumn, permission: 'stats.view' },
       { title: 'Vocaux perso', url: '/voice', icon: Headphones, permission: 'voice.view' },
       { title: 'Sondages', url: '/polls', icon: Vote, permission: 'polls.view' },
+      { title: 'Giveaways', url: '/giveaways', icon: Gift, permission: 'giveaways.view' },
       { title: 'Messages dynamiques', url: '/messages', icon: MessagesSquare, permission: 'messages.view' },
       { title: 'Changelog', url: '/changelog', icon: ChangelogIcon, permission: 'changelog.view' },
     ],

@@ -104,6 +104,8 @@ async function main() {
 		setInterval(() => core.liveMessages.tick().catch(error => logger.error('Live messages failed:', error)), 60_000),
 		// Scheduled polls to open, open polls reaching their end
 		setInterval(() => core.polls.tick().catch(error => logger.error('Polls failed:', error)), 30_000),
+		// Giveaways to open, to draw, unclaimed prizes to reroll
+		setInterval(() => core.giveaways.tick().catch(error => logger.error('Giveaways failed:', error)), 30_000),
 		// Raids that are over
 		setInterval(() => core.antiraid.tick().catch(error => logger.error('Anti-raid tick failed:', error)), 30_000),
 		// Temporary roles reaching their end

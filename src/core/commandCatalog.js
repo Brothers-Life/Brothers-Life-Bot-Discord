@@ -26,5 +26,6 @@ export const COMMANDS = [
 	{ name: 'stats', category: 'Communauté', description: 'Statistiques du serveur, d’un membre, classements', permissions: [] },
 	{ name: 'changelog', category: 'Communauté', description: 'Voir les dernières nouveautés', permissions: [] },
 	{ name: 'sondage', category: 'Communauté', description: 'Créer un sondage rapide, fermer un sondage', permissions: ['polls.manage'] },
+	{ name: 'giveaway', category: 'Communauté', description: 'Lancer, finir, relancer un giveaway, voir ceux en cours', permissions: ['giveaways.manage'] },
 	{ name: 'ping', category: 'Divers', description: 'Latence du bot', permissions: [] },
 ];
