@@ -100,6 +100,8 @@ async function main() {
 		setInterval(() => core.stats.flush().catch(error => logger.error('Stats flush failed:', error)), 60_000),
 		setInterval(() => core.stats.updateCounters().catch(error => logger.error('Counters failed:', error)), 10 * 60_000),
 		setInterval(() => core.stats.purge(), 24 * HOUR),
+		// Dynamic messages whose variables need a refresh
+		setInterval(() => core.liveMessages.tick().catch(error => logger.error('Live messages failed:', error)), 60_000),
 		// Raids that are over
 		setInterval(() => core.antiraid.tick().catch(error => logger.error('Anti-raid tick failed:', error)), 30_000),
 		// Temporary roles reaching their end

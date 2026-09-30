@@ -274,6 +274,21 @@ export function createExecutor(client) {
 			return message.id;
 		},
 
+		// Edits the message if it still exists, otherwise posts it again (repost) — returns its id
+		async upsertMessage(channelId, messageId, payload, { repost = true } = {}) {
+			const channel = await client.channels.fetch(channelId);
+			const body = { content: payload.content || null, embeds: buildEmbeds(payload), allowedMentions: { parse: [] } };
+			if (messageId) {
+				const existing = await channel.messages.fetch(messageId).catch(() => null);
+				if (existing) {
+					await existing.edit(body);
+					return existing.id;
+				}
+				if (!repost) throw new Error('Le message a été supprimé de Discord.');
+			}
+			return (await channel.send({ ...body, content: payload.content || undefined })).id;
+		},
+
 		// Message edited in the panel ({ content, embed }), with files (image cards) and allowed user pings
 		async sendMessage(channelId, { payload, files = [], mentionUserIds = [], mentionRoleIds = [] }) {
 			const channel = await client.channels.fetch(channelId);

@@ -15,11 +15,13 @@ import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedAntiraidRouteImport } from './routes/_authenticated/antiraid'
 import { Route as AuthenticatedAuditRouteImport } from './routes/_authenticated/audit'
 import { Route as AuthenticatedAutomodRouteImport } from './routes/_authenticated/automod'
+import { Route as AuthenticatedChangelogRouteImport } from './routes/_authenticated/changelog'
 import { Route as AuthenticatedCommandsRouteImport } from './routes/_authenticated/commands'
 import { Route as AuthenticatedConsoleRouteImport } from './routes/_authenticated/console'
 import { Route as AuthenticatedEventsRouteImport } from './routes/_authenticated/events'
 import { Route as AuthenticatedLogsRouteImport } from './routes/_authenticated/logs'
 import { Route as AuthenticatedMembersRouteImport } from './routes/_authenticated/members'
+import { Route as AuthenticatedMessagesRouteImport } from './routes/_authenticated/messages'
 import { Route as AuthenticatedNetworkRouteImport } from './routes/_authenticated/network'
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
 import { Route as AuthenticatedPeopleRouteImport } from './routes/_authenticated/people'
@@ -65,6 +67,11 @@ const AuthenticatedAutomodRoute = AuthenticatedAutomodRouteImport.update({
   path: '/automod',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedChangelogRoute = AuthenticatedChangelogRouteImport.update({
+  id: '/changelog',
+  path: '/changelog',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedCommandsRoute = AuthenticatedCommandsRouteImport.update({
   id: '/commands',
   path: '/commands',
@@ -88,6 +95,11 @@ const AuthenticatedLogsRoute = AuthenticatedLogsRouteImport.update({
 const AuthenticatedMembersRoute = AuthenticatedMembersRouteImport.update({
   id: '/members',
   path: '/members',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedMessagesRoute = AuthenticatedMessagesRouteImport.update({
+  id: '/messages',
+  path: '/messages',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedNetworkRoute = AuthenticatedNetworkRouteImport.update({
@@ -175,11 +187,13 @@ export interface FileRoutesByFullPath {
   '/antiraid': typeof AuthenticatedAntiraidRoute
   '/audit': typeof AuthenticatedAuditRoute
   '/automod': typeof AuthenticatedAutomodRoute
+  '/changelog': typeof AuthenticatedChangelogRoute
   '/commands': typeof AuthenticatedCommandsRoute
   '/console': typeof AuthenticatedConsoleRoute
   '/events': typeof AuthenticatedEventsRoute
   '/logs': typeof AuthenticatedLogsRoute
   '/members': typeof AuthenticatedMembersRoute
+  '/messages': typeof AuthenticatedMessagesRoute
   '/network': typeof AuthenticatedNetworkRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/people': typeof AuthenticatedPeopleRoute
@@ -201,11 +215,13 @@ export interface FileRoutesByTo {
   '/antiraid': typeof AuthenticatedAntiraidRoute
   '/audit': typeof AuthenticatedAuditRoute
   '/automod': typeof AuthenticatedAutomodRoute
+  '/changelog': typeof AuthenticatedChangelogRoute
   '/commands': typeof AuthenticatedCommandsRoute
   '/console': typeof AuthenticatedConsoleRoute
   '/events': typeof AuthenticatedEventsRoute
   '/logs': typeof AuthenticatedLogsRoute
   '/members': typeof AuthenticatedMembersRoute
+  '/messages': typeof AuthenticatedMessagesRoute
   '/network': typeof AuthenticatedNetworkRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/people': typeof AuthenticatedPeopleRoute
@@ -230,11 +246,13 @@ export interface FileRoutesById {
   '/_authenticated/antiraid': typeof AuthenticatedAntiraidRoute
   '/_authenticated/audit': typeof AuthenticatedAuditRoute
   '/_authenticated/automod': typeof AuthenticatedAutomodRoute
+  '/_authenticated/changelog': typeof AuthenticatedChangelogRoute
   '/_authenticated/commands': typeof AuthenticatedCommandsRoute
   '/_authenticated/console': typeof AuthenticatedConsoleRoute
   '/_authenticated/events': typeof AuthenticatedEventsRoute
   '/_authenticated/logs': typeof AuthenticatedLogsRoute
   '/_authenticated/members': typeof AuthenticatedMembersRoute
+  '/_authenticated/messages': typeof AuthenticatedMessagesRoute
   '/_authenticated/network': typeof AuthenticatedNetworkRoute
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
   '/_authenticated/people': typeof AuthenticatedPeopleRoute
@@ -260,11 +278,13 @@ export interface FileRouteTypes {
     | '/antiraid'
     | '/audit'
     | '/automod'
+    | '/changelog'
     | '/commands'
     | '/console'
     | '/events'
     | '/logs'
     | '/members'
+    | '/messages'
     | '/network'
     | '/onboarding'
     | '/people'
@@ -286,11 +306,13 @@ export interface FileRouteTypes {
     | '/antiraid'
     | '/audit'
     | '/automod'
+    | '/changelog'
     | '/commands'
     | '/console'
     | '/events'
     | '/logs'
     | '/members'
+    | '/messages'
     | '/network'
     | '/onboarding'
     | '/people'
@@ -314,11 +336,13 @@ export interface FileRouteTypes {
     | '/_authenticated/antiraid'
     | '/_authenticated/audit'
     | '/_authenticated/automod'
+    | '/_authenticated/changelog'
     | '/_authenticated/commands'
     | '/_authenticated/console'
     | '/_authenticated/events'
     | '/_authenticated/logs'
     | '/_authenticated/members'
+    | '/_authenticated/messages'
     | '/_authenticated/network'
     | '/_authenticated/onboarding'
     | '/_authenticated/people'
@@ -386,6 +410,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAutomodRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/changelog': {
+      id: '/_authenticated/changelog'
+      path: '/changelog'
+      fullPath: '/changelog'
+      preLoaderRoute: typeof AuthenticatedChangelogRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/commands': {
       id: '/_authenticated/commands'
       path: '/commands'
@@ -419,6 +450,13 @@ declare module '@tanstack/react-router' {
       path: '/members'
       fullPath: '/members'
       preLoaderRoute: typeof AuthenticatedMembersRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/messages': {
+      id: '/_authenticated/messages'
+      path: '/messages'
+      fullPath: '/messages'
+      preLoaderRoute: typeof AuthenticatedMessagesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/network': {
@@ -533,11 +571,13 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAntiraidRoute: typeof AuthenticatedAntiraidRoute
   AuthenticatedAuditRoute: typeof AuthenticatedAuditRoute
   AuthenticatedAutomodRoute: typeof AuthenticatedAutomodRoute
+  AuthenticatedChangelogRoute: typeof AuthenticatedChangelogRoute
   AuthenticatedCommandsRoute: typeof AuthenticatedCommandsRoute
   AuthenticatedConsoleRoute: typeof AuthenticatedConsoleRoute
   AuthenticatedEventsRoute: typeof AuthenticatedEventsRoute
   AuthenticatedLogsRoute: typeof AuthenticatedLogsRoute
   AuthenticatedMembersRoute: typeof AuthenticatedMembersRoute
+  AuthenticatedMessagesRoute: typeof AuthenticatedMessagesRoute
   AuthenticatedNetworkRoute: typeof AuthenticatedNetworkRoute
   AuthenticatedOnboardingRoute: typeof AuthenticatedOnboardingRoute
   AuthenticatedPeopleRoute: typeof AuthenticatedPeopleRoute
@@ -560,11 +600,13 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAntiraidRoute: AuthenticatedAntiraidRoute,
   AuthenticatedAuditRoute: AuthenticatedAuditRoute,
   AuthenticatedAutomodRoute: AuthenticatedAutomodRoute,
+  AuthenticatedChangelogRoute: AuthenticatedChangelogRoute,
   AuthenticatedCommandsRoute: AuthenticatedCommandsRoute,
   AuthenticatedConsoleRoute: AuthenticatedConsoleRoute,
   AuthenticatedEventsRoute: AuthenticatedEventsRoute,
   AuthenticatedLogsRoute: AuthenticatedLogsRoute,
   AuthenticatedMembersRoute: AuthenticatedMembersRoute,
+  AuthenticatedMessagesRoute: AuthenticatedMessagesRoute,
   AuthenticatedNetworkRoute: AuthenticatedNetworkRoute,
   AuthenticatedOnboardingRoute: AuthenticatedOnboardingRoute,
   AuthenticatedPeopleRoute: AuthenticatedPeopleRoute,

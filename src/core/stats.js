@@ -360,6 +360,9 @@ export function createStats({ db, network, audit, executor, logger = console, no
 		},
 
 		// --- Counter channels ----------------------------------------------------------------------
+		// Live numbers of a server ({members}, {voice}, {staff}, FiveM…), formatted for display
+		variables: counterVars,
+
 		addVariables(provider) {
 			variableProviders.push(provider);
 		},

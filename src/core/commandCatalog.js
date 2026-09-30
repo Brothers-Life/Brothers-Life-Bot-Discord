@@ -24,5 +24,6 @@ export const COMMANDS = [
 	{ name: 'raid', category: 'Modération', description: 'Activer ou arrêter le mode raid', permissions: ['antiraid.manage'] },
 	{ name: 'ticket', category: 'Tickets', description: 'Gérer le ticket du salon : ajouter, statut, priorité, transférer, fermer…', permissions: ['tickets.handle'] },
 	{ name: 'stats', category: 'Communauté', description: 'Statistiques du serveur, d’un membre, classements', permissions: [] },
+	{ name: 'changelog', category: 'Communauté', description: 'Voir les dernières nouveautés', permissions: [] },
 	{ name: 'ping', category: 'Divers', description: 'Latence du bot', permissions: [] },
 ];

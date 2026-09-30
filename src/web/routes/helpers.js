@@ -8,3 +8,15 @@ export async function resolveNames(executor, ids) {
 }
 
 export const snowflake = { type: 'string', pattern: '^\\d{17,20}$' };
+
+// Servers of the network with their text channels (and roles), to choose where to post
+export async function networkTargets(core) {
+	const guilds = core.network.list().filter(g => g.status === 'active' && g.botPresent);
+	return Promise.all(guilds.map(async g => ({
+		id: g.id,
+		name: g.name,
+		isMain: g.isMain,
+		channels: await core.executor.listTextChannels(g.id),
+		roles: (await core.executor.listRoles(g.id)).map(({ id, name, color }) => ({ id, name, color })),
+	})));
+}

@@ -306,6 +306,17 @@ export function createFakeExecutor() {
 		async sendRoomPanel(channelId, data) {
 			this.roomPanels.push({ channelId, ...data });
 		},
+		// Messages edited in place: channelId -> Map(messageId -> payload)
+		posted: new Map(),
+		async upsertMessage(channelId, messageId, payload) {
+			if (this.failOn.has(channelId)) throw new Error('Missing Access');
+			const messages = this.posted.get(channelId) ?? new Map();
+			this.posted.set(channelId, messages);
+			const id = messageId && messages.has(messageId) ? messageId : String(730000000000000000n + BigInt(this.calls.length + messages.size + 1));
+			messages.set(id, payload);
+			this.calls.push(['upsert', channelId, id]);
+			return id;
+		},
 		raidLocks: [],
 		async setRaidLocks(guildId, options) {
 			this.raidLocks.push(['lock', guildId, options]);

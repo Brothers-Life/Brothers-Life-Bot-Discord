@@ -20,6 +20,8 @@ import { createOnboarding } from './onboarding.js';
 import { createAntiraid } from './antiraid.js';
 import { createStats } from './stats.js';
 import { createVoiceRooms } from './voiceRooms.js';
+import { createLiveMessages } from './liveMessages.js';
+import { createChangelog } from './changelog.js';
 import { createPermissionSync } from './permissionSync.js';
 import { definePermission } from './permissions.js';
 
@@ -62,6 +64,9 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const stats = createStats({ db, network, audit, executor, logger });
 	const voiceRooms = createVoiceRooms({ db, network, audit, executor, logger });
 	logs.registerCategory('voice', 'Vocaux personnels (créés, transférés, fermés)');
+	const liveMessages = createLiveMessages({ db, network, audit, executor, stats, logger });
+	const changelog = createChangelog({ db, network, audit, executor, logger });
+	logs.registerCategory('changelog', 'Changelog publié');
 	const permissionSync = createPermissionSync({ db, network, ranks, audit, executor, logs, settings });
 
 	// Every audited action is also posted in the log channel of its category
@@ -95,5 +100,5 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 		sanctions.syncGuild(guild.id).catch(error => logger.error(`Ban sync failed on ${guild.name}:`, error));
 	});
 
-	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms };
+	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog };
 }
