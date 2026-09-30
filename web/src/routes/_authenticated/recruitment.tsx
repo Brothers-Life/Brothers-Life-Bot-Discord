@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Download, MessageSquarePlus, Plus, Save, Send, ThumbsDown, ThumbsUp, Trash2, Minus } from 'lucide-react'
+import { CheckCircle2, Download, Inbox, MessageSquarePlus, MessagesSquare, Plus, Save, Send, ThumbsDown, ThumbsUp, Trash2, Minus } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Channel, FormDef, Guild, RankSummary, Role } from '@/lib/types'
 import { ago, dateTime } from '@/lib/format'
 import { useMe } from '@/hooks/use-me'
-import { Page, Section, EmptyState, Pill, UserAvatar, GuildIcon } from '@/components/app/ui'
+import { Page, Section, EmptyState, Pill, StatCards, UserAvatar, GuildIcon } from '@/components/app/ui'
 import { CategorySelect, ChannelSelect, RolesPicker } from '@/components/app/pickers'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { FormBuilder } from '@/features/forms/form-builder'
@@ -83,7 +83,12 @@ function Recruitment({ guildId }: { guildId: string }) {
         <TabsTrigger value='applications'>Candidatures</TabsTrigger>
         <TabsTrigger value='positions'>Postes ({data.positions.length})</TabsTrigger>
       </TabsList>
-      <TabsContent value='applications' className='mt-4'>
+      <TabsContent value='applications' className='mt-4 grid gap-4'>
+        <StatCards className='lg:grid-cols-3' items={[
+          { label: 'À traiter', value: data.applications.filter((a) => ['received', 'review'].includes(a.status)).length, icon: Inbox, tone: 'warning' },
+          { label: 'En entretien', value: data.applications.filter((a) => a.status === 'interview').length, icon: MessagesSquare, tone: 'info' },
+          { label: 'Acceptées', value: data.applications.filter((a) => a.status === 'accepted').length, icon: CheckCircle2, tone: 'success' },
+        ]} />
         <Section
           title={`${list.length} candidature${list.length > 1 ? 's' : ''}`}
           actions={
@@ -195,7 +200,7 @@ function ApplicationDialog({ id, data, guildId, onClose }: { id: number; data: P
                   {a.status === 'received' && <Button variant='outline' onClick={() => decide.mutate('review')}>🔎 En étude</Button>}
                   {a.status !== 'interview' && <Button variant='outline' onClick={() => decide.mutate('interview')}>🗣️ Entretien</Button>}
                   <Button variant='destructive' onClick={() => decide.mutate('rejected')}>Refuser</Button>
-                  <Button className='bg-success text-white hover:bg-success/90' onClick={() => decide.mutate('accepted')}>Accepter</Button>
+                  <Button variant='success' onClick={() => decide.mutate('accepted')}>Accepter</Button>
                 </div>
               </DialogFooter>
             )}
@@ -239,7 +244,7 @@ function Positions({ data, guildId }: { data: Payload; guildId: string }) {
                 {manage && (
                   <div className='flex gap-2'>
                     <Button size='sm' variant='outline' onClick={() => setEditing(p)}>Modifier</Button>
-                    <Button size='sm' variant='ghost' className='text-destructive' onClick={() => setDeleting(p)}><Trash2 /></Button>
+                    <Button size='sm' variant='danger-ghost' onClick={() => setDeleting(p)}><Trash2 /></Button>
                   </div>
                 )}
               </li>

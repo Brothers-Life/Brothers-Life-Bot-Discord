@@ -175,11 +175,11 @@ function Items({ box }: { box: Box }) {
                   <div className='flex flex-wrap gap-1'>
                     {!i.approved && <>
                       <Button size='sm' variant='outline' onClick={() => review.mutate({ i, ok: true })}><Check /> Publier</Button>
-                      <Button size='sm' variant='ghost' className='text-destructive' onClick={() => review.mutate({ i, ok: false })}><X /> Refuser</Button>
+                      <Button size='sm' variant='danger-ghost' onClick={() => review.mutate({ i, ok: false })}><X /> Refuser</Button>
                     </>}
                     {box.kind === 'staff' && !i.assignee && i.approved && <Button size='sm' variant='outline' onClick={() => assign.mutate(i)}><UserCheck /> Je prends</Button>}
                     {i.approved && <Button size='sm' variant='outline' onClick={() => setEditing(i)}>Statut</Button>}
-                    {can('feedback.manage') && <Button size='icon' variant='ghost' className='text-destructive' aria-label='Supprimer' onClick={() => setDeleting(i)}><Trash2 /></Button>}
+                    {can('feedback.manage') && <Button size='icon' variant='danger-ghost' aria-label='Supprimer' onClick={() => setDeleting(i)}><Trash2 /></Button>}
                   </div>
                 )}
               </li>
@@ -249,7 +249,7 @@ function BoxSettings({ box, data, guildId, onDeleted }: { box: Box; data: Payloa
 
   return (
     <div className='grid gap-6'>
-      <Section title='Général' actions={manage && <Button size='sm' variant='ghost' className='text-destructive' onClick={() => setDeleting(true)}><Trash2 /> Supprimer la boîte</Button>}>
+      <Section title='Général' actions={manage && <Button size='sm' variant='danger-ghost' onClick={() => setDeleting(true)}><Trash2 /> Supprimer la boîte</Button>}>
         <div className='grid gap-4 p-4'>
           <div className='grid gap-4 sm:grid-cols-2'>
             <div className='grid gap-1.5'><Label htmlFor='b-name'>Nom</Label><Input id='b-name' value={name} maxLength={60} disabled={!manage} onChange={(e) => setName(e.target.value)} /></div>

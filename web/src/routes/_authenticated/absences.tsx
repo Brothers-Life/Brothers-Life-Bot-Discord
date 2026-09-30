@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarPlus, Check, Save, X } from 'lucide-react'
+import { CalendarClock, CalendarOff, CalendarPlus, Check, Hourglass, Save, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Channel, Role } from '@/lib/types'
 import { dateTime } from '@/lib/format'
 import { useMe } from '@/hooks/use-me'
-import { Page, Section, EmptyState, Pill, UserAvatar } from '@/components/app/ui'
+import { Page, Section, EmptyState, Pill, StatCards, UserAvatar } from '@/components/app/ui'
 import { ChannelSelect } from '@/components/app/pickers'
 import { UserPicker } from '@/components/app/user-picker'
 import { Button } from '@/components/ui/button'
@@ -65,6 +65,11 @@ function AbsencesPage() {
     >
       {!data ? <Skeleton className='h-96 w-full' /> : (
         <div className='grid gap-6'>
+          <StatCards className='lg:grid-cols-3' items={[
+            { label: 'Absents en ce moment', value: data.absences.filter((a) => a.status === 'active').length, icon: CalendarOff, tone: 'info' },
+            { label: 'Absences prévues', value: data.absences.filter((a) => a.status === 'approved').length, icon: CalendarClock, tone: 'accent' },
+            { label: 'À valider', value: data.absences.filter((a) => a.status === 'pending').length, icon: Hourglass, tone: data.absences.some((a) => a.status === 'pending') ? 'warning' : 'neutral' },
+          ]} />
           <Section
             title={filter === 'current' ? 'En cours et à venir' : 'Historique'}
             actions={
@@ -86,8 +91,8 @@ function AbsencesPage() {
                     <div className='flex flex-wrap gap-2'>
                       {a.status === 'pending' && manage && !mine(a) && (
                         <>
-                          <Button size='sm' variant='outline' className='text-success' onClick={() => review.mutate({ id: a.id, approved: true })}><Check /> Valider</Button>
-                          <Button size='sm' variant='outline' className='text-destructive' onClick={() => review.mutate({ id: a.id, approved: false })}><X /> Refuser</Button>
+                          <Button size='sm' variant='success-outline' onClick={() => review.mutate({ id: a.id, approved: true })}><Check /> Valider</Button>
+                          <Button size='sm' variant='danger-outline' onClick={() => review.mutate({ id: a.id, approved: false })}><X /> Refuser</Button>
                         </>
                       )}
                       {['pending', 'approved', 'active'].includes(a.status) && (manage || mine(a)) && (

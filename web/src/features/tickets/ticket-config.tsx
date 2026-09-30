@@ -107,7 +107,7 @@ export function TicketConfigPanel({ guildId }: { guildId: string }) {
                   {manage && (
                     <div className='flex gap-2'>
                       <Button size='sm' variant='outline' onClick={() => setEditing(c)}><Pencil /> Modifier</Button>
-                      <Button size='sm' variant='ghost' className='text-destructive' onClick={() => setDeleting(c)}>Supprimer</Button>
+                      <Button size='sm' variant='danger-ghost' onClick={() => setDeleting(c)}>Supprimer</Button>
                     </div>
                   )}
                 </li>
@@ -147,7 +147,7 @@ export function TicketConfigPanel({ guildId }: { guildId: string }) {
                       <Send /> {p.messageId ? 'Mettre à jour' : 'Publier'}
                     </Button>
                     <Button size='sm' variant='outline' onClick={() => setEditingPanel(p)}><Pencil /> Modifier</Button>
-                    <Button size='sm' variant='ghost' className='text-destructive' onClick={() => setDeletingPanel(p)}>Supprimer</Button>
+                    <Button size='sm' variant='danger-ghost' onClick={() => setDeletingPanel(p)}>Supprimer</Button>
                   </div>
                 )}
               </li>
@@ -236,7 +236,7 @@ function StatusesEditor({ guildId, config, disabled }: { guildId: string; config
             <div className='flex gap-1'>
               <Button type='button' size='icon' variant='ghost' aria-label='Monter' disabled={disabled || i === 0} onClick={() => move(i, i - 1)}><ArrowUp /></Button>
               <Button type='button' size='icon' variant='ghost' aria-label='Descendre' disabled={disabled || i === statuses.length - 1} onClick={() => move(i, i + 1)}><ArrowDown /></Button>
-              <Button type='button' size='icon' variant='ghost' className='text-destructive' aria-label={`Supprimer le statut ${s.label}`} disabled={disabled || s.builtin} onClick={() => setStatuses(statuses.filter((_, j) => j !== i))}><Trash2 /></Button>
+              <Button type='button' size='icon' variant='danger-ghost' aria-label={`Supprimer le statut ${s.label}`} disabled={disabled || s.builtin} onClick={() => setStatuses(statuses.filter((_, j) => j !== i))}><Trash2 /></Button>
             </div>
           </li>
         ))}
@@ -537,7 +537,7 @@ function CategoryDialog({ guildId, config, initial, onClose }: { guildId: string
         </form>
         <DialogFooter>
           <Button variant='outline' onClick={onClose}>Annuler</Button>
-          <Button type='submit' form='category-form' disabled={!c.name?.trim() || save.isPending}>Enregistrer</Button>
+          <Button loading={save.isPending} type='submit' form='category-form' disabled={!c.name?.trim() || save.isPending}>Enregistrer</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -644,7 +644,7 @@ function PanelDialog({ guildId, config, initial, onClose }: { guildId: string; c
         </form>
         <DialogFooter>
           <Button variant='outline' onClick={onClose}>Annuler</Button>
-          <Button type='submit' form='panel-form' disabled={!p.name?.trim() || save.isPending}>Enregistrer</Button>
+          <Button loading={save.isPending} type='submit' form='panel-form' disabled={!p.name?.trim() || save.isPending}>Enregistrer</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

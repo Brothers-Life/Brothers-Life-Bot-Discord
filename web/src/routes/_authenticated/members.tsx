@@ -142,7 +142,7 @@ function AssignDialog({ ranks, onClose }: { ranks: RanksPayload['ranks']; onClos
         </form>
         <DialogFooter>
           <Button variant='outline' onClick={onClose}>Annuler</Button>
-          <Button type='submit' form='assign-form' disabled={!validId || !rankId || assign.isPending}>Attribuer</Button>
+          <Button loading={assign.isPending} type='submit' form='assign-form' disabled={!validId || !rankId || assign.isPending}>Attribuer</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

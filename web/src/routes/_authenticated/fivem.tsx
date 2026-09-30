@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, MessageSquarePlus, Pencil, Plus, Save, Trash2, X } from 'lucide-react'
+import { ChevronDown, Gamepad2, MessageSquarePlus, Pencil, Plus, Save, Server, Trash2, Users, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Channel } from '@/lib/types'
 import { ago } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useMe } from '@/hooks/use-me'
-import { Page, Section, EmptyState, Pill } from '@/components/app/ui'
+import { Page, Section, EmptyState, Pill, StatCards } from '@/components/app/ui'
 import { ChannelSelect } from '@/components/app/pickers'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Button } from '@/components/ui/button'
@@ -45,6 +45,13 @@ function FivemPage() {
     >
       {!data ? <Skeleton className='h-96 w-full' /> : (
         <div className='grid gap-6'>
+          {data.servers.length > 0 && (
+            <StatCards className='lg:grid-cols-3' items={[
+              { label: 'Serveurs en ligne', value: `${data.servers.filter((s) => s.status?.online).length}/${data.servers.length}`, icon: Server, tone: data.servers.every((s) => s.status?.online) ? 'success' : 'warning' },
+              { label: 'Joueurs connectés', value: data.servers.reduce((n, s) => n + (s.status?.online ? s.status.players : 0), 0), icon: Users, tone: 'accent' },
+              { label: 'Places au total', value: data.servers.reduce((n, s) => n + (s.status?.online ? s.status.max : 0), 0), icon: Gamepad2, tone: 'info' },
+            ]} />
+          )}
           {!data.servers.length
             ? <Section title='Serveurs'><EmptyState title='Aucun serveur FiveM'>Ajoute l’adresse ip:port de ton serveur.</EmptyState></Section>
             : <div className='grid gap-4 lg:grid-cols-2'>{data.servers.map((s) => <ServerCard key={s.id} server={s} data={data} manage={manage} onEdit={() => setEditing(s)} />)}</div>}
@@ -81,7 +88,7 @@ function ServerCard({ server: s, data, manage, onEdit }: { server: Server; data:
         {manage && (
           <div className='flex gap-1'>
             <Button size='icon' variant='ghost' aria-label={`Modifier ${s.name}`} onClick={onEdit}><Pencil /></Button>
-            <Button size='icon' variant='ghost' className='text-destructive' aria-label={`Supprimer ${s.name}`} onClick={() => setDeleting(true)}><Trash2 /></Button>
+            <Button size='icon' variant='danger-ghost' aria-label={`Supprimer ${s.name}`} onClick={() => setDeleting(true)}><Trash2 /></Button>
           </div>
         )}
       </div>

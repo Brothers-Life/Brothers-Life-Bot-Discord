@@ -68,7 +68,7 @@ export function FormBuilder({ value, onChange, disabled, allowEmpty = true }: {
               </div>
               <Button type='button' size='icon' variant='ghost' aria-label='Monter l’étape' disabled={disabled || si === 0} onClick={() => setSteps(move(steps, si, si - 1))}><ArrowUp /></Button>
               <Button type='button' size='icon' variant='ghost' aria-label='Descendre l’étape' disabled={disabled || si === steps.length - 1} onClick={() => setSteps(move(steps, si, si + 1))}><ArrowDown /></Button>
-              <Button type='button' size='icon' variant='ghost' className='text-destructive' aria-label='Supprimer l’étape' disabled={disabled || (!allowEmpty && steps.length === 1)} onClick={() => setSteps(steps.filter((_, j) => j !== si))}><Trash2 /></Button>
+              <Button type='button' size='icon' variant='danger-ghost' aria-label='Supprimer l’étape' disabled={disabled || (!allowEmpty && steps.length === 1)} onClick={() => setSteps(steps.filter((_, j) => j !== si))}><Trash2 /></Button>
             </div>
             {si > 0 && earlier.length > 0 && (
               <div className='flex flex-wrap items-center gap-2 text-sm'>
@@ -117,7 +117,7 @@ export function FormBuilder({ value, onChange, disabled, allowEmpty = true }: {
                     </label>
                     <Button type='button' size='icon' variant='ghost' aria-label='Monter la question' disabled={disabled || qi === 0} onClick={() => patchStep(si, { questions: move(step.questions, qi, qi - 1) })}><ArrowUp /></Button>
                     <Button type='button' size='icon' variant='ghost' aria-label='Descendre la question' disabled={disabled || qi === step.questions.length - 1} onClick={() => patchStep(si, { questions: move(step.questions, qi, qi + 1) })}><ArrowDown /></Button>
-                    <Button type='button' size='icon' variant='ghost' className='text-destructive' aria-label='Supprimer la question' disabled={disabled || step.questions.length === 1} onClick={() => patchStep(si, { questions: step.questions.filter((_, j) => j !== qi) })}><X /></Button>
+                    <Button type='button' size='icon' variant='danger-ghost' aria-label='Supprimer la question' disabled={disabled || step.questions.length === 1} onClick={() => patchStep(si, { questions: step.questions.filter((_, j) => j !== qi) })}><X /></Button>
                   </div>
                   <div className='grid gap-3 sm:grid-cols-2'>
                     <div className='grid gap-1.5'>

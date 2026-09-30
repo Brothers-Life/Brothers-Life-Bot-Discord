@@ -124,7 +124,7 @@ function EntryEditor({ entry, guilds, onSaved, onDeleted }: { entry: Entry | nul
   return (
     <div className='grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]'>
       <div className='grid content-start gap-6'>
-        <Section title={entry ? 'Modifier l’entrée' : 'Nouvelle entrée'} actions={entry && manage && <Button size='sm' variant='ghost' className='text-destructive' onClick={() => setDeleting(true)}><Trash2 /> Supprimer</Button>}>
+        <Section title={entry ? 'Modifier l’entrée' : 'Nouvelle entrée'} actions={entry && manage && <Button size='sm' variant='danger-ghost' onClick={() => setDeleting(true)}><Trash2 /> Supprimer</Button>}>
           <div className='grid gap-4 p-4'>
             <div className='grid gap-4 sm:grid-cols-[8rem_1fr_6rem]'>
               <div className='grid gap-1.5'><Label htmlFor='cl-v'>Version</Label><Input id='cl-v' value={e.version} maxLength={30} placeholder='v2.4' disabled={!manage} onChange={(ev) => setE({ ...e, version: ev.target.value })} /></div>

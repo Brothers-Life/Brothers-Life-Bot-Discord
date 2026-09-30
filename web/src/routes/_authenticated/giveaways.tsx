@@ -130,7 +130,7 @@ function Overview({ g, onSaved }: { g: Giveaway; onSaved: (id: number) => void }
         <div className='flex flex-wrap gap-2'>
           {g.status === 'open' && <Button onClick={() => setConfirm('end')}><Dices /> Tirer au sort maintenant</Button>}
           {g.status === 'ended' && <Button variant='outline' onClick={() => setConfirm('reroll')}><Dices /> Un gagnant de plus</Button>}
-          {(g.status === 'open' || g.status === 'scheduled' || g.status === 'draft') && <Button variant='ghost' className='text-destructive' onClick={() => setConfirm('cancel')}><Ban /> Annuler</Button>}
+          {(g.status === 'open' || g.status === 'scheduled' || g.status === 'draft') && <Button variant='danger-ghost' onClick={() => setConfirm('cancel')}><Ban /> Annuler</Button>}
           <Button variant='outline' onClick={() => duplicate.mutate()}><Copy /> Dupliquer</Button>
           <Button variant='outline' asChild><a href={`/api/giveaways/${g.id}/export`}><Download /> CSV</a></Button>
         </div>
@@ -235,7 +235,7 @@ function Form({ giveaway, guilds, onSaved, onDeleted }: { giveaway: Giveaway | n
 
   return (
     <div className='grid gap-6'>
-      <Section title={giveaway ? 'Réglages' : 'Nouveau giveaway'} actions={giveaway && can('giveaways.manage') && <Button size='sm' variant='ghost' className='text-destructive' onClick={() => setDeleting(true)}><Trash2 /> Supprimer</Button>}>
+      <Section title={giveaway ? 'Réglages' : 'Nouveau giveaway'} actions={giveaway && can('giveaways.manage') && <Button size='sm' variant='danger-ghost' onClick={() => setDeleting(true)}><Trash2 /> Supprimer</Button>}>
         <div className='grid gap-4 p-4'>
           <div className='grid gap-4 sm:grid-cols-[1fr_8rem_6rem]'>
             <div className='grid gap-1.5'><Label htmlFor='g-prize'>Lot</Label><Input id='g-prize' value={prize} maxLength={200} disabled={!editable} onChange={(e) => setPrize(e.target.value)} placeholder='Voiture de sport en jeu' /></div>

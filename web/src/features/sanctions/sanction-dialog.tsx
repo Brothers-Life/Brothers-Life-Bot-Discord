@@ -142,7 +142,7 @@ export function SanctionDialog({ userId: initialUserId = '', onClose }: { userId
         </form>
         <DialogFooter>
           <Button variant='outline' onClick={onClose}>Annuler</Button>
-          <Button type='submit' form='sanction-form' variant={type === 'ban' || type === 'kick' ? 'destructive' : 'default'} disabled={!valid || submit.isPending}>
+          <Button loading={submit.isPending} type='submit' form='sanction-form' variant={type === 'ban' || type === 'kick' ? 'destructive' : 'default'} disabled={!valid || submit.isPending}>
             {submit.isPending ? 'Application…' : TYPE_LABELS[type]}
           </Button>
         </DialogFooter>

@@ -116,7 +116,7 @@ function VoiceEditor({ guildId }: { guildId: string }) {
                 {manage && (
                   <div className='flex gap-2'>
                     <Button size='sm' variant='outline' onClick={() => setEditing(h)}><Settings2 /> Réglages</Button>
-                    <Button size='sm' variant='ghost' className='text-destructive' onClick={() => setDeleting(h)}><Trash2 /> Supprimer</Button>
+                    <Button size='sm' variant='danger-ghost' onClick={() => setDeleting(h)}><Trash2 /> Supprimer</Button>
                   </div>
                 )}
               </li>
@@ -141,7 +141,7 @@ function VoiceEditor({ guildId }: { guildId: string }) {
                     À {r.owner.name ?? r.ownerId} · créé {ago(r.createdAt)} · <Users className='inline size-3' /> {r.members}{r.state.userLimit ? `/${r.state.userLimit}` : ''}
                   </div>
                 </div>
-                {manage && <Button size='sm' variant='ghost' className='text-destructive' onClick={() => setClosing(r)}><X /> Fermer</Button>}
+                {manage && <Button size='sm' variant='danger-ghost' onClick={() => setClosing(r)}><X /> Fermer</Button>}
               </li>
             ))}
           </ul>

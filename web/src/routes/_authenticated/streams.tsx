@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FlaskConical, KeyRound, Pencil, Plus, Radio, Save, Trash2 } from 'lucide-react'
+import { AlertTriangle, BellRing, FlaskConical, KeyRound, Pencil, Plus, Radio, Save, Trash2, Tv } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { AnnouncementEmbed, AnnouncementTarget, AnnouncementTargetsPayload } from '@/lib/types'
 import { ago, dateTime } from '@/lib/format'
 import { useMe } from '@/hooks/use-me'
-import { Page, Section, EmptyState, Pill } from '@/components/app/ui'
+import { Page, Section, EmptyState, Pill, StatCards } from '@/components/app/ui'
 import { UserPicker } from '@/components/app/user-picker'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { DiscordPreview } from '@/features/announcements/discord-preview'
@@ -62,7 +62,7 @@ function StreamsPage() {
   const { can } = useMe()
   const manage = can('notifications.manage')
   const qc = useQueryClient()
-  const { data } = useQuery({ queryKey: ['streams'], queryFn: () => api<Data>('/streams'), refetchInterval: 30_000 })
+  const { data, dataUpdatedAt } = useQuery({ queryKey: ['streams'], queryFn: () => api<Data>('/streams'), refetchInterval: 30_000 })
   const [editing, setEditing] = useState<Partial<Subscription> | null>(null)
   const [deleting, setDeleting] = useState<Subscription | null>(null)
   const refresh = () => qc.invalidateQueries({ queryKey: ['streams'] })
@@ -81,6 +81,12 @@ function StreamsPage() {
     >
       {!data ? <Skeleton className='h-96 w-full' /> : (
         <div className='grid gap-6'>
+          <StatCards items={[
+            { label: 'Chaînes suivies', value: data.subscriptions.length, icon: Tv, tone: 'accent' },
+            { label: 'En live maintenant', value: data.subscriptions.filter((s) => s.state.live).length, icon: Radio, tone: 'danger' },
+            { label: 'Notifications (24 h)', value: data.history.filter((h) => h.kind !== 'end' && h.kind !== 'test' && dataUpdatedAt - h.at < 86_400_000).length, icon: BellRing, tone: 'info' },
+            { label: 'Chaînes en erreur', value: data.subscriptions.filter((s) => s.state.error).length, icon: AlertTriangle, tone: data.subscriptions.some((s) => s.state.error) ? 'warning' : 'neutral' },
+          ]} />
           <Section title={`${data.subscriptions.length} chaîne${data.subscriptions.length > 1 ? 's' : ''} suivie${data.subscriptions.length > 1 ? 's' : ''}`}>
             {!data.subscriptions.length ? <EmptyState title='Aucune chaîne suivie'>Ajoute une chaîne Twitch, YouTube ou Kick à annoncer.</EmptyState> : (
               <ul className='divide-y'>
@@ -108,7 +114,7 @@ function StreamsPage() {
                         <Switch checked={s.enabled} onCheckedChange={() => toggle.mutate(s)} aria-label={`Activer ${s.displayName}`} />
                         <Button size='sm' variant='outline' onClick={() => test.mutate(s)} disabled={test.isPending}><FlaskConical /> Tester</Button>
                         <Button size='icon' variant='ghost' aria-label={`Modifier ${s.displayName}`} onClick={() => setEditing(s)}><Pencil /></Button>
-                        <Button size='icon' variant='ghost' className='text-destructive' aria-label={`Supprimer ${s.displayName}`} onClick={() => setDeleting(s)}><Trash2 /></Button>
+                        <Button size='icon' variant='danger-ghost' aria-label={`Supprimer ${s.displayName}`} onClick={() => setDeleting(s)}><Trash2 /></Button>
                       </div>
                     )}
                   </li>

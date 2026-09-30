@@ -1,3 +1,4 @@
+import { AlertTriangle, CheckCircle2, Info, Inbox, OctagonAlert, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Header } from '@/components/layout/header'
@@ -22,7 +23,7 @@ export function Page({
       <Header fixed>
         <h1 className='truncate text-base font-semibold tracking-tight'>{title}</h1>
       </Header>
-      <Main fixed={fixed} className='flex flex-col gap-6'>
+      <Main fixed={fixed} className='page-enter flex flex-col gap-6'>
         {(description || actions) && (
           <div className='flex flex-wrap items-end justify-between gap-4'>
             {description && <p className='max-w-2xl text-sm text-muted-foreground'>{description}</p>}
@@ -56,22 +57,66 @@ export function Section({ title, description, actions, children, className }: {
   )
 }
 
-export function EmptyState({ title, children }: { title: string; children?: React.ReactNode }) {
+export function EmptyState({ title, children, icon: Icon = Inbox }: { title: string; children?: React.ReactNode; icon?: LucideIcon }) {
   return (
     <div className='flex flex-col items-center gap-2 px-6 py-12 text-center'>
+      <span className='mb-1 grid size-12 place-items-center rounded-full bg-muted text-muted-foreground ring-8 ring-muted/40' aria-hidden><Icon className='size-5' /></span>
       <p className='font-medium'>{title}</p>
       {children && <div className='max-w-md text-sm text-muted-foreground'>{children}</div>}
     </div>
   )
 }
 
-type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'accent'
+export type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'info' | 'accent'
 const tones: Record<Tone, string> = {
   neutral: 'bg-muted text-muted-foreground',
   success: 'bg-success/12 text-success',
   warning: 'bg-warning/15 text-warning',
   danger: 'bg-destructive/12 text-destructive',
+  info: 'bg-info/12 text-info',
   accent: 'bg-primary/15 text-primary',
+}
+
+// Colored strip + icon: explains a state (success, warning, error, info) inside a page
+const noticeIcons: Record<Exclude<Tone, 'neutral' | 'accent'>, LucideIcon> = { success: CheckCircle2, warning: AlertTriangle, danger: OctagonAlert, info: Info }
+export function Notice({ tone = 'info', title, children, className }: { tone?: 'success' | 'warning' | 'danger' | 'info'; title?: string; children?: React.ReactNode; className?: string }) {
+  const Icon = noticeIcons[tone]
+  const color = { success: 'border-success/40 bg-success/8 [&>svg]:text-success', warning: 'border-warning/40 bg-warning/8 [&>svg]:text-warning', danger: 'border-destructive/40 bg-destructive/8 [&>svg]:text-destructive', info: 'border-info/40 bg-info/8 [&>svg]:text-info' }[tone]
+  return (
+    <div role={tone === 'danger' || tone === 'warning' ? 'alert' : 'status'} className={cn('flex gap-3 rounded-lg border px-4 py-3 text-sm', color, className)}>
+      <Icon className='mt-0.5 size-4 shrink-0' aria-hidden />
+      <div className='grid gap-0.5'>
+        {title && <p className='font-medium'>{title}</p>}
+        {children && <div className='text-muted-foreground'>{children}</div>}
+      </div>
+    </div>
+  )
+}
+
+// Summary counters at the top of a page
+export type Stat = { label: string; value: React.ReactNode; tone?: Tone; icon?: LucideIcon; hint?: React.ReactNode }
+const statTones: Record<Tone, string> = {
+  neutral: 'text-foreground [&_.stat-icon]:bg-muted [&_.stat-icon]:text-muted-foreground',
+  success: '[&_.stat-icon]:bg-success/12 [&_.stat-icon]:text-success',
+  warning: '[&_.stat-icon]:bg-warning/15 [&_.stat-icon]:text-warning',
+  danger: '[&_.stat-icon]:bg-destructive/12 [&_.stat-icon]:text-destructive',
+  info: '[&_.stat-icon]:bg-info/12 [&_.stat-icon]:text-info',
+  accent: '[&_.stat-icon]:bg-primary/15 [&_.stat-icon]:text-primary',
+}
+export function StatCards({ items, className }: { items: Stat[]; className?: string }) {
+  return (
+    <div className={cn('grid gap-3 sm:grid-cols-2 lg:grid-cols-4', className)}>
+      {items.map(({ label, value, tone = 'neutral', icon: Icon, hint }) => (
+        <div key={label} className={cn('flex items-center gap-3 rounded-lg border bg-card px-4 py-3', statTones[tone])}>
+          {Icon && <span className='stat-icon grid size-10 shrink-0 place-items-center rounded-lg' aria-hidden><Icon className='size-5' /></span>}
+          <div className='min-w-0'>
+            <div className='text-2xl leading-tight font-semibold tabular-nums'>{value}</div>
+            <div className='truncate text-xs text-muted-foreground'>{label}{hint ? <> · {hint}</> : null}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 export function Pill({ tone = 'neutral', children, className, style }: { tone?: Tone; children: React.ReactNode; className?: string; style?: React.CSSProperties }) {
@@ -82,8 +127,8 @@ export function Pill({ tone = 'neutral', children, className, style }: { tone?: 
   )
 }
 
-export function Dot({ tone }: { tone: 'success' | 'warning' | 'danger' | 'neutral' }) {
-  const color = { success: 'bg-success', warning: 'bg-warning', danger: 'bg-destructive', neutral: 'bg-muted-foreground' }[tone]
+export function Dot({ tone }: { tone: 'success' | 'warning' | 'danger' | 'info' | 'neutral' }) {
+  const color = { success: 'bg-success', warning: 'bg-warning', danger: 'bg-destructive', info: 'bg-info', neutral: 'bg-muted-foreground' }[tone]
   return <span aria-hidden className={cn('inline-block size-2 rounded-full', color)} />
 }
 

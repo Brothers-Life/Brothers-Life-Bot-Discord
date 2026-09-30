@@ -110,7 +110,7 @@ function NetworkPage() {
                       </Button>
                     )}
                     {g.status === 'active' && !g.isMain && (
-                      <Button size='sm' variant='ghost' className='text-destructive' onClick={() => setPending({ guild: g, action: 'remove' })}>
+                      <Button size='sm' variant='danger-ghost' onClick={() => setPending({ guild: g, action: 'remove' })}>
                         Retirer
                       </Button>
                     )}

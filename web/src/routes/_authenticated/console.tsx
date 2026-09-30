@@ -141,7 +141,7 @@ function ConsolePage() {
         {control && (
           <>
             <Button size='sm' variant='outline' onClick={() => setConfirm('restart')}><RotateCw /> Redémarrer</Button>
-            <Button size='sm' variant='outline' className='text-destructive' onClick={() => setConfirm('stop')}><Power /> Arrêter</Button>
+            <Button size='sm' variant='danger-outline' onClick={() => setConfirm('stop')}><Power /> Arrêter</Button>
           </>
         )}
       </div>
@@ -155,7 +155,7 @@ function ConsolePage() {
       >
         {!visible.length && <div className='text-console-foreground/50'>{lines.length ? 'Aucune ligne ne correspond aux filtres.' : 'En attente des premières lignes…'}</div>}
         {visible.map((line) => (
-          <div key={line.id} className='flex gap-3 whitespace-pre-wrap break-all hover:bg-white/5'>
+          <div key={line.id} className='row-enter flex gap-3 whitespace-pre-wrap break-all hover:bg-white/5'>
             <span className='shrink-0 text-console-foreground/40 select-none'>{time(line.at)}</span>
             <span className={cn(LEVEL_CLASS[line.level] ?? LEVEL_CLASS.raw, line.stream === 'launcher' && 'italic')}>{line.text}</span>
           </div>

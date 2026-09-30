@@ -160,7 +160,7 @@ function RetentionSetting() {
       <label htmlFor='retention'>Conserver les événements</label>
       <Input id='retention' type='number' min={1} max={365} value={value} onChange={(e) => setDays(e.target.value)} className='h-8 w-20' />
       <span>jours dans la base</span>
-      {days !== '' && Number(days) !== data.retentionDays && <Button size='sm' type='submit' disabled={save.isPending}>Enregistrer</Button>}
+      {days !== '' && Number(days) !== data.retentionDays && <Button loading={save.isPending} size='sm' type='submit' disabled={save.isPending}>Enregistrer</Button>}
     </form>
   )
 }

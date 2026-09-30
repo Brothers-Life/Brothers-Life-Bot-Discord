@@ -97,7 +97,7 @@ export function RestrictionsEditor() {
               )}
             </div>
             {manage && (
-              <Button size='icon' variant='ghost' className='text-destructive' aria-label={`Supprimer ${p.label}`} disabled={profiles.length === 1} onClick={() => setDraft(profiles.filter((_, j) => j !== i))}>
+              <Button size='icon' variant='danger-ghost' aria-label={`Supprimer ${p.label}`} disabled={profiles.length === 1} onClick={() => setDraft(profiles.filter((_, j) => j !== i))}>
                 <Trash2 />
               </Button>
             )}

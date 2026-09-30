@@ -161,7 +161,7 @@ function Editor({ announcement, guilds }: { announcement: Announcement | null; g
           {can('announcements.manage') && <Button variant='outline' onClick={() => setTemplateName(draft.name)}><BookmarkPlus /> Modèle</Button>}
           {announcement && can('announcements.manage') && <Button variant='outline' onClick={() => duplicate.mutate()}><Copy /> Dupliquer</Button>}
           {announcement && can('announcements.manage') && announcement.status !== 'deleted' && (
-            <Button variant='ghost' className='text-destructive' onClick={() => setConfirmDelete(true)}><Trash2 /> Supprimer</Button>
+            <Button variant='danger-ghost' onClick={() => setConfirmDelete(true)}><Trash2 /> Supprimer</Button>
           )}
         </div>
       }

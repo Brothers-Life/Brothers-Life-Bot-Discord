@@ -118,7 +118,7 @@ function RanksPage() {
                       >
                         Modifier
                       </Button>
-                      <Button size='sm' variant='ghost' className='text-destructive' onClick={() => setToDelete(rank)}>Supprimer</Button>
+                      <Button size='sm' variant='danger-ghost' onClick={() => setToDelete(rank)}>Supprimer</Button>
                     </div>
                   )}
                 </li>

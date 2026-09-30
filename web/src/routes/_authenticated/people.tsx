@@ -142,7 +142,7 @@ function GuildMembership({ userId, guild }: { userId: string; guild: PersonProfi
           >
             <label htmlFor={`nick-${guild.id}`} className='text-muted-foreground'>Pseudo</label>
             <Input id={`nick-${guild.id}`} value={nickname ?? member.nickname ?? ''} placeholder='aucun' onChange={(e) => setNickname(e.target.value)} disabled={!manage} maxLength={32} className='h-8 w-56' />
-            {nickname !== null && nickname !== (member.nickname ?? '') && <Button size='sm' type='submit' disabled={saveNickname.isPending}>Enregistrer</Button>}
+            {nickname !== null && nickname !== (member.nickname ?? '') && <Button loading={saveNickname.isPending} size='sm' type='submit' disabled={saveNickname.isPending}>Enregistrer</Button>}
           </form>
           <div className='flex flex-wrap items-center gap-1.5'>
             {!member.roles.length && <span className='text-sm text-muted-foreground'>Aucun rôle</span>}

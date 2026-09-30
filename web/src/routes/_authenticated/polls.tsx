@@ -156,7 +156,7 @@ function PollForm({ poll, guilds, onSaved, onDeleted }: { poll: Poll | null; gui
       <Section title={poll ? `Sondage #${poll.id}` : 'Nouveau sondage'} actions={poll && can('polls.manage') && (
         <div className='flex gap-2'>
           <Button size='sm' variant='outline' onClick={() => duplicate.mutate()}><Copy /> Dupliquer</Button>
-          <Button size='sm' variant='ghost' className='text-destructive' onClick={() => setConfirm('delete')}><Trash2 /> Supprimer</Button>
+          <Button size='sm' variant='danger-ghost' onClick={() => setConfirm('delete')}><Trash2 /> Supprimer</Button>
         </div>
       )}>
         <div className='grid gap-4 p-4'>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Ban, Lock, MessageSquarePlus, Save, Send, StickyNote, Trash2, Unlock, UserCheck, X, Zap } from 'lucide-react'
+import { Ban, Lock, MailOpen, MessageSquarePlus, Save, Send, StickyNote, Trash2, Unlock, UserCheck, X, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Channel } from '@/lib/types'
@@ -9,7 +9,7 @@ import { ago, dateTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useMe } from '@/hooks/use-me'
 import { useLive } from '@/hooks/use-live'
-import { Page, Section, EmptyState, Pill, UserAvatar } from '@/components/app/ui'
+import { Page, Section, EmptyState, Pill, StatCards, UserAvatar } from '@/components/app/ui'
 import { ChannelSelect } from '@/components/app/pickers'
 import { UserPicker } from '@/components/app/user-picker'
 import { UploadButton } from '@/features/uploads/image-input'
@@ -70,7 +70,14 @@ function DmsPage() {
           <TabsTrigger value='inbox'>Conversations</TabsTrigger>
           {can('dm.manage') && <TabsTrigger value='settings'>Réglages</TabsTrigger>}
         </TabsList>
-        <TabsContent value='inbox' className='mt-4'>
+        <TabsContent value='inbox' className='mt-4 grid gap-4'>
+          {data && filter !== 'closed' && (
+            <StatCards className='lg:grid-cols-3' items={[
+              { label: 'Conversations ouvertes', value: data.threads.length, icon: MessageSquarePlus, tone: 'accent' },
+              { label: 'Messages non lus', value: data.threads.reduce((n, t) => n + t.unread, 0), icon: MailOpen, tone: data.threads.some((t) => t.unread) ? 'warning' : 'neutral' },
+              { label: 'Sans personne pour les suivre', value: data.threads.filter((t) => !t.assignedTo).length, icon: UserCheck, tone: 'info' },
+            ]} />
+          )}
           <div className='grid min-h-[36rem] overflow-hidden rounded-xl border bg-card md:grid-cols-[20rem_minmax(0,1fr)]'>
             <aside className={cn('flex min-w-0 flex-col border-e', selected !== null && 'hidden md:flex')}>
               <div className='flex gap-1 border-b p-2' role='group' aria-label='Filtre'>
@@ -273,7 +280,7 @@ function ConversationView({ id, snippets, onBack }: { id: number; snippets: Inbo
                 <label className='flex items-center gap-1.5 text-sm'><Checkbox checked={signed} onCheckedChange={(v) => setSigned(v === true)} /> Signer de mon nom</label>
               </>
             )}
-            <Button type='submit' className='ms-auto' disabled={send.isPending || (!text.trim() && !attachments.length) || (!noteMode && !canSend)}>
+            <Button loading={send.isPending} type='submit' className='ms-auto' disabled={send.isPending || (!text.trim() && !attachments.length) || (!noteMode && !canSend)}>
               {noteMode ? <><StickyNote /> Ajouter la note</> : <><Send /> Envoyer</>}
             </Button>
           </div>
@@ -326,7 +333,7 @@ function Settings({ data }: { data: Inbox }) {
               <li key={s.id} className='flex items-center gap-3 px-4 py-2.5'>
                 <div className='min-w-0 flex-1'><div className='font-medium'>{s.name}</div><div className='truncate text-xs text-muted-foreground'>{s.content}</div></div>
                 <Button size='sm' variant='ghost' onClick={() => setSnippet(s)}>Modifier</Button>
-                <Button size='icon' variant='ghost' className='text-destructive' aria-label={`Supprimer ${s.name}`} onClick={() => dropSnippet.mutate(s.id)}><Trash2 /></Button>
+                <Button size='icon' variant='danger-ghost' aria-label={`Supprimer ${s.name}`} onClick={() => dropSnippet.mutate(s.id)}><Trash2 /></Button>
               </li>
             ))}
           </ul>
@@ -338,7 +345,7 @@ function Settings({ data }: { data: Inbox }) {
           <div className='flex flex-wrap gap-2'>
             <UserPicker value={blockUser} onChange={(id) => setBlockUser(id)} className='w-64' />
             <Input value={blockReason} maxLength={300} onChange={(e) => setBlockReason(e.target.value)} placeholder='Raison (facultatif)' className='w-64' aria-label='Raison du blocage' />
-            <Button variant='outline' className='text-destructive' onClick={() => block.mutate()} disabled={!/^\d{17,20}$/.test(blockUser)}><Ban /> Bloquer</Button>
+            <Button variant='danger-outline' onClick={() => block.mutate()} disabled={!/^\d{17,20}$/.test(blockUser)}><Ban /> Bloquer</Button>
           </div>
           {data.blocklist.map((b) => (
             <div key={b.userId} className='flex items-center gap-2 text-sm'>

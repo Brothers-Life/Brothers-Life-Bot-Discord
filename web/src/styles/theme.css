@@ -19,8 +19,14 @@
   --accent: #e9ecf2;
   --accent-foreground: #1d2436;
   --destructive: #c9303a;
+  --destructive-foreground: #ffffff;
   --success: #1f8a5c;
-  --warning: #9a6a14;
+  --success-foreground: #ffffff;
+  /* Amber, kept apart from the brass accent so a warning never reads as "primary" */
+  --warning: #b25e09;
+  --warning-foreground: #ffffff;
+  --info: #2563c9;
+  --info-foreground: #ffffff;
   --border: #dde1ea;
   --input: #d3d8e3;
   --ring: #b8862f;
@@ -54,8 +60,13 @@
   --accent: #222b40;
   --accent-foreground: #e4e8f1;
   --destructive: #e5484d;
+  --destructive-foreground: #ffffff;
   --success: #3ccb8a;
-  --warning: #e5b25d;
+  --success-foreground: #04150d;
+  --warning: #f59e0b;
+  --warning-foreground: #1c1203;
+  --info: #5b9cf5;
+  --info-foreground: #06101f;
   --border: #263048;
   --input: #2c3752;
   --ring: #d6a249;
@@ -96,8 +107,13 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);

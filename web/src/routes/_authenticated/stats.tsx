@@ -362,7 +362,7 @@ function Counters({ guildId, options }: { guildId: string; options?: Options }) 
                 </SelectContent>
               </Select>
             </div>
-            <Button type='submit' disabled={create.isPending || !template.trim()}><Plus /> Créer le compteur</Button>
+            <Button loading={create.isPending} type='submit' disabled={create.isPending || !template.trim()}><Plus /> Créer le compteur</Button>
           </form>
         )}
         <p className='text-xs text-muted-foreground'>Variables : {(options?.variables ?? []).map((v) => `{${v}}`).join(' ')}</p>
@@ -375,7 +375,7 @@ function Counters({ guildId, options }: { guildId: string; options?: Options }) 
                   <div className='text-sm font-medium'>{c.lastName ?? channelName(c.channelId)}</div>
                   <div className='text-xs text-muted-foreground'>{c.template}</div>
                 </div>
-                {manage && <Button size='sm' variant='ghost' className='text-destructive' onClick={() => setDeleting(c)}><Trash2 /> Supprimer</Button>}
+                {manage && <Button size='sm' variant='danger-ghost' onClick={() => setDeleting(c)}><Trash2 /> Supprimer</Button>}
               </li>
             ))}
           </ul>

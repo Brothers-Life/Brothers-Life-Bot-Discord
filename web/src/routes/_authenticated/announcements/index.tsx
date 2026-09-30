@@ -106,7 +106,7 @@ function Templates() {
                 <div className='font-medium'>{t.name}</div>
                 <div className='truncate text-xs text-muted-foreground'>{t.payload.embed.title || t.payload.content || 'Sans titre'} · {t.targets.length} salon(s)</div>
               </div>
-              {can('announcements.manage') && <Button size='icon' variant='ghost' className='text-destructive' aria-label={`Supprimer ${t.name}`} onClick={() => setDeleting(t)}><Trash2 /></Button>}
+              {can('announcements.manage') && <Button size='icon' variant='danger-ghost' aria-label={`Supprimer ${t.name}`} onClick={() => setDeleting(t)}><Trash2 /></Button>}
             </li>
           ))}
         </ul>

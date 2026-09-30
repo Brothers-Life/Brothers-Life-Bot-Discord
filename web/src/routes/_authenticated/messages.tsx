@@ -150,7 +150,7 @@ function Editor({ message, guilds, onSaved, onDeleted }: { message: LiveMessage 
         <Section title={message ? message.name : 'Nouveau message'} actions={message && manage && (
           <div className='flex gap-2'>
             <Button size='sm' variant='outline' onClick={() => republish.mutate()} disabled={republish.isPending}><Send /> Renvoyer</Button>
-            <Button size='sm' variant='ghost' className='text-destructive' onClick={() => setDeleting(true)}><Trash2 /> Supprimer</Button>
+            <Button size='sm' variant='danger-ghost' onClick={() => setDeleting(true)}><Trash2 /> Supprimer</Button>
           </div>
         )}>
           <div className='grid gap-4 p-4'>

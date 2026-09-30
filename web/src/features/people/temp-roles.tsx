@@ -83,7 +83,7 @@ export function TempRoles({ userId, guildId, roles }: { userId: string; guildId:
             <SelectContent>{givable.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent>
           </Select>
           <Input value={duration} onChange={(e) => setDuration(e.target.value)} className='h-8 w-24' aria-label='Durée' placeholder='7j' />
-          <Button size='sm' type='submit' className='h-8' disabled={!roleId || !duration.trim() || give.isPending}><Plus /> Donner</Button>
+          <Button loading={give.isPending} size='sm' type='submit' className='h-8' disabled={!roleId || !duration.trim() || give.isPending}><Plus /> Donner</Button>
           <span className='text-xs text-muted-foreground'>Durées : 30m, 12h, 7j, 2sem</span>
         </form>
       )}

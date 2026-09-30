@@ -127,7 +127,7 @@ function TicketPage() {
                   <NotebookPen className='size-4' /> Note interne
                 </label>
                 <span className='text-xs text-muted-foreground'>{reply.length}/2000</span>
-                <Button type='submit' className='ms-auto' variant={internal ? 'outline' : 'default'} disabled={!reply.trim() || send.isPending}>
+                <Button loading={send.isPending} type='submit' className='ms-auto' variant={internal ? 'outline' : 'default'} disabled={!reply.trim() || send.isPending}>
                   <Send /> {internal ? 'Ajouter la note' : 'Envoyer'}
                 </Button>
               </div>
@@ -179,7 +179,7 @@ function TicketPage() {
                   <div className='flex flex-wrap gap-2'>
                     {!ticket.claimedBy && <Button size='sm' onClick={() => action.mutate({ path: 'claim' })}>Prendre en charge</Button>}
                     <Button size='sm' variant='outline' onClick={() => setAdding(true)}><UserPlus /> Ajouter</Button>
-                    <Button size='sm' variant='outline' className='text-destructive' onClick={() => setClosing(true)}><Lock /> Fermer</Button>
+                    <Button size='sm' variant='danger-outline' onClick={() => setClosing(true)}><Lock /> Fermer</Button>
                   </div>
                 </div>
               )}

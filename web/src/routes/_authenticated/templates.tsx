@@ -84,7 +84,7 @@ function TemplatesPage() {
                       {can('templates.manage') && (
                         <div className='flex'>
                           <Button size='icon' variant='ghost' aria-label={`Renommer ${t.name}`} onClick={() => setRenaming(t)}><Pencil /></Button>
-                          <Button size='icon' variant='ghost' className='text-destructive' aria-label={`Supprimer ${t.name}`} onClick={() => setDeleting(t)}><Trash2 /></Button>
+                          <Button size='icon' variant='danger-ghost' aria-label={`Supprimer ${t.name}`} onClick={() => setDeleting(t)}><Trash2 /></Button>
                         </div>
                       )}
                     </div>
@@ -98,7 +98,7 @@ function TemplatesPage() {
                       {t.summary.automod && <Pill tone='accent'>Automod</Pill>}
                     </div>
                     {can('templates.manage') && (
-                      <Button variant='outline' size='sm' className='justify-self-start' disabled={capture.isPending} onClick={() => capture.mutate(t)}>
+                      <Button loading={capture.isPending} variant='outline' size='sm' className='justify-self-start' disabled={capture.isPending} onClick={() => capture.mutate(t)}>
                         <Camera /> Reprendre la photo
                       </Button>
                     )}
@@ -125,7 +125,7 @@ function TemplatesPage() {
                     {can('templates.apply') && data.templates.length > 0 && (
                       <div className='flex gap-2'>
                         <Button size='sm' variant='outline' disabled={running} onClick={() => setApplying({ target: g, mode: 'repair' })}><Hammer /> Réparer</Button>
-                        <Button size='sm' variant='outline' className='text-destructive' disabled={running} onClick={() => setApplying({ target: g, mode: 'reset' })}><RotateCcw /> Réinitialiser</Button>
+                        <Button size='sm' variant='danger-outline' disabled={running} onClick={() => setApplying({ target: g, mode: 'reset' })}><RotateCcw /> Réinitialiser</Button>
                       </div>
                     )}
                   </li>
