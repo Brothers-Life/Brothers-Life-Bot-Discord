@@ -2,15 +2,22 @@
 
 Bot qui gère plusieurs serveurs Discord comme un seul **réseau**, piloté depuis un **panel web**.
 
-Ce qui existe aujourd'hui (chantier 1, le socle) :
+Fonctionnalités :
 
-- **Réseau de serveurs** : un serveur principal et des serveurs ajoutés au réseau depuis le panel. Inviter le bot ne suffit jamais.
-- **Permissions fines** : des rangs regroupent des permissions. On obtient un rang par un rôle du serveur principal, ou par attribution directe dans le panel. Un utilisateur ne peut pas donner plus de droits qu'il n'en a.
-- **Panel web** : connexion via Discord, vue d'ensemble, serveurs, rangs, membres, salons de logs, journal, sessions, console en direct, versions.
-- **Salons de logs** : chaque catégorie de logs peut aller dans son propre salon, sur chaque serveur, avec en option un miroir vers le serveur principal.
-- **Versions** : les versions sont publiées sur GitHub par la CI. Depuis le panel, on installe n'importe quelle version ; la base est sauvegardée avant, et en cas d'échec la version précédente revient toute seule.
+| Domaine | Contenu |
+|---|---|
+| **Réseau** | Un serveur principal et des serveurs ajoutés au réseau depuis le panel (inviter le bot ne suffit jamais) |
+| **Permissions** | Des rangs regroupent des permissions ; on les obtient par un rôle du serveur principal ou par attribution directe. Personne ne peut donner plus de droits qu'il n'en a. `OWNER_ID` a tout. |
+| **Sanctions** | Ban, kick, timeout et warn sur tout le réseau ou un seul serveur, avec un résultat par serveur. Les bans, kicks et timeouts faits directement dans Discord sont détectés et propagés si le rang de l'auteur l'autorise. Bans temporaires. Un serveur ajouté au réseau reçoit les bans existants. |
+| **Logs** | Messages modifiés ou supprimés, arrivées et départs (avec l'invitation utilisée), pseudos, rôles, salons, vocal, invitations, serveur. Chaque catégorie va dans le salon de ton choix, par serveur, avec un miroir vers le serveur principal en option. Recherche dans le panel. |
+| **Automod** | Anti-arnaque (domaines connus, faux liens Discord ou Steam, appâts « nitro gratuit » ou crypto), anti-spam, anti-envoi massif, invitations. Réglage réseau et réglages par serveur, avec exemptions. |
+| **Staff** | Chaque rang peut être lié à un rôle sur chaque serveur : le bot donne et retire ces rôles tout seul. Recherche d'un membre sur tout le réseau, avec gestion de ses rôles et de ses pseudos. |
+| **Tickets** | Panneau avec un bouton par catégorie, salon privé avec le staff concerné, prise en charge, transcript à la fermeture (dans les logs et en MP). |
+| **Permissions Discord** | Un profil de permissions par rang, appliqué aux rôles liés sur tous les serveurs, avec un signalement des écarts toutes les 6 heures. |
+| **Panel web** | Connexion Discord, toutes les pages ci-dessus, journal, sessions, console en direct, versions. |
+| **Versions** | Publiées sur GitHub par la CI, installables depuis le panel, avec une sauvegarde de la base avant et un retour automatique en cas d'échec. |
 
-Prévu ensuite : sanctions synchronisées, logs complets des serveurs, automod (anti-spam, anti-arnaque, anti-envoi massif), gestion des rôles et des membres, tickets, synchronisation des permissions.
+Commandes slash : `/ban`, `/unban`, `/kick`, `/timeout`, `/untimeout`, `/warn`, `/historique`. Elles sont enregistrées automatiquement au démarrage quand elles changent.
 
 La conception détaillée est dans `docs/superpowers/specs/`.
 
@@ -18,16 +25,17 @@ La conception détaillée est dans `docs/superpowers/specs/`.
 
 - Node.js 22 ou plus
 - Une application Discord ([Developer Portal](https://discord.com/developers/applications)) :
-  - **Bot** : activer les intents *Server Members* et *Message Content*.
+  - **Bot** : activer les intents privilégiés *Server Members* et *Message Content*.
   - **OAuth2 > Redirects** : ajouter `<WEB_PUBLIC_URL>/api/auth/callback` (par exemple `http://localhost:3000/api/auth/callback`).
+  - Inviter le bot sur chaque serveur avec ces permissions : Voir les logs du serveur, Gérer le serveur (suivi des invitations), Gérer les rôles, Gérer les salons, Expulser, Bannir, Exclure temporairement, Gérer les messages, Gérer les pseudos, Voir les salons, Envoyer des messages, Intégrer des liens, Joindre des fichiers, Voir l'historique des messages.
+  - Dans chaque serveur, placer le rôle du bot **au-dessus** des rôles du staff qu'il doit gérer.
 
 ## Développement en local
 
 ```bash
 npm install
 cp .env.example .env.dev      # puis remplir TOKEN, APP_ID, CLIENT_SECRET, OWNER_ID
-npm run deploy:dev            # commandes slash sur DEV_GUILD_ID
-npm run dev                   # bot + API sur http://localhost:3000
+npm run dev                   # bot + API sur http://localhost:3000 (commandes slash enregistrées sur DEV_GUILD_ID)
 ```
 
 Pour travailler sur le panel avec rechargement à chaud :
@@ -49,8 +57,7 @@ La première connexion au panel se fait avec le compte `OWNER_ID`. Choisis ensui
 | `npm start` | Lanceur de production (`launcher.js`, config `.env.prod`) |
 | `npm test` | Tests (`node --test`) |
 | `npm run lint` | ESLint |
-| `npm run deploy:dev` | Commandes slash sur le serveur de test |
-| `npm run deploy:global` | Commandes slash sur tous les serveurs (config prod) |
+| `npm run deploy:dev` / `deploy:global` | Forcer l'enregistrement des commandes slash (normalement automatique au démarrage) |
 | `npm run dev:web` / `build:web` | Panel : développement / compilation |
 
 ## Configuration
@@ -77,9 +84,10 @@ Voir [docs/pterodactyl.md](docs/pterodactyl.md).
 ```
 launcher.js, launcher/   superviseur de production : redémarrage, versions, retour arrière
 src/index.js             démarrage : config, base, core, bot, web
-src/core/                logique métier (réseau, rangs, permissions, logs, audit, sessions, versions)
+src/core/                logique métier : réseau, rangs, sanctions, événements, automod,
+                         staff, tickets, permissions Discord, audit, sessions, versions
 src/db/                  SQLite et migrations
-src/bot/                 discord.js : événements, commandes, exécuteur Discord
+src/bot/                 discord.js : événements, commandes, boutons, exécuteur Discord
 src/web/                 Fastify : OAuth2, API, console WebSocket
 web/                     panel React (basé sur satnaing/shadcn-admin, MIT)
 test/                    tests

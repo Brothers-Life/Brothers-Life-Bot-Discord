@@ -52,7 +52,11 @@ GITHUB_TOKEN=<token de l'étape 1>
 3. Connecte-toi avec le compte `OWNER_ID`.
 4. **Serveurs** : choisis le serveur principal, puis ajoute les autres serveurs au réseau.
 5. **Rangs** : crée tes rangs et lie-les aux rôles du serveur principal.
-6. **Salons de logs** : choisis les salons.
+6. **Rôles du staff** : lie chaque rang au rôle correspondant sur chaque serveur.
+7. **Salons de logs** : choisis les salons de chaque catégorie, sur chaque serveur.
+8. **Automod**, **Tickets** et **Permissions Discord** : règle-les selon tes besoins.
+
+Les commandes slash (`/ban`, `/warn`…) sont enregistrées automatiquement au premier démarrage, et à nouveau quand une version les modifie. Sur tous les serveurs, Discord peut mettre jusqu'à une heure à les afficher.
 
 ## Mises à jour
 

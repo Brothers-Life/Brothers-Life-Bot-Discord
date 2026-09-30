@@ -1,6 +1,7 @@
 import { Events } from 'discord.js';
 import logger from '../../utils/logger.js';
 import { cacheGuildInvites } from '../invites.js';
+import { syncCommands } from '../syncCommands.js';
 
 export const name = Events.ClientReady;
 export const once = true;
@@ -38,6 +39,8 @@ export async function execute(client) {
 	const pending = network.list().filter(g => g.status === 'pending' && g.botPresent);
 	if (!mainId) logger.warn('No main server yet: log in to the panel with OWNER_ID to choose it.');
 	if (pending.length) logger.info(`${pending.length} server(s) waiting to be added to the network from the panel.`);
+
+	await syncCommands(client, client.core);
 
 	client.emit('botSynced');
 }
