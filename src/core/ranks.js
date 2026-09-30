@@ -218,6 +218,8 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 			if (!Array.isArray(roleIds) || roleIds.some(r => typeof r !== 'string' || !r)) {
 				throw new ValidationError('roleIds must be an array of role IDs.');
 			}
+			// @everyone has the server's id: linking it would give the rank to every member
+			if (roleIds.includes(mainGuildId)) throw new ValidationError('The @everyone role cannot grant a rank.');
 
 			db.transaction(() => {
 				q.clearRoles.run(id, mainGuildId);

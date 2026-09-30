@@ -150,3 +150,8 @@ test('lists panel members with the origin of their ranks', async () => {
 	const members = ranks.listDirectAssignments();
 	assert.deepEqual(members.map(m => [m.discordId, m.rankId]), [[ALICE, modo.id]]);
 });
+
+test('@everyone cannot grant a rank', async () => {
+	const rank = ranks.create(await owner(), { name: 'Modo', level: 20, permissions: ['panel.access'] });
+	assert.throws(() => ranks.setRoleLinks(ranks.system, rank.id, [MAIN]), ValidationError);
+});
