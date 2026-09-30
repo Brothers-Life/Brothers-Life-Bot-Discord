@@ -5,6 +5,7 @@ import { roomPanel } from './voiceUi.js';
 import { pollPayload, pollResultsPayload } from './pollsUi.js';
 import { giveawayPayload, winnersPayload } from './giveawaysUi.js';
 import { boxPanelPayload, feedbackPayload, reviewPayload } from './feedbackUi.js';
+import { applicationPayload, recruitmentPanelPayload } from './recruitmentUi.js';
 
 const COLORS = {
 	info: 0x5865f2,
@@ -343,6 +344,56 @@ export function createExecutor(client) {
 				}
 			}
 			return (await channel.send(payload)).id;
+		},
+
+		// --- Recruitment -----------------------------------------------------------------------
+		async publishRecruitmentPanel(channelId, messageId, positions) {
+			const channel = await client.channels.fetch(channelId);
+			const payload = recruitmentPanelPayload(positions);
+			if (messageId) {
+				const existing = await channel.messages.fetch(messageId).catch(() => null);
+				if (existing) {
+					await existing.edit(payload);
+					return existing.id;
+				}
+			}
+			return (await channel.send(payload)).id;
+		},
+
+		async upsertApplicationMessage(channelId, messageId, view, { thread = false, pingRoleIds = [] } = {}) {
+			const channel = await client.channels.fetch(channelId);
+			const payload = applicationPayload(view);
+			if (messageId) {
+				const existing = await channel.messages.fetch(messageId).catch(() => null);
+				if (existing) await existing.edit(payload);
+				return { messageId };
+			}
+			const message = await channel.send({ ...payload, content: pingRoleIds.map(id => `<@&${id}>`).join(' ') || undefined, allowedMentions: { roles: pingRoleIds } });
+			const threadId = thread && channel.type === ChannelType.GuildText
+				? (await message.startThread({ name: `Candidature de ${view.application.userName ?? view.application.userId}`.slice(0, 100) }).catch(() => null))?.id ?? null
+				: null;
+			return { messageId: message.id, threadId };
+		},
+
+		// Private channel between the candidate and the recruiters
+		async createInterviewChannel(guildId, { name, parentId, candidateId, staffRoleIds }) {
+			const guild = guildOf(guildId);
+			const parent = parentId ? guild.channels.cache.get(parentId) : null;
+			const people = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles];
+			const channel = await guild.channels.create({
+				name: name.toLowerCase().replace(/[^a-z0-9-]+/g, '-').slice(0, 90),
+				type: ChannelType.GuildText,
+				parent: parent?.type === ChannelType.GuildCategory ? parent.id : null,
+				permissionOverwrites: [
+					{ id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+					{ id: client.user.id, allow: [...people, PermissionFlagsBits.ManageChannels] },
+					{ id: candidateId, allow: people },
+					...staffRoleIds.filter(id => guild.roles.cache.has(id)).map(id => ({ id, allow: people })),
+				],
+				reason: 'Entretien de recrutement',
+			});
+			await channel.send({ content: `<@${candidateId}> bienvenue dans ton entretien : l’équipe de recrutement va te parler ici.`, allowedMentions: { users: [candidateId] } });
+			return channel.id;
 		},
 
 		async lockThread(threadId) {

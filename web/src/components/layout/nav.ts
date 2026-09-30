@@ -1,5 +1,7 @@
 import {
   Gauge,
+  UserPlus,
+  CalendarOff,
   Network,
   ShieldHalf,
   Users,
@@ -78,6 +80,8 @@ export const navSections: NavSection[] = [
       { title: 'Rôles du staff', url: '/staff-roles', icon: Link2, permission: 'ranks.view' },
       { title: 'Permissions Discord', url: '/permissions', icon: KeySquare, permission: 'permsync.view' },
       { title: 'Membres du panel', url: '/members', icon: Users, permission: 'ranks.view' },
+      { title: 'Recrutement', url: '/recruitment', icon: UserPlus, permission: 'recruitment.view' },
+      { title: 'Absences', url: '/absences', icon: CalendarOff, permission: null },
     ],
   },
   {

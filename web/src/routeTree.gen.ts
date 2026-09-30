@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedAbsencesRouteImport } from './routes/_authenticated/absences'
 import { Route as AuthenticatedAntiraidRouteImport } from './routes/_authenticated/antiraid'
 import { Route as AuthenticatedAuditRouteImport } from './routes/_authenticated/audit'
 import { Route as AuthenticatedAutomodRouteImport } from './routes/_authenticated/automod'
@@ -30,6 +31,7 @@ import { Route as AuthenticatedPeopleRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedPermissionsRouteImport } from './routes/_authenticated/permissions'
 import { Route as AuthenticatedPollsRouteImport } from './routes/_authenticated/polls'
 import { Route as AuthenticatedRanksRouteImport } from './routes/_authenticated/ranks'
+import { Route as AuthenticatedRecruitmentRouteImport } from './routes/_authenticated/recruitment'
 import { Route as AuthenticatedSanctionsRouteImport } from './routes/_authenticated/sanctions'
 import { Route as AuthenticatedSessionsRouteImport } from './routes/_authenticated/sessions'
 import { Route as AuthenticatedStaffRolesRouteImport } from './routes/_authenticated/staff-roles'
@@ -53,6 +55,11 @@ const LoginRoute = LoginRouteImport.update({
 const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAbsencesRoute = AuthenticatedAbsencesRouteImport.update({
+  id: '/absences',
+  path: '/absences',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedAntiraidRoute = AuthenticatedAntiraidRouteImport.update({
@@ -146,6 +153,12 @@ const AuthenticatedRanksRoute = AuthenticatedRanksRouteImport.update({
   path: '/ranks',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedRecruitmentRoute =
+  AuthenticatedRecruitmentRouteImport.update({
+    id: '/recruitment',
+    path: '/recruitment',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSanctionsRoute = AuthenticatedSanctionsRouteImport.update({
   id: '/sanctions',
   path: '/sanctions',
@@ -202,6 +215,7 @@ const AuthenticatedTicketIdRoute = AuthenticatedTicketIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/login': typeof LoginRoute
+  '/absences': typeof AuthenticatedAbsencesRoute
   '/antiraid': typeof AuthenticatedAntiraidRoute
   '/audit': typeof AuthenticatedAuditRoute
   '/automod': typeof AuthenticatedAutomodRoute
@@ -220,6 +234,7 @@ export interface FileRoutesByFullPath {
   '/permissions': typeof AuthenticatedPermissionsRoute
   '/polls': typeof AuthenticatedPollsRoute
   '/ranks': typeof AuthenticatedRanksRoute
+  '/recruitment': typeof AuthenticatedRecruitmentRoute
   '/sanctions': typeof AuthenticatedSanctionsRoute
   '/sessions': typeof AuthenticatedSessionsRoute
   '/staff-roles': typeof AuthenticatedStaffRolesRoute
@@ -233,6 +248,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
+  '/absences': typeof AuthenticatedAbsencesRoute
   '/antiraid': typeof AuthenticatedAntiraidRoute
   '/audit': typeof AuthenticatedAuditRoute
   '/automod': typeof AuthenticatedAutomodRoute
@@ -251,6 +267,7 @@ export interface FileRoutesByTo {
   '/permissions': typeof AuthenticatedPermissionsRoute
   '/polls': typeof AuthenticatedPollsRoute
   '/ranks': typeof AuthenticatedRanksRoute
+  '/recruitment': typeof AuthenticatedRecruitmentRoute
   '/sanctions': typeof AuthenticatedSanctionsRoute
   '/sessions': typeof AuthenticatedSessionsRoute
   '/staff-roles': typeof AuthenticatedStaffRolesRoute
@@ -267,6 +284,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/login': typeof LoginRoute
+  '/_authenticated/absences': typeof AuthenticatedAbsencesRoute
   '/_authenticated/antiraid': typeof AuthenticatedAntiraidRoute
   '/_authenticated/audit': typeof AuthenticatedAuditRoute
   '/_authenticated/automod': typeof AuthenticatedAutomodRoute
@@ -285,6 +303,7 @@ export interface FileRoutesById {
   '/_authenticated/permissions': typeof AuthenticatedPermissionsRoute
   '/_authenticated/polls': typeof AuthenticatedPollsRoute
   '/_authenticated/ranks': typeof AuthenticatedRanksRoute
+  '/_authenticated/recruitment': typeof AuthenticatedRecruitmentRoute
   '/_authenticated/sanctions': typeof AuthenticatedSanctionsRoute
   '/_authenticated/sessions': typeof AuthenticatedSessionsRoute
   '/_authenticated/staff-roles': typeof AuthenticatedStaffRolesRoute
@@ -302,6 +321,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/absences'
     | '/antiraid'
     | '/audit'
     | '/automod'
@@ -320,6 +340,7 @@ export interface FileRouteTypes {
     | '/permissions'
     | '/polls'
     | '/ranks'
+    | '/recruitment'
     | '/sanctions'
     | '/sessions'
     | '/staff-roles'
@@ -333,6 +354,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
+    | '/absences'
     | '/antiraid'
     | '/audit'
     | '/automod'
@@ -351,6 +373,7 @@ export interface FileRouteTypes {
     | '/permissions'
     | '/polls'
     | '/ranks'
+    | '/recruitment'
     | '/sanctions'
     | '/sessions'
     | '/staff-roles'
@@ -366,6 +389,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_authenticated'
     | '/login'
+    | '/_authenticated/absences'
     | '/_authenticated/antiraid'
     | '/_authenticated/audit'
     | '/_authenticated/automod'
@@ -384,6 +408,7 @@ export interface FileRouteTypes {
     | '/_authenticated/permissions'
     | '/_authenticated/polls'
     | '/_authenticated/ranks'
+    | '/_authenticated/recruitment'
     | '/_authenticated/sanctions'
     | '/_authenticated/sessions'
     | '/_authenticated/staff-roles'
@@ -423,6 +448,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/absences': {
+      id: '/_authenticated/absences'
+      path: '/absences'
+      fullPath: '/absences'
+      preLoaderRoute: typeof AuthenticatedAbsencesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/antiraid': {
@@ -551,6 +583,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRanksRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/recruitment': {
+      id: '/_authenticated/recruitment'
+      path: '/recruitment'
+      fullPath: '/recruitment'
+      preLoaderRoute: typeof AuthenticatedRecruitmentRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/sanctions': {
       id: '/_authenticated/sanctions'
       path: '/sanctions'
@@ -625,6 +664,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAbsencesRoute: typeof AuthenticatedAbsencesRoute
   AuthenticatedAntiraidRoute: typeof AuthenticatedAntiraidRoute
   AuthenticatedAuditRoute: typeof AuthenticatedAuditRoute
   AuthenticatedAutomodRoute: typeof AuthenticatedAutomodRoute
@@ -643,6 +683,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedPermissionsRoute: typeof AuthenticatedPermissionsRoute
   AuthenticatedPollsRoute: typeof AuthenticatedPollsRoute
   AuthenticatedRanksRoute: typeof AuthenticatedRanksRoute
+  AuthenticatedRecruitmentRoute: typeof AuthenticatedRecruitmentRoute
   AuthenticatedSanctionsRoute: typeof AuthenticatedSanctionsRoute
   AuthenticatedSessionsRoute: typeof AuthenticatedSessionsRoute
   AuthenticatedStaffRolesRoute: typeof AuthenticatedStaffRolesRoute
@@ -657,6 +698,7 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAbsencesRoute: AuthenticatedAbsencesRoute,
   AuthenticatedAntiraidRoute: AuthenticatedAntiraidRoute,
   AuthenticatedAuditRoute: AuthenticatedAuditRoute,
   AuthenticatedAutomodRoute: AuthenticatedAutomodRoute,
@@ -675,6 +717,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedPermissionsRoute: AuthenticatedPermissionsRoute,
   AuthenticatedPollsRoute: AuthenticatedPollsRoute,
   AuthenticatedRanksRoute: AuthenticatedRanksRoute,
+  AuthenticatedRecruitmentRoute: AuthenticatedRecruitmentRoute,
   AuthenticatedSanctionsRoute: AuthenticatedSanctionsRoute,
   AuthenticatedSessionsRoute: AuthenticatedSessionsRoute,
   AuthenticatedStaffRolesRoute: AuthenticatedStaffRolesRoute,

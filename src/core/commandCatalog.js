@@ -28,5 +28,7 @@ export const COMMANDS = [
 	{ name: 'sondage', category: 'Communauté', description: 'Créer un sondage rapide, fermer un sondage', permissions: ['polls.manage'] },
 	{ name: 'giveaway', category: 'Communauté', description: 'Lancer, finir, relancer un giveaway, voir ceux en cours', permissions: ['giveaways.manage'] },
 	{ name: 'proposer', category: 'Communauté', description: 'Suggestion, report de bug ou bug interne du staff', permissions: [] },
+	{ name: 'candidature', category: 'Staff', description: 'Postuler dans le staff', permissions: [] },
+	{ name: 'absence', category: 'Staff', description: 'Déclarer une absence, signaler son retour, voir le staff absent', permissions: ['absences.declare'] },
 	{ name: 'ping', category: 'Divers', description: 'Latence du bot', permissions: [] },
 ];

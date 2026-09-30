@@ -108,6 +108,8 @@ async function main() {
 		setInterval(() => core.giveaways.tick().catch(error => logger.error('Giveaways failed:', error)), 30_000),
 		// Staff bugs still unassigned after their urgency delay
 		setInterval(() => core.feedback.tick().catch(error => logger.error('Feedback reminders failed:', error)), 60_000),
+		// Staff absences that start or end
+		setInterval(() => core.absences.tick().catch(error => logger.error('Absences failed:', error)), 60_000),
 		// Raids that are over
 		setInterval(() => core.antiraid.tick().catch(error => logger.error('Anti-raid tick failed:', error)), 30_000),
 		// Temporary roles reaching their end

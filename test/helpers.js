@@ -355,6 +355,19 @@ export function createFakeExecutor() {
 		async lockThread(threadId) {
 			this.lockedThreads.push(threadId);
 		},
+		applications: [],
+		async upsertApplicationMessage(channelId, messageId, view, options = {}) {
+			this.applications.push({ channelId, messageId, status: view.application.status, score: view.application.score });
+			return { messageId: messageId ?? String(800000000000000000n + BigInt(this.applications.length)), threadId: options.thread ? '810000000000000001' : null };
+		},
+		async publishRecruitmentPanel(channelId, messageId) {
+			return messageId ?? '820000000000000001';
+		},
+		interviews: [],
+		async createInterviewChannel(guildId, options) {
+			this.interviews.push({ guildId, ...options });
+			return '830000000000000001';
+		},
 		raidLocks: [],
 		async setRaidLocks(guildId, options) {
 			this.raidLocks.push(['lock', guildId, options]);
