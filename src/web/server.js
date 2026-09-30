@@ -35,6 +35,7 @@ import { registerTemplateRoutes } from './routes/templates.js';
 import { registerCustomCommandRoutes } from './routes/customCommands.js';
 import { registerBackupRoutes } from './routes/backups.js';
 import { registerStaffActivityRoutes } from './routes/staffActivity.js';
+import { registerRpEventRoutes } from './routes/rpEvents.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_STATIC_DIR = path.resolve(__dirname, '..', '..', 'web', 'dist');
@@ -103,6 +104,7 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	registerCustomCommandRoutes(app, { core });
 	registerBackupRoutes(app, { core });
 	registerStaffActivityRoutes(app, { core });
+	registerRpEventRoutes(app, { core });
 
 	const hasPanel = fs.existsSync(path.join(staticDir, 'index.html'));
 	const sendPanel = (reply) => {

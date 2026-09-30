@@ -108,6 +108,8 @@ async function main() {
 		setInterval(() => core.giveaways.tick().catch(error => logger.error('Giveaways failed:', error)), 30_000),
 		// Staff bugs still unassigned after their urgency delay
 		setInterval(() => core.feedback.tick().catch(error => logger.error('Feedback reminders failed:', error)), 60_000),
+		// RP events: reminders, start and end
+		setInterval(() => core.rpEvents.tick().catch(error => logger.error('RP events failed:', error)), 60_000),
 		// Monthly staff activity report
 		setInterval(() => core.staffActivity.tick().catch(error => logger.error('Staff report failed:', error)), 10 * 60_000),
 		// Nightly server backups

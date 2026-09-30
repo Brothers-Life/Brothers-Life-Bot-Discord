@@ -7,6 +7,7 @@ import { giveawayPayload, winnersPayload } from './giveawaysUi.js';
 import { boxPanelPayload, feedbackPayload, reviewPayload } from './feedbackUi.js';
 import { applicationPayload, recruitmentPanelPayload } from './recruitmentUi.js';
 import { fivemPayload } from './fivemUi.js';
+import { rpEventPayload } from './rpEventsUi.js';
 
 const COLORS = {
 	info: 0x5865f2,
@@ -475,6 +476,26 @@ export function createExecutor(client) {
 				if (error.code === RESTJSONErrorCodes.CannotSendMessagesToThisUser) throw Object.assign(new Error('DMs closed'), { code: 'DMS_CLOSED' });
 				throw error;
 			}
+		},
+
+		// --- RP events --------------------------------------------------------------------------------
+		// Event message edited in place; created with the target's ping (and the uploaded image) the first time
+		async upsertEventMessage(channelId, messageId, event, { target, files = [] } = {}) {
+			const channel = await client.channels.fetch(channelId);
+			const payload = rpEventPayload(event);
+			if (messageId) {
+				const existing = await channel.messages.fetch(messageId).catch(() => null);
+				if (existing) {
+					await existing.edit(payload);
+					return existing.id;
+				}
+			}
+			const ping = { everyone: '@everyone', here: '@here', roles: (target?.roleIds ?? []).map(id => `<@&${id}>`).join(' '), none: '' }[target?.ping ?? 'none'];
+			const message = await channel.send({
+				...payload, content: ping || undefined, files: files.map(f => new AttachmentBuilder(f.attachment, { name: f.name })),
+				allowedMentions: { parse: target?.ping === 'everyone' || target?.ping === 'here' ? ['everyone'] : [], roles: target?.ping === 'roles' ? target.roleIds : [] },
+			});
+			return message.id;
 		},
 
 		// --- FiveM ---------------------------------------------------------------------------------

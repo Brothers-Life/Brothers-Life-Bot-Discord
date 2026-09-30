@@ -77,7 +77,7 @@ function StaffActivityPage() {
       }
     >
       {!data ? <Skeleton className='h-96 w-full' /> : (
-        <div className='grid gap-6'>
+        <div className='grid grid-cols-[minmax(0,1fr)] gap-6'>
           <StatCards items={[
             { label: 'Membres du staff', value: members.length, icon: Users, tone: 'accent' },
             { label: 'Tickets fermés', value: sum('ticketsClosed'), icon: LifeBuoy, tone: 'success' },

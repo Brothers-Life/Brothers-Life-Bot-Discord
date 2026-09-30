@@ -36,6 +36,7 @@ import { Route as AuthenticatedPermissionsRouteImport } from './routes/_authenti
 import { Route as AuthenticatedPollsRouteImport } from './routes/_authenticated/polls'
 import { Route as AuthenticatedRanksRouteImport } from './routes/_authenticated/ranks'
 import { Route as AuthenticatedRecruitmentRouteImport } from './routes/_authenticated/recruitment'
+import { Route as AuthenticatedRpEventsRouteImport } from './routes/_authenticated/rp-events'
 import { Route as AuthenticatedSanctionsRouteImport } from './routes/_authenticated/sanctions'
 import { Route as AuthenticatedSessionsRouteImport } from './routes/_authenticated/sessions'
 import { Route as AuthenticatedStaffActivityRouteImport } from './routes/_authenticated/staff-activity'
@@ -187,6 +188,11 @@ const AuthenticatedRecruitmentRoute =
     path: '/recruitment',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedRpEventsRoute = AuthenticatedRpEventsRouteImport.update({
+  id: '/rp-events',
+  path: '/rp-events',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedSanctionsRoute = AuthenticatedSanctionsRouteImport.update({
   id: '/sanctions',
   path: '/sanctions',
@@ -283,6 +289,7 @@ export interface FileRoutesByFullPath {
   '/polls': typeof AuthenticatedPollsRoute
   '/ranks': typeof AuthenticatedRanksRoute
   '/recruitment': typeof AuthenticatedRecruitmentRoute
+  '/rp-events': typeof AuthenticatedRpEventsRoute
   '/sanctions': typeof AuthenticatedSanctionsRoute
   '/sessions': typeof AuthenticatedSessionsRoute
   '/staff-activity': typeof AuthenticatedStaffActivityRoute
@@ -323,6 +330,7 @@ export interface FileRoutesByTo {
   '/polls': typeof AuthenticatedPollsRoute
   '/ranks': typeof AuthenticatedRanksRoute
   '/recruitment': typeof AuthenticatedRecruitmentRoute
+  '/rp-events': typeof AuthenticatedRpEventsRoute
   '/sanctions': typeof AuthenticatedSanctionsRoute
   '/sessions': typeof AuthenticatedSessionsRoute
   '/staff-activity': typeof AuthenticatedStaffActivityRoute
@@ -366,6 +374,7 @@ export interface FileRoutesById {
   '/_authenticated/polls': typeof AuthenticatedPollsRoute
   '/_authenticated/ranks': typeof AuthenticatedRanksRoute
   '/_authenticated/recruitment': typeof AuthenticatedRecruitmentRoute
+  '/_authenticated/rp-events': typeof AuthenticatedRpEventsRoute
   '/_authenticated/sanctions': typeof AuthenticatedSanctionsRoute
   '/_authenticated/sessions': typeof AuthenticatedSessionsRoute
   '/_authenticated/staff-activity': typeof AuthenticatedStaffActivityRoute
@@ -410,6 +419,7 @@ export interface FileRouteTypes {
     | '/polls'
     | '/ranks'
     | '/recruitment'
+    | '/rp-events'
     | '/sanctions'
     | '/sessions'
     | '/staff-activity'
@@ -450,6 +460,7 @@ export interface FileRouteTypes {
     | '/polls'
     | '/ranks'
     | '/recruitment'
+    | '/rp-events'
     | '/sanctions'
     | '/sessions'
     | '/staff-activity'
@@ -492,6 +503,7 @@ export interface FileRouteTypes {
     | '/_authenticated/polls'
     | '/_authenticated/ranks'
     | '/_authenticated/recruitment'
+    | '/_authenticated/rp-events'
     | '/_authenticated/sanctions'
     | '/_authenticated/sessions'
     | '/_authenticated/staff-activity'
@@ -704,6 +716,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRecruitmentRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/rp-events': {
+      id: '/_authenticated/rp-events'
+      path: '/rp-events'
+      fullPath: '/rp-events'
+      preLoaderRoute: typeof AuthenticatedRpEventsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/sanctions': {
       id: '/_authenticated/sanctions'
       path: '/sanctions'
@@ -823,6 +842,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedPollsRoute: typeof AuthenticatedPollsRoute
   AuthenticatedRanksRoute: typeof AuthenticatedRanksRoute
   AuthenticatedRecruitmentRoute: typeof AuthenticatedRecruitmentRoute
+  AuthenticatedRpEventsRoute: typeof AuthenticatedRpEventsRoute
   AuthenticatedSanctionsRoute: typeof AuthenticatedSanctionsRoute
   AuthenticatedSessionsRoute: typeof AuthenticatedSessionsRoute
   AuthenticatedStaffActivityRoute: typeof AuthenticatedStaffActivityRoute
@@ -864,6 +884,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedPollsRoute: AuthenticatedPollsRoute,
   AuthenticatedRanksRoute: AuthenticatedRanksRoute,
   AuthenticatedRecruitmentRoute: AuthenticatedRecruitmentRoute,
+  AuthenticatedRpEventsRoute: AuthenticatedRpEventsRoute,
   AuthenticatedSanctionsRoute: AuthenticatedSanctionsRoute,
   AuthenticatedSessionsRoute: AuthenticatedSessionsRoute,
   AuthenticatedStaffActivityRoute: AuthenticatedStaffActivityRoute,

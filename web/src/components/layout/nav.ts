@@ -1,5 +1,6 @@
 import {
   Gauge,
+  CalendarDays,
   Trophy,
   DatabaseBackup,
   Wand2,
@@ -76,6 +77,7 @@ export const navSections: NavSection[] = [
       { title: 'Accueil', url: '/onboarding', icon: DoorOpen, permission: 'onboarding.view' },
       { title: 'Statistiques', url: '/stats', icon: ChartColumn, permission: 'stats.view' },
       { title: 'Vocaux perso', url: '/voice', icon: Headphones, permission: 'voice.view' },
+      { title: 'Événements RP', url: '/rp-events', icon: CalendarDays, permission: 'rpevents.view' },
       { title: 'Sondages', url: '/polls', icon: Vote, permission: 'polls.view' },
       { title: 'Giveaways', url: '/giveaways', icon: Gift, permission: 'giveaways.view' },
       { title: 'Suggestions et bugs', url: '/feedback', icon: Lightbulb, permission: null },

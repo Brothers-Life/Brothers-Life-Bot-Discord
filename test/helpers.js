@@ -419,6 +419,12 @@ export function createFakeExecutor() {
 			this.directs.push({ userId, ...data });
 			return String(850000000000000000n + BigInt(this.directs.length));
 		},
+		eventMessages: [],
+		async upsertEventMessage(channelId, messageId, event, options = {}) {
+			if (this.failOn.has(channelId)) throw new Error('Missing Access');
+			this.eventMessages.push({ channelId, messageId, event, options });
+			return messageId ?? String(860000000000000000n + BigInt(this.eventMessages.length));
+		},
 		fivemMessages: [],
 		async upsertFivemMessage(channelId, messageId, data) {
 			if (this.failOn.has(channelId)) throw new Error('Missing Access');
