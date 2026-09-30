@@ -285,3 +285,21 @@ test('invite link carries the application id, the bot permissions and both scope
 	assert.equal(url.searchParams.get('permissions'), '8');
 	assert.equal(url.searchParams.get('scope'), 'bot applications.commands');
 });
+
+test('announcements through the API: create, send with confirmation', async () => {
+	const { app, core, executor } = await setup();
+	core.network.activate(await core.ranks.resolve(OWNER), OTHER);
+	executor.channels.set('610000000000000001', { guildId: MAIN, name: 'annonces' });
+	const call = api(app, await sessionFor(app, OWNER));
+	const created = await call('POST', '/api/announcements', {
+		name: 'Test', payload: { content: 'Salut', embed: { title: 'Titre' } },
+		targets: [{ guildId: MAIN, channelId: '610000000000000001', ping: 'none' }],
+	});
+	assert.equal(created.statusCode, 201, created.body);
+	const id = created.json().id;
+	assert.equal((await call('POST', `/api/announcements/${id}/send`, {})).statusCode, 400, 'needs confirmation');
+	const sent = await call('POST', `/api/announcements/${id}/send`, { confirm: true });
+	assert.equal(sent.json().status, 'sent');
+	const targets = (await call('GET', '/api/announcements/targets')).json();
+	assert.ok(targets.some(t => t.id === MAIN && t.channels.length));
+});

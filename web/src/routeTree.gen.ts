@@ -27,6 +27,8 @@ import { Route as AuthenticatedSessionsRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedStaffRolesRouteImport } from './routes/_authenticated/staff-roles'
 import { Route as AuthenticatedTicketsRouteImport } from './routes/_authenticated/tickets'
 import { Route as AuthenticatedVersionsRouteImport } from './routes/_authenticated/versions'
+import { Route as AuthenticatedAnnouncementsIndexRouteImport } from './routes/_authenticated/announcements/index'
+import { Route as AuthenticatedAnnouncementsIdRouteImport } from './routes/_authenticated/announcements/$id'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -118,6 +120,18 @@ const AuthenticatedVersionsRoute = AuthenticatedVersionsRouteImport.update({
   path: '/versions',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAnnouncementsIndexRoute =
+  AuthenticatedAnnouncementsIndexRouteImport.update({
+    id: '/announcements/',
+    path: '/announcements/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAnnouncementsIdRoute =
+  AuthenticatedAnnouncementsIdRouteImport.update({
+    id: '/announcements/$id',
+    path: '/announcements/$id',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -137,6 +151,8 @@ export interface FileRoutesByFullPath {
   '/staff-roles': typeof AuthenticatedStaffRolesRoute
   '/tickets': typeof AuthenticatedTicketsRoute
   '/versions': typeof AuthenticatedVersionsRoute
+  '/announcements/$id': typeof AuthenticatedAnnouncementsIdRoute
+  '/announcements/': typeof AuthenticatedAnnouncementsIndexRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
@@ -156,6 +172,8 @@ export interface FileRoutesByTo {
   '/tickets': typeof AuthenticatedTicketsRoute
   '/versions': typeof AuthenticatedVersionsRoute
   '/': typeof AuthenticatedIndexRoute
+  '/announcements/$id': typeof AuthenticatedAnnouncementsIdRoute
+  '/announcements': typeof AuthenticatedAnnouncementsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -177,6 +195,8 @@ export interface FileRoutesById {
   '/_authenticated/tickets': typeof AuthenticatedTicketsRoute
   '/_authenticated/versions': typeof AuthenticatedVersionsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/announcements/$id': typeof AuthenticatedAnnouncementsIdRoute
+  '/_authenticated/announcements/': typeof AuthenticatedAnnouncementsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -198,6 +218,8 @@ export interface FileRouteTypes {
     | '/staff-roles'
     | '/tickets'
     | '/versions'
+    | '/announcements/$id'
+    | '/announcements/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
@@ -217,6 +239,8 @@ export interface FileRouteTypes {
     | '/tickets'
     | '/versions'
     | '/'
+    | '/announcements/$id'
+    | '/announcements'
   id:
     | '__root__'
     | '/_authenticated'
@@ -237,6 +261,8 @@ export interface FileRouteTypes {
     | '/_authenticated/tickets'
     | '/_authenticated/versions'
     | '/_authenticated/'
+    | '/_authenticated/announcements/$id'
+    | '/_authenticated/announcements/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -372,6 +398,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedVersionsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/announcements/': {
+      id: '/_authenticated/announcements/'
+      path: '/announcements'
+      fullPath: '/announcements/'
+      preLoaderRoute: typeof AuthenticatedAnnouncementsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/announcements/$id': {
+      id: '/_authenticated/announcements/$id'
+      path: '/announcements/$id'
+      fullPath: '/announcements/$id'
+      preLoaderRoute: typeof AuthenticatedAnnouncementsIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
@@ -392,6 +432,8 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedTicketsRoute: typeof AuthenticatedTicketsRoute
   AuthenticatedVersionsRoute: typeof AuthenticatedVersionsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedAnnouncementsIdRoute: typeof AuthenticatedAnnouncementsIdRoute
+  AuthenticatedAnnouncementsIndexRoute: typeof AuthenticatedAnnouncementsIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -411,6 +453,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedTicketsRoute: AuthenticatedTicketsRoute,
   AuthenticatedVersionsRoute: AuthenticatedVersionsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedAnnouncementsIdRoute: AuthenticatedAnnouncementsIdRoute,
+  AuthenticatedAnnouncementsIndexRoute: AuthenticatedAnnouncementsIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

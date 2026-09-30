@@ -15,6 +15,7 @@ import {
   Link2,
   LifeBuoy,
   KeySquare,
+  Megaphone,
 } from 'lucide-react'
 
 export type NavEntry = {
@@ -41,6 +42,7 @@ export const navSections: NavSection[] = [
       { title: 'Sanctions', url: '/sanctions', icon: Gavel, permission: 'sanctions.view' },
       { title: 'Automod', url: '/automod', icon: ShieldAlert, permission: 'automod.view' },
       { title: 'Tickets', url: '/tickets', icon: LifeBuoy, permission: 'tickets.view' },
+      { title: 'Annonces', url: '/announcements', icon: Megaphone, permission: 'announcements.view' },
     ],
   },
   {

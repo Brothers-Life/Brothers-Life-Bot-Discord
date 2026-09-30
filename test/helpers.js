@@ -113,6 +113,12 @@ export function createFakeExecutor() {
 			return this.bans.get(guildId) ?? [];
 		},
 		deleted: [],
+		announcements: [],
+		async sendAnnouncement(channelId, payload, target) {
+			if (this.failOn.has(channelId)) throw new Error('Missing Access');
+			this.announcements.push({ channelId, payload, target });
+			return String(650000000000000000n + BigInt(this.announcements.length));
+		},
 		// invite code -> guildId
 		invites: new Map(),
 		async resolveInvite(code) {

@@ -92,6 +92,8 @@ async function main() {
 		setInterval(() => core.sessions.purgeExpired(), HOUR),
 		// Temporary bans reaching their end
 		setInterval(() => core.sanctions.expireDue().catch(error => logger.error('Ban expiry failed:', error)), 30_000),
+		// Scheduled announcements
+		setInterval(() => core.announcements.sendDue().catch(error => logger.error('Announcements failed:', error)), 30_000),
 		// Server events older than the retention period
 		setInterval(() => core.events.purge(), 6 * HOUR),
 		// Roles whose Discord permissions drifted from their rank profile (reported, not fixed)

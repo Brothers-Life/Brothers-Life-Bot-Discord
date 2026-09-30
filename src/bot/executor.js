@@ -122,6 +122,38 @@ export function createExecutor(client) {
 			await channel.messages.delete(messageId);
 		},
 
+		// Announcement: text + embed, pings of the target, optional crosspost in announcement channels
+		async sendAnnouncement(channelId, payload, target) {
+			const channel = await client.channels.fetch(channelId);
+			const e = payload.embed;
+			const embeds = [];
+			if (e.enabled) {
+				const embed = new EmbedBuilder().setColor(e.color);
+				if (e.title) embed.setTitle(e.title);
+				if (e.url && e.title) embed.setURL(e.url);
+				if (e.description) embed.setDescription(e.description);
+				if (e.authorName) embed.setAuthor({ name: e.authorName, iconURL: e.authorIconUrl ?? undefined });
+				if (e.thumbnailUrl) embed.setThumbnail(e.thumbnailUrl);
+				if (e.imageUrl) embed.setImage(e.imageUrl);
+				if (e.footerText) embed.setFooter({ text: e.footerText, iconURL: e.footerIconUrl ?? undefined });
+				if (e.timestamp) embed.setTimestamp(new Date());
+				if (e.fields.length) embed.addFields(e.fields);
+				embeds.push(embed);
+			}
+			const ping = { everyone: '@everyone', here: '@here', roles: target.roleIds.map(id => `<@&${id}>`).join(' '), none: '' }[target.ping];
+			const content = [ping, payload.content].filter(Boolean).join('\n');
+			const message = await channel.send({
+				content: content || undefined,
+				embeds,
+				allowedMentions: {
+					parse: target.ping === 'everyone' || target.ping === 'here' ? ['everyone'] : [],
+					roles: target.ping === 'roles' ? target.roleIds : [],
+				},
+			});
+			if (target.publish && channel.type === ChannelType.GuildAnnouncement) await message.crosspost().catch(() => null);
+			return message.id;
+		},
+
 		// Server an invite leads to (null if invalid or expired)
 		async resolveInvite(code) {
 			const invite = await client.fetchInvite(code).catch(() => null);
@@ -244,7 +276,7 @@ export function createExecutor(client) {
 			return [...guild.channels.cache.values()]
 				.filter(c => TEXT_TYPES.has(c.type))
 				.sort((a, b) => (a.parent?.rawPosition ?? -1) - (b.parent?.rawPosition ?? -1) || a.rawPosition - b.rawPosition)
-				.map(c => ({ id: c.id, name: c.name, parent: c.parent?.name ?? null, canSend: canSend(c) }));
+				.map(c => ({ id: c.id, name: c.name, parent: c.parent?.name ?? null, canSend: canSend(c), announcement: c.type === ChannelType.GuildAnnouncement }));
 		},
 
 		async listRoles(guildId) {

@@ -10,6 +10,7 @@ import { createAutomod } from './automod/index.js';
 import { createStaffSync } from './staffSync.js';
 import { createMembers } from './members.js';
 import { createRoleImport } from './roleImport.js';
+import { createAnnouncements } from './announcements.js';
 import { createTickets } from './tickets.js';
 import { createPermissionSync } from './permissionSync.js';
 import { definePermission } from './permissions.js';
@@ -42,6 +43,7 @@ export function createCore({ db, config, executor, logger = console }) {
 	const staffSync = createStaffSync({ db, network, ranks, audit, executor, logs, logger });
 	const members = createMembers({ db, network, ranks, sanctions, audit, executor });
 	const roleImport = createRoleImport({ db, network, ranks, staffSync, executor, audit });
+	const announcements = createAnnouncements({ db, network, audit, executor, logs, logger });
 	const tickets = createTickets({ db, network, ranks, audit, executor, logs, logger });
 	const permissionSync = createPermissionSync({ db, network, ranks, audit, executor, logs, settings });
 
@@ -76,5 +78,5 @@ export function createCore({ db, config, executor, logger = console }) {
 		sanctions.syncGuild(guild.id).catch(error => logger.error(`Ban sync failed on ${guild.name}:`, error));
 	});
 
-	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, events, automod, staffSync, members, tickets, permissionSync, roleImport };
+	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements };
 }

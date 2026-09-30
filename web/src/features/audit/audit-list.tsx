@@ -54,6 +54,12 @@ export const ACTION_LABELS: Record<string, string> = {
   'permissions.profile': 'Profil de permissions modifié',
   'permissions.apply': 'Profils de permissions appliqués',
   'permissions.drift': 'Écart de permissions détecté',
+  'ranks.import': 'Rangs importés depuis les rôles',
+  'announcements.create': 'Annonce créée',
+  'announcements.send': 'Annonce envoyée',
+  'announcements.schedule': 'Annonce programmée',
+  'announcements.unschedule': 'Programmation annulée',
+  'announcements.delete': 'Annonce supprimée',
 }
 
 const SOURCE_LABELS: Record<AuditEntry['source'], string> = {

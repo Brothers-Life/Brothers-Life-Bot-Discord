@@ -49,7 +49,7 @@ export type PanelMember = {
 
 export type DiscordUser = { id: string; username: string; globalName: string | null; avatar: string | null }
 
-export type Channel = { id: string; name: string; parent: string | null; canSend: boolean }
+export type Channel = { id: string; name: string; parent: string | null; canSend: boolean; announcement?: boolean }
 
 export type LogRoute = { category: string; channelId: string; enabled: boolean }
 
@@ -276,3 +276,50 @@ export type PermissionRow = {
   editable: boolean
   error?: string
 }
+
+export type AnnouncementEmbed = {
+  enabled: boolean
+  title: string
+  url: string | null
+  description: string
+  color: string
+  authorName: string
+  authorIconUrl: string | null
+  thumbnailUrl: string | null
+  imageUrl: string | null
+  footerText: string
+  footerIconUrl: string | null
+  timestamp: boolean
+  fields: { name: string; value: string; inline: boolean }[]
+}
+
+export type AnnouncementTarget = {
+  guildId: string
+  channelId: string
+  ping: 'none' | 'everyone' | 'here' | 'roles'
+  roleIds: string[]
+  publish: boolean
+}
+
+export type Announcement = {
+  id: number
+  name: string
+  payload: { content: string; embed: AnnouncementEmbed }
+  targets: AnnouncementTarget[]
+  status: 'draft' | 'scheduled' | 'sending' | 'sent' | 'partial' | 'failed' | 'deleted'
+  scheduledAt: number | null
+  sentAt: number | null
+  results: (AnnouncementTarget & { ok: boolean; messageId?: string; error?: string; deleted?: boolean })[] | null
+  createdBy: string
+  createdAt: number
+  updatedAt: number
+  author: { name: string | null; avatar: string | null } | null
+}
+
+export type AnnouncementTargetsPayload = {
+  id: string
+  name: string
+  isMain: boolean
+  channels: Channel[]
+  roles: { id: string; name: string; color: string }[]
+}[]
