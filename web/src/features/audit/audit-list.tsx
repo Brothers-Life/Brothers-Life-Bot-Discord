@@ -35,6 +35,9 @@ export const ACTION_LABELS: Record<string, string> = {
   'sanctions.warn': 'Avertissement',
   'sanctions.unwarn': 'Avertissement retiré',
   'sanctions.sync': 'Bans synchronisés sur un serveur',
+  'automod.trigger': 'Automod déclenché',
+  'automod.config': 'Automod reconfiguré',
+  'automod.reset': 'Automod : retour au réglage réseau',
 }
 
 const SOURCE_LABELS: Record<AuditEntry['source'], string> = {
@@ -44,7 +47,7 @@ const SOURCE_LABELS: Record<AuditEntry['source'], string> = {
   system: 'Système',
 }
 
-const DANGER = new Set(['network.bot_left', 'network.remove', 'ranks.delete', 'panel.login_denied', 'system.stop', 'sanctions.ban', 'sanctions.kick'])
+const DANGER = new Set(['network.bot_left', 'network.remove', 'ranks.delete', 'panel.login_denied', 'system.stop', 'sanctions.ban', 'sanctions.kick', 'automod.trigger'])
 
 function describe(entry: AuditEntry) {
   const d = entry.details ?? {}
@@ -54,6 +57,7 @@ function describe(entry: AuditEntry) {
   if (typeof d.rank === 'string') parts.push(`rang ${d.rank}`)
   if (entry.action.startsWith('ranks.') && entry.target && /^\d{17,20}$/.test(entry.target)) parts.push(`utilisateur ${entry.target}`)
   if (entry.action === 'system.install' && entry.target) parts.push(entry.target)
+  if (entry.action === 'automod.trigger' && typeof d.reason === 'string') parts.push(`${d.user ?? ''} : ${d.reason}`)
   if (typeof d.username === 'string') parts.push(d.username)
   if (entry.action.startsWith('sanctions.') && typeof d.user === 'string') parts.push(d.user)
   if (entry.action.startsWith('sanctions.') && typeof d.reason === 'string' && d.reason) parts.push(`« ${d.reason} »`)

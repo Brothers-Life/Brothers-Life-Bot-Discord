@@ -82,6 +82,10 @@ export function createFakeExecutor() {
 		async fetchBans(guildId) {
 			return this.bans.get(guildId) ?? [];
 		},
+		deleted: [],
+		async deleteMessage(channelId, messageId) {
+			this.deleted.push([channelId, messageId]);
+		},
 		async sendDM(userId, content) {
 			this.dms.push([userId, content]);
 		},

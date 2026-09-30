@@ -92,6 +92,11 @@ export function createExecutor(client) {
 			return [...bans.values()].map(b => ({ userId: b.user.id, username: b.user.username, reason: b.reason }));
 		},
 
+		async deleteMessage(channelId, messageId) {
+			const channel = await client.channels.fetch(channelId);
+			await channel.messages.delete(messageId);
+		},
+
 		async sendDM(userId, content) {
 			const user = await client.users.fetch(userId);
 			await user.send({ content, allowedMentions: { parse: [] } });

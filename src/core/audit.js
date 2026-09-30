@@ -24,6 +24,8 @@ export function createAudit({ db, now = Date.now }) {
 	return {
 		// action is "<category>.<verb>", e.g. "ranks.create": the category drives log routing
 		record({ actorId, source, action, guildId = null, target = null, details = null, results = null }) {
+			// Automod actions are system actions whose author is "automod"
+			if (source === 'automod') source = 'system';
 			if (!SOURCES.has(source)) throw new Error(`Unknown audit source: ${source}`);
 			const entry = { at: now(), actorId: String(actorId), source, action, guildId, target, details, results };
 			const { lastInsertRowid } = insert.run({

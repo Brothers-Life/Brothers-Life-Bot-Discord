@@ -10,6 +10,7 @@ import {
   PackageCheck,
   Gavel,
   Activity,
+  ShieldAlert,
 } from 'lucide-react'
 
 export type NavEntry = {
@@ -34,6 +35,7 @@ export const navSections: NavSection[] = [
     title: 'Modération',
     items: [
       { title: 'Sanctions', url: '/sanctions', icon: Gavel, permission: 'sanctions.view' },
+      { title: 'Automod', url: '/automod', icon: ShieldAlert, permission: 'automod.view' },
     ],
   },
   {

@@ -19,6 +19,7 @@ const CATEGORIES = [
   { value: 'ranks', label: 'Rangs' },
   { value: 'panel', label: 'Panel' },
   { value: 'sanctions', label: 'Sanctions' },
+  { value: 'automod', label: 'Automod' },
   { value: 'logs', label: 'Salons de logs' },
   { value: 'system', label: 'Système' },
 ]

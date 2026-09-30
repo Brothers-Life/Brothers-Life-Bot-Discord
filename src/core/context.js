@@ -6,6 +6,7 @@ import { createLogRouting } from './logRouting.js';
 import { createSessions } from './sessions.js';
 import { createSanctions } from './sanctions.js';
 import { createEvents } from './events.js';
+import { createAutomod } from './automod/index.js';
 import { describeAuditEntry } from './describe.js';
 
 // Wires every core service together. `executor` is the only door to Discord:
@@ -26,6 +27,7 @@ export function createCore({ db, config, executor, logger = console }) {
 	const sanctions = createSanctions({ db, audit, network, ranks, executor, logger });
 	logs.registerCategory('sanctions', 'Sanctions (ban, kick, timeout, warn)');
 	const events = createEvents({ db, network, logs, settings });
+	const automod = createAutomod({ db, network, sanctions, ranks, audit, executor, logs, logger });
 
 	// Every audited action is also posted in the log channel of its category
 	audit.onRecord((entry) => {
@@ -42,5 +44,5 @@ export function createCore({ db, config, executor, logger = console }) {
 		sanctions.syncGuild(guild.id).catch(error => logger.error(`Ban sync failed on ${guild.name}:`, error));
 	});
 
-	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, events };
+	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, events, automod };
 }

@@ -169,3 +169,21 @@ export type NetworkEvent = {
   user: { name: string | null; avatar: string | null } | null
   actor: { name: string | null; avatar: string | null } | null
 }
+
+export type AutomodAction = 'delete' | 'warn' | 'timeout' | 'kick' | 'ban' | 'network_ban'
+
+export type AutomodConfig = {
+  enabled: boolean
+  exemptRoles: string[]
+  exemptChannels: string[]
+  spam: { enabled: boolean; maxMessages: number; perSeconds: number; maxDuplicates: number; duplicateSeconds: number; maxMentions: number; action: AutomodAction; timeoutMinutes: number }
+  uploads: { enabled: boolean; maxPerMessage: number; maxFiles: number; perSeconds: number; action: AutomodAction; timeoutMinutes: number }
+  scam: { enabled: boolean; action: AutomodAction; customDomains: string[]; customPatterns: string[]; blockEveryoneLinks: boolean }
+  invites: { enabled: boolean; action: AutomodAction; allowedCodes: string[] }
+}
+
+export type AutomodPayload = {
+  network: AutomodConfig
+  guilds: { id: string; name: string; custom: boolean; config: AutomodConfig }[]
+  defaults: AutomodConfig
+}

@@ -33,6 +33,9 @@ const TITLES = {
 	'sanctions.warn': 'Avertissement',
 	'sanctions.unwarn': 'Avertissement retiré',
 	'sanctions.sync': 'Bans synchronisés sur un serveur',
+	'automod.trigger': 'Automod déclenché',
+	'automod.config': 'Automod reconfiguré',
+	'automod.reset': 'Automod : retour au réglage réseau',
 };
 
 const COLORS = {
@@ -51,6 +54,7 @@ const COLORS = {
 	'sanctions.unban': 'success',
 	'sanctions.untimeout': 'success',
 	'sanctions.unwarn': 'success',
+	'automod.trigger': 'danger',
 };
 
 function actorLabel(actorId) {
