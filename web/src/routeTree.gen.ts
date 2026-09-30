@@ -14,6 +14,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedAuditRouteImport } from './routes/_authenticated/audit'
 import { Route as AuthenticatedConsoleRouteImport } from './routes/_authenticated/console'
+import { Route as AuthenticatedEventsRouteImport } from './routes/_authenticated/events'
 import { Route as AuthenticatedLogsRouteImport } from './routes/_authenticated/logs'
 import { Route as AuthenticatedMembersRouteImport } from './routes/_authenticated/members'
 import { Route as AuthenticatedNetworkRouteImport } from './routes/_authenticated/network'
@@ -44,6 +45,11 @@ const AuthenticatedAuditRoute = AuthenticatedAuditRouteImport.update({
 const AuthenticatedConsoleRoute = AuthenticatedConsoleRouteImport.update({
   id: '/console',
   path: '/console',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedEventsRoute = AuthenticatedEventsRouteImport.update({
+  id: '/events',
+  path: '/events',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedLogsRoute = AuthenticatedLogsRouteImport.update({
@@ -87,6 +93,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/audit': typeof AuthenticatedAuditRoute
   '/console': typeof AuthenticatedConsoleRoute
+  '/events': typeof AuthenticatedEventsRoute
   '/logs': typeof AuthenticatedLogsRoute
   '/members': typeof AuthenticatedMembersRoute
   '/network': typeof AuthenticatedNetworkRoute
@@ -99,6 +106,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/audit': typeof AuthenticatedAuditRoute
   '/console': typeof AuthenticatedConsoleRoute
+  '/events': typeof AuthenticatedEventsRoute
   '/logs': typeof AuthenticatedLogsRoute
   '/members': typeof AuthenticatedMembersRoute
   '/network': typeof AuthenticatedNetworkRoute
@@ -114,6 +122,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_authenticated/audit': typeof AuthenticatedAuditRoute
   '/_authenticated/console': typeof AuthenticatedConsoleRoute
+  '/_authenticated/events': typeof AuthenticatedEventsRoute
   '/_authenticated/logs': typeof AuthenticatedLogsRoute
   '/_authenticated/members': typeof AuthenticatedMembersRoute
   '/_authenticated/network': typeof AuthenticatedNetworkRoute
@@ -130,6 +139,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/audit'
     | '/console'
+    | '/events'
     | '/logs'
     | '/members'
     | '/network'
@@ -142,6 +152,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/audit'
     | '/console'
+    | '/events'
     | '/logs'
     | '/members'
     | '/network'
@@ -156,6 +167,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/_authenticated/audit'
     | '/_authenticated/console'
+    | '/_authenticated/events'
     | '/_authenticated/logs'
     | '/_authenticated/members'
     | '/_authenticated/network'
@@ -206,6 +218,13 @@ declare module '@tanstack/react-router' {
       path: '/console'
       fullPath: '/console'
       preLoaderRoute: typeof AuthenticatedConsoleRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/events': {
+      id: '/_authenticated/events'
+      path: '/events'
+      fullPath: '/events'
+      preLoaderRoute: typeof AuthenticatedEventsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/logs': {
@@ -263,6 +282,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAuditRoute: typeof AuthenticatedAuditRoute
   AuthenticatedConsoleRoute: typeof AuthenticatedConsoleRoute
+  AuthenticatedEventsRoute: typeof AuthenticatedEventsRoute
   AuthenticatedLogsRoute: typeof AuthenticatedLogsRoute
   AuthenticatedMembersRoute: typeof AuthenticatedMembersRoute
   AuthenticatedNetworkRoute: typeof AuthenticatedNetworkRoute
@@ -276,6 +296,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAuditRoute: AuthenticatedAuditRoute,
   AuthenticatedConsoleRoute: AuthenticatedConsoleRoute,
+  AuthenticatedEventsRoute: AuthenticatedEventsRoute,
   AuthenticatedLogsRoute: AuthenticatedLogsRoute,
   AuthenticatedMembersRoute: AuthenticatedMembersRoute,
   AuthenticatedNetworkRoute: AuthenticatedNetworkRoute,

@@ -13,6 +13,7 @@ import { registerAuthRoutes } from './auth.js';
 import { registerPanelRoutes } from './routes/panel.js';
 import { registerSystemRoutes } from './routes/system.js';
 import { registerSanctionRoutes } from './routes/sanctions.js';
+import { registerEventRoutes } from './routes/events.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_STATIC_DIR = path.resolve(__dirname, '..', '..', 'web', 'dist');
@@ -58,6 +59,7 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	registerPanelRoutes(app, { core, runtime });
 	registerSystemRoutes(app, { core, runtime, consoleLog, versions });
 	registerSanctionRoutes(app, { core });
+	registerEventRoutes(app, { core });
 
 	const hasPanel = fs.existsSync(path.join(staticDir, 'index.html'));
 	if (hasPanel) {

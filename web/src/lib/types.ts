@@ -153,3 +153,19 @@ export type Sanction = {
   user: { name: string | null; avatar: string | null } | null
   moderator: { name: string | null; avatar: string | null } | null
 }
+
+export type NetworkEvent = {
+  id: number
+  at: number
+  guildId: string
+  guildName: string
+  category: string
+  type: string
+  userId: string | null
+  actorId: string | null
+  channelId: string | null
+  summary: string
+  details: Record<string, unknown> | null
+  user: { name: string | null; avatar: string | null } | null
+  actor: { name: string | null; avatar: string | null } | null
+}

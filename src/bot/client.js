@@ -5,6 +5,7 @@ import { Client, Collection, GatewayIntentBits, Partials } from 'discord.js';
 import { createExecutor } from './executor.js';
 import { loadCommands } from './loadCommands.js';
 import logger from '../utils/logger.js';
+import { cacheGuildInvites } from './invites.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -12,8 +13,18 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // the core is attached afterwards with attachCore().
 export function createBot() {
 	const client = new Client({
-		intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildModeration],
-		partials: [Partials.GuildMember],
+		intents: [
+			GatewayIntentBits.Guilds,
+			GatewayIntentBits.GuildMembers,
+			GatewayIntentBits.GuildModeration,
+			GatewayIntentBits.GuildMessages,
+			GatewayIntentBits.MessageContent,
+			GatewayIntentBits.GuildVoiceStates,
+			GatewayIntentBits.GuildInvites,
+			GatewayIntentBits.GuildExpressions,
+		],
+		// Partials: still get events for messages/members that are no longer in cache
+		partials: [Partials.GuildMember, Partials.Message, Partials.Channel, Partials.User],
 	});
 	client.commands = new Collection();
 	client.cooldowns = new Collection();
@@ -45,6 +56,12 @@ export function createBot() {
 				if (event.once) client.once(event.name, handler);
 				else client.on(event.name, handler);
 			}
+
+			// A server joining the network: start tracking its invites
+			core.network.on('activated', ({ id }) => {
+				const guild = client.guilds.cache.get(id);
+				if (guild) cacheGuildInvites(guild);
+			});
 
 			// A new main server means new rank roles to watch: cache its members
 			core.network.on('mainChanged', ({ main }) => {

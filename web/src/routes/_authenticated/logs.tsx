@@ -8,6 +8,8 @@ import { Page, Section, EmptyState, Pill } from '@/components/app/ui'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 export const Route = createFileRoute('/_authenticated/logs')({
   component: LogsPage,
@@ -39,6 +41,7 @@ function LogsPage() {
           <EmptyState title='Aucun serveur à configurer'>Ajoute d’abord des serveurs au réseau.</EmptyState>
         </Section>
       )}
+      <RetentionSetting />
       {current && data && (
         <div className='grid grid-cols-1 gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]'>
           <nav aria-label='Serveurs' className='flex gap-1 overflow-x-auto lg:flex-col'>
@@ -129,5 +132,35 @@ function RouteTable({ guildId, title, channelsOf, routes, categories }: {
         })}
       </ul>
     </Section>
+  )
+}
+
+function RetentionSetting() {
+  const qc = useQueryClient()
+  const { data } = useQuery({ queryKey: ['events-settings'], queryFn: () => api<{ retentionDays: number }>('/events/settings') })
+  const [days, setDays] = useState<string>('')
+  const save = useMutation({
+    mutationFn: (retentionDays: number) => api('/events/settings', { method: 'PUT', body: { retentionDays } }),
+    onSuccess: () => {
+      toast.success('Durée de conservation enregistrée')
+      qc.invalidateQueries({ queryKey: ['events-settings'] })
+      setDays('')
+    },
+  })
+  if (!data) return null
+  const value = days === '' ? String(data.retentionDays) : days
+  return (
+    <form
+      className='flex flex-wrap items-center gap-2 text-sm'
+      onSubmit={(e) => {
+        e.preventDefault()
+        save.mutate(Number(value))
+      }}
+    >
+      <label htmlFor='retention'>Conserver les événements</label>
+      <Input id='retention' type='number' min={1} max={365} value={value} onChange={(e) => setDays(e.target.value)} className='h-8 w-20' />
+      <span>jours dans la base</span>
+      {days !== '' && Number(days) !== data.retentionDays && <Button size='sm' type='submit' disabled={save.isPending}>Enregistrer</Button>}
+    </form>
   )
 }

@@ -1,4 +1,5 @@
 import { AuditLogEvent, Events } from 'discord.js';
+import { auditEntry } from '../eventLog.js';
 
 export const name = Events.GuildAuditLogEntryCreate;
 
@@ -6,6 +7,9 @@ export const name = Events.GuildAuditLogEntryCreate;
 // which propagates it to the network if the author's rank allows it.
 export async function execute(entry, guild) {
 	const { core } = guild.client;
+	// Role, channel and server changes go to the event logs (with their author)
+	auditEntry(entry, guild);
+
 	if (!entry.executorId || entry.executorId === guild.client.user.id || !entry.targetId) return;
 
 	const base = { guildId: guild.id, userId: entry.targetId, executorId: entry.executorId, reason: entry.reason ?? null };

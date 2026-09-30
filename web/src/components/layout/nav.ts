@@ -9,6 +9,7 @@ import {
   SquareTerminal,
   PackageCheck,
   Gavel,
+  Activity,
 } from 'lucide-react'
 
 export type NavEntry = {
@@ -45,6 +46,7 @@ export const navSections: NavSection[] = [
   {
     title: 'Suivi',
     items: [
+      { title: 'Événements', url: '/events', icon: Activity, permission: 'events.view' },
       { title: 'Salons de logs', url: '/logs', icon: ScrollText, permission: 'logs.manage' },
       { title: 'Journal', url: '/audit', icon: History, permission: 'audit.view' },
       { title: 'Sessions', url: '/sessions', icon: KeyRound, permission: null },

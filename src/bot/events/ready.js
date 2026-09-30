@@ -1,5 +1,6 @@
 import { Events } from 'discord.js';
 import logger from '../../utils/logger.js';
+import { cacheGuildInvites } from '../invites.js';
 
 export const name = Events.ClientReady;
 export const once = true;
@@ -26,6 +27,12 @@ export async function execute(client) {
 		catch (error) {
 			logger.warn('Unable to fetch the members of the main server:', error);
 		}
+	}
+
+	// Invite counters, to know which invite each new member used
+	for (const guildId of network.activeIds()) {
+		const guild = client.guilds.cache.get(guildId);
+		if (guild) await cacheGuildInvites(guild);
 	}
 
 	const pending = network.list().filter(g => g.status === 'pending' && g.botPresent);
