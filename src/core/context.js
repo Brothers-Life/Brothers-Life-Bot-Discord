@@ -6,6 +6,7 @@ import { createRankService } from './ranks.js';
 import { createLogRouting } from './logRouting.js';
 import { createSessions } from './sessions.js';
 import { createSanctions } from './sanctions.js';
+import { createSanctionTemplates } from './sanctionTemplates.js';
 import { createRestrictions } from './restrictions.js';
 import { createModeration } from './moderation.js';
 import { createEvents } from './events.js';
@@ -62,6 +63,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const sessions = createSessions({ db });
 	const restrictions = createRestrictions({ db, network, audit, executor, logger });
 	const sanctions = createSanctions({ db, audit, network, ranks, executor, restrictions, logger });
+	const sanctionTemplates = createSanctionTemplates({ db, audit, restrictions });
 	logs.registerCategory('sanctions', 'Sanctions (ban, kick, timeout, warn)');
 	const events = createEvents({ db, network, logs, settings });
 	const automod = createAutomod({ db, network, sanctions, ranks, audit, executor, logs, logger });
@@ -136,5 +138,5 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 		sanctions.syncGuild(guild.id).catch(error => logger.error(`Ban sync failed on ${guild.name}:`, error));
 	});
 
-	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents };
+	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, sanctionTemplates, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents };
 }

@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { durationInput, useSanctionTemplates } from './templates'
 
 export const TYPE_LABELS: Record<SanctionType, string> = { ban: 'Bannir', kick: 'Expulser', timeout: 'Timeout', warn: 'Avertir', restrict: 'Restreindre' }
 
@@ -25,6 +26,21 @@ export function SanctionDialog({ userId: initialUserId = '', onClose }: { userId
   const [scope, setScope] = useState<'network' | 'local'>('network')
   const [guildId, setGuildId] = useState('')
   const [profile, setProfile] = useState('')
+  const [deleteMessageSeconds, setDeleteMessageSeconds] = useState(0)
+  const [templateId, setTemplateId] = useState('none')
+  const templates = (useSanctionTemplates().data ?? []).filter((t) => allowed.includes(t.type))
+  // A template fills the form; everything stays editable afterwards
+  const applyTemplate = (id: string) => {
+    setTemplateId(id)
+    const t = templates.find((x) => String(x.id) === id)
+    if (!t) return
+    setType(t.type)
+    setReason(t.reason)
+    setDuration(durationInput(t.durationMs))
+    setScope(t.scope)
+    setProfile(t.profile ?? '')
+    setDeleteMessageSeconds(t.deleteMessageSeconds)
+  }
   const profiles = useQuery({ queryKey: ['restrictions'], queryFn: () => api<{ profiles: RestrictionProfile[] }>('/restrictions'), enabled: type === 'restrict' })
 
   const validId = /^\d{17,20}$/.test(userId.trim())
@@ -46,6 +62,7 @@ export function SanctionDialog({ userId: initialUserId = '', onClose }: { userId
         scope: type === 'warn' ? 'network' : scope,
         originGuildId: scope === 'local' ? guildId : null,
         profile: type === 'restrict' ? profile : null,
+        ...(type === 'ban' ? { deleteMessageSeconds } : {}),
       },
     }),
     onSuccess: (s) => {
@@ -74,6 +91,20 @@ export function SanctionDialog({ userId: initialUserId = '', onClose }: { userId
             if (valid) submit.mutate()
           }}
         >
+          {templates.length > 0 && (
+            <div className='grid gap-1.5'>
+              <Label>Modèle</Label>
+              <Select value={templateId} onValueChange={applyTemplate}>
+                <SelectTrigger aria-label='Modèle de sanction'><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='none'>Aucun, tout remplir à la main</SelectItem>
+                  {templates.map((t) => <SelectItem key={t.id} value={String(t.id)}>{t.name} · {TYPE_LABELS[t.type]}{t.durationLabel ? ` ${t.durationLabel}` : ''}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <p className='text-xs text-muted-foreground'>Remplit le formulaire : tu peux ensuite tout modifier, par exemple ajouter une précision à la raison.</p>
+            </div>
+          )}
+
           <div className='grid gap-1.5'>
             <Label htmlFor='sanction-user'>Membre</Label>
             <UserPicker id='sanction-user' value={userId} onChange={setUserId} autoFocus={!initialUserId} />
@@ -97,6 +128,19 @@ export function SanctionDialog({ userId: initialUserId = '', onClose }: { userId
               </div>
             )}
           </div>
+
+          {type === 'ban' && (
+            <div className='grid gap-1.5'>
+              <Label>Supprimer ses messages récents</Label>
+              <Select value={String(deleteMessageSeconds)} onValueChange={(v) => setDeleteMessageSeconds(Number(v))}>
+                <SelectTrigger aria-label='Supprimer ses messages récents'><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='0'>Rien</SelectItem><SelectItem value='3600'>Dernière heure</SelectItem>
+                  <SelectItem value='86400'>24 dernières heures</SelectItem><SelectItem value='604800'>7 derniers jours</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {type === 'restrict' && (
             <div className='grid gap-1.5'>

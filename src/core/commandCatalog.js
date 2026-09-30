@@ -10,6 +10,7 @@ export const COMMANDS = [
 	{ name: 'unban', category: 'Sanctions', description: 'Débannir', permissions: ['sanctions.revoke'] },
 	{ name: 'untimeout', category: 'Sanctions', description: 'Lever un timeout', permissions: ['sanctions.revoke'] },
 	{ name: 'unwarn', category: 'Sanctions', description: 'Retirer un avertissement', permissions: ['sanctions.revoke'] },
+	{ name: 'sanctionner', category: 'Sanctions', description: 'Sanctionner avec un modèle (raison, durée, portée prêtes), ajustable', permissions: ['sanctions.warn', 'sanctions.timeout', 'sanctions.kick', 'sanctions.ban', 'sanctions.restrict'] },
 	{ name: 'sanction', category: 'Sanctions', description: 'Voir, lever ou corriger une sanction par son numéro', permissions: ['sanctions.view', 'sanctions.revoke', 'sanctions.edit'] },
 	{ name: 'historique', category: 'Sanctions', description: 'Sanctions d’un membre sur tout le réseau', permissions: ['sanctions.view'] },
 	{ name: 'clear', category: 'Modération', description: 'Supprimer des messages en masse (filtre membre, texte, bots)', permissions: ['commands.clear'] },

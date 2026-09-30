@@ -174,3 +174,32 @@ test('list filters', async () => {
 	assert.equal(core.sanctions.list({ type: 'warn' }).length, 1);
 	assert.equal(core.sanctions.list({ active: true }).length, 1);
 });
+
+test('templates: a base the moderator adjusts; suggestions limited to what one may apply; checks on save', async () => {
+	const { core, owner, alice, executor } = await setup();
+	const T = core.sanctionTemplates;
+	const insult = T.save(owner, { name: 'Insultes', type: 'timeout', reason: 'Insultes envers un membre', durationMs: 3_600_000 });
+	const cheat = T.save(owner, { name: 'Triche', type: 'ban', reason: 'Triche / exploit', durationMs: null, deleteMessageSeconds: 86400 });
+	assert.equal(insult.durationLabel, formatDuration(3_600_000));
+	assert.throws(() => T.save(owner, { name: 'insultes', type: 'warn', reason: 'x' }), ValidationError, 'names are unique');
+	assert.throws(() => T.save(owner, { name: 'Vide', type: 'warn', reason: '' }), ValidationError, 'a warn needs a reason');
+	assert.throws(() => T.save(owner, { name: 'Long', type: 'timeout', durationMs: 40 * 86_400_000 }), ValidationError);
+	assert.throws(() => T.save(alice, { name: 'Nope', type: 'warn', reason: 'x' }), ForbiddenError);
+
+	assert.deepEqual(T.suggest(alice).map(t => t.name), ['Insultes'], 'alice cannot ban');
+	assert.deepEqual(T.suggest(owner, 'exploit').map(t => t.name), ['Triche'], 'search in the reason too');
+
+	// Used as-is, then adjusted: extra reason appended, duration and scope replaced
+	const base = T.resolve(insult.id);
+	assert.deepEqual([base.type, base.reason, base.durationMs, base.scope], ['timeout', 'Insultes envers un membre', 3_600_000, 'network']);
+	const tuned = T.resolve(insult.id, { extra: 'en vocal', durationMs: 7_200_000, scope: 'local' });
+	assert.deepEqual([tuned.reason, tuned.durationMs, tuned.scope], ['Insultes envers un membre · en vocal', 7_200_000, 'local']);
+	executor.members.set(MAIN, new Set([TARGET]));
+	const sanction = await core.sanctions.create(alice, { ...tuned, userId: TARGET, originGuildId: MAIN });
+	assert.equal(sanction.reason, 'Insultes envers un membre · en vocal');
+	assert.equal(T.resolve(cheat.id).deleteMessageSeconds, 86400);
+
+	assert.deepEqual(T.reorder(owner, [cheat.id, insult.id]).map(t => t.name), ['Triche', 'Insultes']);
+	T.remove(owner, cheat.id);
+	assert.deepEqual(T.list().map(t => t.name), ['Insultes']);
+});

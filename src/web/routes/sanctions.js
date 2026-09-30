@@ -52,6 +52,7 @@ export function registerSanctionRoutes(app, { core }) {
 					scope: { type: 'string', enum: ['network', 'local'] },
 					originGuildId: { anyOf: [snowflake, { type: 'null' }] },
 					profile: { type: ['string', 'null'], maxLength: 30 },
+					deleteMessageSeconds: { type: 'integer', enum: [0, 3600, 86400, 604800] },
 				},
 				additionalProperties: false,
 			},
@@ -82,6 +83,45 @@ export function registerSanctionRoutes(app, { core }) {
 		config: { permission: 'sanctions.edit' },
 		schema: { params: idParam, body: { type: 'object', required: ['reason'], properties: { reason: { type: 'string', maxLength: 500 } }, additionalProperties: false } },
 	}, async (request) => (await withNames([sanctions.setReason(request.actor, request.params.id, request.body.reason)]))[0]);
+
+	// --- Sanction templates ----------------------------------------------------------------------
+	app.get('/api/sanction-templates', { config: { permission: null } }, async () => core.sanctionTemplates.list());
+
+	app.post('/api/sanction-templates', {
+		config: { permission: 'sanctions.templates' },
+		schema: {
+			body: {
+				type: 'object',
+				required: ['name', 'type'],
+				properties: {
+					id: { type: 'integer' },
+					name: { type: 'string', maxLength: 60 },
+					type: { type: 'string', enum: ['ban', 'kick', 'timeout', 'warn', 'restrict'] },
+					reason: { type: 'string', maxLength: 500 },
+					duration: { type: ['string', 'null'], maxLength: 20 },
+					scope: { type: 'string', enum: ['network', 'local'] },
+					profile: { type: ['string', 'null'], maxLength: 30 },
+					deleteMessageSeconds: { type: 'integer' },
+				},
+				additionalProperties: false,
+			},
+		},
+	}, async (request) => {
+		const { duration, ...body } = request.body;
+		const durationMs = duration ? parseDuration(duration) : null;
+		if (duration && !durationMs) throw new ValidationError(`Durée invalide : « ${duration} ». Exemples : 30m, 2h, 7j.`);
+		return core.sanctionTemplates.save(request.actor, { ...body, durationMs });
+	});
+
+	app.delete('/api/sanction-templates/:id', { config: { permission: 'sanctions.templates' }, schema: { params: idParam } }, async (request) => {
+		core.sanctionTemplates.remove(request.actor, request.params.id);
+		return { ok: true };
+	});
+
+	app.put('/api/sanction-templates/order', {
+		config: { permission: 'sanctions.templates' },
+		schema: { body: { type: 'object', required: ['ids'], properties: { ids: { type: 'array', maxItems: 200, items: { type: 'integer' } } } } },
+	}, async (request) => core.sanctionTemplates.reorder(request.actor, request.body.ids));
 
 	// --- Restriction profiles ("punishment roles") ---------------------------------------------
 	app.get('/api/restrictions', { config: { permission: 'sanctions.view' } }, async () => ({

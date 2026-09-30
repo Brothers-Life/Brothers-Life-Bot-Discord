@@ -10,6 +10,7 @@ import { Page, Section } from '@/components/app/ui'
 import { SanctionDialog } from '@/features/sanctions/sanction-dialog'
 import { SanctionList } from '@/features/sanctions/sanction-list'
 import { RestrictionsEditor } from '@/features/sanctions/restrictions-editor'
+import { SanctionTemplates } from '@/features/sanctions/templates'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -88,6 +89,7 @@ function SanctionsPage() {
           </div>
         )}
       </Section>
+      <SanctionTemplates />
       <RestrictionsEditor />
       {creating && <SanctionDialog userId={userFilter} onClose={() => setCreating(false)} />}
     </Page>
