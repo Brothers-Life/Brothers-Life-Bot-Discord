@@ -355,6 +355,60 @@ export function createFakeExecutor() {
 		async lockThread(threadId) {
 			this.lockedThreads.push(threadId);
 		},
+		// Server templates: guildId -> { id, name, community, botRolePosition, roles, channels, settings }
+		guildModels: new Map(),
+		nextModelId: 870000000000000000n,
+		model(guildId) {
+			const m = this.guildModels.get(guildId);
+			if (!m) throw new Error('Unknown guild');
+			return m;
+		},
+		async snapshotGuild(guildId) {
+			return structuredClone(this.model(guildId));
+		},
+		async createRole(guildId, data) {
+			const m = this.model(guildId);
+			if (this.failOn.has(`role:${data.name}`)) throw new Error('Missing Permissions');
+			const id = String(this.nextModelId++);
+			m.roles.push({ ...data, id, position: m.roles.length, managed: false, everyone: false });
+			return id;
+		},
+		async editRole(guildId, roleId, data) {
+			const r = this.model(guildId).roles.find(x => x.id === roleId);
+			if (!r) throw new Error('rôle introuvable');
+			Object.assign(r, data, r.everyone ? { name: '@everyone' } : {});
+		},
+		async deleteRole(guildId, roleId) {
+			const m = this.model(guildId);
+			m.roles = m.roles.filter(r => r.id !== roleId);
+		},
+		async setRolePositions(guildId, roleIds) {
+			const m = this.model(guildId);
+			roleIds.forEach((id, i) => {
+				const r = m.roles.find(x => x.id === id);
+				if (r) r.position = i + 1;
+			});
+		},
+		async createChannel(guildId, data) {
+			const m = this.model(guildId);
+			const id = String(this.nextModelId++);
+			m.channels.push({ id, type: data.type, name: data.name, parentId: data.parentId, position: m.channels.length, topic: data.topic ?? null, overwrites: data.overwrites.map(o => ({ ...o, type: 'role' })) });
+			this.channels.set(id, { guildId, name: data.name });
+			return id;
+		},
+		async editChannel(guildId, channelId, data) {
+			const c = this.model(guildId).channels.find(x => x.id === channelId);
+			if (!c) throw new Error('salon introuvable');
+			Object.assign(c, { name: data.name, parentId: data.parentId, topic: data.topic ?? null, overwrites: data.overwrites.map(o => ({ ...o, type: 'role' })) });
+		},
+		async removeTemplateChannel(guildId, channelId) {
+			const m = this.model(guildId);
+			m.channels = m.channels.filter(c => c.id !== channelId);
+			this.channels.delete(channelId);
+		},
+		async editGuildSettings(guildId, settings) {
+			Object.assign(this.model(guildId).settings, settings);
+		},
 		directs: [],
 		dmsClosed: new Set(),
 		async sendDirect(userId, data) {

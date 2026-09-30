@@ -368,6 +368,91 @@ export function createExecutor(client) {
 			return (await channel.send(payload)).id;
 		},
 
+		// --- Server templates ------------------------------------------------------------------------
+		// Structure of a server: roles, channels with their role overwrites, settings
+		async snapshotGuild(guildId) {
+			const guild = guildOf(guildId);
+			await Promise.all([guild.roles.fetch(), guild.channels.fetch()]);
+			const types = { [ChannelType.GuildCategory]: 'category', [ChannelType.GuildText]: 'text', [ChannelType.GuildVoice]: 'voice', [ChannelType.GuildAnnouncement]: 'announcement', [ChannelType.GuildForum]: 'forum', [ChannelType.GuildStageVoice]: 'stage' };
+			return {
+				id: guild.id,
+				name: guild.name,
+				community: guild.features.includes('COMMUNITY'),
+				botRolePosition: guild.members.me?.roles.highest.position ?? 0,
+				roles: guild.roles.cache.map(r => ({
+					id: r.id, name: r.name, color: r.colors?.primaryColor ?? r.color, hoist: r.hoist, mentionable: r.mentionable,
+					permissions: r.permissions.bitfield.toString(), position: r.position, managed: r.managed, everyone: r.id === guild.id,
+				})),
+				channels: guild.channels.cache.filter(c => types[c.type]).map(c => ({
+					id: c.id, type: types[c.type], name: c.name, position: c.rawPosition ?? c.position, parentId: c.parentId ?? null,
+					topic: c.topic ?? null, nsfw: Boolean(c.nsfw), rateLimitPerUser: c.rateLimitPerUser ?? 0, bitrate: c.bitrate ?? null,
+					userLimit: c.userLimit ?? 0, rtcRegion: c.rtcRegion ?? null, defaultAutoArchiveDuration: c.defaultAutoArchiveDuration ?? null,
+					availableTags: (c.availableTags ?? []).map(t => ({ name: t.name, moderated: t.moderated, emoji: t.emoji?.name ? { name: t.emoji.name } : null })),
+					overwrites: c.permissionOverwrites.cache.map(o => ({ id: o.id, type: o.type === 0 ? 'role' : 'member', allow: o.allow.bitfield.toString(), deny: o.deny.bitfield.toString() })),
+				})),
+				settings: {
+					verificationLevel: guild.verificationLevel, defaultMessageNotifications: guild.defaultMessageNotifications, explicitContentFilter: guild.explicitContentFilter,
+					afkChannelId: guild.afkChannelId, afkTimeout: guild.afkTimeout, systemChannelId: guild.systemChannelId, systemChannelFlags: guild.systemChannelFlags.bitfield,
+					rulesChannelId: guild.rulesChannelId, publicUpdatesChannelId: guild.publicUpdatesChannelId, preferredLocale: guild.preferredLocale,
+				},
+			};
+		},
+
+		async createRole(guildId, data) {
+			const role = await guildOf(guildId).roles.create({
+				name: data.name, colors: { primaryColor: data.color ?? 0 }, hoist: data.hoist, mentionable: data.mentionable,
+				permissions: BigInt(data.permissions ?? '0'), reason: 'Modèle de serveur',
+			});
+			return role.id;
+		},
+
+		async editRole(guildId, roleId, data) {
+			const role = await guildOf(guildId).roles.fetch(roleId);
+			if (!role) throw new Error('rôle introuvable');
+			await role.edit({
+				...(data.name !== undefined && roleId !== guildId ? { name: data.name } : {}),
+				...(data.color !== undefined ? { colors: { primaryColor: data.color } } : {}),
+				...(data.hoist !== undefined ? { hoist: data.hoist } : {}),
+				...(data.mentionable !== undefined ? { mentionable: data.mentionable } : {}),
+				permissions: BigInt(data.permissions ?? '0'),
+				reason: 'Modèle de serveur',
+			});
+		},
+
+		async deleteRole(guildId, roleId) {
+			await guildOf(guildId).roles.delete(roleId, 'Modèle de serveur (réinitialisation)');
+		},
+
+		// Roles from the lowest to the highest, just above @everyone
+		async setRolePositions(guildId, roleIds) {
+			const guild = guildOf(guildId);
+			await guild.roles.setPositions(roleIds.map((role, i) => ({ role, position: i + 1 })));
+		},
+
+		async createChannel(guildId, data) {
+			const guild = guildOf(guildId);
+			const channel = await guild.channels.create(templateChannelOptions(guild, data));
+			return channel.id;
+		},
+
+		async editChannel(guildId, channelId, data) {
+			const guild = guildOf(guildId);
+			const channel = await guild.channels.fetch(channelId);
+			if (!channel) throw new Error('salon introuvable');
+			const options = templateChannelOptions(guild, data);
+			delete options.type;
+			await channel.edit({ ...options, lockPermissions: false });
+		},
+
+		async removeTemplateChannel(guildId, channelId) {
+			const channel = await guildOf(guildId).channels.fetch(channelId).catch(() => null);
+			if (channel) await channel.delete('Modèle de serveur (réinitialisation)');
+		},
+
+		async editGuildSettings(guildId, s) {
+			await guildOf(guildId).edit({ ...s, reason: 'Modèle de serveur' });
+		},
+
 		// --- Private messages ----------------------------------------------------------------------
 		// Throws an error with code DMS_CLOSED when the person does not accept private messages
 		async sendDirect(userId, { content, files = [] }) {
@@ -932,5 +1017,23 @@ export function createExecutor(client) {
 				user: client.user ? { id: client.user.id, username: client.user.username, avatar: client.user.displayAvatarURL({ size: 64 }) } : null,
 			};
 		},
+	};
+}
+
+// Channel options from a template (types: category, text, voice, announcement, forum, stage)
+function templateChannelOptions(guild, data) {
+	const types = { category: ChannelType.GuildCategory, text: ChannelType.GuildText, voice: ChannelType.GuildVoice, announcement: ChannelType.GuildAnnouncement, forum: ChannelType.GuildForum, stage: ChannelType.GuildStageVoice };
+	const voice = data.type === 'voice' || data.type === 'stage';
+	const text = data.type === 'text' || data.type === 'announcement' || data.type === 'forum';
+	return {
+		name: data.name,
+		type: types[data.type],
+		parent: data.type === 'category' ? null : data.parentId ?? null,
+		permissionOverwrites: data.overwrites.map(o => ({ id: o.id, type: 0, allow: BigInt(o.allow), deny: BigInt(o.deny) })),
+		...(text ? { topic: data.topic ?? undefined, nsfw: data.nsfw, rateLimitPerUser: data.rateLimitPerUser || undefined } : {}),
+		...(voice ? { bitrate: data.bitrate ? Math.min(data.bitrate, guild.maximumBitrate ?? 96_000) : undefined, userLimit: data.userLimit || undefined, rtcRegion: data.rtcRegion ?? undefined } : {}),
+		...(data.type === 'forum' ? { availableTags: data.availableTags.slice(0, 20).map(t => ({ name: t.name, moderated: t.moderated, emoji: t.emoji })) } : {}),
+		...(data.defaultAutoArchiveDuration && text ? { defaultAutoArchiveDuration: data.defaultAutoArchiveDuration } : {}),
+		reason: 'Modèle de serveur',
 	};
 }

@@ -42,13 +42,21 @@ export function createEvents({ db, network, logs, settings, now = Date.now }) {
 		};
 	}
 
+	// Servers being rebuilt from a template: their hundreds of changes are not logged one by one
+	const muted = new Set();
+
 	return {
 		categories: () => EVENT_CATEGORIES,
+
+		mute(guildId, on = true) {
+			if (on) muted.add(guildId);
+			else muted.delete(guildId);
+		},
 
 		// message: the log embed ({ title, description, fields, color }); built by the bot layer
 		record({ guildId, category, type, userId = null, actorId = null, channelId = null, summary, details = null, message = null }) {
 			if (!EVENT_CATEGORIES[category]) throw new Error(`Unknown event category: ${category}`);
-			if (network.find(guildId)?.status !== 'active') return null;
+			if (network.find(guildId)?.status !== 'active' || muted.has(guildId)) return null;
 			const { lastInsertRowid } = insert.run({
 				at: now(), guildId, category, type, userId, actorId, channelId,
 				summary: summary.slice(0, 500),
