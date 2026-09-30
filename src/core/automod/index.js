@@ -1,6 +1,7 @@
 import { definePermission } from '../permissions.js';
 import { ForbiddenError, ValidationError } from '../errors.js';
 import { createAutomodEngine, normalizeConfig, DEFAULT_CONFIG } from './engine.js';
+import { extractInvites } from './scam.js';
 
 definePermission('automod.view', { label: 'Voir la configuration de l’automod', category: 'Automod' });
 definePermission('automod.manage', { label: 'Configurer l’automod', category: 'Automod' });
@@ -8,6 +9,7 @@ definePermission('automod.bypass', { label: 'Ignoré par l’automod', category:
 
 export const NETWORK = '*';
 const COOLDOWN_MS = 10_000;
+const INVITE_CACHE_MS = 3600_000;
 
 // Acts as the author of automatic sanctions
 const AUTOMOD = Object.freeze({ id: 'automod', source: 'automod', isOwner: true, level: Infinity, permissions: [], ranks: [], can: () => true });
@@ -16,6 +18,8 @@ export function createAutomod({ db, network, sanctions, ranks, audit, executor, 
 	logs.registerCategory('automod', 'Automod (spam, arnaques, envois massifs)');
 	const engine = createAutomodEngine({ now });
 	const lastAction = new Map();
+	// invite code -> { guildId, at }
+	const inviteCache = new Map();
 
 	const q = {
 		get: db.prepare('SELECT * FROM automod_config WHERE guild_id = ?'),
@@ -37,6 +41,25 @@ export function createAutomod({ db, network, sanctions, ranks, audit, executor, 
 
 	function effective(guildId) {
 		return raw(guildId)?.config ?? raw(NETWORK)?.config ?? normalizeConfig();
+	}
+
+	async function inviteGuild(code) {
+		const cached = inviteCache.get(code);
+		if (cached && now() - cached.at < INVITE_CACHE_MS) return cached.guildId;
+		const guildId = await executor.resolveInvite(code).catch(() => null);
+		inviteCache.set(code, { guildId, at: now() });
+		return guildId;
+	}
+
+	// Invite codes of the message that lead to a server of the network
+	async function networkInvites(content) {
+		const codes = extractInvites(content);
+		const allowed = [];
+		for (const code of codes) {
+			const guildId = await inviteGuild(code);
+			if (guildId && network.find(guildId)?.status === 'active') allowed.push(code);
+		}
+		return allowed;
 	}
 
 	function requireManage(actor) {
@@ -98,6 +121,9 @@ export function createAutomod({ db, network, sanctions, ranks, audit, executor, 
 			if (config.exemptChannels.includes(facts.channelId)) return null;
 			if (facts.roleIds?.some(r => config.exemptRoles.includes(r))) return null;
 
+			if (config.invites.enabled && config.invites.allowNetwork && extractInvites(facts.content ?? '').length) {
+				facts = { ...facts, allowedInvites: await networkInvites(facts.content) };
+			}
 			const verdict = engine.evaluate(config, facts, { edited });
 			if (!verdict) return null;
 			if ((await ranks.resolve(facts.userId)).can('automod.bypass')) return null;

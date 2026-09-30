@@ -122,6 +122,12 @@ export function createExecutor(client) {
 			await channel.messages.delete(messageId);
 		},
 
+		// Server an invite leads to (null if invalid or expired)
+		async resolveInvite(code) {
+			const invite = await client.fetchInvite(code).catch(() => null);
+			return invite?.guild?.id ?? null;
+		},
+
 		async sendDM(userId, content, files) {
 			const user = await client.users.fetch(userId);
 			await user.send({ content, files: toFiles(files), allowedMentions: { parse: [] } });

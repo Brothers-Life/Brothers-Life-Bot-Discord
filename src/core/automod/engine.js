@@ -9,7 +9,8 @@ export const DEFAULT_CONFIG = {
 	spam: { enabled: true, maxMessages: 6, perSeconds: 5, maxDuplicates: 4, duplicateSeconds: 30, maxMentions: 6, action: 'timeout', timeoutMinutes: 10 },
 	uploads: { enabled: true, maxPerMessage: 4, maxFiles: 8, perSeconds: 30, action: 'timeout', timeoutMinutes: 10 },
 	scam: { enabled: true, action: 'network_ban', customDomains: [], customPatterns: [], blockEveryoneLinks: true },
-	invites: { enabled: false, action: 'delete', allowedCodes: [] },
+	// allowNetwork: invites to the servers of the network are always fine
+	invites: { enabled: false, action: 'delete', allowNetwork: true, allowedCodes: [] },
 };
 
 // Merges a partial config over the defaults, keeping only known keys
@@ -29,6 +30,8 @@ export function normalizeConfig(input = {}) {
 			if (Array.isArray(fallback) && Array.isArray(value)) out[section][key] = value.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim()).slice(0, 200);
 		}
 	}
+	// "https://discord.gg/abc" or "abc": keep the code only
+	out.invites.allowedCodes = out.invites.allowedCodes.map(code => code.split('/').filter(Boolean).pop());
 	out.spam.timeoutMinutes = Math.min(out.spam.timeoutMinutes, 40_320);
 	out.uploads.timeoutMinutes = Math.min(out.uploads.timeoutMinutes, 40_320);
 	return out;
@@ -63,7 +66,8 @@ export function createAutomodEngine({ now = Date.now, historySeconds = 120 } = {
 			}
 
 			if (config.invites.enabled) {
-				const codes = extractInvites(content).filter(code => !config.invites.allowedCodes.includes(code));
+				const allowed = new Set([...config.invites.allowedCodes, ...(message.allowedInvites ?? [])]);
+				const codes = extractInvites(content).filter(code => !allowed.has(code));
 				if (codes.length) return verdict(config.invites, 'invite', `invitation Discord (${codes[0]})`);
 			}
 

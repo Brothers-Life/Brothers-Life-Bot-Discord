@@ -91,3 +91,21 @@ test('action "delete" only removes the message', async () => {
 	assert.equal(executor.deleted.length, 1);
 	assert.equal(executor.calls.length, 0);
 });
+
+test('invites: network servers allowed by default, extra codes allowed, others removed', async () => {
+	const { core, owner, executor } = await setup();
+	executor.invites.set('brotherslife', MAIN);
+	executor.invites.set('roleplay', OTHER);
+	executor.invites.set('ailleurs', '900000000000000099');
+	core.automod.setConfig(owner, NETWORK, { invites: { enabled: true, allowedCodes: ['https://discord.gg/partenaire'] } });
+
+	assert.equal(await core.automod.handleMessage(facts({ content: 'rejoins discord.gg/brotherslife' })), null);
+	assert.equal(await core.automod.handleMessage(facts({ content: 'et https://discord.com/invite/roleplay' })), null);
+	assert.equal(await core.automod.handleMessage(facts({ content: 'discord.gg/partenaire' })), null, 'extra code, even written as a link');
+	const blocked = await core.automod.handleMessage(facts({ userId: '300000000000000002', content: 'discord.gg/ailleurs' }));
+	assert.equal(blocked.rule, 'invite');
+
+	core.automod.setConfig(owner, NETWORK, { invites: { enabled: true, allowNetwork: false } });
+	const strict = await core.automod.handleMessage(facts({ userId: '300000000000000003', content: 'discord.gg/brotherslife' }));
+	assert.equal(strict.rule, 'invite', 'network invites blocked when the option is off');
+});

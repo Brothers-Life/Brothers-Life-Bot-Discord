@@ -113,6 +113,11 @@ export function createFakeExecutor() {
 			return this.bans.get(guildId) ?? [];
 		},
 		deleted: [],
+		// invite code -> guildId
+		invites: new Map(),
+		async resolveInvite(code) {
+			return this.invites.get(code) ?? null;
+		},
 		// Tickets
 		ticketChannels: new Map(),
 		async createTicketChannel(options) {

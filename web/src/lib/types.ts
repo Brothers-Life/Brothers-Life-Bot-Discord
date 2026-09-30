@@ -179,7 +179,7 @@ export type AutomodConfig = {
   spam: { enabled: boolean; maxMessages: number; perSeconds: number; maxDuplicates: number; duplicateSeconds: number; maxMentions: number; action: AutomodAction; timeoutMinutes: number }
   uploads: { enabled: boolean; maxPerMessage: number; maxFiles: number; perSeconds: number; action: AutomodAction; timeoutMinutes: number }
   scam: { enabled: boolean; action: AutomodAction; customDomains: string[]; customPatterns: string[]; blockEveryoneLinks: boolean }
-  invites: { enabled: boolean; action: AutomodAction; allowedCodes: string[] }
+  invites: { enabled: boolean; action: AutomodAction; allowNetwork: boolean; allowedCodes: string[] }
 }
 
 export type AutomodPayload = {

@@ -224,9 +224,13 @@ function AutomodForm({ target, initial, inherited, editable }: { target: string;
 
       <Block title='Invitations Discord' description='Liens d’invitation vers d’autres serveurs.' enabled={config.invites.enabled} onToggle={(v) => patch('invites', { enabled: v })} disabled={disabled}>
         <ActionField id='invites-action' section={config.invites} onChange={(p) => patch('invites', p)} disabled={disabled} />
+        <label className='flex items-center gap-2 text-sm'>
+          <Checkbox checked={config.invites.allowNetwork} onCheckedChange={(v) => patch('invites', { allowNetwork: v === true })} disabled={disabled} />
+          Autoriser les invitations vers les serveurs du réseau
+        </label>
         <div className='grid gap-1.5'>
-          <Label htmlFor='invite-codes'>Invitations autorisées (codes, un par ligne)</Label>
-          <Textarea id='invite-codes' rows={3} value={lines(config.invites.allowedCodes)} onChange={(e) => patch('invites', { allowedCodes: toList(e.target.value) })} disabled={disabled} placeholder='brotherslife' />
+          <Label htmlFor='invite-codes'>Autres invitations autorisées (code ou lien, une par ligne)</Label>
+          <Textarea id='invite-codes' rows={3} value={lines(config.invites.allowedCodes)} onChange={(e) => patch('invites', { allowedCodes: toList(e.target.value) })} disabled={disabled} placeholder='https://discord.gg/partenaire' />
         </div>
       </Block>
 
