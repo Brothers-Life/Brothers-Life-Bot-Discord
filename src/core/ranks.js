@@ -68,7 +68,7 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 		if (!actor.can(permission)) throw new ForbiddenError(`Permission manquante : ${permission}`);
 	}
 
-	function requireBelow(actor, level, what) {
+	function requireBelow(actor, level) {
 		if (!actor.isOwner && level >= actor.level) {
 			throw new ForbiddenError(`Tu ne peux gérer que des rangs de niveau inférieur au tien (${actor.level}).`);
 		}
@@ -141,7 +141,7 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 		create(actor, { name, level, color = null, permissions = [] }) {
 			requirePermission(actor, 'ranks.manage');
 			validate({ name, level, color, permissions });
-			requireBelow(actor, level, 'ranks');
+			requireBelow(actor, level);
 			requireHeld(actor, permissions);
 			assertUniqueName(name);
 
@@ -161,8 +161,8 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 			requirePermission(actor, 'ranks.manage');
 			const rank = getOrThrow(id);
 			validate(patch);
-			requireBelow(actor, rank.level, 'ranks');
-			if (patch.level !== undefined) requireBelow(actor, patch.level, 'ranks');
+			requireBelow(actor, rank.level);
+			if (patch.level !== undefined) requireBelow(actor, patch.level);
 			if (patch.name !== undefined) assertUniqueName(patch.name, id);
 
 			let added = [], removed = [];
@@ -202,7 +202,7 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 		remove(actor, id) {
 			requirePermission(actor, 'ranks.manage');
 			const rank = getOrThrow(id);
-			requireBelow(actor, rank.level, 'ranks');
+			requireBelow(actor, rank.level);
 			q.delete.run(id);
 			invalidate();
 			record(actor, 'ranks.delete', id, { name: rank.name });
@@ -212,7 +212,7 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 		setRoleLinks(actor, id, roleIds) {
 			requirePermission(actor, 'ranks.manage');
 			const rank = getOrThrow(id);
-			requireBelow(actor, rank.level, 'ranks');
+			requireBelow(actor, rank.level);
 			const mainGuildId = getMainGuildId();
 			if (!mainGuildId) throw new ValidationError('Choisis d’abord le serveur principal.');
 			if (!Array.isArray(roleIds) || roleIds.some(r => typeof r !== 'string' || !r)) {
@@ -250,7 +250,7 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 		if (userId === actor.id && !actor.isOwner) throw new ForbiddenError('Tu ne peux pas modifier tes propres rangs.');
 		if (userId === ownerId) throw new ForbiddenError('Le chef du réseau a déjà toutes les permissions.');
 		const rank = getOrThrow(rankId);
-		requireBelow(actor, rank.level, 'ranks');
+		requireBelow(actor, rank.level);
 
 		if (!actor.isOwner) {
 			// Resolve without cache: the target's level must be strictly below ours

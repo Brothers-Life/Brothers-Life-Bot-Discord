@@ -167,12 +167,13 @@ export function createSanctions({ db, audit, network, ranks, executor, logger = 
 		get: getOrThrow,
 
 		list({ userId, type, active, guildId, before, limit = 50 } = {}) {
-			const where = [];
-			const params = { limit: Math.min(Math.max(Number(limit) || 50, 1), 200), now: now() };
-			if (userId) { where.push('user_id = @userId'); params.userId = userId; }
-			if (type) { where.push('type = @type'); params.type = type; }
-			if (guildId) { where.push('origin_guild_id = @guildId'); params.guildId = guildId; }
-			if (before) { where.push('id < @before'); params.before = before; }
+			const params = { limit: Math.min(Math.max(Number(limit) || 50, 1), 200), now: now(), userId, type, guildId, before };
+			const where = [
+				userId && 'user_id = @userId',
+				type && 'type = @type',
+				guildId && 'origin_guild_id = @guildId',
+				before && 'id < @before',
+			].filter(Boolean);
 			if (active) where.push('revoked_at IS NULL AND type IN (\'ban\', \'timeout\') AND (expires_at IS NULL OR expires_at > @now)');
 			const sql = `SELECT * FROM sanctions ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY id DESC LIMIT @limit`;
 			return db.prepare(sql).all(params).map(toSanction);
