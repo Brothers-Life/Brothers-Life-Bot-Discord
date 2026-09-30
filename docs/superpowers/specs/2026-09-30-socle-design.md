@@ -11,7 +11,7 @@ Le projet est découpé en chantiers, chacun avec sa conception, son plan et son
 
 | # | Chantier | Contenu |
 |---|---|---|
-| **1** | **Socle (ce document)** | Lanceur et versions, base de données, réseau, rangs et droits, panel web minimal, console en direct, routage des logs |
+| **1** | **Socle (ce document)** | Lanceur et versions, base de données, réseau, rangs et permissions, panel web minimal, console en direct, routage des logs |
 | 2 | Sanctions | Ban, kick, timeout et warn synchronisés, détection des actions natives, historique commun |
 | 3 | Logs ultra complets | Tous les événements serveur, recherche et filtres dans le panel |
 | 4 | Automod | Anti-spam, anti-arnaque crypto, anti-envoi massif, seuils par serveur |
@@ -26,7 +26,7 @@ Base de code : fork corrigé de `arthurcorberes/discordjs-bot-template` (discord
 | Sujet | Décision |
 |---|---|
 | Qui décide | Les sanctions peuvent partir de n'importe quel serveur du réseau ; le staff et les permissions ne se gèrent que depuis le serveur principal |
-| Droits | Des rangs avec des droits par action (warn, kick, timeout, ban, panel), configurés dans le panel |
+| Droits | **Tout passe par des permissions fines** attribuées à des rangs, configurées dans le panel : aucune page ni action n'est réservée en dur, sauf `OWNER_ID`, qui a tout (protection contre le verrouillage) |
 | Actions natives Discord (hors bot) | Détectées via le journal d'audit et propagées si le rang de l'auteur l'autorise, sinon locales. Même règle pour les débans. *(chantier 2)* |
 | Nouveau serveur | Rattrapage automatique : les bans réseau actifs y sont appliqués, et ses bans locaux importés dans l'historique sans propagation. *(chantier 2)* |
 | Warns | Historique commun, sans palier automatique. *(chantier 2)* |
@@ -47,7 +47,8 @@ src/
 ├── index.js            # application : DB, puis bot, puis web
 ├── core/               # logique métier, sans dépendance à Discord ni à HTTP
 │   ├── network.js      # serveurs, serveur principal, ajout et retrait
-│   ├── ranks.js        # rangs, droits, calcul du rang d'un membre
+│   ├── permissions.js  # registre des permissions, permissions effectives, anti-escalade
+│   ├── ranks.js        # rangs, liaisons aux rôles, rangs directs
 │   ├── audit.js        # journal des actions
 │   └── logRouting.js   # catégorie de log → salon, par serveur
 ├── db/                 # connexion, migrations SQL numérotées
@@ -70,19 +71,50 @@ Migrations `src/db/migrations/NNN_nom.sql`, appliquées au démarrage dans une t
 | Table | Colonnes principales |
 |---|---|
 | `guilds` | `id`, `name`, `status` (`pending` \| `active` \| `removed`), `is_main` (un seul à 1), `joined_network_at` |
-| `ranks` | `id`, `name`, `level` (0 à 100), `can_warn`, `can_kick`, `can_timeout`, `can_ban`, `can_manage_panel` |
+| `ranks` | `id`, `name`, `level` (0 à 100, sert à la hiérarchie), `color` |
+| `rank_permissions` | `rank_id`, `permission` (chaîne du registre de permissions) |
 | `rank_roles` | `rank_id`, `guild_id`, `role_id` (au chantier 1, uniquement des rôles du serveur principal) |
-| `panel_users` | `discord_id`, `note`, `added_by`, `added_at` |
+| `user_ranks` | `discord_id`, `rank_id`, `added_by`, `added_at` (rang attribué directement, sans rôle Discord) |
 | `sessions` | `id` (aléatoire, 256 bits), `discord_id`, `created_at`, `last_seen_at`, `expires_at`, `ip`, `user_agent` |
 | `audit_log` | `id`, `at`, `actor_id` (ou `system`), `source` (`bot` \| `panel` \| `native` \| `system`), `action`, `target`, `details` (JSON), `results` (JSON : résultat par serveur) |
 | `log_routes` | `guild_id`, `category`, `channel_id`, `enabled` |
 | `settings` | `key`, `value` (JSON) |
 
-### Rang effectif
+### Permissions
 
-Le rang d'un membre est le rang de plus haut `level` parmi ses rôles **sur le serveur principal**. Il est recalculé quand ses rôles changent (`GuildMemberUpdate`) et gardé en cache mémoire. Un non-membre du serveur principal n'a aucun droit réseau. `OWNER_ID` (config) a tous les droits, dans tous les cas.
+Tout ce que fait le panel ou le bot est contrôlé par une **permission** : une chaîne déclarée dans un registre (`core/permissions.js`), avec un libellé et une catégorie pour l'affichage. Chaque chantier ajoute les siennes.
 
-Accès au panel : `discord_id` présent dans `panel_users`, **et** rang effectif avec `can_manage_panel`, ou `OWNER_ID`. Les droits des pages suivent les droits du rang.
+Permissions du chantier 1 :
+
+| Permission | Donne accès à |
+|---|---|
+| `panel.access` | Se connecter au panel, page Accueil |
+| `network.view` / `network.manage` | Voir les serveurs / ajouter, retirer, changer le serveur principal |
+| `ranks.view` / `ranks.manage` | Voir / créer, éditer et supprimer des rangs, leurs permissions et leurs liaisons |
+| `members.assign` | Attribuer ou retirer des rangs directs (`user_ranks`) |
+| `logs.manage` | Configurer le routage des logs |
+| `audit.view` | Consulter le journal |
+| `sessions.manage` | Voir et révoquer les sessions des autres |
+| `console.view` / `console.control` | Voir la console / redémarrer et arrêter le bot |
+| `versions.view` / `versions.install` | Voir les versions / installer une version, restaurer une sauvegarde |
+
+Exemples de permissions ajoutées plus tard : `sanctions.warn`, `sanctions.ban`, `tickets.view`, `automod.manage`…
+
+### Permissions effectives
+
+- Les **rangs** d'un utilisateur sont l'union de :
+  - les rangs liés (via `rank_roles`) aux rôles qu'il a **sur le serveur principal** ;
+  - ses rangs directs (`user_ranks`), qui permettent de donner l'accès au panel à quelqu'un sans lui donner de rôle Discord.
+- Ses **permissions effectives** sont l'union des permissions de tous ses rangs. Son **niveau** est le `level` le plus haut parmi ses rangs.
+- Recalcul quand les rôles changent (`GuildMemberUpdate`) ou quand un rang est modifié. Le résultat est gardé en cache mémoire. Une session ouverte perd immédiatement les permissions retirées.
+- `OWNER_ID` (config) a **toutes** les permissions, y compris celles des chantiers futurs, et ne peut pas être restreint depuis le panel. C'est la garantie qu'on ne se verrouille jamais dehors.
+
+### Anti-escalade
+
+- Un utilisateur ne peut pas accorder une permission qu'il n'a pas lui-même.
+- Il ne peut pas créer, modifier, attribuer ou supprimer un rang de niveau supérieur ou égal au sien.
+- Il ne peut pas modifier ses propres rangs.
+- `OWNER_ID` échappe à ces règles.
 
 ### Cycle de vie d'un serveur
 
@@ -91,7 +123,7 @@ Accès au panel : `discord_id` présent dans `panel_users`, **et** rang effectif
 3. « Retirer du réseau » : passage en `removed`, les données sont conservées et le bot reste sur le serveur.
 4. Le bot est expulsé du serveur : passage en `removed` et alerte.
 
-Premier démarrage : aucun serveur principal. Le panel (accessible au seul `OWNER_ID`) demande de le choisir parmi les serveurs `pending`.
+Premier démarrage : aucun serveur principal, aucun rang. Le panel (accessible au seul `OWNER_ID`) demande de le choisir parmi les serveurs `pending`.
 
 ## Routage des logs
 
@@ -117,7 +149,7 @@ Chaque log a une **catégorie**. Pour chaque serveur, chaque catégorie peut êt
 ### Authentification
 
 - Discord OAuth2 (code grant), scope `identify` uniquement. L'URL de retour vient de `WEB_PUBLIC_URL` dans la config. Un paramètre `state` aléatoire, lié à un cookie temporaire, protège contre le CSRF de connexion.
-- Au retour, l'ID Discord est vérifié selon les règles d'accès. En cas de refus, on affiche une page d'erreur et on écrit `panel.login_denied` dans le journal.
+- Au retour, l'utilisateur doit avoir `panel.access` (ou être `OWNER_ID`). En cas de refus, on affiche une page d'erreur et on écrit `panel.login_denied` dans le journal.
 - Sessions côté serveur (table `sessions`), avec un cookie `sid` `HttpOnly`, `SameSite=Strict`, et `Secure` si HTTPS.
 - Durée de vie de 12h, et expiration après 2h d'inactivité. Page « Sessions » : liste et révocation.
 - Limitation de fréquence : 10 tentatives de connexion par IP toutes les 15 minutes.
@@ -125,28 +157,31 @@ Chaque log a une **catégorie**. Pour chaque serveur, chaque catégorie peut êt
 
 ### API
 
-- Chaque route déclare son droit requis (`requires: 'can_ban'`, etc.). Un hook Fastify le vérifie à partir du rang effectif. L'interface masque les actions interdites, mais seul le serveur fait foi.
+- Chaque route déclare sa permission requise. Un hook Fastify la vérifie à partir des permissions effectives. L'interface masque les actions interdites, mais seul le serveur fait foi.
 - Les actions sensibles exigent `confirm: true` dans le corps de la requête. Liste : installer une version, arrêter le bot, retirer un serveur, changer de serveur principal, restaurer une sauvegarde.
 - Format d'erreur unique : `{ "error": { "code": "FORBIDDEN", "message": "..." } }`. Le détail technique n'apparaît que dans les logs.
 
 ### Pages du chantier 1
 
-| Page | Contenu | Droit requis |
+| Page | Contenu | Permission requise |
 |---|---|---|
-| Connexion | Bouton « Se connecter avec Discord » | Aucun |
-| Accueil | État du bot, ping, uptime, version, nombre de serveurs, dernières actions | Accès panel |
-| Réseau | Serveurs par statut, ajout et retrait, choix du serveur principal | `can_manage_panel` |
-| Rangs | CRUD des rangs, liaison aux rôles du serveur principal | `can_manage_panel` |
-| Logs | Routage catégorie → salon par serveur, miroir réseau | `can_manage_panel` |
-| Accès | `panel_users` et sessions actives | `OWNER_ID` |
-| Journal | `audit_log` filtrable par auteur, action, serveur et date | Accès panel |
-| Console | Console en direct | `can_manage_panel` |
-| Versions | Version actuelle, versions disponibles, changelogs, installation | `OWNER_ID` |
+| Connexion | Bouton « Se connecter avec Discord » | Aucune |
+| Accueil | État du bot, ping, uptime, version, nombre de serveurs, dernières actions | `panel.access` |
+| Réseau | Serveurs par statut, ajout et retrait, choix du serveur principal | `network.view` / `network.manage` |
+| Rangs | CRUD des rangs, cases à cocher des permissions groupées par catégorie, liaison aux rôles du serveur principal | `ranks.view` / `ranks.manage` |
+| Membres du panel | Qui a accès et par quel rang, attribution de rangs directs | `ranks.view` / `members.assign` |
+| Logs | Routage catégorie → salon par serveur, miroir réseau | `logs.manage` |
+| Journal | `audit_log` filtrable par auteur, action, serveur et date | `audit.view` |
+| Sessions | Ses propres sessions (toujours visibles), celles des autres | `sessions.manage` |
+| Console | Console en direct | `console.view` / `console.control` |
+| Versions | Version actuelle, versions disponibles, changelogs, installation | `versions.view` / `versions.install` |
+
+Toutes les pages sont visibles dans le menu uniquement si l'utilisateur a la permission correspondante. Chaque route de l'API déclare sa permission (`requires: 'network.manage'`), et le serveur la vérifie à chaque requête.
 
 ### Console en direct
 
 - Le lanceur garde un buffer circulaire des 5 000 dernières lignes de stdout et stderr de l'application.
-- WebSocket `/api/console` : à la connexion, envoi du buffer, puis des nouvelles lignes au fil de l'eau. Authentification par le cookie de session, vérifiée à l'ouverture de la connexion.
+- WebSocket `/api/console` : à la connexion, envoi du buffer, puis des nouvelles lignes au fil de l'eau. Authentification par le cookie de session et permission `console.view`, vérifiées à l'ouverture ; la connexion est fermée si la permission est retirée.
 - Interface : couleurs par niveau (préfixe du logger), filtre par niveau, recherche, pause du défilement, boutons « Redémarrer » et « Arrêter » (confirmation requise).
 - **Pas de saisie de commandes**, par choix de sécurité.
 
@@ -214,14 +249,14 @@ Intents Discord : `Guilds`, `GuildMembers` (privilégié) et `GuildModeration`. 
 ## Tests
 
 - `node --test` sur `core/` et `db/` : base SQLite `:memory:` et faux exécuteur Discord. Cas couverts :
-  - droits par rang ;
-  - calcul du rang effectif ;
+  - permissions effectives (union des rangs, OWNER_ID) ;
+  - règles anti-escalade ;
   - cycle de vie des serveurs ;
   - routage des logs ;
   - migrations ;
   - compatibilité des versions pour un retour arrière.
 - Lanceur : tests avec une fausse application (un script qui envoie `ready`, plante ou ne répond pas) pour la supervision et le retour automatique.
-- Web : `fastify.inject` pour le flux OAuth (Discord simulé), les sessions, les droits par route, le refus hors liste et le format d'erreur.
+- Web : `fastify.inject` pour le flux OAuth (Discord simulé), les sessions, les permissions par route, le refus sans `panel.access` et le format d'erreur.
 - CI : lint et tests à chaque push.
 
 ## Hors périmètre du chantier 1
