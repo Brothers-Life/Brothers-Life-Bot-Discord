@@ -47,3 +47,10 @@ test('collects every problem at once', () => {
 		assert.ok(err.problems.length >= 3);
 	}
 });
+
+test('uses the Pterodactyl allocation when WEB_PORT and WEB_PUBLIC_URL are not set', () => {
+	const config = parseConfig({ OWNER_ID: OWNER, SERVER_PORT: '25565', SERVER_IP: '51.77.1.2', WEB_MODE: 'https-selfsigned' });
+	assert.equal(config.WEB_PORT, 25565);
+	assert.equal(config.WEB_PUBLIC_URL, 'https://51.77.1.2:25565');
+	assert.equal(parseConfig({ OWNER_ID: OWNER, SERVER_PORT: '25565', SERVER_IP: '0.0.0.0' }).WEB_PUBLIC_URL, 'http://localhost:25565');
+});

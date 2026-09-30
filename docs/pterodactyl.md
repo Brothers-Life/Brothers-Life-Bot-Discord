@@ -5,45 +5,48 @@
 Le repo est privé : le bot a besoin d'un token en lecture seule pour voir et télécharger les versions.
 
 1. GitHub > Settings > Developer settings > **Fine-grained tokens** > Generate new token.
-2. Resource owner : l'organisation `Brothers-Life`. Repository access : **Only select repositories**, puis `Brothers-Life-Bot-Discord`.
+2. Connecté avec le compte `Brothers-Life` (propriétaire du dépôt), Resource owner : `Brothers-Life`. Repository access : **Only select repositories**, puis `Brothers-Life-Bot-Discord`.
 3. Permissions > Repository permissions > **Contents : Read-only**. Rien d'autre.
 4. Garde le token : c'est `GITHUB_TOKEN`.
 
-Publie au moins une version (voir le README : `npm version`, puis `git push --follow-tags`).
+Une version doit avoir été publiée (la v1.0.0 l’est déjà ; pour les suivantes, voir le README : `npm version`, puis `git push --follow-tags`).
 
-## 2. Créer le serveur
+## 2. Importer l'egg
 
-- Egg : **Node.js** (générique), Node 22 ou plus.
-- Une allocation (port) : c'est `WEB_PORT`.
-- Dans **Startup** :
-  - `MAIN_FILE` (ou fichier de démarrage) : `launcher.js`
-  - `AUTO_UPDATE` : **désactivé** (les mises à jour passent par le panel, pas par `git pull`)
-  - Pas de dépôt Git à cloner.
+Il faut être administrateur du panel Pterodactyl.
 
-## 3. Première installation
+1. **Admin > Nests** : crée un nest (par exemple « Bots Discord ») ou prends un nest existant.
+2. **Import Egg** : envoie `pterodactyl/egg-brothers-life-bot.json` dans ce nest.
 
-1. Télécharge l'archive `bot-vX.Y.Z.tar.gz` de la dernière Release GitHub.
-2. Dans Pterodactyl > **Files** : envoie l'archive, puis clic droit > **Unarchive**.
-3. Crée le fichier `.env.prod` (modèle : `.env.example`) :
+L'egg contient :
+- les images Docker (Node.js 22 ou 24) et le démarrage `node launcher.js prod` ;
+- le script d'installation, qui télécharge la Release choisie depuis le dépôt privé et installe les dépendances sans rien compiler ;
+- toutes les variables de configuration : plus besoin de fichier `.env.prod`.
 
-```dotenv
-TOKEN=...
-APP_ID=...
-CLIENT_SECRET=...
-OWNER_ID=267235400467218432
+Si l'egg change (`npm run egg` le régénère), ré-importe-le par-dessus l'ancien.
 
-WEB_PORT=<port alloué>
-WEB_MODE=https-selfsigned
-WEB_PUBLIC_URL=https://<IP de l'hébergeur>:<port alloué>
+## 3. Créer le serveur
 
-GITHUB_REPO=Brothers-Life/Brothers-Life-Bot-Discord
-GITHUB_TOKEN=<token de l'étape 1>
-```
+1. **Admin > Servers > Create New**, egg « Brothers Life Bot ».
+2. Une allocation (IP et port) : le panel écoutera sur ce port.
+3. 512 Mo de RAM suffisent pour quelques serveurs Discord ; prévois 1 Go si le réseau est gros.
+4. Remplis les variables :
 
-   Plutôt que de laisser le token dans un fichier, tu peux définir `TOKEN`, `CLIENT_SECRET` et `GITHUB_TOKEN` comme variables d'environnement du serveur : elles passent avant le fichier.
+| Variable | Valeur |
+|---|---|
+| Token du bot | Developer Portal > Bot > Reset Token |
+| ID de l'application | Developer Portal > General Information |
+| Client Secret | Developer Portal > OAuth2 |
+| Chef du réseau | Ton ID Discord (déjà rempli) |
+| Mode du panel | `https-selfsigned` |
+| Adresse publique du panel | `https://<IP publique>:<port>`, ou vide pour utiliser l'allocation |
+| Dépôt GitHub | `Brothers-Life/Brothers-Life-Bot-Discord` (déjà rempli) |
+| Token GitHub | Le token de l'étape 1 |
+| Version à installer | `latest` |
 
-4. Discord Developer Portal > OAuth2 > **Redirects** : ajoute `https://<IP>:<port>/api/auth/callback`.
-5. Démarre le serveur. L'egg lance `npm install`, puis `node launcher.js`.
+5. Crée le serveur : l'installation se lance toute seule (environ une minute).
+6. Discord Developer Portal > OAuth2 > **Redirects** : ajoute `https://<IP publique>:<port>/api/auth/callback`.
+7. Démarre le serveur. Pterodactyl l'affiche comme « en marche » quand la console montre `[LAUNCHER] App ready`.
 
 ## 4. Premier accès au panel
 
@@ -73,7 +76,7 @@ Revenir à une version plus ancienne se fait depuis la même page. Si l'ancienne
 
 | Chemin | Contenu |
 |---|---|
-| `.env.prod` | Configuration (à sauvegarder toi-même) |
+| Variables du serveur (onglet Startup) | Configuration |
 | `data/bot.db` | Base de données |
 | `data/backups/` | Sauvegardes faites avant chaque installation (10 dernières) |
 | `data/tls/` | Certificat auto-signé du panel |
@@ -86,3 +89,5 @@ Revenir à une version plus ancienne se fait depuis la même page. Si l'ancienne
 Après 5 plantages en 10 minutes, le lanceur s'arrête avec le code 1 et Pterodactyl affiche le serveur comme arrêté. La cause est dans la console Pterodactyl.
 
 Pour revenir de force à la version précédente : dans `current.json`, remets `version` sur la valeur de `previous`, puis redémarre.
+
+Pour repartir d'une version précise (par exemple si le panel ne démarre plus du tout) : mets la variable « Version à installer » sur le tag voulu (par exemple `v1.0.0`), puis **Settings > Reinstall Server**. La réinstallation remplace le code, mais garde la base (`data/`) et les logs.

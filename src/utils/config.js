@@ -27,7 +27,8 @@ export function parseConfig(vars) {
 		CLIENT_SECRET: str('CLIENT_SECRET'),
 		DEV_GUILD_ID: str('DEV_GUILD_ID'),
 		OWNER_ID: str('OWNER_ID'),
-		WEB_PORT: Number(str('WEB_PORT') || 3000),
+		// Pterodactyl gives the allocated port in SERVER_PORT
+		WEB_PORT: Number(str('WEB_PORT') || str('SERVER_PORT') || 3000),
 		WEB_MODE: str('WEB_MODE') || 'http',
 		WEB_PUBLIC_URL: str('WEB_PUBLIC_URL').replace(/\/+$/, ''),
 		TLS_CERT: str('TLS_CERT'),
@@ -44,7 +45,10 @@ export function parseConfig(vars) {
 	if (!WEB_MODES.includes(config.WEB_MODE)) problems.push(`WEB_MODE must be one of: ${WEB_MODES.join(', ')}`);
 
 	if (!config.WEB_PUBLIC_URL) {
-		config.WEB_PUBLIC_URL = `${config.WEB_MODE === 'http' ? 'http' : 'https'}://localhost:${config.WEB_PORT}`;
+		// On Pterodactyl, SERVER_IP is the allocation address (0.0.0.0 when bound to every interface)
+		const ip = str('SERVER_IP');
+		const host = ip && ip !== '0.0.0.0' ? ip : 'localhost';
+		config.WEB_PUBLIC_URL = `${config.WEB_MODE === 'http' ? 'http' : 'https'}://${host}:${config.WEB_PORT}`;
 	}
 	else if (!/^https?:\/\/[^/]+$/.test(config.WEB_PUBLIC_URL)) {
 		problems.push('WEB_PUBLIC_URL must look like http(s)://host[:port], without path');

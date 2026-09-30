@@ -1,0 +1,143 @@
+{
+    "_comment": "Egg Pterodactyl du bot Brothers Life. Généré par pterodactyl/build-egg.mjs, ne pas modifier à la main.",
+    "meta": {
+        "version": "PTDL_v2",
+        "update_url": null
+    },
+    "exported_at": "2026-09-30T14:14:19.414Z",
+    "name": "Brothers Life Bot",
+    "author": "bot@brothers-life.invalid",
+    "description": "Bot Discord multi-serveurs Brothers Life avec son panel web. Installe une Release du dépôt GitHub privé ; les mises à jour se font ensuite depuis le panel (page Versions).",
+    "features": null,
+    "docker_images": {
+        "Node.js 22": "ghcr.io/parkervcp/yolks:nodejs_22",
+        "Node.js 24": "ghcr.io/parkervcp/yolks:nodejs_24"
+    },
+    "file_denylist": [],
+    "startup": "node launcher.js prod",
+    "config": {
+        "files": "{}",
+        "startup": "{\n    \"done\": \"[LAUNCHER] App ready\"\n}",
+        "logs": "{}",
+        "stop": "^C"
+    },
+    "scripts": {
+        "installation": {
+            "script": "#!/bin/bash\n# Pterodactyl installation script (runs in node:22-bookworm-slim, server files mounted on /mnt/server).\n# Downloads a release of the bot from the private GitHub repo and installs its production dependencies.\n# Kept on reinstall: .env.prod, data/ (database, backups, certificate), logs/.\nset -euo pipefail\ncd /mnt/server\n\nif [ -z \"${GITHUB_REPO:-}\" ] || [ -z \"${GITHUB_TOKEN:-}\" ]; then\n\techo \"GITHUB_REPO et GITHUB_TOKEN sont obligatoires (onglet Startup du serveur).\"\n\texit 1\nfi\n\nnode --input-type=module <<'NODE'\nimport fs from 'node:fs';\n\nconst { GITHUB_REPO: repo, GITHUB_TOKEN: token } = process.env;\nconst wanted = (process.env.BOT_VERSION || 'latest').trim();\nconst headers = {\n\tAuthorization: `Bearer ${token}`,\n\tAccept: 'application/vnd.github+json',\n\t'User-Agent': 'brl-pterodactyl-installer',\n\t'X-GitHub-Api-Version': '2022-11-28',\n};\n\nconst url = wanted === 'latest'\n\t? `https://api.github.com/repos/${repo}/releases/latest`\n\t: `https://api.github.com/repos/${repo}/releases/tags/${wanted}`;\nconst res = await fetch(url, { headers });\nif (!res.ok) {\n\tconsole.error(`GitHub a répondu ${res.status} pour ${url}.`);\n\tconsole.error('Vérifie GITHUB_REPO, GITHUB_TOKEN (lecture du contenu du dépôt) et BOT_VERSION.');\n\tprocess.exit(1);\n}\nconst release = await res.json();\nconst asset = release.assets.find(a => /^bot-v\\d+\\.\\d+\\.\\d+\\.tar\\.gz$/.test(a.name));\nif (!asset) {\n\tconsole.error(`La version ${release.tag_name} n'a pas d'archive bot-vX.Y.Z.tar.gz (la CI de publication a-t-elle réussi ?).`);\n\tprocess.exit(1);\n}\n\nconsole.log(`Téléchargement de ${release.tag_name} (${asset.name}, ${Math.round(asset.size / 1024)} Ko)`);\nconst file = await fetch(`https://api.github.com/repos/${repo}/releases/assets/${asset.id}`, {\n\theaders: { ...headers, Accept: 'application/octet-stream' },\n});\nif (!file.ok) {\n\tconsole.error(`Téléchargement impossible (${file.status}).`);\n\tprocess.exit(1);\n}\nfs.writeFileSync('/tmp/bot.tar.gz', Buffer.from(await file.arrayBuffer()));\nNODE\n\n# Replace the code, keep the data. current.json is removed: (re)installing runs this release.\nrm -rf src launcher web/dist node_modules current.json\ntar -xzf /tmp/bot.tar.gz -C /mnt/server\nrm -f /tmp/bot.tar.gz\n\nnpm ci --omit=dev --ignore-scripts --no-audit --no-fund\nmkdir -p data logs\n\necho \"Installation terminée : $(node -p \"require('./package.json').version\")\"\n",
+            "container": "node:22-bookworm-slim",
+            "entrypoint": "bash"
+        }
+    },
+    "variables": [
+        {
+            "name": "Token du bot",
+            "description": "Developer Portal > Bot > Reset Token.",
+            "env_variable": "TOKEN",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:200",
+            "field_type": "text"
+        },
+        {
+            "name": "ID de l’application",
+            "description": "Developer Portal > General Information > Application ID.",
+            "env_variable": "APP_ID",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|regex:/^\\d{17,20}$/",
+            "field_type": "text"
+        },
+        {
+            "name": "Client Secret",
+            "description": "Developer Portal > OAuth2 > Client Secret (connexion au panel).",
+            "env_variable": "CLIENT_SECRET",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:200",
+            "field_type": "text"
+        },
+        {
+            "name": "Chef du réseau (OWNER_ID)",
+            "description": "ID Discord du seul compte qui a toutes les permissions.",
+            "env_variable": "OWNER_ID",
+            "default_value": "267235400467218432",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|regex:/^\\d{17,20}$/",
+            "field_type": "text"
+        },
+        {
+            "name": "Mode du panel",
+            "description": "https-selfsigned (conseillé sans domaine), https-custom (avec TLS_CERT/TLS_KEY) ou http.",
+            "env_variable": "WEB_MODE",
+            "default_value": "https-selfsigned",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|in:https-selfsigned,https-custom,http",
+            "field_type": "text"
+        },
+        {
+            "name": "Adresse publique du panel",
+            "description": "Ex. https://51.77.1.2:25565. Vide = IP et port de l’allocation. À ajouter aussi dans Discord > OAuth2 > Redirects avec /api/auth/callback.",
+            "env_variable": "WEB_PUBLIC_URL",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|regex:/^https?:\\/\\/[^\\/]+$/",
+            "field_type": "text"
+        },
+        {
+            "name": "Dépôt GitHub",
+            "description": "owner/repo où la CI publie les versions.",
+            "env_variable": "GITHUB_REPO",
+            "default_value": "Brothers-Life/Brothers-Life-Bot-Discord",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|regex:/^[\\w.-]+\\/[\\w.-]+$/",
+            "field_type": "text"
+        },
+        {
+            "name": "Token GitHub",
+            "description": "Fine-grained token, Contents: Read-only sur le dépôt (installation et page Versions).",
+            "env_variable": "GITHUB_TOKEN",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:255",
+            "field_type": "text"
+        },
+        {
+            "name": "Version à installer",
+            "description": "latest ou un tag (ex. v1.0.0). Utilisée à l’installation et à la réinstallation ; ensuite, les mises à jour se font depuis le panel.",
+            "env_variable": "BOT_VERSION",
+            "default_value": "latest",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|regex:/^(latest|v\\d+\\.\\d+\\.\\d+)$/",
+            "field_type": "text"
+        },
+        {
+            "name": "Certificat TLS (https-custom)",
+            "description": "Chemin du certificat, relatif au dossier du serveur.",
+            "env_variable": "TLS_CERT",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:255",
+            "field_type": "text"
+        },
+        {
+            "name": "Clé TLS (https-custom)",
+            "description": "Chemin de la clé privée, relatif au dossier du serveur.",
+            "env_variable": "TLS_KEY",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:255",
+            "field_type": "text"
+        }
+    ]
+}
