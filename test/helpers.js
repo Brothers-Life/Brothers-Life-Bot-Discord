@@ -117,9 +117,9 @@ export function createFakeExecutor() {
 		},
 		deleted: [],
 		announcements: [],
-		async sendAnnouncement(channelId, payload, target) {
+		async sendAnnouncement(channelId, payload, target, options = {}) {
 			if (this.failOn.has(channelId)) throw new Error('Missing Access');
-			this.announcements.push({ channelId, payload, target });
+			this.announcements.push({ channelId, payload, target, options });
 			return String(650000000000000000n + BigInt(this.announcements.length));
 		},
 		// invite code -> guildId

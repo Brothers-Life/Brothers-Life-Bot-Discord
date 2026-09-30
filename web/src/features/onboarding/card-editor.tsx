@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, Copy, Image as ImageIcon, Loader2, Plus, Square, Trash2, Type, Upload, UserRound } from 'lucide-react'
-import { toast } from 'sonner'
+import { ArrowDown, ArrowUp, Copy, Image as ImageIcon, Loader2, Plus, Square, Trash2, Type, UserRound } from 'lucide-react'
 import type { CardDesign, CardLayer } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import { uploadImage, imageUrl } from '@/features/uploads/upload'
+import { imageUrl } from '@/features/uploads/upload'
+import { UploadButton } from '@/features/uploads/image-input'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -42,37 +42,6 @@ function newLayer(type: CardLayer['type'], design: CardDesign): CardLayer {
     case 'rect': return { id, type, x: 40, y: 40, w: 300, h: 120, color: '#000000', opacity: 0.4, radius: 16 }
     case 'image': return { id, type, x: 40, y: 40, w: 128, h: 128, src: null, radius: 16 }
   }
-}
-
-function UploadButton({ onUploaded, label = 'Envoyer une image' }: { onUploaded: (src: string) => void; label?: string }) {
-  const input = useRef<HTMLInputElement>(null)
-  const [busy, setBusy] = useState(false)
-  return (
-    <>
-      <input
-        ref={input} type='file' accept='image/png,image/jpeg,image/webp,image/gif' className='hidden'
-        onChange={async (e) => {
-          const file = e.target.files?.[0]
-          e.target.value = ''
-          if (!file) return
-          setBusy(true)
-          try {
-            onUploaded(await uploadImage(file))
-            toast.success('Image envoyée')
-          }
-          catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Envoi impossible')
-          }
-          finally {
-            setBusy(false)
-          }
-        }}
-      />
-      <Button type='button' size='sm' variant='outline' onClick={() => input.current?.click()} disabled={busy}>
-        {busy ? <Loader2 className='animate-spin' /> : <Upload />} {label}
-      </Button>
-    </>
-  )
 }
 
 function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {

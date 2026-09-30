@@ -1,5 +1,7 @@
 import { definePermission } from './permissions.js';
 import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
+import { fillVars } from './cards.js';
+import { DEFAULT_TIME_ZONE, nextOccurrence, normalizeRecurrence, occurrences } from './recurrence.js';
 
 definePermission('announcements.view', { label: 'Voir les annonces', category: 'Annonces' });
 definePermission('announcements.manage', { label: 'Créer, programmer et envoyer des annonces', category: 'Annonces' });
@@ -8,7 +10,10 @@ definePermission('announcements.everyone', { label: 'Mentionner @everyone et @he
 const SNOWFLAKE = /^\d{17,20}$/;
 const HTTPS_URL = /^https:\/\/\S+$/;
 const COLOR = /^#[0-9a-f]{6}$/i;
+const UPLOAD = /^upload:[a-f0-9]{32}\.(png|jpg|webp|gif)$/;
+const EMOJI = /^(<a?:\w{2,32}:\d{17,20}>|[^\s<>]{1,16})$/u;
 const EDITABLE = new Set(['draft', 'scheduled', 'failed']);
+const MAX_IMAGES = 10;
 
 // Discord embed limits
 const LIMITS = { content: 2000, title: 256, description: 4096, fields: 25, fieldName: 256, fieldValue: 1024, footer: 2048, author: 256, total: 6000 };
@@ -23,14 +28,14 @@ function str(value, max) {
 // Besides https URLs: the avatar / server icon variables of welcome messages, and attached files
 const URL_TOKEN = /^(\{(user\.avatar|server\.icon)\}|attachment:\/\/[\w.-]+)$/;
 
-function url(value, label) {
+function url(value, label, uploads) {
 	if (!value) return null;
-	if (!HTTPS_URL.test(value) && !URL_TOKEN.test(value)) throw new ValidationError(`${label} : une adresse en https:// est attendue.`);
+	if (!HTTPS_URL.test(value) && !URL_TOKEN.test(value) && !(uploads && UPLOAD.test(value))) throw new ValidationError(`${label} : une adresse en https:// est attendue.`);
 	return value;
 }
 
-// Keeps only known fields and enforces Discord's limits
-export function normalizePayload(input = {}) {
+// Keeps only known fields and enforces Discord's limits. `uploads`: images sent from the panel ("upload:<id>") are allowed.
+export function normalizePayload(input = {}, { uploads = false } = {}) {
 	const embed = input.embed ?? {};
 	const out = {
 		content: str(input.content, LIMITS.content),
@@ -41,11 +46,11 @@ export function normalizePayload(input = {}) {
 			description: str(embed.description, LIMITS.description),
 			color: embed.color && COLOR.test(embed.color) ? embed.color.toLowerCase() : '#d6a249',
 			authorName: str(embed.authorName, LIMITS.author),
-			authorIconUrl: url(embed.authorIconUrl, 'Icône de l’auteur'),
-			thumbnailUrl: url(embed.thumbnailUrl, 'Miniature'),
-			imageUrl: url(embed.imageUrl, 'Image'),
+			authorIconUrl: url(embed.authorIconUrl, 'Icône de l’auteur', uploads),
+			thumbnailUrl: url(embed.thumbnailUrl, 'Miniature', uploads),
+			imageUrl: url(embed.imageUrl, 'Image', uploads),
 			footerText: str(embed.footerText, LIMITS.footer),
-			footerIconUrl: url(embed.footerIconUrl, 'Icône du pied de page'),
+			footerIconUrl: url(embed.footerIconUrl, 'Icône du pied de page', uploads),
 			timestamp: Boolean(embed.timestamp),
 			fields: (Array.isArray(embed.fields) ? embed.fields : []).slice(0, LIMITS.fields).map(f => ({
 				name: str(f?.name, LIMITS.fieldName),
@@ -79,22 +84,83 @@ export function normalizeTargets(input) {
 	});
 }
 
-export function createAnnouncements({ db, network, audit, executor, logs, logger = console, now = Date.now }) {
+export const DEFAULT_OPTIONS = { autoDeleteHours: 0, pin: false, thread: { enabled: false, name: '' }, reactions: [], buttons: [], gallery: [], attachments: [] };
+
+function image(value, label) {
+	if (typeof value !== 'string' || !(HTTPS_URL.test(value) || UPLOAD.test(value))) throw new ValidationError(`${label} : image envoyée ou adresse https:// attendue.`);
+	return value;
+}
+
+// Send options: pin, thread, reactions, link buttons, gallery (up to 3 images next to the main one), attached images, auto-delete
+export function normalizeOptions(input = {}) {
+	const o = input ?? {};
+	const hours = Number(o.autoDeleteHours ?? 0);
+	if (!Number.isInteger(hours) || hours < 0 || hours > 720) throw new ValidationError('Suppression automatique : de 0 à 720 heures.');
+	const reactions = [...new Set((Array.isArray(o.reactions) ? o.reactions : []).map(r => String(r).trim()).filter(Boolean))];
+	if (reactions.length > 10) throw new ValidationError('10 réactions au maximum.');
+	for (const r of reactions) if (!EMOJI.test(r)) throw new ValidationError(`Réaction invalide : ${r.slice(0, 20)}`);
+	const buttons = (Array.isArray(o.buttons) ? o.buttons : []).map((b) => {
+		const label = str(b?.label, 80).trim();
+		if (!label) throw new ValidationError('Chaque bouton a besoin d’un texte.');
+		if (!HTTPS_URL.test(b?.url ?? '')) throw new ValidationError(`Bouton « ${label} » : une adresse en https:// est attendue.`);
+		const emoji = String(b?.emoji ?? '').trim();
+		if (emoji && !EMOJI.test(emoji)) throw new ValidationError(`Bouton « ${label} » : émoji invalide.`);
+		return { label, url: b.url.slice(0, 512), emoji: emoji || null };
+	});
+	if (buttons.length > 5) throw new ValidationError('5 boutons au maximum.');
+	const gallery = (Array.isArray(o.gallery) ? o.gallery : []).filter(Boolean).map(v => image(v, 'Galerie'));
+	if (gallery.length > 3) throw new ValidationError('La galerie compte 3 images en plus de l’image principale.');
+	const attachments = (Array.isArray(o.attachments) ? o.attachments : []).filter(Boolean).map((v) => {
+		if (!UPLOAD.test(v)) throw new ValidationError('Pièces jointes : seulement des images envoyées depuis le panel.');
+		return v;
+	});
+	const thread = o.thread ?? {};
+	return {
+		autoDeleteHours: hours,
+		pin: Boolean(o.pin),
+		thread: { enabled: Boolean(thread.enabled), name: str(thread.name, 100).trim() },
+		reactions,
+		buttons,
+		gallery,
+		attachments,
+	};
+}
+
+// Every image of an announcement that comes from the panel
+function uploadRefs(payload, options) {
+	const e = payload.embed;
+	return [e.imageUrl, e.thumbnailUrl, e.authorIconUrl, e.footerIconUrl, ...options.gallery, ...options.attachments].filter(v => v && UPLOAD.test(v));
+}
+
+function dateText(at, timeZone = DEFAULT_TIME_ZONE) {
+	return new Date(at).toLocaleDateString('fr-FR', { timeZone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+export function createAnnouncements({ db, network, audit, executor, logs, uploads = null, logger = console, now = Date.now }) {
 	logs.registerCategory('announcements', 'Annonces envoyées');
 
 	const q = {
 		insert: db.prepare(`
-			INSERT INTO announcements (name, payload, targets, status, scheduled_at, created_by, created_at, updated_at)
-			VALUES (@name, @payload, @targets, @status, @scheduledAt, @createdBy, @at, @at)
+			INSERT INTO announcements (name, payload, targets, options, recurrence, status, scheduled_at, created_by, created_at, updated_at)
+			VALUES (@name, @payload, @targets, @options, NULL, @status, @scheduledAt, @createdBy, @at, @at)
 		`),
-		update: db.prepare('UPDATE announcements SET name = @name, payload = @payload, targets = @targets, updated_at = @at WHERE id = @id'),
+		update: db.prepare('UPDATE announcements SET name = @name, payload = @payload, targets = @targets, options = @options, updated_at = @at WHERE id = @id'),
 		status: db.prepare('UPDATE announcements SET status = ?, scheduled_at = ?, updated_at = ? WHERE id = ?'),
-		sent: db.prepare('UPDATE announcements SET status = ?, sent_at = ?, results = ?, updated_at = ? WHERE id = ?'),
+		schedule: db.prepare('UPDATE announcements SET status = \'scheduled\', scheduled_at = ?, recurrence = ?, updated_at = ? WHERE id = ?'),
+		sent: db.prepare('UPDATE announcements SET status = @status, scheduled_at = @next, sent_at = @at, results = @results, run_count = run_count + 1, history = @history, updated_at = @at WHERE id = @id'),
 		results: db.prepare('UPDATE announcements SET status = ?, results = ?, updated_at = ? WHERE id = ?'),
 		claim: db.prepare('UPDATE announcements SET status = \'sending\', updated_at = ? WHERE id = ? AND status IN (\'draft\', \'scheduled\', \'failed\')'),
 		get: db.prepare('SELECT * FROM announcements WHERE id = ?'),
 		delete: db.prepare('DELETE FROM announcements WHERE id = ?'),
 		due: db.prepare('SELECT id FROM announcements WHERE status = \'scheduled\' AND scheduled_at <= ?'),
+		planned: db.prepare('SELECT * FROM announcements WHERE status = \'scheduled\' AND scheduled_at <= ?'),
+		addDeletion: db.prepare('INSERT INTO scheduled_deletions (channel_id, message_id, delete_at, source) VALUES (?, ?, ?, ?)'),
+		dueDeletions: db.prepare('SELECT * FROM scheduled_deletions WHERE delete_at <= ? LIMIT 50'),
+		dropDeletion: db.prepare('DELETE FROM scheduled_deletions WHERE id = ?'),
+		templates: db.prepare('SELECT * FROM announcement_templates ORDER BY name COLLATE NOCASE'),
+		template: db.prepare('SELECT * FROM announcement_templates WHERE id = ?'),
+		addTemplate: db.prepare('INSERT INTO announcement_templates (name, payload, options, targets, created_by, created_at) VALUES (@name, @payload, @options, @targets, @createdBy, @at)'),
+		dropTemplate: db.prepare('DELETE FROM announcement_templates WHERE id = ?'),
 	};
 
 	function toAnnouncement(row) {
@@ -104,6 +170,10 @@ export function createAnnouncements({ db, network, audit, executor, logs, logger
 			name: row.name,
 			payload: JSON.parse(row.payload),
 			targets: JSON.parse(row.targets),
+			options: { ...DEFAULT_OPTIONS, ...JSON.parse(row.options ?? '{}') },
+			recurrence: row.recurrence ? JSON.parse(row.recurrence) : null,
+			runCount: row.run_count ?? 0,
+			history: JSON.parse(row.history ?? '[]'),
 			status: row.status,
 			scheduledAt: row.scheduled_at,
 			sentAt: row.sent_at,
@@ -112,6 +182,10 @@ export function createAnnouncements({ db, network, audit, executor, logs, logger
 			createdAt: row.created_at,
 			updatedAt: row.updated_at,
 		};
+	}
+
+	function toTemplate(row) {
+		return { id: row.id, name: row.name, payload: JSON.parse(row.payload), options: { ...DEFAULT_OPTIONS, ...JSON.parse(row.options) }, targets: JSON.parse(row.targets), createdBy: row.created_by, createdAt: row.created_at };
 	}
 
 	function getOrThrow(id) {
@@ -137,6 +211,16 @@ export function createAnnouncements({ db, network, audit, executor, logs, logger
 		}
 	}
 
+	// Payload and options checked together: panel images must exist, 10 at most
+	function clean(payload, options) {
+		const p = normalizePayload(payload, { uploads: true });
+		const o = normalizeOptions(options);
+		const refs = uploadRefs(p, o);
+		if (new Set(refs).size > MAX_IMAGES) throw new ValidationError(`${MAX_IMAGES} images envoyées au maximum par annonce.`);
+		for (const ref of refs) if (uploads && !uploads.exists(ref.slice(7))) throw new ValidationError('Une des images envoyées n’existe plus : renvoie-la.');
+		return { payload: p, options: o };
+	}
+
 	function validateName(name) {
 		if (typeof name !== 'string' || !name.trim() || name.length > 100) throw new ValidationError('Le nom de l’annonce fait 1 à 100 caractères.');
 		return name.trim();
@@ -146,13 +230,43 @@ export function createAnnouncements({ db, network, audit, executor, logs, logger
 		audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action, target: String(a.id), details: { name: a.name, ...details } });
 	}
 
+	// Panel images become attached files ("attachment://<name>"), variables are filled for the server
+	async function render(a, target, guildCache) {
+		if (!guildCache.has(target.guildId)) guildCache.set(target.guildId, await executor.getGuildInfo(target.guildId).catch(() => null));
+		const guild = guildCache.get(target.guildId);
+		const vars = { date: dateText(now(), a.recurrence?.timeZone), server: guild?.name ?? '', memberCount: guild?.memberCount ?? '' };
+		const files = new Map();
+		const swap = (value) => {
+			if (!value || !UPLOAD.test(value)) return value;
+			const id = value.slice(7);
+			files.set(id, uploads ? uploads.file(id) : id);
+			return `attachment://${id}`;
+		};
+		const f = value => (typeof value === 'string' ? fillVars(value, vars) : value);
+		const e = a.payload.embed;
+		const payload = {
+			content: f(a.payload.content),
+			embed: {
+				...e,
+				title: f(e.title), description: f(e.description), authorName: f(e.authorName), footerText: f(e.footerText),
+				imageUrl: swap(e.imageUrl), thumbnailUrl: swap(e.thumbnailUrl), authorIconUrl: swap(e.authorIconUrl), footerIconUrl: swap(e.footerIconUrl),
+				fields: e.fields.map(field => ({ ...field, name: f(field.name), value: f(field.value) })),
+			},
+		};
+		const options = { ...a.options, gallery: a.options.gallery.map(swap), attachments: a.options.attachments.map(swap), thread: { ...a.options.thread, name: f(a.options.thread.name) } };
+		return { payload, options, files: [...files].map(([name, attachment]) => ({ name, attachment })) };
+	}
+
 	async function deliver(id, actor) {
 		if (!q.claim.run(now(), id).changes) throw new ValidationError('Cette annonce est déjà envoyée ou en cours d’envoi.');
 		const a = getOrThrow(id);
 		const results = [];
+		const guildCache = new Map();
 		for (const target of a.targets) {
 			try {
-				const messageId = await executor.sendAnnouncement(target.channelId, a.payload, target);
+				const { payload, options, files } = await render(a, target, guildCache);
+				const messageId = await executor.sendAnnouncement(target.channelId, payload, target, { ...options, files });
+				if (a.options.autoDeleteHours) q.addDeletion.run(target.channelId, messageId, now() + a.options.autoDeleteHours * 3_600_000, `announcement:${id}`);
 				results.push({ ...target, ok: true, messageId });
 			}
 			catch (error) {
@@ -161,11 +275,16 @@ export function createAnnouncements({ db, network, audit, executor, logs, logger
 			}
 		}
 		const okCount = results.filter(r => r.ok).length;
-		const status = okCount === results.length ? 'sent' : okCount ? 'partial' : 'failed';
-		q.sent.run(status, now(), JSON.stringify(results), now(), id);
+		const runs = a.runCount + 1;
+		// Recurring: planned again for its next date while the series goes on
+		const next = a.recurrence && a.scheduledAt ? nextOccurrence(a.recurrence, Math.max(now(), a.scheduledAt), { previous: a.scheduledAt, runs }) : null;
+		const status = next ? 'scheduled' : okCount === results.length ? 'sent' : okCount ? 'partial' : 'failed';
+		const history = [{ at: now(), ok: okCount, total: results.length }, ...a.history].slice(0, 30);
+		q.sent.run({ id, status, next, at: now(), results: JSON.stringify(results), history: JSON.stringify(history) });
 		const sent = getOrThrow(id);
 		record(actor, 'announcements.send', sent, {
 			channels: results.map(r => `<#${r.channelId}> ${r.ok ? '✓' : `✗ ${r.error}`}`),
+			...(next ? { next: new Date(next).toISOString() } : {}),
 		});
 		return sent;
 	}
@@ -180,12 +299,12 @@ export function createAnnouncements({ db, network, audit, executor, logs, logger
 
 		get: getOrThrow,
 
-		async create(actor, { name, payload, targets }) {
+		async create(actor, { name, payload, targets, options }) {
 			requireManage(actor);
-			const clean = { name: validateName(name), payload: normalizePayload(payload), targets: normalizeTargets(targets ?? []) };
-			if (clean.targets.length) await checkTargets(actor, clean.targets);
+			const c = { name: validateName(name), ...clean(payload, options), targets: normalizeTargets(targets ?? []) };
+			if (c.targets.length) await checkTargets(actor, c.targets);
 			const id = Number(q.insert.run({
-				name: clean.name, payload: JSON.stringify(clean.payload), targets: JSON.stringify(clean.targets),
+				name: c.name, payload: JSON.stringify(c.payload), targets: JSON.stringify(c.targets), options: JSON.stringify(c.options),
 				status: 'draft', scheduledAt: null, createdBy: actor.id, at: now(),
 			}).lastInsertRowid);
 			const a = getOrThrow(id);
@@ -193,17 +312,17 @@ export function createAnnouncements({ db, network, audit, executor, logs, logger
 			return a;
 		},
 
-		async update(actor, id, { name, payload, targets }) {
+		async update(actor, id, { name, payload, targets, options }) {
 			requireManage(actor);
 			const current = getOrThrow(id);
 			if (!EDITABLE.has(current.status)) throw new ValidationError('Une annonce déjà envoyée ne se modifie plus : duplique-la.');
-			const clean = {
+			const c = {
 				name: name === undefined ? current.name : validateName(name),
-				payload: payload === undefined ? current.payload : normalizePayload(payload),
+				...clean(payload === undefined ? current.payload : payload, options === undefined ? current.options : options),
 				targets: targets === undefined ? current.targets : normalizeTargets(targets),
 			};
-			if (clean.targets.length) await checkTargets(actor, clean.targets);
-			q.update.run({ id, name: clean.name, payload: JSON.stringify(clean.payload), targets: JSON.stringify(clean.targets), at: now() });
+			if (c.targets.length) await checkTargets(actor, c.targets);
+			q.update.run({ id, name: c.name, payload: JSON.stringify(c.payload), targets: JSON.stringify(c.targets), options: JSON.stringify(c.options), at: now() });
 			return getOrThrow(id);
 		},
 
@@ -214,15 +333,19 @@ export function createAnnouncements({ db, network, audit, executor, logs, logger
 			return deliver(id, actor);
 		},
 
-		async schedule(actor, id, at) {
+		// `at`: first send (for a recurrence, optional: its next date is used). `recurrence`: see recurrence.js, null = once.
+		async schedule(actor, id, at, recurrenceInput = null) {
 			requireManage(actor);
 			const a = getOrThrow(id);
 			if (!EDITABLE.has(a.status)) throw new ValidationError('Cette annonce est déjà envoyée.');
-			if (!Number.isInteger(at) || at < now() + 30_000) throw new ValidationError('Choisis une date dans le futur (au moins 30 secondes).');
+			const recurrence = normalizeRecurrence(recurrenceInput);
+			const first = at ?? (recurrence ? nextOccurrence(recurrence, now() + 30_000) : null);
+			if (!Number.isInteger(first) || first < now() + 30_000) throw new ValidationError('Choisis une date dans le futur (au moins 30 secondes).');
+			if (recurrence?.endAt && recurrence.endAt < first) throw new ValidationError('La date de fin est avant le premier envoi.');
 			await checkTargets(actor, a.targets);
-			q.status.run('scheduled', at, now(), id);
+			q.schedule.run(first, recurrence ? JSON.stringify(recurrence) : null, now(), id);
 			const scheduled = getOrThrow(id);
-			record(actor, 'announcements.schedule', scheduled, { at: new Date(at).toISOString() });
+			record(actor, 'announcements.schedule', scheduled, { at: new Date(first).toISOString(), ...(recurrence ? { recurrence: recurrence.type } : {}) });
 			return scheduled;
 		},
 
@@ -239,7 +362,7 @@ export function createAnnouncements({ db, network, audit, executor, logs, logger
 			requireManage(actor);
 			const a = getOrThrow(id);
 			const copyId = Number(q.insert.run({
-				name: `${a.name} (copie)`.slice(0, 100), payload: JSON.stringify(a.payload), targets: JSON.stringify(a.targets),
+				name: `${a.name} (copie)`.slice(0, 100), payload: JSON.stringify(a.payload), targets: JSON.stringify(a.targets), options: JSON.stringify(a.options),
 				status: 'draft', scheduledAt: null, createdBy: actor.id, at: now(),
 			}).lastInsertRowid);
 			return getOrThrow(copyId);
@@ -273,11 +396,42 @@ export function createAnnouncements({ db, network, audit, executor, logs, logger
 			return getOrThrow(id);
 		},
 
-		// Scheduler: announcements whose date has come
+		// Planned sends between two dates, recurring ones expanded
+		calendar(from, to) {
+			return q.planned.all(to).flatMap((row) => {
+				const a = toAnnouncement(row);
+				return occurrences(a.recurrence, a.scheduledAt, from, to, { runs: a.runCount }).map(at => ({ id: a.id, name: a.name, at, color: a.payload.embed.color, recurring: Boolean(a.recurrence) }));
+			}).sort((x, y) => x.at - y.at);
+		},
+
+		// --- Templates -----------------------------------------------------------------------------
+		templates: () => q.templates.all().map(toTemplate),
+
+		saveTemplate(actor, { name, payload, options, targets }) {
+			requireManage(actor);
+			const c = { name: validateName(name), ...clean(payload, options), targets: normalizeTargets(targets ?? []) };
+			const id = Number(q.addTemplate.run({ name: c.name, payload: JSON.stringify(c.payload), options: JSON.stringify(c.options), targets: JSON.stringify(c.targets), createdBy: actor.id, at: now() }).lastInsertRowid);
+			audit.record({ actorId: actor.id, source: 'panel', action: 'announcements.template', target: String(id), details: { name: c.name } });
+			return toTemplate(q.template.get(id));
+		},
+
+		deleteTemplate(actor, id) {
+			requireManage(actor);
+			const row = q.template.get(id);
+			if (!row) throw new NotFoundError('Modèle introuvable.');
+			q.dropTemplate.run(id);
+			audit.record({ actorId: actor.id, source: 'panel', action: 'announcements.template_delete', target: String(id), details: { name: row.name } });
+		},
+
+		// Scheduler: announcements whose date has come, messages to delete
 		async sendDue() {
 			const system = { id: 'system', source: 'system', isOwner: true, can: () => true };
 			const due = q.due.all(now());
 			for (const { id } of due) await deliver(id, system).catch(error => logger.error(`Scheduled announcement #${id} failed:`, error));
+			for (const d of q.dueDeletions.all(now())) {
+				await executor.deleteMessage(d.channel_id, d.message_id).catch(error => logger.warn(`Auto-delete of ${d.message_id} failed:`, error.message));
+				q.dropDeletion.run(d.id);
+			}
 			return due.length;
 		},
 	};

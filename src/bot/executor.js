@@ -261,20 +261,41 @@ export function createExecutor(client) {
 		},
 
 		// Announcement: text + embed, pings of the target, optional crosspost in announcement channels
-		async sendAnnouncement(channelId, payload, target) {
+		// options: files [{ name, attachment }], gallery (image URLs shown with the main image), attachments, buttons, reactions, pin, thread
+		async sendAnnouncement(channelId, payload, target, options = {}) {
 			const channel = await client.channels.fetch(channelId);
 			const embeds = buildEmbeds(payload);
+			// Gallery: embeds sharing the same URL are shown as one block of images
+			if (embeds.length && options.gallery?.length) {
+				const link = payload.embed.url ?? 'https://discord.com';
+				embeds[0].setURL(link);
+				for (const src of options.gallery) embeds.push(new EmbedBuilder().setURL(link).setImage(src));
+			}
 			const ping = { everyone: '@everyone', here: '@here', roles: target.roleIds.map(id => `<@&${id}>`).join(' '), none: '' }[target.ping];
 			const content = [ping, payload.content].filter(Boolean).join('\n');
+			const buttons = (options.buttons ?? []).map((b) => {
+				const button = new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(b.label).setURL(b.url);
+				if (b.emoji) button.setEmoji(emojiOf(b.emoji));
+				return button;
+			});
+			const files = (options.files ?? []).map(f => new AttachmentBuilder(f.attachment, { name: f.name }));
+			// Discord hides files used inside the embed (attachment://); the others show under the message
 			const message = await channel.send({
 				content: content || undefined,
 				embeds,
+				files,
+				components: buttons.length ? [new ActionRowBuilder().addComponents(buttons)] : [],
 				allowedMentions: {
 					parse: target.ping === 'everyone' || target.ping === 'here' ? ['everyone'] : [],
 					roles: target.ping === 'roles' ? target.roleIds : [],
 				},
 			});
 			if (target.publish && channel.type === ChannelType.GuildAnnouncement) await message.crosspost().catch(() => null);
+			if (options.pin) await message.pin().catch(() => null);
+			for (const r of options.reactions ?? []) await message.react(emojiOf(r)?.id ?? r).catch(() => null);
+			if (options.thread?.enabled && [ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(channel.type)) {
+				await message.startThread({ name: (options.thread.name || payload.embed?.title || 'Discussion').slice(0, 100) }).catch(() => null);
+			}
 			return message.id;
 		},
 

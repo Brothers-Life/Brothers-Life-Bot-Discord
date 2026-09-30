@@ -5,6 +5,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { ImageInput } from '@/features/uploads/image-input'
 
 export const EMPTY_EMBED: AnnouncementEmbed = {
   enabled: true, title: '', url: null, description: '', color: '#d6a249', authorName: '', authorIconUrl: null,
@@ -17,11 +18,13 @@ export function cleanEmbed(e: AnnouncementEmbed): AnnouncementEmbed {
 }
 
 // Every field of a Discord embed; `idPrefix` keeps label/input ids unique when several editors share a page
-export function EmbedFields({ embed: e, onChange, disabled, idPrefix = 'e' }: {
+// `uploads`: images can also be sent from the computer (announcements)
+export function EmbedFields({ embed: e, onChange, disabled, idPrefix = 'e', uploads = false }: {
   embed: AnnouncementEmbed
   onChange: (patch: Partial<AnnouncementEmbed>) => void
   disabled?: boolean
   idPrefix?: string
+  uploads?: boolean
 }) {
   const id = (name: string) => `${idPrefix}-${name}`
   return (
@@ -54,15 +57,15 @@ export function EmbedFields({ embed: e, onChange, disabled, idPrefix = 'e' }: {
         </div>
         <div className='grid gap-1.5'>
           <Label htmlFor={id('author-icon')}>Icône de l’auteur</Label>
-          <Input id={id('author-icon')} value={e.authorIconUrl ?? ''} placeholder='https://…' disabled={disabled} onChange={(ev) => onChange({ authorIconUrl: ev.target.value })} />
+          <ImageInput id={id('author-icon')} value={e.authorIconUrl} uploads={uploads} disabled={disabled} onChange={(v) => onChange({ authorIconUrl: v })} />
         </div>
         <div className='grid gap-1.5'>
           <Label htmlFor={id('thumb')}>Miniature (en haut à droite)</Label>
-          <Input id={id('thumb')} value={e.thumbnailUrl ?? ''} placeholder='https://…' disabled={disabled} onChange={(ev) => onChange({ thumbnailUrl: ev.target.value })} />
+          <ImageInput id={id('thumb')} value={e.thumbnailUrl} uploads={uploads} disabled={disabled} onChange={(v) => onChange({ thumbnailUrl: v })} />
         </div>
         <div className='grid gap-1.5'>
           <Label htmlFor={id('image')}>Grande image</Label>
-          <Input id={id('image')} value={e.imageUrl ?? ''} placeholder='https://…' disabled={disabled} onChange={(ev) => onChange({ imageUrl: ev.target.value })} />
+          <ImageInput id={id('image')} value={e.imageUrl} uploads={uploads} disabled={disabled} onChange={(v) => onChange({ imageUrl: v })} />
         </div>
         <div className='grid gap-1.5'>
           <Label htmlFor={id('footer')}>Pied de page</Label>
@@ -70,7 +73,7 @@ export function EmbedFields({ embed: e, onChange, disabled, idPrefix = 'e' }: {
         </div>
         <div className='grid gap-1.5'>
           <Label htmlFor={id('footer-icon')}>Icône du pied de page</Label>
-          <Input id={id('footer-icon')} value={e.footerIconUrl ?? ''} placeholder='https://…' disabled={disabled} onChange={(ev) => onChange({ footerIconUrl: ev.target.value })} />
+          <ImageInput id={id('footer-icon')} value={e.footerIconUrl} uploads={uploads} disabled={disabled} onChange={(v) => onChange({ footerIconUrl: v })} />
         </div>
       </div>
       <label className='flex items-center gap-2 text-sm'>

@@ -20,6 +20,8 @@ const TITLES = {
 	'announcements.send': 'Annonce envoyée',
 	'announcements.schedule': 'Annonce programmée',
 	'announcements.unschedule': 'Programmation d’annonce annulée',
+	'announcements.template': 'Modèle d’annonce enregistré',
+	'announcements.template_delete': 'Modèle d’annonce supprimé',
 	'announcements.delete': 'Annonce supprimée',
 	'panel.login': 'Connexion au panel',
 	'panel.login_denied': 'Connexion au panel refusée',

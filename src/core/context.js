@@ -60,9 +60,9 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const members = createMembers({ db, network, ranks, sanctions, audit, executor });
 	const moderation = createModeration({ db, network, ranks, audit, executor, settings, members, logs, logger });
 	const roleImport = createRoleImport({ db, network, ranks, staffSync, executor, audit });
-	const announcements = createAnnouncements({ db, network, audit, executor, logs, logger });
-	const tickets = createTickets({ db, network, ranks, audit, executor, logs, logger });
 	const uploads = createUploads({ dir: path.join(config.DATA_DIR, 'uploads') });
+	const announcements = createAnnouncements({ db, network, audit, executor, logs, uploads, logger });
+	const tickets = createTickets({ db, network, ranks, audit, executor, logs, logger });
 	const onboarding = createOnboarding({ db, network, audit, executor, uploads, logger, fetchImpl });
 	logs.registerCategory('onboarding', 'Accueil (règlement accepté, boosts, réglages)');
 	const antiraid = createAntiraid({ db, network, audit, executor, sanctions, logs, logger });

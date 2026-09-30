@@ -7,6 +7,7 @@ const body = {
 		name: { type: 'string', maxLength: 100 },
 		payload: { type: 'object' },
 		targets: { type: 'array', maxItems: 50 },
+		options: { type: 'object' },
 	},
 };
 
@@ -32,6 +33,26 @@ export function registerAnnouncementRoutes(app, { core }) {
 		})));
 	});
 
+	// Planned sends between two dates (calendar), recurring ones expanded
+	app.get('/api/announcements/calendar', {
+		config: { permission: 'announcements.view' },
+		schema: { querystring: { type: 'object', required: ['from', 'to'], properties: { from: { type: 'integer' }, to: { type: 'integer' } } } },
+	}, async (request) => {
+		const { from, to } = request.query;
+		return announcements.calendar(from, Math.min(to, from + 62 * 86_400_000));
+	});
+
+	// Templates
+	app.get('/api/announcements/templates', { config: { permission: 'announcements.view' } }, async () => announcements.templates());
+	app.post('/api/announcements/templates', { config: { permission: 'announcements.manage' }, schema: { body: { ...body, required: ['name', 'payload'] } } }, async (request, reply) => {
+		reply.code(201);
+		return announcements.saveTemplate(request.actor, request.body);
+	});
+	app.delete('/api/announcements/templates/:id', { config: { permission: 'announcements.manage', confirm: true }, schema: { params: idParam } }, async (request) => {
+		announcements.deleteTemplate(request.actor, request.params.id);
+		return { ok: true };
+	});
+
 	app.get('/api/announcements/:id', { config: { permission: 'announcements.view' }, schema: { params: idParam } }, async (request) => {
 		return (await withNames([announcements.get(request.params.id)]))[0];
 	});
@@ -52,8 +73,8 @@ export function registerAnnouncementRoutes(app, { core }) {
 
 	app.post('/api/announcements/:id/schedule', {
 		config: { permission: 'announcements.manage' },
-		schema: { params: idParam, body: { type: 'object', required: ['at'], properties: { at: { type: 'integer' } } } },
-	}, async (request) => announcements.schedule(request.actor, request.params.id, request.body.at));
+		schema: { params: idParam, body: { type: 'object', properties: { at: { type: ['integer', 'null'] }, recurrence: { type: ['object', 'null'] } } } },
+	}, async (request) => announcements.schedule(request.actor, request.params.id, request.body.at ?? null, request.body.recurrence ?? null));
 
 	app.post('/api/announcements/:id/unschedule', { config: { permission: 'announcements.manage' }, schema: { params: idParam } }, async (request) => {
 		return announcements.unschedule(request.actor, request.params.id);

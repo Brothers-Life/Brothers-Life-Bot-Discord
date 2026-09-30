@@ -415,6 +415,29 @@ export type AnnouncementEmbed = {
   fields: { name: string; value: string; inline: boolean }[]
 }
 
+export type AnnouncementOptions = {
+  autoDeleteHours: number
+  pin: boolean
+  thread: { enabled: boolean; name: string }
+  reactions: string[]
+  buttons: { label: string; url: string; emoji: string | null }[]
+  gallery: string[]
+  attachments: string[]
+}
+
+export type Recurrence = {
+  type: 'daily' | 'weekly' | 'monthly' | 'interval'
+  time: string
+  days: number[]
+  dayOfMonth: number | null
+  everyHours: number | null
+  endAt: number | null
+  maxRuns: number | null
+  timeZone: string
+}
+
+export type AnnouncementTemplate = { id: number; name: string; payload: { content: string; embed: AnnouncementEmbed }; options: AnnouncementOptions; targets: AnnouncementTarget[]; createdAt: number }
+
 export type AnnouncementTarget = {
   guildId: string
   channelId: string
@@ -428,6 +451,10 @@ export type Announcement = {
   name: string
   payload: { content: string; embed: AnnouncementEmbed }
   targets: AnnouncementTarget[]
+  options: AnnouncementOptions
+  recurrence: Recurrence | null
+  runCount: number
+  history: { at: number; ok: number; total: number }[]
   status: 'draft' | 'scheduled' | 'sending' | 'sent' | 'partial' | 'failed' | 'deleted'
   scheduledAt: number | null
   sentAt: number | null

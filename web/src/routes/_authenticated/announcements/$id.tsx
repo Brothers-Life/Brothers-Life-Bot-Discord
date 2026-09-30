@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, CalendarClock, Copy, Send, Trash2 } from 'lucide-react'
+import { ArrowLeft, BookmarkPlus, CalendarClock, Copy, Repeat, Send, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import type { Announcement, AnnouncementEmbed, AnnouncementTarget, AnnouncementTargetsPayload } from '@/lib/types'
+import type { Announcement, AnnouncementEmbed, AnnouncementOptions, AnnouncementTarget, AnnouncementTargetsPayload, AnnouncementTemplate } from '@/lib/types'
 import { dateTime } from '@/lib/format'
 import { useMe } from '@/hooks/use-me'
 import { Page, Section, Pill } from '@/components/app/ui'
@@ -13,6 +13,9 @@ import { DiscordPreview } from '@/features/announcements/discord-preview'
 import { TargetsEditor } from '@/features/announcements/targets-editor'
 import { STATUS } from '@/features/announcements/status'
 import { EMPTY_EMBED, EmbedFields, cleanEmbed } from '@/features/announcements/embed-editor'
+import { EMPTY_OPTIONS, OptionsEditor, cleanOptions } from '@/features/announcements/options-editor'
+import { ScheduleEditor, describeRecurrence, scheduleBody, scheduleDraft, scheduleReady } from '@/features/announcements/schedule-editor'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -25,7 +28,12 @@ export const Route = createFileRoute('/_authenticated/announcements/$id')({
   component: AnnouncementEditor,
 })
 
-type Draft = { name: string; content: string; embed: AnnouncementEmbed; targets: AnnouncementTarget[] }
+type Draft = { name: string; content: string; embed: AnnouncementEmbed; targets: AnnouncementTarget[]; options: AnnouncementOptions }
+
+// Variables filled at send time; the preview shows them for the chosen server
+function previewVars(text: string, server: string) {
+  return text.replaceAll('{server}', server).replaceAll('{date}', new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))
+}
 
 function AnnouncementEditor() {
   const { id } = Route.useParams()
@@ -49,11 +57,14 @@ function Editor({ announcement, guilds }: { announcement: Announcement | null; g
     content: announcement?.payload.content ?? '',
     embed: { ...EMPTY_EMBED, ...announcement?.payload.embed },
     targets: announcement?.targets ?? [],
+    options: { ...EMPTY_OPTIONS, ...announcement?.options },
   }))
+  const [schedule, setSchedule] = useState(() => scheduleDraft(announcement?.recurrence ?? null, announcement?.status === 'scheduled' ? announcement.scheduledAt : null))
+  const [templateName, setTemplateName] = useState<string | null>(null)
+  const templates = useQuery({ queryKey: ['announcement-templates'], queryFn: () => api<AnnouncementTemplate[]>('/announcements/templates'), enabled: !announcement })
   const [previewTarget, setPreviewTarget] = useState(0)
   const [confirmSend, setConfirmSend] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [scheduleAt, setScheduleAt] = useState('')
 
   const roles = new Map(guilds.flatMap((g) => g.roles.map((r) => [r.id, r.name] as const)))
   const setEmbed = (patch: Partial<AnnouncementEmbed>) => setDraft((d) => ({ ...d, embed: { ...d.embed, ...patch } }))
@@ -61,6 +72,7 @@ function Editor({ announcement, guilds }: { announcement: Announcement | null; g
     name: draft.name,
     payload: { content: draft.content, embed: cleanEmbed(draft.embed) },
     targets: draft.targets,
+    options: cleanOptions(draft.options),
   })
 
   const refresh = (a: Announcement) => {
@@ -93,10 +105,10 @@ function Editor({ announcement, guilds }: { announcement: Announcement | null; g
       navigate({ to: '/announcements/$id', params: { id: String(a.id) }, replace: true })
     },
   })
-  const schedule = useMutation({
-    mutationFn: () => saveThen((a) => api<Announcement>(`/announcements/${a.id}/schedule`, { method: 'POST', body: { at: new Date(scheduleAt).getTime() } })),
+  const plan = useMutation({
+    mutationFn: () => saveThen((a) => api<Announcement>(`/announcements/${a.id}/schedule`, { method: 'POST', body: scheduleBody(schedule) })),
     onSuccess: (a) => {
-      toast.success(`Annonce programmée le ${dateTime(a.scheduledAt)}`)
+      toast.success(a.recurrence ? `Annonce récurrente : premier envoi le ${dateTime(a.scheduledAt)}` : `Annonce programmée le ${dateTime(a.scheduledAt)}`)
       refresh(a)
       navigate({ to: '/announcements/$id', params: { id: String(a.id) }, replace: true })
     },
@@ -109,6 +121,14 @@ function Editor({ announcement, guilds }: { announcement: Announcement | null; g
     mutationFn: () => api<Announcement>(`/announcements/${announcement!.id}/duplicate`, { method: 'POST' }),
     onSuccess: (a) => { qc.invalidateQueries({ queryKey: ['announcements'] }); navigate({ to: '/announcements/$id', params: { id: String(a.id) } }) },
   })
+  const saveTemplate = useMutation({
+    mutationFn: () => api<AnnouncementTemplate>('/announcements/templates', { method: 'POST', body: { ...body(), name: templateName } }),
+    onSuccess: () => { toast.success('Modèle enregistré'); setTemplateName(null); qc.invalidateQueries({ queryKey: ['announcement-templates'] }) },
+  })
+  const applyTemplate = (t: AnnouncementTemplate) => {
+    setDraft({ name: draft.name || t.name, content: t.payload.content, embed: { ...EMPTY_EMBED, ...t.payload.embed }, targets: t.targets, options: { ...EMPTY_OPTIONS, ...t.options } })
+    toast.success(`Modèle « ${t.name} » appliqué`)
+  }
   const remove = useMutation({
     mutationFn: () => api<{ announcement: Announcement | null }>(`/announcements/${announcement!.id}`, { method: 'DELETE', body: { confirm: true } }),
     onSuccess: (r) => {
@@ -120,6 +140,7 @@ function Editor({ announcement, guilds }: { announcement: Announcement | null; g
   })
 
   const target = draft.targets[previewTarget] ?? draft.targets[0]
+  const guildName = guilds.find((g) => g.id === target?.guildId)?.name ?? guilds[0]?.name ?? ''
   const status = announcement ? STATUS[announcement.status] : null
   const e = draft.embed
 
@@ -130,6 +151,14 @@ function Editor({ announcement, guilds }: { announcement: Announcement | null; g
         <div className='flex flex-wrap items-center gap-2'>
           <Button asChild variant='ghost'><Link to='/announcements'><ArrowLeft /> Annonces</Link></Button>
           {status && <Pill tone={status.tone}>{status.label}{announcement?.status === 'scheduled' && announcement.scheduledAt ? ` · ${dateTime(announcement.scheduledAt)}` : ''}</Pill>}
+          {announcement?.recurrence && announcement.status === 'scheduled' && <Pill tone='accent'><Repeat className='size-3' /> {describeRecurrence(announcement.recurrence)}</Pill>}
+          {!announcement && !!templates.data?.length && (
+            <Select value='' onValueChange={(v) => { const t = templates.data.find((x) => String(x.id) === v); if (t) applyTemplate(t) }}>
+              <SelectTrigger className='w-52' aria-label='Partir d’un modèle'><SelectValue placeholder='Partir d’un modèle…' /></SelectTrigger>
+              <SelectContent>{templates.data.map((t) => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}</SelectContent>
+            </Select>
+          )}
+          {can('announcements.manage') && <Button variant='outline' onClick={() => setTemplateName(draft.name)}><BookmarkPlus /> Modèle</Button>}
           {announcement && can('announcements.manage') && <Button variant='outline' onClick={() => duplicate.mutate()}><Copy /> Dupliquer</Button>}
           {announcement && can('announcements.manage') && announcement.status !== 'deleted' && (
             <Button variant='ghost' className='text-destructive' onClick={() => setConfirmDelete(true)}><Trash2 /> Supprimer</Button>
@@ -148,6 +177,7 @@ function Editor({ announcement, guilds }: { announcement: Announcement | null; g
               <div className='grid gap-1.5'>
                 <Label htmlFor='a-content'>Texte au-dessus de l’embed <span className='text-muted-foreground'>({draft.content.length}/2000)</span></Label>
                 <Textarea id='a-content' rows={3} maxLength={2000} value={draft.content} disabled={!editable} onChange={(ev) => setDraft({ ...draft, content: ev.target.value })} placeholder='Markdown Discord accepté : **gras**, *italique*, liens…' />
+                <span className='text-xs text-muted-foreground'>Variables : {'{server}'} nom du serveur, {'{memberCount}'} nombre de membres, {'{date}'} date du jour.</span>
               </div>
             </div>
           </Section>
@@ -155,7 +185,7 @@ function Editor({ announcement, guilds }: { announcement: Announcement | null; g
           <Section title='Embed' actions={<Switch checked={e.enabled} onCheckedChange={(v) => setEmbed({ enabled: v })} disabled={!editable} aria-label='Activer l’embed' />}>
             {e.enabled && (
               <div className='p-4'>
-                <EmbedFields embed={e} onChange={setEmbed} disabled={!editable} />
+                <EmbedFields embed={e} onChange={setEmbed} disabled={!editable} uploads />
               </div>
             )}
           </Section>
@@ -165,6 +195,40 @@ function Editor({ announcement, guilds }: { announcement: Announcement | null; g
               <TargetsEditor guilds={guilds} targets={draft.targets} onChange={(targets) => setDraft({ ...draft, targets })} disabled={!editable} />
             </div>
           </Section>
+
+          <Section title='Options d’envoi' description='Images en plus, boutons, réactions, épinglage, fil de discussion, suppression automatique.'>
+            <div className='p-4'>
+              <OptionsEditor value={draft.options} onChange={(options) => setDraft({ ...draft, options })} disabled={!editable} />
+            </div>
+          </Section>
+
+          {editable && (
+            <Section
+              title='Programmation'
+              description='Une date précise, ou un envoi qui revient (heure de Paris).'
+              actions={announcement?.status === 'scheduled' && <Button size='sm' variant='ghost' onClick={() => unschedule.mutate()}>Arrêter la programmation</Button>}
+            >
+              <div className='grid gap-4 p-4'>
+                <ScheduleEditor value={schedule} onChange={setSchedule} />
+                <Button variant='outline' className='justify-self-start' onClick={() => plan.mutate()} disabled={!scheduleReady(schedule) || !draft.targets.length || !draft.name.trim() || plan.isPending}>
+                  <CalendarClock /> {schedule.mode === 'once' ? 'Programmer' : 'Programmer la récurrence'}
+                </Button>
+              </div>
+            </Section>
+          )}
+
+          {!!announcement?.history.length && (
+            <Section title={`Envois (${announcement.runCount})`}>
+              <ul className='divide-y text-sm'>
+                {announcement.history.map((h) => (
+                  <li key={h.at} className='flex items-center gap-2 px-4 py-2'>
+                    <span className='flex-1'>{dateTime(h.at)}</span>
+                    <Pill tone={h.ok === h.total ? 'success' : h.ok ? 'warning' : 'danger'}>{h.ok}/{h.total} salons</Pill>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          )}
 
           {announcement?.results && (
             <Section title='Résultat de l’envoi'>
@@ -186,13 +250,6 @@ function Editor({ announcement, guilds }: { announcement: Announcement | null; g
           {editable && (
             <div className='flex flex-wrap items-center gap-3 rounded-lg border bg-card p-4'>
               <Button variant='outline' onClick={() => save.mutate()} disabled={save.isPending || !draft.name.trim()}>Enregistrer le brouillon</Button>
-              <div className='flex flex-wrap items-center gap-2'>
-                <Input type='datetime-local' value={scheduleAt} onChange={(ev) => setScheduleAt(ev.target.value)} className='w-56' aria-label='Date d’envoi' />
-                <Button variant='outline' onClick={() => schedule.mutate()} disabled={!scheduleAt || !draft.targets.length || !draft.name.trim() || schedule.isPending}>
-                  <CalendarClock /> Programmer
-                </Button>
-                {announcement?.status === 'scheduled' && <Button variant='ghost' onClick={() => unschedule.mutate()}>Annuler la programmation</Button>}
-              </div>
               <Button className='ms-auto' onClick={() => setConfirmSend(true)} disabled={!draft.targets.length || !draft.name.trim()}>
                 <Send /> Envoyer maintenant
               </Button>
@@ -215,10 +272,29 @@ function Editor({ announcement, guilds }: { announcement: Announcement | null; g
               </Select>
             )}
           </div>
-          <DiscordPreview content={draft.content} embed={draft.embed} target={target} roles={roles} />
+          <DiscordPreview
+            content={previewVars(draft.content, guildName)}
+            embed={{ ...draft.embed, title: previewVars(draft.embed.title, guildName), description: previewVars(draft.embed.description, guildName) }}
+            target={target} roles={roles}
+            extras={draft.options}
+          />
         </div>
       </div>
 
+      <Dialog open={templateName !== null} onOpenChange={(o) => !o && setTemplateName(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Enregistrer comme modèle</DialogTitle></DialogHeader>
+          <div className='grid gap-1.5'>
+            <Label htmlFor='tpl-name'>Nom du modèle</Label>
+            <Input id='tpl-name' value={templateName ?? ''} maxLength={100} onChange={(ev) => setTemplateName(ev.target.value)} placeholder='Maintenance, événement…' />
+            <span className='text-xs text-muted-foreground'>Le message, l’embed, les options et les salons sont repris.</span>
+          </div>
+          <DialogFooter>
+            <Button variant='outline' onClick={() => setTemplateName(null)}>Annuler</Button>
+            <Button onClick={() => saveTemplate.mutate()} disabled={!templateName?.trim() || saveTemplate.isPending}><BookmarkPlus /> Enregistrer</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <ConfirmDialog
         open={confirmSend}
         onOpenChange={setConfirmSend}
