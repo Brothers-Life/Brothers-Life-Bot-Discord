@@ -317,6 +317,16 @@ export function createFakeExecutor() {
 			this.calls.push(['upsert', channelId, id]);
 			return id;
 		},
+		polls: [],
+		async upsertPollMessage(channelId, messageId, data) {
+			if (this.failOn.has(channelId)) throw new Error('Missing Access');
+			this.polls.push({ channelId, messageId, data });
+			return messageId ?? String(740000000000000000n + BigInt(this.polls.length));
+		},
+		pollResults: [],
+		async sendPollResults(channelId, messageId, data) {
+			this.pollResults.push({ channelId, messageId, data });
+		},
 		raidLocks: [],
 		async setRaidLocks(guildId, options) {
 			this.raidLocks.push(['lock', guildId, options]);

@@ -26,6 +26,7 @@ import { Route as AuthenticatedNetworkRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
 import { Route as AuthenticatedPeopleRouteImport } from './routes/_authenticated/people'
 import { Route as AuthenticatedPermissionsRouteImport } from './routes/_authenticated/permissions'
+import { Route as AuthenticatedPollsRouteImport } from './routes/_authenticated/polls'
 import { Route as AuthenticatedRanksRouteImport } from './routes/_authenticated/ranks'
 import { Route as AuthenticatedSanctionsRouteImport } from './routes/_authenticated/sanctions'
 import { Route as AuthenticatedSessionsRouteImport } from './routes/_authenticated/sessions'
@@ -123,6 +124,11 @@ const AuthenticatedPermissionsRoute =
     path: '/permissions',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedPollsRoute = AuthenticatedPollsRouteImport.update({
+  id: '/polls',
+  path: '/polls',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedRanksRoute = AuthenticatedRanksRouteImport.update({
   id: '/ranks',
   path: '/ranks',
@@ -198,6 +204,7 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/people': typeof AuthenticatedPeopleRoute
   '/permissions': typeof AuthenticatedPermissionsRoute
+  '/polls': typeof AuthenticatedPollsRoute
   '/ranks': typeof AuthenticatedRanksRoute
   '/sanctions': typeof AuthenticatedSanctionsRoute
   '/sessions': typeof AuthenticatedSessionsRoute
@@ -226,6 +233,7 @@ export interface FileRoutesByTo {
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/people': typeof AuthenticatedPeopleRoute
   '/permissions': typeof AuthenticatedPermissionsRoute
+  '/polls': typeof AuthenticatedPollsRoute
   '/ranks': typeof AuthenticatedRanksRoute
   '/sanctions': typeof AuthenticatedSanctionsRoute
   '/sessions': typeof AuthenticatedSessionsRoute
@@ -257,6 +265,7 @@ export interface FileRoutesById {
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
   '/_authenticated/people': typeof AuthenticatedPeopleRoute
   '/_authenticated/permissions': typeof AuthenticatedPermissionsRoute
+  '/_authenticated/polls': typeof AuthenticatedPollsRoute
   '/_authenticated/ranks': typeof AuthenticatedRanksRoute
   '/_authenticated/sanctions': typeof AuthenticatedSanctionsRoute
   '/_authenticated/sessions': typeof AuthenticatedSessionsRoute
@@ -289,6 +298,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/people'
     | '/permissions'
+    | '/polls'
     | '/ranks'
     | '/sanctions'
     | '/sessions'
@@ -317,6 +327,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/people'
     | '/permissions'
+    | '/polls'
     | '/ranks'
     | '/sanctions'
     | '/sessions'
@@ -347,6 +358,7 @@ export interface FileRouteTypes {
     | '/_authenticated/onboarding'
     | '/_authenticated/people'
     | '/_authenticated/permissions'
+    | '/_authenticated/polls'
     | '/_authenticated/ranks'
     | '/_authenticated/sanctions'
     | '/_authenticated/sessions'
@@ -487,6 +499,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPermissionsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/polls': {
+      id: '/_authenticated/polls'
+      path: '/polls'
+      fullPath: '/polls'
+      preLoaderRoute: typeof AuthenticatedPollsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/ranks': {
       id: '/_authenticated/ranks'
       path: '/ranks'
@@ -582,6 +601,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedOnboardingRoute: typeof AuthenticatedOnboardingRoute
   AuthenticatedPeopleRoute: typeof AuthenticatedPeopleRoute
   AuthenticatedPermissionsRoute: typeof AuthenticatedPermissionsRoute
+  AuthenticatedPollsRoute: typeof AuthenticatedPollsRoute
   AuthenticatedRanksRoute: typeof AuthenticatedRanksRoute
   AuthenticatedSanctionsRoute: typeof AuthenticatedSanctionsRoute
   AuthenticatedSessionsRoute: typeof AuthenticatedSessionsRoute
@@ -611,6 +631,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedOnboardingRoute: AuthenticatedOnboardingRoute,
   AuthenticatedPeopleRoute: AuthenticatedPeopleRoute,
   AuthenticatedPermissionsRoute: AuthenticatedPermissionsRoute,
+  AuthenticatedPollsRoute: AuthenticatedPollsRoute,
   AuthenticatedRanksRoute: AuthenticatedRanksRoute,
   AuthenticatedSanctionsRoute: AuthenticatedSanctionsRoute,
   AuthenticatedSessionsRoute: AuthenticatedSessionsRoute,

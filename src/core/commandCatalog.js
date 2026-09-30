@@ -25,5 +25,6 @@ export const COMMANDS = [
 	{ name: 'ticket', category: 'Tickets', description: 'Gérer le ticket du salon : ajouter, statut, priorité, transférer, fermer…', permissions: ['tickets.handle'] },
 	{ name: 'stats', category: 'Communauté', description: 'Statistiques du serveur, d’un membre, classements', permissions: [] },
 	{ name: 'changelog', category: 'Communauté', description: 'Voir les dernières nouveautés', permissions: [] },
+	{ name: 'sondage', category: 'Communauté', description: 'Créer un sondage rapide, fermer un sondage', permissions: ['polls.manage'] },
 	{ name: 'ping', category: 'Divers', description: 'Latence du bot', permissions: [] },
 ];

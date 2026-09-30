@@ -2,6 +2,7 @@ import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, Channe
 import { noticePayload, panelPayload, ratingPayload, welcomePayload } from './ticketsUi.js';
 import { buildEmbeds, emojiOf } from './messages.js';
 import { roomPanel } from './voiceUi.js';
+import { pollPayload, pollResultsPayload } from './pollsUi.js';
 
 const COLORS = {
 	info: 0x5865f2,
@@ -272,6 +273,28 @@ export function createExecutor(client) {
 			});
 			if (target.publish && channel.type === ChannelType.GuildAnnouncement) await message.crosspost().catch(() => null);
 			return message.id;
+		},
+
+		// --- Polls ---------------------------------------------------------------------------
+		async upsertPollMessage(channelId, messageId, data, { target } = {}) {
+			const channel = await client.channels.fetch(channelId);
+			const payload = pollPayload(data, { target });
+			if (messageId) {
+				const existing = await channel.messages.fetch(messageId).catch(() => null);
+				if (existing) {
+					await existing.edit({ ...payload, content: existing.content || null });
+					return existing.id;
+				}
+				return messageId;
+			}
+			const message = await channel.send({ ...payload, content: payload.content || undefined });
+			if (data.poll.settings.pin) await message.pin().catch(() => null);
+			return message.id;
+		},
+
+		async sendPollResults(channelId, messageId, data) {
+			const channel = await client.channels.fetch(channelId);
+			await channel.send({ ...pollResultsPayload(data), reply: { messageReference: messageId, failIfNotExists: false } });
 		},
 
 		// Edits the message if it still exists, otherwise posts it again (repost) — returns its id

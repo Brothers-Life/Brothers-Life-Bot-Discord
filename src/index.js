@@ -102,6 +102,8 @@ async function main() {
 		setInterval(() => core.stats.purge(), 24 * HOUR),
 		// Dynamic messages whose variables need a refresh
 		setInterval(() => core.liveMessages.tick().catch(error => logger.error('Live messages failed:', error)), 60_000),
+		// Scheduled polls to open, open polls reaching their end
+		setInterval(() => core.polls.tick().catch(error => logger.error('Polls failed:', error)), 30_000),
 		// Raids that are over
 		setInterval(() => core.antiraid.tick().catch(error => logger.error('Anti-raid tick failed:', error)), 30_000),
 		// Temporary roles reaching their end
