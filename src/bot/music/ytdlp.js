@@ -1,38 +1,75 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { execFile, spawn } from 'node:child_process';
+import { unzip } from './unzip.js';
 
 // yt-dlp reads YouTube (and SoundCloud, Twitch, etc.). Its standalone build is downloaded into data/bin
 // and refreshed every few days: YouTube changes often and old versions stop working.
+// On Linux the "onedir" build (.zip) is used: the single-file one unpacks ~90 MB into /tmp at every run,
+// which fills the small /tmp of hosted containers (and leaves leftovers when a track is skipped).
+const glibc = Boolean(process.report?.getReport?.().header?.glibcVersionRuntime);
 const ASSETS = {
-	win32: 'yt-dlp.exe',
-	darwin: 'yt-dlp_macos',
-	// Alpine-based images (musl, no glibc) need their own build
-	linux: process.arch === 'arm64' ? 'yt-dlp_linux_aarch64' : process.report?.getReport?.().header?.glibcVersionRuntime ? 'yt-dlp_linux' : 'yt-dlp_musllinux',
+	win32: { name: 'yt-dlp.exe' },
+	darwin: { name: 'yt-dlp_macos' },
+	linux: { name: process.arch === 'arm64' ? (glibc ? 'yt-dlp_linux_aarch64' : 'yt-dlp_musllinux_aarch64') : glibc ? 'yt-dlp_linux' : 'yt-dlp_musllinux', zip: true },
 };
 const REFRESH_MS = 3 * 86_400_000;
 
 export function createYtDlp({ dataDir, logger = console }) {
-	const file = path.join(dataDir, 'bin', process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp');
+	const asset = ASSETS[process.platform];
+	const binDir = path.join(dataDir, 'bin');
+	const appDir = path.join(binDir, 'yt-dlp-app');
+	const file = asset?.zip ? path.join(appDir, asset.name) : path.join(binDir, process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp');
 	// Netscape cookies file exported from a browser: needed when YouTube asks the server to "sign in"
 	const cookies = path.join(dataDir, 'youtube-cookies.txt');
 	let download = null;
 
 	async function fetchBinary() {
-		const asset = ASSETS[process.platform];
 		if (!asset) throw new Error(`yt-dlp n’existe pas pour ${process.platform}`);
-		const response = await fetch(`https://github.com/yt-dlp/yt-dlp/releases/latest/download/${asset}`, { redirect: 'follow' });
+		const response = await fetch(`https://github.com/yt-dlp/yt-dlp/releases/latest/download/${asset.name}${asset.zip ? '.zip' : ''}`, { redirect: 'follow' });
 		if (!response.ok) throw new Error(`téléchargement de yt-dlp impossible (${response.status})`);
-		fs.mkdirSync(path.dirname(file), { recursive: true });
-		const tmp = `${file}.part`;
-		fs.writeFileSync(tmp, Buffer.from(await response.arrayBuffer()));
-		fs.chmodSync(tmp, 0o755);
-		fs.renameSync(tmp, file);
+		const content = Buffer.from(await response.arrayBuffer());
+		fs.mkdirSync(binDir, { recursive: true });
+		if (asset.zip) {
+			const fresh = `${appDir}.new`;
+			fs.rmSync(fresh, { recursive: true, force: true });
+			unzip(content, fresh);
+			// Running processes keep their files (Linux): the old folder can go
+			fs.rmSync(appDir, { recursive: true, force: true });
+			fs.renameSync(fresh, appDir);
+			// The single-file build of earlier versions
+			fs.rmSync(path.join(binDir, 'yt-dlp'), { force: true });
+		}
+		else {
+			const tmp = `${file}.part`;
+			fs.writeFileSync(tmp, content);
+			fs.chmodSync(tmp, 0o755);
+			fs.renameSync(tmp, file);
+		}
 		logger.info?.('yt-dlp downloaded');
+	}
+
+	// Leftovers of the single-file build in /tmp (_MEIxxxx folders of ~90 MB each)
+	let cleaned = false;
+	function cleanTmp() {
+		if (cleaned || !asset?.zip) return;
+		cleaned = true;
+		const tmp = os.tmpdir();
+		for (const name of fs.readdirSync(tmp).filter(n => n.startsWith('_MEI'))) {
+			try {
+				const full = path.join(tmp, name);
+				if (Date.now() - fs.statSync(full).mtimeMs > 10 * 60_000) fs.rmSync(full, { recursive: true, force: true });
+			}
+			catch {
+				// someone else's folder
+			}
+		}
 	}
 
 	async function binary() {
 		if (process.env.YTDLP_PATH) return process.env.YTDLP_PATH;
+		cleanTmp();
 		const stat = fs.existsSync(file) ? fs.statSync(file) : null;
 		if (!stat) {
 			download ??= fetchBinary().finally(() => { download = null; });

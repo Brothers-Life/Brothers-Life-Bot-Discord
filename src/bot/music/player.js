@@ -30,7 +30,7 @@ export function createMusicBackend(client, { ytdlp, ffmpeg, logger = console }) 
 	function kill(processes) {
 		for (const child of processes ?? []) {
 			try {
-				child.kill('SIGKILL');
+				child.kill('SIGTERM');
 			}
 			catch {
 				// already gone
