@@ -1,9 +1,11 @@
 import { MessageFlags } from 'discord.js';
 import { AppError } from '../../core/errors.js';
-import { queuePayload } from '../musicUi.js';
+import { addModal, pickPayload, queuePayload, saveModal } from '../musicUi.js';
 
-// customId: mu:<action> (buttons of the now-playing message)
+// customId: mu:<action>[:<extra>] (now-playing message, search results, forms)
 export const prefix = 'mu';
+
+const URL_LIKE = /^https?:\/\//i;
 
 // Who clicks, as the music service needs it: voice channel, roles, rank permissions
 export async function musicContext(interaction) {
@@ -20,17 +22,42 @@ export async function musicContext(interaction) {
 	};
 }
 
+// A link is played at once; a search shows its results to pick from
+export async function playOrPick(interaction, ctx, text, when = 'end') {
+	const { music } = interaction.client.core;
+	if (URL_LIKE.test(text)) {
+		const result = await music.play(ctx, interaction.guildId, text, { next: when === 'next', now: when === 'now' });
+		const first = result.tracks[0];
+		return { content: result.playlist ? `📃 **${result.playlist.title}** : ${result.tracks.length} titre(s) ajouté(s).` : result.startedNow ? `🎶 Lecture de **${first.title}**.` : `➕ **${first.title}** ajouté à la file.`, components: [] };
+	}
+	return pickPayload(await music.search(text, 10), text, when);
+}
+
 export async function execute(interaction) {
-	const [, action] = interaction.customId.split(':');
+	const [, action, extra] = interaction.customId.split(':');
 	const { music } = interaction.client.core;
 	const guildId = interaction.guildId;
+	const privately = (payload) => interaction.reply({ ...payload, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
 	try {
 		const ctx = await musicContext(interaction);
-		if (action === 'queue') {
-			return await interaction.reply({ embeds: [queuePayload(music.state(guildId))], flags: MessageFlags.Ephemeral });
-		}
 		const state = music.state(guildId);
 		switch (action) {
+		case 'queue': return await privately({ embeds: [queuePayload(state)] });
+		case 'add': return await interaction.showModal(addModal());
+		case 'save': return await interaction.showModal(saveModal());
+		case 'addform': {
+			await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+			return await interaction.editReply(await playOrPick(interaction, ctx, interaction.fields.getTextInputValue('query').trim()));
+		}
+		case 'pick': {
+			await interaction.deferUpdate();
+			const result = await music.play(ctx, guildId, interaction.values[0], { next: extra === 'next', now: extra === 'now' });
+			return await interaction.editReply({ content: result.startedNow ? `🎶 Lecture de **${result.tracks[0].title}**.` : `➕ **${result.tracks[0].title}** ajouté à la file.`, components: [] });
+		}
+		case 'saveform': {
+			const list = music.saveQueue(ctx, guildId, { name: interaction.fields.getTextInputValue('name') });
+			return await privately({ content: `💾 Playlist **${list.name}** enregistrée (${list.count} titres). Relance-la avec \`/musique playlist jouer\`.` });
+		}
 		case 'prev': await music.previous(ctx, guildId); break;
 		case 'toggle': await music.pause(ctx, guildId); break;
 		case 'skip': await music.skip(ctx, guildId); break;
@@ -39,13 +66,16 @@ export async function execute(interaction) {
 		case 'voldown': await music.setVolume(ctx, guildId, (state.volume ?? 100) - 10); break;
 		case 'volup': await music.setVolume(ctx, guildId, (state.volume ?? 100) + 10); break;
 		case 'loop': music.setLoop(ctx, guildId); break;
-		default: return await interaction.reply({ content: 'Bouton inconnu.', flags: MessageFlags.Ephemeral });
+		case 'filters': await music.setFilters(ctx, guildId, interaction.values); break;
+		case 'speed': await music.setSpeed(ctx, guildId, Number(interaction.values[0])); break;
+		default: return await privately({ content: 'Bouton inconnu.' });
 		}
 		// The message itself is refreshed by the music service
 		await interaction.deferUpdate();
 	}
 	catch (error) {
 		if (!(error instanceof AppError)) throw error;
-		await interaction.reply({ content: error.message, flags: MessageFlags.Ephemeral });
+		if (interaction.deferred || interaction.replied) await interaction.editReply({ content: error.message, components: [] }).catch(() => undefined);
+		else await privately({ content: error.message });
 	}
 }

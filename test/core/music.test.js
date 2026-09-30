@@ -13,7 +13,7 @@ async function setup() {
 	let clock = Date.now();
 	const ctx = await withNetwork();
 	const { core, executor } = ctx;
-	const music = createMusic({ network: core.network, audit: core.audit, settings: core.settings, backend: executor.music, resolver: executor.musicResolver, executor, logger: { warn: () => undefined }, now: () => clock });
+	const music = createMusic({ db: core.db, network: core.network, audit: core.audit, settings: core.settings, backend: executor.music, resolver: executor.musicResolver, executor, logger: { warn: () => undefined }, now: () => clock });
 	// A member in the bot's voice channel, without any rank
 	const member = (userId, extra = {}) => ({ actorId: userId, source: 'bot', guildId: MAIN, voiceChannelId: VOICE, textChannelId: TEXT, roleIds: [], can: () => false, ...extra });
 	return { ...ctx, music, member, backend: executor.music, advance: (ms) => { clock += ms; } };
@@ -113,7 +113,7 @@ test('broken tracks are skipped; the bot leaves when alone or idle for a while',
 	assert.equal(state.current.title, 'Bien');
 	assert.equal(state.history[0].error, 'Vidéo indisponible');
 	await new Promise(r => setTimeout(r, 10));
-	assert.equal(executor.musicMessages.at(-1).channelId, TEXT, 'now-playing message');
+	assert.equal(executor.musicMessages.at(-1).channelId, VOICE, 'now-playing message in the chat of the voice channel');
 
 	backend.listenerCount.set(MAIN, 0);
 	await music.tick();
@@ -129,4 +129,35 @@ test('broken tracks are skipped; the bot leaves when alone or idle for a while',
 	advance(6 * 60_000);
 	await music.tick();
 	assert.equal(music.state(MAIN).connected, false, 'nothing left to play');
+});
+
+test('playlists: saved from the queue, personal or shared, played (shuffled or not), only the owner edits', async () => {
+	const { music, member, backend } = await setup();
+	await music.play(member(ALICE), MAIN, 'playlist:A,B,C');
+	const saved = music.saveQueue(member(ALICE), MAIN, { name: 'Soirée' });
+	assert.deepEqual([saved.name, saved.count, saved.ownerId, saved.shared], ['Soirée', 3, ALICE, true]);
+	assert.equal(saved.tracks[0].id, undefined, 'no queue state kept');
+	const secret = music.playlists.create(member(BOB), { name: 'Perso', shared: false, tracks: [] });
+	assert.deepEqual(music.playlists.list(ALICE).map(p => p.name), ['Soirée'], 'private playlists of others are hidden');
+	assert.throws(() => music.playlists.get(secret.id, ALICE), /introuvable/);
+	assert.throws(() => music.playlists.addTracks(member(BOB), saved.id, [{ title: 'X' }]), ForbiddenError);
+
+	await music.skip(member(ALICE), MAIN);
+	music.addCurrentTo(member(ALICE), MAIN, saved.id);
+	music.playlists.moveTrack(member(ALICE), saved.id, 3, 0);
+	music.playlists.removeTrack(member(ALICE), saved.id, 1);
+	assert.deepEqual(music.playlists.get(saved.id, ALICE).tracks.map(t => t.title), ['B', 'B', 'C']);
+
+	await music.stop(member(ALICE), MAIN);
+	const result = await music.playPlaylist(member(BOB), MAIN, saved.id);
+	assert.equal(result.playlist.title, 'Soirée');
+	assert.equal(backend.joined.get(MAIN), VOICE);
+	const state = music.state(MAIN);
+	assert.deepEqual([state.current.title, state.current.requestedBy, state.upcoming.length], ['B', BOB, 2]);
+	assert.equal(music.playlists.get(saved.id, ALICE).plays, 1);
+	await assert.rejects(music.playPlaylist(member(BOB), MAIN, secret.id + 99), /introuvable/);
+	music.playlists.update(member(ALICE), saved.id, { name: 'Soirée RP', shared: false });
+	assert.deepEqual(music.playlists.list(BOB).map(p => p.name), ['Perso']);
+	music.playlists.remove(member(ALICE), saved.id);
+	assert.equal(music.playlists.list(ALICE).length, 0);
 });

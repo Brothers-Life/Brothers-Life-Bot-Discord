@@ -118,3 +118,64 @@ export function registerMusicRoutes(app, { core }) {
 
 	app.put('/api/music/config', { config: { permission: 'music.manage' }, schema: { body: { type: 'object' } } }, async (request) => music.setConfig(request.actor, request.body));
 }
+
+// Saved playlists (anyone who can pilot the music from the panel; changes by their owner or music.manage)
+export function registerPlaylistRoutes(app, { core }) {
+	const { music, executor } = core;
+	const lists = music.playlists;
+	const ctxOf = (request) => ({ actorId: request.actor.id, source: 'panel', can: request.actor.can });
+	const idParam = { type: 'object', properties: { id: { type: 'integer' } }, required: ['id'] };
+	const withOwners = async (items) => {
+		const names = await resolveNames(executor, items.map(p => p.ownerId));
+		return items.map(p => ({ ...p, owner: names.get(p.ownerId) ?? null }));
+	};
+
+	app.get('/api/music/playlists', { config: { permission: 'music.use' } }, async (request) => withOwners(lists.list(request.actor.id)));
+
+	app.get('/api/music/playlists/:id', { config: { permission: 'music.use' }, schema: { params: idParam } }, async (request) => (await withOwners([lists.get(request.params.id, request.actor.id)]))[0]);
+
+	app.post('/api/music/playlists', {
+		config: { permission: 'music.use' },
+		schema: { body: { type: 'object', required: ['name'], properties: { name: { type: 'string', maxLength: 60 }, shared: { type: 'boolean' }, fromGuildId: snowflake } } },
+	}, async (request) => {
+		const { name, shared = true, fromGuildId } = request.body;
+		return fromGuildId ? music.saveQueue(ctxOf(request), fromGuildId, { name, shared }) : lists.create(ctxOf(request), { name, shared });
+	});
+
+	app.patch('/api/music/playlists/:id', {
+		config: { permission: 'music.use' },
+		schema: { params: idParam, body: { type: 'object', properties: { name: { type: 'string', maxLength: 60 }, shared: { type: 'boolean' } } } },
+	}, async (request) => lists.update(ctxOf(request), request.params.id, request.body));
+
+	app.delete('/api/music/playlists/:id', { config: { permission: 'music.use' }, schema: { params: idParam } }, async (request) => {
+		lists.remove(ctxOf(request), request.params.id);
+		return { ok: true };
+	});
+
+	app.post('/api/music/playlists/:id/tracks', {
+		config: { permission: 'music.use' },
+		schema: { params: idParam, body: { type: 'object', required: ['query'], properties: { query: { type: 'string', maxLength: 500 } } } },
+	}, async (request) => music.addToPlaylist(ctxOf(request), request.params.id, request.body.query));
+
+	app.delete('/api/music/playlists/:id/tracks/:index', {
+		config: { permission: 'music.use' },
+		schema: { params: { type: 'object', properties: { id: { type: 'integer' }, index: { type: 'integer' } }, required: ['id', 'index'] } },
+	}, async (request) => lists.removeTrack(ctxOf(request), request.params.id, request.params.index));
+
+	app.post('/api/music/playlists/:id/move', {
+		config: { permission: 'music.use' },
+		schema: { params: idParam, body: { type: 'object', required: ['from', 'to'], properties: { from: { type: 'integer' }, to: { type: 'integer' } } } },
+	}, async (request) => lists.moveTrack(ctxOf(request), request.params.id, request.body.from, request.body.to));
+
+	app.post('/api/music/:guildId/playlist/:id', {
+		config: { permission: 'music.use' },
+		schema: {
+			params: { type: 'object', properties: { guildId: snowflake, id: { type: 'integer' } }, required: ['guildId', 'id'] },
+			body: { type: 'object', properties: { channelId: snowflake, when: { type: 'string', enum: ['end', 'next', 'now'] }, shuffle: { type: 'boolean' } } },
+		},
+	}, async (request) => {
+		const { channelId, when = 'end', shuffle = false } = request.body ?? {};
+		const result = await music.playPlaylist(ctxOf(request), request.params.guildId, request.params.id, { channelId, shuffle, next: when === 'next', now: when === 'now' });
+		return { added: result.tracks.length, playlist: result.playlist, truncated: result.truncated };
+	});
+}

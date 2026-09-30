@@ -36,7 +36,7 @@ import { registerCustomCommandRoutes } from './routes/customCommands.js';
 import { registerBackupRoutes } from './routes/backups.js';
 import { registerStaffActivityRoutes } from './routes/staffActivity.js';
 import { registerRpEventRoutes } from './routes/rpEvents.js';
-import { registerMusicRoutes } from './routes/music.js';
+import { registerMusicRoutes, registerPlaylistRoutes } from './routes/music.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_STATIC_DIR = path.resolve(__dirname, '..', '..', 'web', 'dist');
@@ -109,6 +109,7 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	registerStaffActivityRoutes(app, { core });
 	registerRpEventRoutes(app, { core });
 	registerMusicRoutes(app, { core });
+	registerPlaylistRoutes(app, { core });
 
 	const hasPanel = fs.existsSync(path.join(staticDir, 'index.html'));
 	const sendPanel = (reply) => {

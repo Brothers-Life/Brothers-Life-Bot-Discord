@@ -1,7 +1,7 @@
 import { InteractionContextType, MessageFlags, SlashCommandBuilder } from 'discord.js';
 import { AppError, ValidationError } from '../../../core/errors.js';
 import { FILTERS, SPEEDS } from '../../../core/music/index.js';
-import { musicContext } from '../../components/music.js';
+import { musicContext, playOrPick } from '../../components/music.js';
 import { clock, queuePayload, musicPayload } from '../../musicUi.js';
 
 export const data = new SlashCommandBuilder()
@@ -46,11 +46,33 @@ export const data = new SlashCommandBuilder()
 		.addIntegerOption(o => o.setName('vers').setDescription('Nouvelle place dans « À suivre »').setRequired(true).setMinValue(1)))
 	.addSubcommand(s => s.setName('sauter').setDescription('Aller directement à un titre de la file')
 		.addIntegerOption(o => o.setName('numero').setDescription('Numéro dans « À suivre »').setRequired(true).setMinValue(1)))
-	.addSubcommand(s => s.setName('vider').setDescription('Vider la suite de la file'));
+	.addSubcommand(s => s.setName('vider').setDescription('Vider la suite de la file'))
+	.addSubcommandGroup(g => g.setName('playlist').setDescription('Playlists enregistrées')
+		.addSubcommand(s => s.setName('jouer').setDescription('Lancer une playlist')
+			.addStringOption(o => o.setName('nom').setDescription('Playlist').setRequired(true).setAutocomplete(true))
+			.addBooleanOption(o => o.setName('melanger').setDescription('Dans le désordre'))
+			.addStringOption(o => o.setName('quand').setDescription('Où la mettre dans la file').addChoices(
+				{ name: 'À la fin de la file', value: 'end' },
+				{ name: 'Juste après le titre en cours', value: 'next' },
+				{ name: 'Maintenant', value: 'now' },
+			)))
+		.addSubcommand(s => s.setName('creer').setDescription('Enregistrer la file actuelle en playlist')
+			.addStringOption(o => o.setName('nom').setDescription('Nom').setRequired(true).setMaxLength(60))
+			.addBooleanOption(o => o.setName('privee').setDescription('Visible par toi seulement (sinon partagée)')))
+		.addSubcommand(s => s.setName('ajouter').setDescription('Ajouter le titre en cours à une de tes playlists')
+			.addStringOption(o => o.setName('nom').setDescription('Playlist').setRequired(true).setAutocomplete(true)))
+		.addSubcommand(s => s.setName('liste').setDescription('Tes playlists et celles partagées'))
+		.addSubcommand(s => s.setName('supprimer').setDescription('Supprimer une de tes playlists')
+			.addStringOption(o => o.setName('nom').setDescription('Playlist').setRequired(true).setAutocomplete(true))));
 
 const URL_LIKE = /^https?:\/\//i;
 
 export async function autocomplete(interaction) {
+	if (interaction.options.getSubcommandGroup(false) === 'playlist') {
+		const ownOnly = interaction.options.getSubcommand() !== 'jouer';
+		const lists = interaction.client.core.music.playlists.suggest(interaction.user.id, interaction.options.getFocused(), { ownOnly });
+		return interaction.respond(lists.map(p => ({ name: `${p.name} · ${p.count} titre${p.count > 1 ? 's' : ''}${p.ownerId === interaction.user.id ? '' : ' (partagée)'}`.slice(0, 100), value: String(p.id) })));
+	}
 	const typed = interaction.options.getFocused().trim();
 	if (!typed || URL_LIKE.test(typed) || typed.length < 3) return interaction.respond(typed ? [{ name: typed.slice(0, 100), value: typed.slice(0, 100) }] : []);
 	// Discord gives 3 s to answer: past that, the typed text is searched when the command is sent
@@ -78,10 +100,13 @@ export async function execute(interaction) {
 	if (network.find(interaction.guildId)?.status !== 'active') {
 		return interaction.reply({ content: 'Ce serveur ne fait pas partie du réseau.', flags: MessageFlags.Ephemeral });
 	}
+	const group = interaction.options.getSubcommandGroup(false);
 	const sub = interaction.options.getSubcommand();
 	const guildId = interaction.guildId;
-	// "jouer" answers publicly (everyone sees what was added), the rest privately
-	await interaction.deferReply(sub === 'jouer' ? {} : { flags: MessageFlags.Ephemeral });
+	if (group === 'playlist') return playlistCommand(interaction, sub);
+	// A link (or a pick from the suggestions) is played and said publicly; a search first shows its results, privately
+	const searching = sub === 'jouer' && !URL_LIKE.test(interaction.options.getString('recherche').trim());
+	await interaction.deferReply(sub === 'jouer' && !searching ? {} : { flags: MessageFlags.Ephemeral });
 	try {
 		const ctx = await musicContext(interaction);
 		const state = () => music.state(guildId);
@@ -93,15 +118,8 @@ export async function execute(interaction) {
 		};
 		let reply;
 		switch (sub) {
-		case 'jouer': {
-			const when = interaction.options.getString('quand') ?? 'end';
-			const result = await music.play(ctx, guildId, interaction.options.getString('recherche'), { next: when === 'next', now: when === 'now' });
-			const first = result.tracks[0];
-			reply = result.playlist
-				? `📃 **${result.playlist.title}** : ${result.tracks.length} titre(s) ajouté(s)${result.truncated ? ' (file pleine, le reste est ignoré)' : ''}.`
-				: result.startedNow ? `🎶 Lecture de **${first.title}**.` : `➕ **${first.title}** ajouté à la file (${result.state.upcoming.findIndex(t => t.id === first.id) + 1}ᵉ).`;
-			break;
-		}
+		case 'jouer':
+			return await interaction.editReply(await playOrPick(interaction, ctx, interaction.options.getString('recherche').trim(), interaction.options.getString('quand') ?? 'end'));
 		case 'pause': reply = (await music.pause(ctx, guildId)).paused ? '⏸️ En pause.' : '▶️ Reprise.'; break;
 		case 'passer':
 			await music.skip(ctx, guildId, interaction.options.getInteger('nombre') ?? 1);
@@ -157,6 +175,53 @@ export async function execute(interaction) {
 			music.clear(ctx, guildId);
 			reply = '🧹 File vidée (le titre en cours continue).';
 			break;
+		}
+		await interaction.editReply({ content: reply, allowedMentions: { parse: [] } });
+	}
+	catch (error) {
+		if (!(error instanceof AppError)) throw error;
+		await interaction.editReply({ content: `Impossible : ${error.message}` });
+	}
+}
+
+async function playlistCommand(interaction, sub) {
+	const { music } = interaction.client.core;
+	const guildId = interaction.guildId;
+	await interaction.deferReply(sub === 'jouer' ? {} : { flags: MessageFlags.Ephemeral });
+	try {
+		const ctx = await musicContext(interaction);
+		const id = Number(interaction.options.getString('nom'));
+		let reply;
+		switch (sub) {
+		case 'jouer': {
+			const when = interaction.options.getString('quand') ?? 'end';
+			const result = await music.playPlaylist(ctx, guildId, id, { shuffle: interaction.options.getBoolean('melanger') ?? false, next: when === 'next', now: when === 'now' });
+			reply = `📃 Playlist **${result.playlist.title}** : ${result.tracks.length} titre(s) ajouté(s)${result.truncated ? ' (file pleine, le reste est ignoré)' : ''}.`;
+			break;
+		}
+		case 'creer': {
+			const list = music.saveQueue(ctx, guildId, { name: interaction.options.getString('nom'), shared: !interaction.options.getBoolean('privee') });
+			reply = `💾 Playlist **${list.name}** enregistrée (${list.count} titres${list.shared ? ', partagée' : ', privée'}).`;
+			break;
+		}
+		case 'ajouter': {
+			const list = music.addCurrentTo(ctx, guildId, id);
+			reply = `➕ Ajouté à **${list.name}** (${list.count} titres).`;
+			break;
+		}
+		case 'liste': {
+			const lists = music.playlists.list(interaction.user.id);
+			reply = lists.length
+				? lists.slice(0, 25).map(p => `• **${p.name}** · ${p.count} titre${p.count > 1 ? 's' : ''} · ${clock(p.durationMs)}${p.ownerId === interaction.user.id ? (p.shared ? '' : ' · privée') : ` · de <@${p.ownerId}>`}`).join('\n')
+				: 'Aucune playlist. Enregistre la file avec `/musique playlist creer` ou le bouton 💾.';
+			break;
+		}
+		case 'supprimer': {
+			const list = music.playlists.get(id, interaction.user.id);
+			music.playlists.remove(ctx, id);
+			reply = `🗑️ Playlist **${list.name}** supprimée.`;
+			break;
+		}
 		}
 		await interaction.editReply({ content: reply, allowedMentions: { parse: [] } });
 	}

@@ -1,4 +1,5 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
+import { FILTERS, SPEEDS } from '../core/music/index.js';
 
 const LOOP_LABEL = { off: 'Boucle : non', track: 'Boucle : titre', queue: 'Boucle : file' };
 const SOURCE_ICON = { youtube: '▶️', spotify: '🟢', soundcloud: '☁️' };
@@ -68,13 +69,56 @@ export function musicPayload(view) {
 		new ActionRowBuilder().addComponents(
 			button('voldown', '🔉'),
 			button('volup', '🔊'),
-			new ButtonBuilder().setCustomId('mu:loop').setEmoji('🔁').setLabel(LOOP_LABEL[view.loop].replace('Boucle : ', '')).setStyle(view.loop === 'off' ? ButtonStyle.Secondary : ButtonStyle.Success),
+			new ButtonBuilder().setCustomId('mu:loop').setEmoji(view.loop === 'track' ? '🔂' : '🔁').setLabel(LOOP_LABEL[view.loop].replace('Boucle : ', '')).setStyle(view.loop === 'off' ? ButtonStyle.Secondary : ButtonStyle.Success),
 			new ButtonBuilder().setCustomId('mu:queue').setEmoji('📜').setLabel('File').setStyle(ButtonStyle.Secondary),
+			new ButtonBuilder().setCustomId('mu:add').setEmoji('➕').setLabel('Ajouter').setStyle(ButtonStyle.Success),
 		),
+		new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
+			.setCustomId('mu:filters')
+			.setPlaceholder(view.filters.length ? `🎛️ Effets : ${view.filters.map(f => FILTERS[f]).join(', ')}`.slice(0, 150) : '🎛️ Effets audio : aucun')
+			.setMinValues(0)
+			.setMaxValues(Object.keys(FILTERS).length)
+			.addOptions(Object.entries(FILTERS).map(([value, label]) => ({ label, value, default: view.filters.includes(value) })))),
+		new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
+			.setCustomId('mu:speed')
+			.setPlaceholder(`⏩ Vitesse : ×${view.speed}`)
+			.addOptions(SPEEDS.map(v => ({ label: `Vitesse ×${v}`, value: String(v), default: v === view.speed })))),
 	];
+	const last = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('mu:save').setEmoji('💾').setLabel('Enregistrer en playlist').setStyle(ButtonStyle.Secondary).setDisabled(!view.queue?.length));
 	const watch = watchUrl(track, view.position);
-	if (watch) rows[1].addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(watch).setLabel('Voir le clip').setEmoji('🎬'));
+	if (watch) last.addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(watch).setLabel('Voir le clip').setEmoji('🎬'));
+	rows.push(last);
+	embed.setFooter({ text: '⏮ précédent · ⏯ pause · ⏭ suivant · ⏹ arrêter · 🔀 mélanger · 🔉🔊 volume · ➕ ajouter un titre · /musique pour tout le reste' });
 	return { embeds: [embed], components: rows };
+}
+
+// "Ajouter" and "Enregistrer en playlist" forms
+export function addModal() {
+	return new ModalBuilder().setCustomId('mu:addform').setTitle('Ajouter de la musique').addComponents(
+		new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('query').setLabel('Lien ou recherche').setPlaceholder('https://… ou « daft punk one more time »').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(300)),
+	);
+}
+
+export function saveModal() {
+	return new ModalBuilder().setCustomId('mu:saveform').setTitle('Enregistrer la file en playlist').addComponents(
+		new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Nom de la playlist').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(60)),
+	);
+}
+
+// Search results to pick from (customId mu:pick:<when>)
+export function pickPayload(results, text, when = 'end') {
+	if (!results.length) return { content: `Rien trouvé pour « ${text} ».`, components: [] };
+	return {
+		content: `Résultats pour « ${text.slice(0, 100)} » : choisis le bon titre.`,
+		components: [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
+			.setCustomId(`mu:pick:${when}`)
+			.setPlaceholder('Choisir un titre')
+			.addOptions(results.filter(r => r.url && r.url.length <= 100).slice(0, 25).map(r => ({
+				label: r.title.slice(0, 100),
+				description: [r.author, r.durationMs ? clock(r.durationMs) : null].filter(Boolean).join(' · ').slice(0, 100) || undefined,
+				value: r.url,
+			}))))],
+	};
 }
 
 // The queue, for the "File" button and /musique file

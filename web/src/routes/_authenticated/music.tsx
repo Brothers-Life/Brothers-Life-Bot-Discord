@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  ArrowDown, ArrowUp, Clapperboard, Disc3, ListMusic, Music, Pause, Play, Plus, Repeat, Repeat1, Save, Search, Shuffle,
+  ArrowDown, ArrowUp, Clapperboard, Disc3, ListMusic, ListPlus, Music, Pause, Play, Plus, Repeat, Repeat1, Save, Search, Shuffle,
   SkipBack, SkipForward, Square, Trash2, Upload, Volume1, Volume2, VolumeX, X,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -19,6 +19,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Playlists, usePlaylists } from '@/features/music/playlists'
 
 export const Route = createFileRoute('/_authenticated/music')({
   component: MusicPage,
@@ -108,6 +110,9 @@ function Player({ guild, data }: { guild: GuildInfo; data: Payload }) {
     return () => clearInterval(timer)
   }, [])
   const [watching, setWatching] = useState(false)
+  // Voice channel to join (the busiest one by default) when nothing plays yet
+  const [channelId, setChannelId] = useState(() => [...guild.voiceChannels].sort((a, b) => b.members - a.members)[0]?.id ?? '')
+  const refreshState = () => qc.invalidateQueries({ queryKey: ['music-state', guild.id] })
 
   const control = useMutation({
     mutationFn: (body: { action: string; value?: unknown; to?: number }) => api<State>(`/music/${guild.id}/control`, { method: 'POST', body }),
@@ -122,7 +127,7 @@ function Player({ guild, data }: { guild: GuildInfo; data: Payload }) {
 
   return (
     <div className='grid grid-cols-[minmax(0,1fr)] gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]'>
-      <div className='grid content-start gap-6'>
+      <div className='grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-6'>
         <section className='brackets relative overflow-hidden rounded-xl border bg-card'>
           {track?.thumbnail && <img src={track.thumbnail} alt='' aria-hidden className='pointer-events-none absolute inset-0 size-full scale-110 object-cover opacity-20 blur-2xl' />}
           <div className='relative grid gap-5 p-5 sm:grid-cols-[11rem_minmax(0,1fr)] sm:p-6'>
@@ -214,9 +219,10 @@ function Player({ guild, data }: { guild: GuildInfo; data: Payload }) {
         {watching && videoId && track && <Clip videoId={videoId} position={position} trackId={track.id} />}
       </div>
 
-      <div className='grid content-start gap-6'>
-        <AddMusic guild={guild} connected={state.connected} onAdded={() => qc.invalidateQueries({ queryKey: ['music-state', guild.id] })} />
+      <div className='grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-6'>
+        <AddMusic guild={guild} connected={state.connected} channelId={channelId} setChannelId={setChannelId} onAdded={refreshState} />
         {state.connected && <Queue state={state} act={act} busy={control.isPending} />}
+        <Playlists guildId={guild.id} connected={state.connected} channelId={channelId} onPlayed={refreshState} />
       </div>
     </div>
   )
@@ -297,38 +303,55 @@ function Clip({ videoId, position, trackId }: { videoId: string; position: numbe
   )
 }
 
-function AddMusic({ guild, connected, onAdded }: { guild: GuildInfo; connected: boolean; onAdded: () => void }) {
+// A link is played directly; a search lists its results, and one picks what to play
+function AddMusic({ guild, connected, channelId, setChannelId, onAdded }: { guild: GuildInfo; connected: boolean; channelId: string; setChannelId: (id: string) => void; onAdded: () => void }) {
+  const { me, can } = useMe()
+  const qc = useQueryClient()
   const [query, setQuery] = useState('')
-  const [channelId, setChannelId] = useState(() => [...guild.voiceChannels].sort((a, b) => b.members - a.members)[0]?.id ?? '')
-  const [debounced, setDebounced] = useState('')
+  const [search, setSearch] = useState('')
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const isUrl = /^https?:\/\//i.test(query.trim())
+  const playlists = (usePlaylists().data ?? []).filter((p) => p.ownerId === me?.user.id || can('music.manage'))
   const results = useQuery({
-    queryKey: ['music-search', debounced],
-    queryFn: () => api<SearchResult[]>(`/music/search?q=${encodeURIComponent(debounced)}`),
-    enabled: debounced.length >= 3,
+    queryKey: ['music-search', search],
+    queryFn: () => api<SearchResult[]>(`/music/search?q=${encodeURIComponent(search)}`),
+    enabled: search.length >= 2,
     staleTime: 10 * 60_000,
   })
   const play = useMutation({
     mutationFn: ({ q, when }: { q: string; when: string }) => api<{ added: number; playlist: { title: string } | null; first: string | null; truncated: boolean }>(`/music/${guild.id}/play`, { method: 'POST', body: { query: q, when, ...(connected ? {} : { channelId }) } }),
     onSuccess: (r) => {
       toast.success(r.playlist ? `${r.playlist.title} : ${r.added} titre${r.added > 1 ? 's' : ''} ajouté${r.added > 1 ? 's' : ''}` : `${r.first} ajouté`)
-      setQuery('')
-      setDebounced('')
+      if (isUrl) setQuery('')
       onAdded()
     },
+  })
+  const toPlaylist = useMutation({
+    mutationFn: ({ id, url }: { id: number; url: string }) => api<{ name: string }>(`/music/playlists/${id}/tracks`, { method: 'POST', body: { query: url } }),
+    onSuccess: (p) => { toast.success(`Ajouté à « ${p.name} »`); qc.invalidateQueries({ queryKey: ['music-playlists'] }) },
   })
   const type = (value: string) => {
     setQuery(value)
     clearTimeout(timer.current)
     const text = value.trim()
-    timer.current = setTimeout(() => setDebounced(/^https?:\/\//i.test(text) ? '' : text), 500)
+    timer.current = setTimeout(() => setSearch(/^https?:\/\//i.test(text) || text.length < 3 ? '' : text), 600)
   }
+  const blocked = !connected && !channelId
   const send = (q: string, when = 'end') => q.trim() && play.mutate({ q: q.trim(), when })
 
   return (
-    <Section title='Ajouter de la musique' description='Lien YouTube, Spotify (titre, album, playlist), SoundCloud… ou une recherche.'>
-      <form className='grid gap-3 p-4' onSubmit={(e) => { e.preventDefault(); send(query) }}>
+    <Section title='Ajouter de la musique' description='Colle un lien (YouTube, Spotify, SoundCloud…) ou cherche un titre puis choisis-le dans la liste.'>
+      <form
+        className='grid gap-3 p-4'
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (isUrl) send(query)
+          else {
+            clearTimeout(timer.current)
+            setSearch(query.trim())
+          }
+        }}
+      >
         {!connected && (
           <div className='grid gap-1.5'>
             <Label>Salon vocal</Label>
@@ -338,28 +361,51 @@ function AddMusic({ guild, connected, onAdded }: { guild: GuildInfo; connected: 
                 {guild.voiceChannels.map((c) => <SelectItem key={c.id} value={c.id}>🔊 {c.name}{c.members ? ` · ${c.members} connecté${c.members > 1 ? 's' : ''}` : ''}</SelectItem>)}
               </SelectContent>
             </Select>
+            <p className='text-xs text-muted-foreground'>Le message de contrôle avec les boutons est posté dans le chat de ce salon vocal.</p>
           </div>
         )}
-        <div className='relative'>
-          <Search className='pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground' />
-          <Input value={query} onChange={(e) => type(e.target.value)} placeholder='https://… ou « daft punk one more time »' aria-label='Lien ou recherche' className='ps-8' />
+        <div className='flex gap-2'>
+          <div className='relative flex-1'>
+            <Search className='pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground' />
+            <Input value={query} onChange={(e) => type(e.target.value)} placeholder='https://… ou « daft punk one more time »' aria-label='Lien ou recherche' className='ps-8' />
+          </div>
+          {isUrl ? (
+            <Button type='submit' loading={play.isPending} disabled={blocked}><Plus /> {connected ? 'Ajouter' : 'Lancer'}</Button>
+          ) : (
+            <Button type='submit' variant='outline' disabled={query.trim().length < 2}><Search /> Chercher</Button>
+          )}
         </div>
-        <div className='flex flex-wrap gap-2'>
-          <Button type='submit' loading={play.isPending} disabled={!query.trim() || (!connected && !channelId)}><Plus /> {connected ? 'Ajouter à la file' : 'Lancer'}</Button>
-          {connected && <Button type='button' variant='outline' disabled={!query.trim() || play.isPending} onClick={() => send(query, 'next')}>Jouer ensuite</Button>}
-          {connected && <Button type='button' variant='ghost' disabled={!query.trim() || play.isPending} onClick={() => send(query, 'now')}><Play /> Maintenant</Button>}
-        </div>
-        {!isUrl && debounced.length >= 3 && (
+        {isUrl && connected && (
+          <div className='flex flex-wrap gap-2'>
+            <Button type='button' size='sm' variant='outline' disabled={play.isPending} onClick={() => send(query, 'next')}>Jouer ensuite</Button>
+            <Button type='button' size='sm' variant='ghost' disabled={play.isPending} onClick={() => send(query, 'now')}><Play /> Maintenant</Button>
+          </div>
+        )}
+        {!isUrl && search && (
           <ul className='grid gap-1' aria-label='Résultats de la recherche'>
-            {results.isLoading && Array.from({ length: 3 }, (_, i) => <Skeleton key={i} className='h-12 w-full' />)}
+            {results.isLoading && Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className='h-14 w-full' />)}
+            {results.data && !results.data.length && <li className='p-2 text-sm text-muted-foreground'>Rien trouvé pour « {search} ».</li>}
             {results.data?.map((r) => (
-              <li key={r.url} className='flex items-center gap-3 rounded-md p-1.5 hover:bg-accent/40'>
-                {r.thumbnail ? <img src={r.thumbnail} alt='' className='h-10 w-16 shrink-0 rounded object-cover' /> : <span className='h-10 w-16 shrink-0 rounded bg-muted' />}
-                <div className='min-w-0 flex-1'>
+              <li key={r.url} className='flex flex-wrap items-center gap-3 rounded-md p-1.5 hover:bg-accent/40'>
+                {r.thumbnail ? <img src={r.thumbnail} alt='' className='h-11 w-[4.5rem] shrink-0 rounded object-cover' /> : <span className='h-11 w-[4.5rem] shrink-0 rounded bg-muted' />}
+                <div className='min-w-0 flex-1 basis-40'>
                   <div className='truncate text-sm font-medium'>{r.title}</div>
                   <div className='truncate text-xs text-muted-foreground'>{r.author}{r.durationMs ? ` · ${clock(r.durationMs)}` : ''}</div>
                 </div>
-                <Button type='button' size='icon' variant='ghost' aria-label={`Ajouter ${r.title}`} disabled={play.isPending || (!connected && !channelId)} onClick={() => send(r.url)}><Plus /></Button>
+                <div className='flex gap-1'>
+                  <Button type='button' size='sm' className='h-8' disabled={play.isPending || blocked} onClick={() => send(r.url)} aria-label={`${connected ? 'Ajouter' : 'Lancer'} ${r.title}`}>{connected ? <Plus /> : <Play />}{connected ? 'Ajouter' : 'Lancer'}</Button>
+                  {connected && <Button type='button' size='sm' variant='outline' className='h-8' disabled={play.isPending} onClick={() => send(r.url, 'next')}>Ensuite</Button>}
+                  {connected && <Button type='button' size='icon' variant='ghost' className='size-8' disabled={play.isPending} onClick={() => send(r.url, 'now')} aria-label={`Jouer ${r.title} maintenant`}><Play /></Button>}
+                  {playlists.length > 0 && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild><Button type='button' size='icon' variant='ghost' className='size-8' aria-label={`Ajouter ${r.title} à une playlist`}><ListPlus /></Button></DropdownMenuTrigger>
+                      <DropdownMenuContent align='end'>
+                        <DropdownMenuLabel>Ajouter à une playlist</DropdownMenuLabel>
+                        {playlists.map((p) => <DropdownMenuItem key={p.id} onSelect={() => toPlaylist.mutate({ id: p.id, url: r.url })}>{p.name}</DropdownMenuItem>)}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
@@ -437,7 +483,7 @@ function Settings({ data }: { data: Payload }) {
           {number('maxTrackMinutes', 'Durée max d’un titre (min)', 0, 1440, '0 = pas de limite')}
           {number('idleMinutes', 'Départ du vocal après (min)', 1, 60, 'Seul dans le salon ou file terminée')}
         </div>
-        <label className='flex items-center gap-2 text-sm'><Switch checked={c.announce} onCheckedChange={(announce) => setC({ ...c, announce })} /> Message « en cours » avec boutons dans le salon de la commande</label>
+        <label className='flex items-center gap-2 text-sm'><Switch checked={c.announce} onCheckedChange={(announce) => setC({ ...c, announce })} /> Message « en cours » avec boutons dans le chat du salon vocal du bot</label>
         <div className='grid gap-2'>
           <Label>Rôles DJ par serveur</Label>
           <p className='text-xs text-muted-foreground'>Sans rôle DJ, tout le monde dans le salon vocal du bot pilote la musique. Avec, les autres peuvent seulement ajouter des titres. Les rangs qui ont « Piloter la musique » passent toujours.</p>

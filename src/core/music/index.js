@@ -1,5 +1,6 @@
 import { definePermission } from '../permissions.js';
 import { ForbiddenError, ValidationError } from '../errors.js';
+import { createPlaylists } from './playlists.js';
 
 definePermission('music.use', { label: 'Piloter la musique depuis le panel (et partout sur Discord, même sans rôle DJ)', category: 'Musique' });
 definePermission('music.manage', { label: 'Régler la musique (rôles DJ, limites, départ automatique)', category: 'Musique' });
@@ -40,10 +41,11 @@ export function normalizeMusicConfig(input = {}) {
 
 // Music: one player per server. The queue and every decision live here; `backend` plays the sound
 // (voice connection, ffmpeg) and `resolver` turns links or searches into tracks.
-export function createMusic({ network, audit, settings, backend, resolver, executor, logger = console, now = Date.now }) {
+export function createMusic({ db, network, audit, settings, backend, resolver, executor, logger = console, now = Date.now }) {
 	const players = new Map();
 	let nextTrackId = 1;
 	const listeners = new Set();
+	const playlists = createPlaylists({ db, audit, now });
 
 	function config() {
 		return normalizeMusicConfig(settings.get('music.config', {}));
@@ -116,7 +118,12 @@ export function createMusic({ network, audit, settings, backend, resolver, execu
 			}
 			catch (error) {
 				logger.warn('Music message failed:', error.message);
-				player.textChannelId = null;
+				// The chat of the voice channel is not usable: the channel where the music was asked for, once
+				const fallback = player.fallbackTextChannelId;
+				player.fallbackTextChannelId = null;
+				player.textChannelId = fallback && fallback !== player.textChannelId ? fallback : null;
+				player.messageId = null;
+				if (player.textChannelId) refreshMessage(player);
 			}
 		}, player.messageId ? 800 : 0);
 		player.messageTimer.unref?.();
@@ -184,6 +191,52 @@ export function createMusic({ network, audit, settings, backend, resolver, execu
 		if (dj.length && !(ctx.roleIds ?? []).some(id => dj.includes(id))) throw new ForbiddenError('Il faut un rôle DJ pour ça.');
 	}
 
+	function checkBefore(ctx, guildId, { channelId = ctx.voiceChannelId, now: playNow = false } = {}) {
+		if (network.find(guildId)?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
+		const player = players.get(guildId);
+		assertCan(ctx, player, playNow ? 'jump' : 'play');
+		if (!player && !channelId) throw new ValidationError('Rejoins un salon vocal (ou choisis-en un) pour que le bot vienne.');
+	}
+
+	// Adds tracks to the queue (joining the voice channel first if needed). The now-playing message goes
+	// into the chat of the voice channel; the channel where the music was asked for is the fallback.
+	async function enqueue(ctx, guildId, found, { channelId = ctx.voiceChannelId, textChannelId = ctx.textChannelId ?? null, next = false, now: playNow = false, label = null, playlist = null } = {}) {
+		let player = players.get(guildId);
+		const cfg = config();
+		if (!player) {
+			await backend.join(guildId, channelId).catch((error) => { throw new ValidationError(error.message); });
+			player = {
+				guildId, channelId, textChannelId: channelId, fallbackTextChannelId: textChannelId,
+				queue: [], index: 0, loop: 'off', volume: cfg.defaultVolume, speed: 1, filters: new Set(), paused: false, messageId: null, idleSince: null, loading: false,
+			};
+			players.set(guildId, player);
+		}
+		else if (textChannelId && !player.fallbackTextChannelId) {
+			player.fallbackTextChannelId = textChannelId;
+		}
+		const room = cfg.maxQueue - (player.queue.length - player.index);
+		if (room <= 0) throw new ValidationError(`La file est pleine (${cfg.maxQueue} titres).`);
+		// Fresh queue entries (a track coming from a playlist or the history has no id, error or requester of its own)
+		const tracks = found.slice(0, room).map((t) => {
+			const copy = { ...t, id: nextTrackId++, requestedBy: ctx.actorId, addedAt: now() };
+			delete copy.error;
+			delete copy.requester;
+			return copy;
+		});
+		const idle = !current(player);
+		const at = idle ? player.queue.length : next || playNow ? player.index + 1 : player.queue.length;
+		player.queue.splice(at, 0, ...tracks);
+		if (idle || playNow) {
+			player.index = at;
+			await start(player);
+		}
+		else {
+			emit(guildId);
+		}
+		record(ctx, guildId, 'play', { title: label ?? tracks[0].title, count: tracks.length });
+		return { tracks, playlist, truncated: found.length > tracks.length, startedNow: idle || playNow, state: view(player) };
+	}
+
 	function record(ctx, guildId, verb, details = {}) {
 		audit.record({ actorId: ctx.actorId, source: ctx.source === 'panel' ? 'panel' : 'bot', action: `music.${verb}`, guildId, details });
 	}
@@ -214,44 +267,54 @@ export function createMusic({ network, audit, settings, backend, resolver, execu
 		search: (text, limit = 5) => resolver.search(text, limit).catch((error) => { throw new ValidationError(error.message); }),
 
 		// ctx: { actorId, source: 'bot'|'panel', guildId, voiceChannelId, textChannelId, roleIds, can }
-		async play(ctx, guildId, query, { channelId = ctx.voiceChannelId, textChannelId = ctx.textChannelId ?? null, next = false, now: playNow = false } = {}) {
-			if (network.find(guildId)?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
-			let player = players.get(guildId);
-			assertCan(ctx, player, playNow ? 'jump' : 'play');
+		async play(ctx, guildId, query, options = {}) {
 			const text = String(query ?? '').trim();
 			if (!text) throw new ValidationError('Donne un lien ou une recherche.');
-			if (!player && !channelId) throw new ValidationError('Rejoins un salon vocal (ou choisis-en un) pour que le bot vienne.');
-
+			checkBefore(ctx, guildId, options);
 			const found = await resolver.resolve(text).catch((error) => { throw error instanceof ValidationError ? error : new ValidationError(error.message); });
 			if (!found.tracks.length) throw new ValidationError('Rien trouvé pour cette recherche.');
-			const cfg = config();
-			if (!player) {
-				await backend.join(guildId, channelId).catch((error) => { throw new ValidationError(error.message); });
-				player = { guildId, channelId, textChannelId, queue: [], index: 0, loop: 'off', volume: cfg.defaultVolume, speed: 1, filters: new Set(), paused: false, messageId: null, idleSince: null, loading: false };
-				players.set(guildId, player);
+			return enqueue(ctx, guildId, found.tracks, { ...options, label: found.playlist?.title, playlist: found.playlist ?? null });
+		},
+
+		// A saved playlist, in the queue
+		async playPlaylist(ctx, guildId, id, { shuffle = false, ...options } = {}) {
+			const list = playlists.get(id, ctx.actorId, { forPlay: true });
+			if (!list.tracks.length) throw new ValidationError('Cette playlist est vide.');
+			checkBefore(ctx, guildId, options);
+			const tracks = [...list.tracks];
+			if (shuffle) {
+				for (let i = tracks.length - 1; i > 0; i--) {
+					const j = Math.floor(Math.random() * (i + 1));
+					[tracks[i], tracks[j]] = [tracks[j], tracks[i]];
+				}
 			}
-			else if (textChannelId && !player.textChannelId) {
-				player.textChannelId = textChannelId;
-			}
-			const room = cfg.maxQueue - (player.queue.length - player.index);
-			if (room <= 0) throw new ValidationError(`La file est pleine (${cfg.maxQueue} titres).`);
-			const tracks = found.tracks.slice(0, room).map(t => ({ ...t, id: nextTrackId++, requestedBy: ctx.actorId, addedAt: now() }));
-			const idle = !current(player);
-			const at = idle ? player.queue.length : next || playNow ? player.index + 1 : player.queue.length;
-			player.queue.splice(at, 0, ...tracks);
-			if (idle) {
-				player.index = at;
-				await start(player);
-			}
-			else if (playNow) {
-				player.index = at;
-				await start(player);
-			}
-			else {
-				emit(guildId);
-			}
-			record(ctx, guildId, 'play', { title: found.playlist?.title ?? tracks[0].title, count: tracks.length });
-			return { tracks, playlist: found.playlist ?? null, truncated: found.tracks.length > tracks.length, startedNow: idle || playNow, state: view(player) };
+			return enqueue(ctx, guildId, tracks, { ...options, label: list.name, playlist: { title: list.name, source: 'playlist', count: tracks.length } });
+		},
+
+		playlists,
+
+		// The whole queue (history included) saved as a playlist
+		saveQueue(ctx, guildId, { name, shared = true, id = null } = {}) {
+			const player = playerOf(guildId);
+			const tracks = player.queue.filter(t => !t.error);
+			if (!tracks.length) throw new ValidationError('La file est vide.');
+			return id ? playlists.addTracks(ctx, id, tracks) : playlists.create(ctx, { name, shared, tracks });
+		},
+
+		// A link (track, YouTube or Spotify playlist...) added to a saved playlist
+		async addToPlaylist(ctx, id, query) {
+			const text = String(query ?? '').trim();
+			if (!text) throw new ValidationError('Donne un lien ou une recherche.');
+			const found = await resolver.resolve(text).catch((error) => { throw error instanceof ValidationError ? error : new ValidationError(error.message); });
+			if (!found.tracks.length) throw new ValidationError('Rien trouvé.');
+			return playlists.addTracks(ctx, id, found.tracks);
+		},
+
+		// The track playing now, added to a playlist
+		addCurrentTo(ctx, guildId, id) {
+			const track = current(playerOf(guildId));
+			if (!track) throw new ValidationError('Rien en cours.');
+			return playlists.addTracks(ctx, id, [track]);
 		},
 
 		async pause(ctx, guildId, paused) {
@@ -435,7 +498,15 @@ export function createMusic({ network, audit, settings, backend, resolver, execu
 			const player = players.get(guildId);
 			if (!player) return;
 			if (!channelId) return service.leave(guildId, { reason: 'déconnecté' });
+			const followed = player.textChannelId === player.channelId;
+			if (followed && player.messageId) {
+				executor.upsertMusicMessage?.(player.textChannelId, player.messageId, { ...view(player), connected: false, ended: true, reason: 'déplacé dans un autre salon' }).catch(() => undefined);
+			}
 			player.channelId = channelId;
+			if (followed) {
+				player.textChannelId = channelId;
+				player.messageId = null;
+			}
 			emit(guildId);
 		},
 

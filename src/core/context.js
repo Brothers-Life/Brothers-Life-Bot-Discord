@@ -103,7 +103,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const backups = createBackups({ db, network, audit, executor, settings, templates, logs, logger });
 	const customCommands = createCustomCommands({ db, network, ranks, audit, executor, logs, members, moderation, sanctions, reservedNames: COMMANDS.map(c => c.name), logger });
 	logs.registerCategory('absences', 'Absences du staff');
-	const music = createMusic({ network, audit, settings, backend: executor.music, resolver: executor.musicResolver, executor, logger });
+	const music = createMusic({ db, network, audit, settings, backend: executor.music, resolver: executor.musicResolver, executor, logger });
 	logs.registerCategory('music', 'Musique (lancée, arrêtée, réglages)');
 	const permissionSync = createPermissionSync({ db, network, ranks, audit, executor, logs, settings });
 
