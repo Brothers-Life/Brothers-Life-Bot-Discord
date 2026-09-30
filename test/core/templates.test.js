@@ -151,3 +151,15 @@ test('a failing role becomes a warning, the job goes on; permissions', async () 
 	await assert.rejects(core.templates.create(nobody, { name: 'x', sourceGuildId: OTHER }), /templates.manage/);
 	assert.throws(() => core.templates.apply(nobody, template.id, { guildId: TARGET, mode: 'repair' }), /templates.apply/);
 });
+
+test('a job cut by a restart is reported as interrupted', async () => {
+	const { core, owner } = await setup();
+	const template = await core.templates.create(owner, { name: 'Entreprise', sourceGuildId: OTHER });
+	core.settings.set('templates.running', { guildId: TARGET, templateId: template.id, mode: 'reset', by: owner.id, startedAt: Date.now() });
+	const { createTemplates } = await import('../../src/core/templates/index.js');
+	const restarted = createTemplates({ ...core, logger: { error: () => undefined } });
+	const [target] = restarted.targets();
+	assert.equal(target.application.status, 'failed');
+	assert.match(target.application.report.warnings[0], /Interrompue/);
+	assert.equal(core.settings.get('templates.running', null), null);
+});

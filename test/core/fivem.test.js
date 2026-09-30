@@ -60,3 +60,11 @@ test('bot status rotates between servers, offline text when down; embed has a jo
 	assert.equal(payload.components[0].url, 'https://cfx.re/join/abcd12');
 	await assert.rejects(fivem.save({ id: '1', can: () => false }, { name: 'x', address: '1.2.3.4:1' }), /fivem.manage/);
 });
+
+test('addresses: link-local and metadata endpoints refused, local network accepted for FiveM', async () => {
+	const { fivem, owner } = await setup();
+	await assert.rejects(fivem.save(owner, { name: 'x', address: '169.254.169.254:80' }), /refusée/);
+	await assert.rejects(fivem.save(owner, { name: 'x', address: 'metadata.google.internal:80' }), /refusée/);
+	const local = await fivem.save(owner, { name: 'Local', address: '127.0.0.1:30120' });
+	assert.equal(local.address, '127.0.0.1:30120');
+});

@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createCanvas, GlobalFonts, loadImage } from '@napi-rs/canvas';
 import { ValidationError } from './errors.js';
+import { blockedUrl } from './netGuard.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FONTS_DIR = path.resolve(__dirname, '..', '..', 'assets', 'fonts');
@@ -217,9 +218,18 @@ export async function renderCard(input, vars, { loadSource }) {
 
 // Downloads an https image with a size and time limit
 export async function fetchImage(url, { fetchImpl = fetch, maxBytes = 8 * 1024 * 1024, timeoutMs = 5000 } = {}) {
-	if (!/^https:\/\//.test(url)) return null;
-	const response = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs), redirect: 'follow' });
-	if (!response.ok) return null;
+	// Redirects followed by hand: each hop is checked (never the local network or metadata endpoints)
+	let target = url;
+	let response = null;
+	for (let hop = 0; hop < 4; hop++) {
+		if (!/^https:\/\//.test(target) || blockedUrl(target)) return null;
+		response = await fetchImpl(target, { signal: AbortSignal.timeout(timeoutMs), redirect: 'manual' });
+		const next = response.status >= 300 && response.status < 400 ? response.headers?.get?.('location') : null;
+		if (!next) break;
+		target = new URL(next, target).href;
+		response = null;
+	}
+	if (!response?.ok) return null;
 	if (Number(response.headers.get('content-length') ?? 0) > maxBytes) return null;
 	const buffer = Buffer.from(await response.arrayBuffer());
 	return buffer.length > maxBytes ? null : buffer;

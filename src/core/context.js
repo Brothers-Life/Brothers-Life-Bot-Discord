@@ -89,7 +89,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const fivem = createFivem({ db, network, audit, executor, settings, logs, fetchImpl, logger });
 	stats.addVariables(async () => fivem.variables());
 	const dms = createDms({ db, audit, executor, settings, logs, uploads, logger });
-	const templates = createTemplates({ db, network, audit, executor, events, automod, tickets, logs, logger });
+	const templates = createTemplates({ db, network, audit, executor, events, automod, tickets, logs, settings, logger });
 	logs.registerCategory('absences', 'Absences du staff');
 	const permissionSync = createPermissionSync({ db, network, ranks, audit, executor, logs, settings });
 

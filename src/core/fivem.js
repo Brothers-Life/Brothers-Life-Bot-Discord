@@ -1,6 +1,7 @@
 import { definePermission } from './permissions.js';
 import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
 import { fillVars } from './cards.js';
+import { blockedHost } from './netGuard.js';
 
 definePermission('fivem.view', { label: 'Voir l’état des serveurs FiveM', category: 'FiveM' });
 definePermission('fivem.manage', { label: 'Gérer les serveurs FiveM, leurs messages de statut et le statut du bot', category: 'FiveM' });
@@ -107,6 +108,8 @@ export function createFivem({ db, network, audit, executor, settings, logs, fetc
 		const address = String(input.address ?? current?.address ?? '').trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
 		const m = ADDRESS.exec(address);
 		if (!m || !Number(m[2]) || Number(m[2]) > 65535) throw new ValidationError('Adresse attendue : ip:port (ex. 51.75.12.34:30120).');
+		const blocked = blockedHost(m[1], { allowPrivate: true });
+		if (blocked) throw new ValidationError(`Adresse refusée : ${blocked}.`);
 		const code = String(input.joinCode ?? current?.joinCode ?? '').trim().replace(/^https?:\/\/cfx\.re\/join\//, '');
 		if (code && !JOIN_CODE.test(code)) throw new ValidationError('Code cfx.re invalide (cfx.re/join/xxxxxx).');
 		const config = { ...current?.config, ...input.config };

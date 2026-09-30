@@ -35,7 +35,7 @@ function CommandsPage() {
                     <div className='min-w-56 flex-1'>
                       <div className='text-sm'>{c.description}</div>
                       <div className='mt-1 flex flex-wrap gap-1'>
-                        {c.permissions.length ? c.permissions.map((p) => <Pill key={p.key}>{p.label}</Pill>) : <Pill>Tout le monde</Pill>}
+                        {c.permissions.length ? c.permissions.map((p) => <Pill key={p.key} className='whitespace-normal'>{p.label}</Pill>) : <Pill>Tout le monde</Pill>}
                       </div>
                     </div>
                     {allowed

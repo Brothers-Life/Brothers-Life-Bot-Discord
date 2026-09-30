@@ -10,7 +10,7 @@ definePermission('templates.apply', { label: 'Réparer ou réinitialiser un serv
 const SYSTEM = { id: 'system', source: 'system', isOwner: true, can: () => true };
 
 // Several model Discords ("Entreprise", "Gang"…) photographed and rebuilt on other servers of the network
-export function createTemplates({ db, network, audit, executor, events, automod, tickets, logs, logger = console, now = Date.now }) {
+export function createTemplates({ db, network, audit, executor, events, automod, tickets, logs, settings, logger = console, now = Date.now }) {
 	logs.registerCategory('templates', 'Modèles de serveur (applications)');
 	let job = null;
 
@@ -71,6 +71,18 @@ export function createTemplates({ db, network, audit, executor, events, automod,
 	}
 
 	const sourceIds = () => new Set(q.sources.all().map(r => r.source_guild_id));
+
+	// A job cut by a restart leaves the server half built: it is reported, and "Réparer" finishes it
+	const interrupted = settings.get('templates.running', null);
+	if (interrupted) {
+		const report = { created: 0, edited: 0, deleted: 0, warnings: ['Interrompue par un redémarrage du bot : lance « Réparer » pour terminer.'], durationMs: 0 };
+		const last = q.application.get(interrupted.guildId);
+		q.saveApplication.run({
+			guildId: interrupted.guildId, templateId: interrupted.templateId, mapping: last?.mapping ?? JSON.stringify({ roles: {}, channels: {} }),
+			mode: interrupted.mode, status: 'failed', report: JSON.stringify(report), at: now(), by: interrupted.by,
+		});
+		settings.set('templates.running', null);
+	}
 
 	// --- Panel configuration of the model, rewritten with the target's ids -----------------------------
 	function applyPanel(panel, guildId, mode, ids, warnings) {
@@ -165,6 +177,7 @@ export function createTemplates({ db, network, audit, executor, events, automod,
 		const channels = new Map();
 		const stats = { created: 0, edited: 0, deleted: 0 };
 		const started = now();
+		settings.set('templates.running', { guildId, templateId: template.id, mode, by: actor.id, startedAt: started });
 		events.mute(guildId, true);
 		try {
 			const target = await executor.snapshotGuild(guildId);
@@ -190,6 +203,7 @@ export function createTemplates({ db, network, audit, executor, events, automod,
 		}
 		finally {
 			events.mute(guildId, false);
+			settings.set('templates.running', null);
 		}
 		job.finishedAt = now();
 		job.step = job.status === 'done' ? 'Terminé' : 'Échec';
