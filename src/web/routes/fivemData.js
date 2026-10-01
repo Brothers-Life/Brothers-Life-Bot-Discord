@@ -38,6 +38,8 @@ export function registerFivemDataRoutes(app, { core }) {
 	});
 	app.get('/api/fivem-data/logs', {
 		config: { permission: 'fivemdata.logs' },
-		schema: { querystring: { type: 'object', properties: { q: { type: 'string', maxLength: 100 }, before: { type: 'integer' } } } },
-	}, async (request) => fivemData.adminLogs(request.actor, { search: request.query.q ?? '', before: request.query.before ?? null }));
+		schema: { querystring: { type: 'object', properties: { q: { type: 'string', maxLength: 100 }, source: { type: 'string', maxLength: 30 }, before: { type: 'integer' } } } },
+	}, async (request) => fivemData.gameLogs(request.actor, { search: request.query.q ?? '', source: request.query.source ?? '', before: request.query.before ?? null }));
+	app.get('/api/fivem-data/log-sources', { config: { permission: 'fivemdata.logs' } }, async request => fivemData.logSources(request.actor));
+	app.get('/api/fivem-data/server', { config: { permission: 'fivemdata.view' } }, async request => fivemData.server(request.actor));
 }

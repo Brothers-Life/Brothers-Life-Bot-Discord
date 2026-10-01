@@ -1,11 +1,13 @@
 import mysql from 'mysql2/promise';
 import { definePermission } from './permissions.js';
 import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
+import { LOG_SOURCES, sourceSelect, unix } from './fivem/logSources.js';
+import { serverReport } from './fivem/serverReport.js';
 
 definePermission('fivemdata.view', { label: 'Voir les fiches joueurs FiveM (personnages, métier, temps de jeu, sanctions en jeu)', category: 'FiveM' });
 definePermission('fivemdata.economy', { label: 'Voir l’argent, la banque et la boutique premium des joueurs FiveM', category: 'FiveM' });
 definePermission('fivemdata.inventory', { label: 'Voir l’inventaire et les coffres de véhicules des joueurs FiveM', category: 'FiveM' });
-definePermission('fivemdata.logs', { label: 'Voir les logs d’administration du jeu', category: 'FiveM' });
+definePermission('fivemdata.logs', { label: 'Voir tous les logs du jeu (menu admin, métiers, garages, coffres, MDT…)', category: 'FiveM' });
 definePermission('fivemdata.manage', { label: 'Configurer la connexion à la base de données FiveM', category: 'FiveM' });
 
 const SNOWFLAKE = /^\d{17,20}$/;
@@ -135,6 +137,95 @@ export function createFivemData({ audit, settings, logger = console, now = Date.
 		if (!actor.can(permission)) throw new ForbiddenError(`Permission manquante : ${permission}`);
 	}
 
+	async function visibleSources(actor, only) {
+		const list = [];
+		for (const src of LOG_SOURCES) {
+			if (only && src.key !== only) continue;
+			if (src.permission && !actor.can(src.permission)) continue;
+			if (await has(src.table)) list.push(src);
+		}
+		return list;
+	}
+
+	// Everything else known about a player, beyond the base sheet
+	function playerExtras({ userId, cids, licenses, canMoney, canInventory }) {
+		const lic = licenses.length ? licenses : ['-'];
+		const money = (table, run) => (canMoney ? when(table, run) : []);
+		return Promise.all([
+			when('bl_mc_sessions', () => query(`SELECT DATE(joined_at) AS d, COUNT(*) AS sessions, SUM(TIMESTAMPDIFF(SECOND, joined_at, COALESCE(left_at, NOW()))) AS seconds
+				FROM bl_mc_sessions WHERE user_id = ? AND joined_at > NOW() - INTERVAL 30 DAY GROUP BY d`, [userId])),
+			when('player_jobs_activity', () => query('SELECT citizenid, job, last_checkin, last_checkout FROM player_jobs_activity WHERE citizenid IN (?) ORDER BY last_checkin DESC LIMIT 30', [cids])),
+			when('job_action_history', () => query('SELECT citizenid, job_name, action_label, amount, created_at FROM job_action_history WHERE citizenid IN (?) ORDER BY created_at DESC LIMIT 30', [cids])),
+			when('job_safe_log', () => query('SELECT citizenid, job_name AS place, action, item, amount, reason, created_at FROM job_safe_log WHERE citizenid IN (?) ORDER BY created_at DESC LIMIT 30', [cids])),
+			when('gang_safe_log', () => query('SELECT citizenid, gang_name AS place, action, NULL AS item, amount, reason, created_at FROM gang_safe_log WHERE citizenid IN (?) ORDER BY created_at DESC LIMIT 30', [cids])),
+			when('harvest_zone_player_stats', () => query('SELECT citizenid, total_harvested FROM harvest_zone_player_stats WHERE citizenid IN (?)', [cids])),
+			when('bl_crafting_logs', () => query('SELECT citizenid, result_item, crafted, requested, created_at FROM bl_crafting_logs WHERE citizenid IN (?) ORDER BY created_at DESC LIMIT 30', [cids])),
+			when('mdt_audit', () => query(`SELECT actor_name, actor_role, field, effect, reason, ${unix('at')} AS at FROM mdt_audit WHERE target_cid IN (?) ORDER BY at DESC LIMIT 30`, [cids])),
+			when('mdt_calls', () => query(`SELECT code, title, place, state, ${unix('created_at')} AS at FROM mdt_calls WHERE caller_cid IN (?) ORDER BY created_at DESC LIMIT 20`, [cids])),
+			when('admindash_staff_sessions', () => query(`SELECT role_name, COUNT(*) AS sessions, SUM(TIMESTAMPDIFF(SECOND, started_at, COALESCE(ended_at, last_seen_at))) AS seconds,
+				SUM(CASE WHEN started_at > NOW() - INTERVAL 30 DAY THEN TIMESTAMPDIFF(SECOND, started_at, COALESCE(ended_at, last_seen_at)) ELSE 0 END) AS recent,
+				MAX(COALESCE(ended_at, last_seen_at)) AS lastSeen, MAX(ended_at IS NULL AND last_seen_at > NOW() - INTERVAL 10 MINUTE) AS active
+				FROM admindash_staff_sessions WHERE license IN (?) GROUP BY role_name`, [lic])),
+			when('admindash_audit_log', () => query('SELECT action, target_name, details, created_at FROM admindash_audit_log WHERE issued_by_license IN (?) ORDER BY created_at DESC LIMIT 40', [lic])),
+			when('mapeditor_audit', () => query('SELECT action, object_id, created_at FROM mapeditor_audit WHERE license IN (?) ORDER BY created_at DESC LIMIT 20', [lic])),
+			when('carplay_logs', () => query('SELECT verdict, label, vehicle, created_at FROM carplay_logs WHERE identifier IN (?) ORDER BY created_at DESC LIMIT 20', [lic])),
+			money('selfmenu_invoices', () => query('SELECT job_name, amount, settled, created_at FROM selfmenu_invoices WHERE issuer_cid IN (?) ORDER BY created_at DESC LIMIT 30', [cids])),
+			money('sky_phone_billing_invoices', () => query('SELECT recipient_identifier, issuer_label, title, amount, status, issued_at, paid_at FROM sky_phone_billing_invoices WHERE recipient_identifier IN (?) ORDER BY issued_at DESC LIMIT 30', [cids])),
+			money('sky_phone_bank_transactions', () => query('SELECT owner_identifier, kind, amount, label, created_at FROM sky_phone_bank_transactions WHERE owner_identifier IN (?) ORDER BY created_at DESC LIMIT 30', [cids])),
+			money('job_payroll_lines', () => query('SELECT l.citizenid, r.job_name, l.grade, l.amount, l.duty_seconds, l.failed, r.created_at FROM job_payroll_lines l JOIN job_payroll_runs r ON r.id = l.run_id WHERE l.citizenid IN (?) ORDER BY r.created_at DESC LIMIT 20', [cids])),
+			money('premium_crate_openings', () => query('SELECT kind, label, rarity, refund_points, created_at FROM premium_crate_openings WHERE license IN (?) OR citizenid IN (?) ORDER BY created_at DESC LIMIT 30', [lic, cids])),
+			money('premium_shop_item_purchases', () => query('SELECT i.label, i.price, p.created_at FROM premium_shop_item_purchases p LEFT JOIN premium_shop_items i ON i.id = p.item_id WHERE p.license IN (?) OR p.citizenid IN (?) ORDER BY p.created_at DESC LIMIT 30', [lic, cids])),
+			money('premium_gifts', () => query('SELECT sender_name, sender_license IN (?) AS sent, label, points_amount, status, created_at FROM premium_gifts WHERE sender_license IN (?) OR target_license IN (?) OR target_citizenid IN (?) ORDER BY created_at DESC LIMIT 30', [lic, lic, lic, cids])),
+			canInventory ? when('ox_inventory', () => query('SELECT owner, name, data, lastupdated FROM ox_inventory WHERE owner IN (?)', [cids])) : [],
+		]);
+	}
+
+	function shapeExtras(extras, charOf) {
+		const [days, jobActivity, jobActions, jobSafe, gangSafe, harvest, crafting, mdtLookups, mdtCalls, staffSessions, staffActions, mapEdits, carplay,
+			invoicesIssued, phoneInvoices, phoneBank, payroll, crates, purchases, gifts, stashes] = extras;
+		const unixMs = v => (v ? Number(v) * (Number(v) > 1e11 ? 1 : 1000) : null);
+		const sum = (rows, key) => rows.reduce((n, r) => n + Number(r[key] ?? 0), 0);
+		const staff = staffSessions.length ? {
+			roles: staffSessions.map(s => s.role_name),
+			sessions: sum(staffSessions, 'sessions'),
+			seconds: sum(staffSessions, 'seconds'),
+			recentSeconds: sum(staffSessions, 'recent'),
+			lastSeen: Math.max(0, ...staffSessions.map(s => ms(s.lastSeen) ?? 0)) || null,
+			active: staffSessions.some(s => Number(s.active)),
+			actions: staffActions.map(a => ({ action: a.action, target: a.target_name, details: a.details, at: ms(a.created_at) })),
+		} : null;
+		return {
+			activity: days.map(d => ({ day: new Date(d.d).toISOString().slice(0, 10), sessions: Number(d.sessions), hours: Math.round(Number(d.seconds) / 360) / 10 })),
+			jobs: {
+				checkins: jobActivity.map(j => ({ character: charOf(j.citizenid), job: j.job, checkin: unixMs(j.last_checkin), checkout: unixMs(j.last_checkout) })),
+				actions: jobActions.map(a => ({ character: charOf(a.citizenid), job: a.job_name, action: a.action_label, amount: a.amount, at: ms(a.created_at) })),
+				safe: [...jobSafe, ...gangSafe].sort((a, b) => ms(b.created_at) - ms(a.created_at)).map(l => ({ character: charOf(l.citizenid), place: l.place, action: l.action, item: l.item, amount: l.amount, reason: l.reason, at: ms(l.created_at) })),
+				payroll: payroll.map(p => ({ character: charOf(p.citizenid), job: p.job_name, grade: p.grade, amount: Number(p.amount ?? 0), dutySeconds: Number(p.duty_seconds ?? 0), failed: Boolean(p.failed), at: ms(p.created_at) })),
+				invoices: invoicesIssued.map(i => ({ job: i.job_name, amount: Number(i.amount), settled: Boolean(i.settled), at: ms(i.created_at) })),
+			},
+			skills: {
+				harvested: sum(harvest, 'total_harvested'),
+				crafting: crafting.map(c => ({ character: charOf(c.citizenid), item: c.result_item, crafted: Number(c.crafted ?? 0), requested: Number(c.requested ?? 0), at: ms(c.created_at) })),
+			},
+			police: {
+				lookups: mdtLookups.map(m => ({ by: m.actor_name, role: m.actor_role, field: m.field, effect: m.effect, reason: m.reason, at: ms(m.at) })),
+				calls: mdtCalls.map(c => ({ code: c.code, title: c.title, place: c.place, state: c.state, at: ms(c.at) })),
+			},
+			phone: phoneInvoices.length || phoneBank.length ? {
+				invoices: phoneInvoices.map(i => ({ character: charOf(i.recipient_identifier), from: i.issuer_label, title: i.title, amount: Number(i.amount ?? 0), status: i.status, at: ms(i.issued_at), paidAt: ms(i.paid_at) })),
+				bank: phoneBank.map(t => ({ character: charOf(t.owner_identifier), kind: t.kind, amount: Number(t.amount ?? 0), label: t.label, at: ms(t.created_at) })),
+			} : null,
+			shop: crates.length || purchases.length || gifts.length ? {
+				crates: crates.map(c => ({ kind: c.kind, label: c.label, rarity: c.rarity, refund: Number(c.refund_points ?? 0), at: ms(c.created_at) })),
+				purchases: purchases.map(p => ({ label: p.label ?? '?', price: Number(p.price ?? 0), at: ms(p.created_at) })),
+				gifts: gifts.map(g => ({ sent: Boolean(Number(g.sent)), from: g.sender_name, label: g.label, points: Number(g.points_amount ?? 0), status: g.status, at: ms(g.created_at) })),
+			} : null,
+			staff,
+			creations: { mapEdits: mapEdits.map(m => ({ action: m.action, object: m.object_id, at: ms(m.created_at) })), carplay: carplay.map(c => ({ verdict: c.verdict, label: c.label ?? c.vehicle, at: ms(c.created_at) })) },
+			stashes: stashes.map(st => ({ owner: charOf(st.owner), name: st.name, items: json(st.data, []).filter(Boolean).map(i => ({ name: i.name, count: i.count })), at: ms(st.lastupdated) })),
+		};
+	}
+
 	const service = {
 		// What the panel shows of the settings (never the password)
 		settingsView() {
@@ -252,6 +343,7 @@ export function createFivemData({ audit, settings, logger = console, now = Date.
 				canMoney ? when('premium_shop_logs', () => query('SELECT action, details, amount, entry_label, created_at FROM premium_shop_logs WHERE license IN (?) OR citizenid IN (?) ORDER BY created_at DESC LIMIT 50', [licenses, anyCid])) : [],
 				when('playerskins', () => query('SELECT citizenid, COUNT(*) AS n FROM playerskins WHERE citizenid IN (?) GROUP BY citizenid', [anyCid])),
 			]);
+			const extras = await playerExtras({ userId, cids: anyCid, licenses, canMoney, canInventory });
 			const totals = sessionTotals[0] ?? {};
 			const charOf = cid => characters.find(c => c.citizenId === cid)?.name ?? cid;
 			const groupLabel = name => groups.get(name)?.label ?? name;
@@ -300,20 +392,41 @@ export function createFivemData({ audit, settings, logger = console, now = Date.
 				} : null,
 				permissions: { economy: canMoney, inventory: canInventory, logs: actor.can('fivemdata.logs') },
 			};
+			Object.assign(result, shapeExtras(extras, charOf));
 			// Who looked at whom: these sheets hold personal data
 			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'fivemdata.view', target: String(userId), details: { joueur: u.username } });
 			return result;
 		},
 
-		// Admin actions done in game (admin menu), newest first
-		async adminLogs(actor, { search = '', before = null, limit = 100 } = {}) {
+		// Every log of the game in one feed (admin menu, garages, jobs, MDT…), newest first; `before` is a timestamp in ms
+		async gameLogs(actor, { source = '', search = '', before = null, limit = 100 } = {}) {
 			need(actor, 'fivemdata.logs');
-			if (!(await has('admindash_audit_log'))) return [];
-			const like = `%${String(search).trim()}%`;
-			const rows = await query(`SELECT id, issued_by_name, action, target_name, details, created_at FROM admindash_audit_log
-				WHERE (? = '' OR issued_by_name LIKE ? OR target_name LIKE ? OR action LIKE ? OR details LIKE ?) ${before ? 'AND id < ?' : ''}
-				ORDER BY id DESC LIMIT ?`, [String(search).trim(), like, like, like, like, ...(before ? [before] : []), Math.min(200, limit)]);
-			return rows.map(r => ({ id: r.id, by: r.issued_by_name, action: r.action, target: r.target_name, details: r.details, at: ms(r.created_at) }));
+			const sources = await visibleSources(actor, source);
+			if (!sources.length) return [];
+			const q = String(search).trim();
+			const like = `%${q}%`;
+			const rows = await query(`SELECT * FROM (${sources.map(sourceSelect).join(' UNION ALL ')}) logs
+				WHERE at IS NOT NULL ${before ? 'AND at < FROM_UNIXTIME(? / 1000)' : ''} ${q ? 'AND (actor LIKE ? OR action LIKE ? OR target LIKE ? OR details LIKE ?)' : ''}
+				ORDER BY at DESC LIMIT ?`, [...(before ? [Number(before)] : []), ...(q ? [like, like, like, like] : []), Math.min(200, Number(limit) || 100)]);
+			return rows.map(r => ({ source: r.source, at: ms(r.at), actor: r.actor, action: r.action, target: r.target, details: r.details }));
+		},
+
+		// The log sources this server has, with their volume (all time and 30 days)
+		async logSources(actor) {
+			need(actor, 'fivemdata.logs');
+			const sources = await visibleSources(actor, '');
+			if (!sources.length) return [];
+			const rows = await query(sources.map(src => `SELECT '${src.key}' AS source, COUNT(*) AS total, SUM(${src.at ?? 'created_at'} > NOW() - INTERVAL 30 DAY) AS recent FROM \`${src.table}\``).join(' UNION ALL '));
+			return sources.map((src) => {
+				const r = rows.find(x => x.source === src.key);
+				return { key: src.key, label: src.label, total: Number(r?.total ?? 0), recent: Number(r?.recent ?? 0) };
+			});
+		},
+
+		// The whole server: activity, jobs and gangs, vehicles, justice, world, staff, economy
+		async server(actor) {
+			need(actor, 'fivemdata.view');
+			return serverReport({ query, when, groupsMap, canMoney: actor.can('fivemdata.economy'), now });
 		},
 
 		// Server overview: players, online now, playtime, staff in service, jobs headcount

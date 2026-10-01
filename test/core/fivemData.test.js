@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../src/core/errors.js';
 import { createFivemData, normalizeDbConfig } from '../../src/core/fivemData.js';
 import { detailPayload, playerPayload } from '../../src/bot/fivemDataUi.js';
+import { peaks } from '../../src/core/fivem/serverReport.js';
 
 const DISCORD = '300000000000000081';
-const TABLES = ['users', 'players', 'bl_mc_sessions', 'player_vehicles', 'management_groups', 'admindash_sanctions', 'bank_flows', 'admindash_audit_log'];
+const TABLES = ['users', 'players', 'bl_mc_sessions', 'player_vehicles', 'management_groups', 'admindash_sanctions', 'bank_flows', 'admindash_audit_log', 'bank_audit_log', 'premium_shop_logs'];
 
 // A fake MariaDB pool: answers by the shape of the SQL, records every query
 function fakePool(log) {
@@ -27,7 +28,8 @@ function fakePool(log) {
 		[/FROM player_vehicles/, (_, sql) => [{ citizenid: 'ABC123', vehicle: 'sultan', plate: 'BRL 001', state: 1, engine: 900, body: 1000, fuel: 70, ...(sql.includes('trunk') ? { trunk: '[{"name":"weapon","count":1}]', glovebox: '[]' } : {}) }]],
 		[/FROM admindash_sanctions/, () => [{ id: 1, type: 'warn', reason: 'HRP', issued_by_name: 'Modo', created_at: '2026-09-20T10:00:00Z' }]],
 		[/FROM bank_flows/, () => [{ created_at: '2026-09-30T10:00:00Z', kind: 'transfer', from_cid: 'ABC123', to_cid: 'XYZ', amount: '250', note: null }]],
-		[/FROM admindash_audit_log/, () => [{ id: 9, issued_by_name: 'Modo', action: 'teleport', target_name: 'Pedro', details: null, created_at: '2026-10-01T08:00:00Z' }]],
+		[/\) logs\s+WHERE/, () => [{ source: 'admin', at: '2026-10-01T08:00:00Z', actor: 'Modo', action: 'teleport', target: 'Pedro', details: null }]],
+		[/AS recent FROM/, () => [{ source: 'admin', total: 12, recent: 3 }, { source: 'sanctions', total: 1, recent: 1 }]],
 	];
 	return {
 		ended: false,
@@ -117,10 +119,20 @@ test('fivem data: the sheet hides money and inventory without their permissions 
 });
 
 test('fivem data: admin logs need their permission; disabled base and new config reset the pool', async () => {
-	const { data, staff, actor, store, pools } = setup();
-	await assert.rejects(data.adminLogs(staff), ForbiddenError);
-	const logs = await data.adminLogs(actor(['fivemdata.logs']), { search: 'tele' });
+	const { data, staff, actor, store, pools, log } = setup();
+	await assert.rejects(data.gameLogs(staff), ForbiddenError);
+	const logs = await data.gameLogs(actor(['fivemdata.logs']), { search: 'tele' });
 	assert.equal(logs[0].action, 'teleport');
+	assert.equal(logs[0].source, 'admin');
+	const unionSql = log.find(sql => /\) logs\s+WHERE/.test(sql));
+	assert.match(unionSql, /UNION ALL/);
+	// Money logs (bank, premium shop) stay hidden without the economy permission
+	assert.doesNotMatch(unionSql, /bank_audit_log|premium_shop_logs/);
+	await data.gameLogs(actor(['fivemdata.logs', 'fivemdata.economy']), {});
+	assert.match(log.findLast(sql => /\) logs\s+WHERE/.test(sql)), /bank_audit_log/);
+	const sources = await data.logSources(actor(['fivemdata.logs']));
+	assert.deepEqual(sources.find(x => x.key === 'admin'), { key: 'admin', label: 'Menu admin', total: 12, recent: 3 });
+	assert.equal(sources.some(x => x.key === 'bank'), false);
 
 	const manager = actor(['fivemdata.manage']);
 	await data.setConfig(manager, { enabled: true, host: 'db2', port: 3306, database: 's10_qbox', user: 'bot', password: '' });
@@ -132,4 +144,30 @@ test('fivem data: admin logs need their permission; disabled base and new config
 	await data.setConfig(manager, { enabled: false });
 	await assert.rejects(data.search(staff, ''), /pas configurée/);
 	await data.close();
+});
+
+test('fivem data: server report (activity peaks, jobs, money only with its permission)', async () => {
+	const { data, staff, actor } = setup();
+	await assert.rejects(data.server(actor([])), ForbiddenError);
+	const report = await data.server(staff);
+	assert.equal(report.activity.days.length, 30);
+	assert.equal(report.activity.heatmap.length, 7);
+	assert.equal(report.economy, null);
+	const police = report.jobs.find(j => j.name === 'police');
+	assert.equal(police.label, 'LSPD');
+	assert.deepEqual(police.grades, [{ grade: 2, name: 'Sergent', payment: null, isBoss: false }]);
+	const rich = await data.server(actor(['fivemdata.view', 'fivemdata.economy']));
+	assert.ok(rich.economy);
+});
+
+test('fivem data: most players at once per day', () => {
+	const day = Date.UTC(2026, 9, 1);
+	const at = h => new Date(day + h * 3_600_000).toISOString();
+	const byDay = peaks([
+		{ joined_at: at(10), left_at: at(12) },
+		{ joined_at: at(11), left_at: at(13) },
+		{ joined_at: at(11.5), left_at: null },
+		{ joined_at: at(14), left_at: at(15) },
+	], day + 16 * 3_600_000);
+	assert.equal(byDay.get('2026-10-01'), 3);
 });

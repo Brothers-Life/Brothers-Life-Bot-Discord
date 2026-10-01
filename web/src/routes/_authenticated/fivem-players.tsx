@@ -1,8 +1,8 @@
 import { useDeferredValue, useState } from 'react'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  ArrowLeft, Backpack, Banknote, Car, Clock, Database, Gamepad2, Gavel, HeartPulse, IdCard, Search, Settings, ShieldAlert, Users, Wallet,
+  Activity, ArrowLeft, Backpack, Banknote, Briefcase, Car, Clock, Database, Gamepad2, Gavel, HeartPulse, IdCard, Search, Settings, ShieldCheck, Siren, Wallet, Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, errorMessage } from '@/lib/api'
@@ -17,71 +17,55 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { hours, money } from '@/features/fivem/format'
+import type { Character, Item, Overview, Sheet, Summary } from '@/features/fivem/types'
+import { ActivityTab, EconomyTab, JobsTab, JusticeTab, ServerTab, StaffTab, VehiclesTab, WorldTab } from '@/features/fivem/server'
+import { GameLogs } from '@/features/fivem/logs'
+import { PlayerActivityChart, PlayerPhone, PlayerPolice, PlayerShop, PlayerStaff, PlayerWork } from '@/features/fivem/player-extras'
+import { hasPoliceTab, hasStaffTab, hasWorkTab } from '@/features/fivem/sheet'
+
+const TABS = ['players', 'activity', 'jobs', 'vehicles', 'justice', 'world', 'staff', 'economy', 'logs'] as const
+type Tab = (typeof TABS)[number]
 
 export const Route = createFileRoute('/_authenticated/fivem-players')({
-  validateSearch: (search: Record<string, unknown>) => ({ id: typeof search.id === 'number' || typeof search.id === 'string' ? Number(search.id) || undefined : undefined }),
+  validateSearch: (search: Record<string, unknown>): { id?: number; tab?: Tab } => ({
+    id: typeof search.id === 'number' || typeof search.id === 'string' ? Number(search.id) || undefined : undefined,
+    tab: TABS.includes(search.tab as Tab) ? (search.tab as Tab) : undefined,
+  }),
   component: FivemPlayersPage,
 })
 
-type Person = { name: string | null; avatar: string | null } | null
-type Group = { name: string; label: string; grade: number; gradeLabel: string | null; type: string; onDuty?: boolean; isBoss?: boolean }
-type Summary = { userId: number; username: string; discordId: string | null; discord: Person; characters: { citizenId: string; name: string; job: Group | null; gang: Group | null; lastUpdated: number | null }[]; lastSeen: number | null; online: boolean; playSeconds: number; sessions: number }
-type Item = { name: string; count: number; slot?: number }
-type Character = {
-  citizenId: string; slot: number; name: string; birthdate: string | null; gender: string | null; nationality: string | null; backstory: string | null; phone: string | null
-  job: Group | null; gang: Group | null; money?: { cash?: number; bank?: number; crypto?: number }; coins?: number | null; vip: string | null
-  status: { dead: boolean; lastStand: boolean; handcuffed: boolean; inJail: number; health: number | null; armor: number | null; hunger: number | null; thirst: number | null; stress: number | null }
-  identity: { bloodType: string | null; fingerprint: string | null; callsign: string | null; licences: Record<string, boolean> | null; criminalRecord: { hasRecord?: boolean } | null }
-  inventory?: Item[]; outfits: number; groups: (Group & { hiredAt: number | null })[]; duty: { job: string; label: string; seconds: number }[]; jail: number
-  properties: { id: number; name: string; price: number }[]; lastUpdated: number | null; lastLoggedOut: number | null
-}
-type Sheet = {
-  account: { userId: number; username: string; discordId: string | null; license: string; license2: string | null; fivemId: string | null }; discord: Person
-  playtime: { online: boolean; sessions: number; firstSeen: number | null; totalSeconds: number; weekSeconds: number; lastSessions: { joinedAt: number; leftAt: number | null; dropReason: string | null; characters: string[] }[] }
-  characters: Character[]
-  vehicles: { owner: string; model: string; plate: string; fakePlate: string | null; garage: string | null; state: string; fuel: number | null; engine: number; body: number; depotPrice: number | null; distance: number | null; nickname: string | null; lastOut: number | null; ownerJob: string | null; ownerGang: string | null; glovebox?: Item[]; trunk?: Item[] }[]
-  sanctions: { id: number; type: string; reason: string | null; durationMinutes: string | null; by: string | null; at: number | null }[]
-  bans: { id: number; reason: string | null; expire: number | null; by: string | null }[]
-  reports: { id: number; message: string; status: string; priority: string | null; category: string | null; claimedBy: string | null; resolvedBy: string | null; at: number | null }[]
-  economy: { total: number; flows: { at: number | null; kind: string; from: string | null; to: string | null; amount: number; note: string | null }[]; premium: { points: number; loyalty: number; logs: { action: string; label: string | null; amount: string | null; details: string | null; at: number | null }[] } } | null
-  permissions: { economy: boolean; inventory: boolean; logs: boolean }
-}
-type Overview = { accounts: number; characters: number; online: number; week: { players: number; seconds: number }; staff: { name: string; role: string; seconds: number; active: boolean }[]; jobs: { name: string; label: string; type: string; members: number }[]; topPlaytime: { userId: number; username: string; seconds: number }[] }
-
-const hours = (s: number) => (s >= 3600 ? `${Math.floor(s / 3600)} h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}` : `${Math.round(s / 60)} min`)
-const money = (n?: number | null) => `${Number(n ?? 0).toLocaleString('fr-FR')} $`
 const SANCTION: Record<string, { label: string; tone: 'danger' | 'warning' | 'info' | 'success' | 'neutral' }> = {
   ban: { label: 'Ban', tone: 'danger' }, kick: { label: 'Kick', tone: 'warning' }, warn: { label: 'Warn', tone: 'warning' }, jail: { label: 'Prison', tone: 'info' }, unban: { label: 'Déban', tone: 'success' }, unjail: { label: 'Sortie', tone: 'success' },
 }
 
 function FivemPlayersPage() {
   const { can } = useMe()
-  const { id } = Route.useSearch()
+  const { id, tab } = Route.useSearch()
   const navigate = useNavigate({ from: '/fivem-players' })
   const [settings, setSettings] = useState(false)
   return (
     <Page
-      title='Joueurs FiveM'
-      description='Les joueurs du serveur FiveM, lus directement dans sa base de données : personnages, métiers, temps de jeu, véhicules, sanctions en jeu. Ce que chacun voit dépend de ses permissions.'
+      title='Données FiveM'
+      description='Tout ce que contient la base du serveur FiveM : joueurs, activité, métiers, véhicules, justice, carte, staff, économie et logs du jeu. Ce que chacun voit dépend de ses permissions.'
       actions={
         <div className='flex gap-2'>
-          {id && <Button variant='outline' onClick={() => navigate({ search: { id: undefined } })}><ArrowLeft /> Tous les joueurs</Button>}
+          {id && <Button variant='outline' onClick={() => navigate({ search: { id: undefined, tab } })}><ArrowLeft /> Retour</Button>}
           {can('fivemdata.manage') && <Button variant='ghost' onClick={() => setSettings(true)}><Settings /> Connexion</Button>}
         </div>
       }
     >
-      {id ? <PlayerSheet userId={id} /> : <Directory onOpen={(userId) => navigate({ search: { id: userId } })} />}
+      {id
+        ? <PlayerSheet userId={id} />
+        : <Directory tab={tab ?? 'players'} onTab={(t) => navigate({ search: { id: undefined, tab: t === 'players' ? undefined : t }, replace: true })} onOpen={(userId) => navigate({ search: { id: userId, tab } })} />}
       {settings && <SettingsDialog onClose={() => setSettings(false)} />}
     </Page>
   )
 }
 
-function Directory({ onOpen }: { onOpen: (userId: number) => void }) {
+function Directory({ tab, onTab, onOpen }: { tab: Tab; onTab: (tab: Tab) => void; onOpen: (userId: number) => void }) {
   const { can } = useMe()
-  const [text, setText] = useState('')
-  const q = useDeferredValue(text.trim())
   const overview = useQuery({ queryKey: ['fivem-overview'], queryFn: () => api<Overview>('/fivem-data/overview'), retry: false, refetchInterval: 60_000 })
-  const players = useQuery({ queryKey: ['fivem-players', q], queryFn: () => api<Summary[]>(`/fivem-data/players?q=${encodeURIComponent(q)}`), retry: false, placeholderData: (prev) => prev })
 
   if (overview.error) {
     return (
@@ -91,6 +75,7 @@ function Directory({ onOpen }: { onOpen: (userId: number) => void }) {
     )
   }
   const o = overview.data
+  const economy = can('fivemdata.economy')
   return (
     <div className='grid grid-cols-[minmax(0,1fr)] gap-6'>
       {o ? (
@@ -98,124 +83,84 @@ function Directory({ onOpen }: { onOpen: (userId: number) => void }) {
           { label: 'Comptes', value: o.accounts, icon: Users, tone: 'accent' },
           { label: 'Personnages', value: o.characters, icon: IdCard, tone: 'info' },
           { label: 'En jeu maintenant', value: o.online, icon: Gamepad2, tone: 'success' },
-          { label: 'Heures jouées (7 j)', value: Math.round(o.week.seconds / 3600), icon: Clock, tone: 'warning' },
+          { label: 'Heures jouées (7 j)', value: Math.round(o.week.seconds / 3600), icon: Clock, tone: 'warning', hint: `${o.week.players} joueurs` },
         ]} />
       ) : <Skeleton className='h-24 w-full' />}
 
-      <Tabs defaultValue='players'>
+      <Tabs value={tab} onValueChange={(v) => onTab(v as Tab)}>
         <TabsList className='h-auto max-w-full flex-wrap justify-start [&>button]:h-8 [&>button]:flex-none'>
-          <TabsTrigger value='players'>Joueurs</TabsTrigger>
-          <TabsTrigger value='server'>Serveur</TabsTrigger>
-          {can('fivemdata.logs') && <TabsTrigger value='logs'>Logs admin du jeu</TabsTrigger>}
+          <TabsTrigger value='players'><Users /> Joueurs</TabsTrigger>
+          <TabsTrigger value='activity'><Activity /> Activité</TabsTrigger>
+          <TabsTrigger value='jobs'><Briefcase /> Métiers et gangs</TabsTrigger>
+          <TabsTrigger value='vehicles'><Car /> Véhicules</TabsTrigger>
+          <TabsTrigger value='justice'><Gavel /> Justice</TabsTrigger>
+          <TabsTrigger value='world'><Siren /> Carte</TabsTrigger>
+          <TabsTrigger value='staff'><ShieldCheck /> Staff</TabsTrigger>
+          {economy && <TabsTrigger value='economy'><Banknote /> Économie</TabsTrigger>}
+          {can('fivemdata.logs') && <TabsTrigger value='logs'><Database /> Logs du jeu</TabsTrigger>}
         </TabsList>
-        <TabsContent value='players' className='mt-4'>
-          <Section
-            title={players.data ? `${players.data.length} joueur${players.data.length > 1 ? 's' : ''}` : 'Joueurs'}
-            actions={
-              <div className='relative'>
-                <Search className='pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground' />
-                <Input value={text} onChange={(e) => setText(e.target.value)} placeholder='Nom RP, pseudo, citizen ID, plaque…' aria-label='Chercher un joueur' className='w-72 ps-8' autoFocus />
-              </div>
-            }
-          >
-            {!players.data ? <Skeleton className='m-4 h-40' /> : !players.data.length ? <EmptyState title='Aucun joueur trouvé' icon={Search} /> : (
-              <ul className={cn('divide-y transition-opacity', players.isPlaceholderData && 'opacity-60')}>
-                {players.data.map((p) => (
-                  <li key={p.userId}>
-                    <button type='button' onClick={() => onOpen(p.userId)} className='flex w-full flex-wrap items-center gap-3 px-4 py-3 text-start hover:bg-accent/40'>
-                      <div className='relative'>
-                        <UserAvatar src={p.discord?.avatar} name={p.discord?.name ?? p.username} className='size-9' />
-                        {p.online && <span className='live-dot absolute -end-0.5 -bottom-0.5 size-3 rounded-full border-2 border-card bg-success' aria-label='en jeu' />}
-                      </div>
-                      <div className='min-w-0 flex-1 basis-56'>
-                        <div className='flex flex-wrap items-center gap-2 font-medium'>{p.username}{p.discord?.name && <span className='text-xs font-normal text-muted-foreground'>@{p.discord.name}</span>}</div>
-                        <div className='flex flex-wrap gap-1'>
-                          {p.characters.map((c) => <Pill key={c.citizenId} tone='neutral'>{c.name}{c.job ? ` · ${c.job.label}` : ''}</Pill>)}
-                        </div>
-                      </div>
-                      <div className='text-end text-xs text-muted-foreground'>
-                        <div className='font-medium text-foreground tabular-nums'>{hours(p.playSeconds)}</div>
-                        <div>{p.online ? 'en jeu' : p.lastSeen ? `vu ${dateTime(p.lastSeen)}` : 'jamais vu'}</div>
-                      </div>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Section>
-        </TabsContent>
-        <TabsContent value='server' className='mt-4'>{o && <ServerTab o={o} onOpen={onOpen} />}</TabsContent>
-        {can('fivemdata.logs') && <TabsContent value='logs' className='mt-4'><AdminLogs /></TabsContent>}
+        <TabsContent value='players' className='mt-4'><Players onOpen={onOpen} top={o?.topPlaytime ?? []} /></TabsContent>
+        <TabsContent value='activity' className='mt-4'><ServerTab>{(r) => <ActivityTab r={r} />}</ServerTab></TabsContent>
+        <TabsContent value='jobs' className='mt-4'><ServerTab>{(r) => <JobsTab r={r} economy={economy} />}</ServerTab></TabsContent>
+        <TabsContent value='vehicles' className='mt-4'><ServerTab>{(r) => <VehiclesTab r={r} />}</ServerTab></TabsContent>
+        <TabsContent value='justice' className='mt-4'><ServerTab>{(r) => <JusticeTab r={r} onOpen={onOpen} />}</ServerTab></TabsContent>
+        <TabsContent value='world' className='mt-4'><ServerTab>{(r) => <WorldTab r={r} />}</ServerTab></TabsContent>
+        <TabsContent value='staff' className='mt-4'><ServerTab>{(r) => <StaffTab r={r} />}</ServerTab></TabsContent>
+        {economy && <TabsContent value='economy' className='mt-4'><ServerTab>{(r) => <EconomyTab r={r} />}</ServerTab></TabsContent>}
+        {can('fivemdata.logs') && <TabsContent value='logs' className='mt-4'><GameLogs /></TabsContent>}
       </Tabs>
     </div>
   )
 }
 
-function ServerTab({ o, onOpen }: { o: Overview; onOpen: (userId: number) => void }) {
+function Players({ onOpen, top }: { onOpen: (userId: number) => void; top: Overview['topPlaytime'] }) {
+  const [text, setText] = useState('')
+  const q = useDeferredValue(text.trim())
+  const players = useQuery({ queryKey: ['fivem-players', q], queryFn: () => api<Summary[]>(`/fivem-data/players?q=${encodeURIComponent(q)}`), retry: false, placeholderData: (prev) => prev })
   return (
-    <div className='grid gap-6 lg:grid-cols-3'>
+    <div className='grid gap-6 xl:grid-cols-[minmax(0,1fr)_18rem]'>
+      <Section
+        title={players.data ? `${players.data.length} joueur${players.data.length > 1 ? 's' : ''}` : 'Joueurs'}
+        actions={
+          <div className='relative'>
+            <Search className='pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground' />
+            <Input value={text} onChange={(e) => setText(e.target.value)} placeholder='Nom RP, pseudo, citizen ID, plaque…' aria-label='Chercher un joueur' className='w-72 ps-8' autoFocus />
+          </div>
+        }
+      >
+        {!players.data ? <Skeleton className='m-4 h-40' /> : !players.data.length ? <EmptyState title='Aucun joueur trouvé' icon={Search} /> : (
+          <ul className={cn('divide-y transition-opacity', players.isPlaceholderData && 'opacity-60')}>
+            {players.data.map((p) => (
+              <li key={p.userId}>
+                <button type='button' onClick={() => onOpen(p.userId)} className='flex w-full flex-wrap items-center gap-3 px-4 py-3 text-start hover:bg-accent/40'>
+                  <div className='relative'>
+                    <UserAvatar src={p.discord?.avatar} name={p.discord?.name ?? p.username} className='size-9' />
+                    {p.online && <span className='live-dot absolute -end-0.5 -bottom-0.5 size-3 rounded-full border-2 border-card bg-success' aria-label='en jeu' />}
+                  </div>
+                  <div className='min-w-0 flex-1 basis-56'>
+                    <div className='flex flex-wrap items-center gap-2 font-medium'>{p.username}{p.discord?.name && <span className='text-xs font-normal text-muted-foreground'>@{p.discord.name}</span>}</div>
+                    <div className='flex flex-wrap gap-1'>
+                      {p.characters.map((c) => <Pill key={c.citizenId} tone='neutral'>{c.name}{c.job ? ` · ${c.job.label}` : ''}{c.gang ? ` · ${c.gang.label}` : ''}</Pill>)}
+                    </div>
+                  </div>
+                  <div className='text-end text-xs text-muted-foreground'>
+                    <div className='font-medium text-foreground tabular-nums'>{hours(p.playSeconds)}</div>
+                    <div>{p.online ? 'en jeu' : p.lastSeen ? `vu ${dateTime(p.lastSeen)}` : 'jamais vu'}</div>
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
       <Section title='Les plus actifs (30 j)'>
         <ol className='divide-y'>
-          {o.topPlaytime.map((t, i) => (
+          {top.map((t, i) => (
             <li key={t.userId}><button type='button' onClick={() => onOpen(t.userId)} className='flex w-full items-center gap-3 px-4 py-2 text-start text-sm hover:bg-accent/40'><span className='w-5 text-xs text-muted-foreground tabular-nums'>{i + 1}</span><span className='flex-1 truncate'>{t.username}</span><span className='tabular-nums'>{hours(t.seconds)}</span></button></li>
           ))}
         </ol>
       </Section>
-      <Section title='Staff en jeu (30 j)' description='Temps de service dans le menu admin du jeu.'>
-        <ul className='divide-y'>
-          {o.staff.map((s) => (
-            <li key={`${s.name}-${s.role}`} className='flex items-center gap-2 px-4 py-2 text-sm'>
-              <span className={cn('size-2 rounded-full', s.active ? 'live-dot bg-success' : 'bg-muted-foreground/40')} aria-label={s.active ? 'en service' : undefined} />
-              <span className='min-w-0 flex-1 truncate'>{s.name} <span className='text-xs text-muted-foreground'>· {s.role}</span></span>
-              <span className='tabular-nums'>{hours(s.seconds)}</span>
-            </li>
-          ))}
-        </ul>
-      </Section>
-      <Section title='Effectifs des métiers et gangs'>
-        <ul className='divide-y'>
-          {o.jobs.map((j) => (
-            <li key={`${j.type}-${j.name}`} className='flex items-center gap-2 px-4 py-2 text-sm'>
-              <span className='flex-1 truncate'>{j.label}</span><Pill tone={j.type === 'gang' ? 'danger' : 'info'}>{j.type === 'gang' ? 'gang' : 'métier'}</Pill><span className='w-8 text-end tabular-nums'>{j.members}</span>
-            </li>
-          ))}
-        </ul>
-      </Section>
     </div>
-  )
-}
-
-function AdminLogs() {
-  const [text, setText] = useState('')
-  const q = useDeferredValue(text.trim())
-  const logs = useInfiniteQuery({
-    queryKey: ['fivem-admin-logs', q],
-    initialPageParam: 0,
-    queryFn: ({ pageParam }) => api<{ id: number; by: string; action: string; target: string | null; details: string | null; at: number }[]>(`/fivem-data/logs?q=${encodeURIComponent(q)}${pageParam ? `&before=${pageParam}` : ''}`),
-    getNextPageParam: (last) => (last.length === 100 ? last.at(-1)?.id : undefined),
-  })
-  const rows = logs.data?.pages.flat() ?? []
-  return (
-    <Section
-      title='Actions du staff en jeu'
-      description='Le journal du menu admin du serveur FiveM : téléportations, véhicules, inventaires, permissions…'
-      actions={<Input value={text} onChange={(e) => setText(e.target.value)} placeholder='Staff, joueur, action…' aria-label='Filtrer les logs' className='w-60' />}
-    >
-      {!rows.length ? <EmptyState title={logs.isLoading ? 'Chargement…' : 'Aucune action'} icon={ShieldAlert} /> : (
-        <ul className='divide-y'>
-          {rows.map((r) => (
-            <li key={r.id} className='flex flex-wrap items-baseline gap-x-3 gap-y-0.5 px-4 py-2 text-sm'>
-              <span className='w-32 shrink-0 text-xs text-muted-foreground tabular-nums'>{dateTime(r.at)}</span>
-              <span className='font-medium'>{r.by}</span>
-              <Pill tone='neutral'>{r.action}</Pill>
-              {r.target && <span>→ {r.target}</span>}
-              {r.details && <span className='min-w-0 flex-1 basis-full text-xs text-muted-foreground [overflow-wrap:anywhere] sm:basis-auto'>{r.details}</span>}
-            </li>
-          ))}
-          {logs.hasNextPage && <li className='p-3 text-center'><Button size='sm' variant='outline' loading={logs.isFetchingNextPage} onClick={() => logs.fetchNextPage()}>Plus ancien</Button></li>}
-        </ul>
-      )}
-    </Section>
   )
 }
 
@@ -259,9 +204,16 @@ function PlayerSheet({ userId }: { userId: number }) {
           <TabsTrigger value='vehicles'><Car /> Véhicules ({p.vehicles.length})</TabsTrigger>
           {p.permissions.inventory && <TabsTrigger value='inventory'><Backpack /> Inventaires</TabsTrigger>}
           {p.economy && <TabsTrigger value='economy'><Wallet /> Économie</TabsTrigger>}
-          <TabsTrigger value='sessions'><Clock /> Sessions</TabsTrigger>
+          {hasWorkTab(p) && <TabsTrigger value='work'><Briefcase /> Travail</TabsTrigger>}
+          <TabsTrigger value='sessions'><Clock /> Activité</TabsTrigger>
           <TabsTrigger value='sanctions'><Gavel /> Sanctions ({p.sanctions.length + p.bans.length})</TabsTrigger>
+          {hasPoliceTab(p) && <TabsTrigger value='police'><Siren /> Police</TabsTrigger>}
+          {hasStaffTab(p) && <TabsTrigger value='staff'><ShieldCheck /> Staff</TabsTrigger>}
         </TabsList>
+
+        {hasWorkTab(p) && <TabsContent value='work' className='mt-4'><PlayerWork p={p} /></TabsContent>}
+        {hasPoliceTab(p) && <TabsContent value='police' className='mt-4'><PlayerPolice p={p} /></TabsContent>}
+        {hasStaffTab(p) && <TabsContent value='staff' className='mt-4'><PlayerStaff p={p} /></TabsContent>}
 
         <TabsContent value='characters' className='mt-4 grid gap-4 lg:grid-cols-2'>
           {p.characters.map((c) => <CharacterCard key={c.citizenId} c={c} />)}
@@ -305,6 +257,11 @@ function PlayerSheet({ userId }: { userId: number }) {
                 <Items items={[...(v.trunk ?? []), ...(v.glovebox ?? [])]} />
               </Section>
             ))}
+            {p.stashes.map((s) => (
+              <Section key={`s-${s.name}`} title={`Coffre ${s.name}`} description={`${s.owner} · ${dateTime(s.at)}`}>
+                <Items items={s.items} />
+              </Section>
+            ))}
           </TabsContent>
         )}
 
@@ -327,10 +284,13 @@ function PlayerSheet({ userId }: { userId: number }) {
                 )}
               </Section>
             </div>
+            <PlayerShop p={p} />
+            <PlayerPhone p={p} />
           </TabsContent>
         )}
 
-        <TabsContent value='sessions' className='mt-4'>
+        <TabsContent value='sessions' className='mt-4 grid gap-6'>
+          <PlayerActivityChart p={p} />
           <Section title='Dernières sessions' description='Connexions au serveur, personnage joué et raison de la déconnexion.'>
             <ul className='divide-y'>
               {p.playtime.lastSessions.map((s, i) => (
