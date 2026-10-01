@@ -50,6 +50,7 @@ import {
   Scale,
   CalendarClock,
   Archive,
+  Presentation,
 } from 'lucide-react'
 
 export type NavEntry = {
@@ -140,6 +141,7 @@ export const navSections: NavSection[] = [
       { title: 'Permissions Discord', url: '/permissions', icon: KeySquare, permission: 'permsync.view' },
       { title: 'Membres du panel', url: '/members', icon: Users, permission: 'ranks.view' },
       { title: 'Recrutement', url: '/recruitment', icon: UserPlus, permission: 'recruitment.view', keywords: 'candidature' },
+      { title: 'Réunions', url: '/meetings', icon: Presentation, permission: 'meetings.view', keywords: 'réu convocation présence staff' },
       { title: 'Absences', url: '/absences', icon: CalendarOff, permission: null },
       { title: 'Activité du staff', url: '/staff-activity', icon: Trophy, permission: 'staffactivity.view' },
     ],

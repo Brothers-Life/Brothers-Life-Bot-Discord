@@ -32,6 +32,7 @@ import { Route as AuthenticatedFeedbackRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedFivemRouteImport } from './routes/_authenticated/fivem'
 import { Route as AuthenticatedGiveawaysRouteImport } from './routes/_authenticated/giveaways'
 import { Route as AuthenticatedLogsRouteImport } from './routes/_authenticated/logs'
+import { Route as AuthenticatedMeetingsRouteImport } from './routes/_authenticated/meetings'
 import { Route as AuthenticatedMembersRouteImport } from './routes/_authenticated/members'
 import { Route as AuthenticatedMessagesRouteImport } from './routes/_authenticated/messages'
 import { Route as AuthenticatedMusicRouteImport } from './routes/_authenticated/music'
@@ -173,6 +174,11 @@ const AuthenticatedGiveawaysRoute = AuthenticatedGiveawaysRouteImport.update({
 const AuthenticatedLogsRoute = AuthenticatedLogsRouteImport.update({
   id: '/logs',
   path: '/logs',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedMeetingsRoute = AuthenticatedMeetingsRouteImport.update({
+  id: '/meetings',
+  path: '/meetings',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedMembersRoute = AuthenticatedMembersRouteImport.update({
@@ -330,6 +336,7 @@ export interface FileRoutesByFullPath {
   '/fivem': typeof AuthenticatedFivemRoute
   '/giveaways': typeof AuthenticatedGiveawaysRoute
   '/logs': typeof AuthenticatedLogsRoute
+  '/meetings': typeof AuthenticatedMeetingsRoute
   '/members': typeof AuthenticatedMembersRoute
   '/messages': typeof AuthenticatedMessagesRoute
   '/music': typeof AuthenticatedMusicRoute
@@ -378,6 +385,7 @@ export interface FileRoutesByTo {
   '/fivem': typeof AuthenticatedFivemRoute
   '/giveaways': typeof AuthenticatedGiveawaysRoute
   '/logs': typeof AuthenticatedLogsRoute
+  '/meetings': typeof AuthenticatedMeetingsRoute
   '/members': typeof AuthenticatedMembersRoute
   '/messages': typeof AuthenticatedMessagesRoute
   '/music': typeof AuthenticatedMusicRoute
@@ -429,6 +437,7 @@ export interface FileRoutesById {
   '/_authenticated/fivem': typeof AuthenticatedFivemRoute
   '/_authenticated/giveaways': typeof AuthenticatedGiveawaysRoute
   '/_authenticated/logs': typeof AuthenticatedLogsRoute
+  '/_authenticated/meetings': typeof AuthenticatedMeetingsRoute
   '/_authenticated/members': typeof AuthenticatedMembersRoute
   '/_authenticated/messages': typeof AuthenticatedMessagesRoute
   '/_authenticated/music': typeof AuthenticatedMusicRoute
@@ -481,6 +490,7 @@ export interface FileRouteTypes {
     | '/fivem'
     | '/giveaways'
     | '/logs'
+    | '/meetings'
     | '/members'
     | '/messages'
     | '/music'
@@ -529,6 +539,7 @@ export interface FileRouteTypes {
     | '/fivem'
     | '/giveaways'
     | '/logs'
+    | '/meetings'
     | '/members'
     | '/messages'
     | '/music'
@@ -579,6 +590,7 @@ export interface FileRouteTypes {
     | '/_authenticated/fivem'
     | '/_authenticated/giveaways'
     | '/_authenticated/logs'
+    | '/_authenticated/meetings'
     | '/_authenticated/members'
     | '/_authenticated/messages'
     | '/_authenticated/music'
@@ -773,6 +785,13 @@ declare module '@tanstack/react-router' {
       path: '/logs'
       fullPath: '/logs'
       preLoaderRoute: typeof AuthenticatedLogsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/meetings': {
+      id: '/_authenticated/meetings'
+      path: '/meetings'
+      fullPath: '/meetings'
+      preLoaderRoute: typeof AuthenticatedMeetingsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/members': {
@@ -974,6 +993,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedFivemRoute: typeof AuthenticatedFivemRoute
   AuthenticatedGiveawaysRoute: typeof AuthenticatedGiveawaysRoute
   AuthenticatedLogsRoute: typeof AuthenticatedLogsRoute
+  AuthenticatedMeetingsRoute: typeof AuthenticatedMeetingsRoute
   AuthenticatedMembersRoute: typeof AuthenticatedMembersRoute
   AuthenticatedMessagesRoute: typeof AuthenticatedMessagesRoute
   AuthenticatedMusicRoute: typeof AuthenticatedMusicRoute
@@ -1023,6 +1043,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedFivemRoute: AuthenticatedFivemRoute,
   AuthenticatedGiveawaysRoute: AuthenticatedGiveawaysRoute,
   AuthenticatedLogsRoute: AuthenticatedLogsRoute,
+  AuthenticatedMeetingsRoute: AuthenticatedMeetingsRoute,
   AuthenticatedMembersRoute: AuthenticatedMembersRoute,
   AuthenticatedMessagesRoute: AuthenticatedMessagesRoute,
   AuthenticatedMusicRoute: AuthenticatedMusicRoute,

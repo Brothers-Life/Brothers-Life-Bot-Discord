@@ -461,6 +461,18 @@ export function createFakeExecutor() {
 			this.musicMessages.push({ channelId, messageId, view });
 			return messageId ?? '890000000000000001';
 		},
+		meetingMessages: [],
+		async upsertMeetingMessage(channelId, messageId, view) {
+			this.meetingMessages.push({ channelId, messageId, view });
+			return messageId ?? String(884000000000000000n + BigInt(this.meetingMessages.length));
+		},
+		meetingDMs: [],
+		async sendMeetingDM(userId, view, options) { this.meetingDMs.push({ userId, view, ...options }); },
+		summaries: [],
+		async sendMeetingSummary(channelId, view) { this.summaries.push({ channelId, view }); return '885000000000000001'; },
+		// channelId -> userIds in that voice channel
+		voice: new Map(),
+		async voiceMembers(channelId) { return this.voice.get(channelId) ?? []; },
 		access: [],
 		async setChannelAccess(channelId, state) { this.access.push({ channelId, ...state }); },
 		history: new Map(),

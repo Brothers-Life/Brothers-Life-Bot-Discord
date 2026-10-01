@@ -12,6 +12,7 @@ import { absencePayload } from './absencesUi.js';
 import { musicPayload } from './musicUi.js';
 import { builtPayload, verificationPanelPayload } from './channelsUi.js';
 import { appealPayload } from './appealsUi.js';
+import { meetingDMPayload, meetingPayload, summaryPayload } from './meetingsUi.js';
 
 const COLORS = {
 	info: 0x5865f2,
@@ -338,6 +339,37 @@ export function createExecutor(client) {
 		async announceGiveawayWinners(channelId, messageId, data) {
 			const channel = await client.channels.fetch(channelId);
 			await channel.send({ ...winnersPayload(data), reply: { messageReference: messageId, failIfNotExists: false } });
+		},
+
+		// --- Staff meetings --------------------------------------------------------------------
+		async upsertMeetingMessage(channelId, messageId, view) {
+			const channel = await client.channels.fetch(channelId);
+			const payload = meetingPayload(view);
+			if (messageId) {
+				const existing = await channel.messages.fetch(messageId).catch(() => null);
+				if (existing) {
+					await existing.edit(payload);
+					return messageId;
+				}
+			}
+			return (await channel.send(payload)).id;
+		},
+
+		async sendMeetingDM(userId, view, options) {
+			const user = await client.users.fetch(userId);
+			await user.send({ ...meetingDMPayload(view, options), allowedMentions: { parse: [] } });
+		},
+
+		async sendMeetingSummary(channelId, view) {
+			const channel = await client.channels.fetch(channelId);
+			return (await channel.send(summaryPayload(view))).id;
+		},
+
+		// People (not bots) in a voice channel right now
+		async voiceMembers(channelId) {
+			const channel = await client.channels.fetch(channelId).catch(() => null);
+			if (!channel?.isVoiceBased()) return [];
+			return [...channel.members.values()].filter(m => !m.user.bot).map(m => m.id);
 		},
 
 		// --- Opening hours, archives, appeals ------------------------------------------------
