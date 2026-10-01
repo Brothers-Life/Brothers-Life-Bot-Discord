@@ -249,6 +249,17 @@ const COLORS = {
 	'permissions.drift': 'warning',
 };
 
+const PERSON_ACTIONS = /^(sanctions|moderation|members|fivemroles|absences|recruitment|dms|verification|appeals|temp_roles|restrictions)\.|^ranks\.(assign|unassign)/;
+
+// Color from the verb when the action has none of its own: creations green, removals red, the rest blurple
+function verbColor(action) {
+	const verb = action.split('.').slice(1).join('.');
+	if (/(^|_)(create|add|join|approve|accept|enable|grant|restore|unban|unwarn|untimeout|open)/.test(verb)) return 'success';
+	if (/(^|_)(delete|remove|ban|kick|deny|refuse|reject|revoke|disable|close|cancel|fail|stop|left)/.test(verb)) return 'danger';
+	if (/(^|_)(warn|timeout|restrict|pause|expire|drift)/.test(verb)) return 'warning';
+	return 'info';
+}
+
 function actorLabel(actorId) {
 	return /^\d{17,20}$/.test(actorId) ? `<@${actorId}>` : actorId;
 }
@@ -283,11 +294,19 @@ export function describeAuditEntry(entry) {
 		fields.push({ name: 'Serveurs', value: failed ? `${values.length - failed}/${values.length} OK, ${failed} en échec` : `${values.length}/${values.length} OK`, inline: true });
 	}
 
+	const snowflake = id => /^\d{17,20}$/.test(String(id ?? ''));
+	// Only actions aimed at a person (a role, a channel or a server ID would cost a useless Discord lookup)
+	const aboutPerson = PERSON_ACTIONS.test(entry.action);
+	const discordTarget = snowflake(entry.target) && aboutPerson ? entry.target : null;
+	fields.push({ name: 'Quand', value: `<t:${Math.round(entry.at / 1000)}:f> · <t:${Math.round(entry.at / 1000)}:R>`, inline: true });
 	return {
 		title: TITLES[entry.action] ?? entry.action,
 		fields: fields.slice(0, 25),
-		color: COLORS[entry.action] ?? 'info',
+		color: COLORS[entry.action] ?? verbColor(entry.action),
 		timestamp: entry.at,
 		footer: `#${entry.id} · ${entry.action}`,
+		// The executor shows the author's avatar and the targeted member's avatar
+		authorId: snowflake(entry.actorId) ? entry.actorId : null,
+		thumbnailUserId: discordTarget,
 	};
 }

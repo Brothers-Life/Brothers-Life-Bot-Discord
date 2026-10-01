@@ -19,7 +19,28 @@ const COLORS = {
 	success: 0x57f287,
 	warning: 0xfee75c,
 	danger: 0xed4245,
+	neutral: 0x4f545c,
+	brand: 0xff9628,
+	purple: 0x9b59b6,
+	pink: 0xf47fff,
+	teal: 0x1abc9c,
 };
+
+// Emoji in front of the title of each log category
+const CATEGORY_EMOJI = {
+	messages: '💬', members: '👥', voice: '🔊', invites: '✉️', roles: '🎭', member_roles: '🎭', channels: '📁', threads: '🧵', server: '🏠',
+	integrations: '🔌', discord_moderation: '🛡️', sanctions: '⚖️', ranks: '🎖️', network: '🌐', panel: '🖥️', system: '⚙️', logs: '📜', tickets: '🎫',
+	automod: '🤖', antiraid: '🚨', music: '🎵', fivem: '🎮', fivemdata: '🎮', fivemroles: '🎮', meetings: '📅', absences: '🏖️', recruitment: '📝',
+	appeals: '📨', archives: '🗄️', verification: '✅', giveaways: '🎉', polls: '📊', announcements: '📢', onboarding: '👋', staff_sync: '🔁',
+	permissions: '🔐', backups: '💾', templates: '🧩', streams: '📺', rp_events: '🎭', staff_activity: '📈', dms: '📩', feedback: '💡',
+};
+
+// "#ff9628", 0xff9628 or a named color
+function colorOf(color) {
+	if (typeof color === 'number') return color;
+	if (typeof color === 'string' && /^#?[0-9a-f]{6}$/i.test(color)) return parseInt(color.replace('#', ''), 16);
+	return COLORS[color] ?? COLORS.info;
+}
 
 const TEXT_TYPES = new Set([ChannelType.GuildText, ChannelType.GuildAnnouncement]);
 // Roles carrying these can moderate or administrate: only the owner may hand them out from the panel
@@ -37,9 +58,16 @@ const DANGEROUS_PERMISSIONS = [
 ];
 const LOG_PERMISSIONS = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks];
 
+// A log message ({ title, description, fields, color, author, thumbnail, image, url, footer, category, type }) as an embed
 export function toEmbed(message) {
-	const embed = new EmbedBuilder().setColor(COLORS[message.color] ?? COLORS.info);
-	if (message.title) embed.setTitle(message.title.slice(0, 256));
+	const embed = new EmbedBuilder().setColor(colorOf(message.color));
+	const emoji = message.category ? CATEGORY_EMOJI[message.category] : null;
+	const title = message.title && emoji && !/^\p{Extended_Pictographic}/u.test(message.title) ? `${emoji} ${message.title}` : message.title;
+	if (title) embed.setTitle(title.slice(0, 256));
+	if (message.url && /^https?:\/\//.test(message.url)) embed.setURL(message.url);
+	if (message.author?.name) embed.setAuthor({ name: message.author.name.slice(0, 256), iconURL: message.author.iconUrl ?? undefined, url: message.author.url ?? undefined });
+	if (message.thumbnail && /^https?:\/\//.test(message.thumbnail)) embed.setThumbnail(message.thumbnail);
+	if (message.image && /^https?:\/\//.test(message.image)) embed.setImage(message.image);
 	if (message.description) embed.setDescription(message.description.slice(0, 4096));
 	if (message.fields?.length) {
 		embed.addFields(message.fields.slice(0, 25).map(f => ({
@@ -48,7 +76,8 @@ export function toEmbed(message) {
 			inline: Boolean(f.inline),
 		})));
 	}
-	if (message.footer) embed.setFooter({ text: message.footer.slice(0, 2048) });
+	const footer = [message.footer, message.categoryLabel].filter(Boolean).join(' · ');
+	if (footer) embed.setFooter({ text: footer.slice(0, 2048) });
 	embed.setTimestamp(message.timestamp ? new Date(message.timestamp) : new Date());
 	return embed;
 }
@@ -1125,7 +1154,17 @@ export function createExecutor(client) {
 				error.code = RESTJSONErrorCodes.UnknownChannel;
 				throw error;
 			}
-			await channel.send({ embeds: [toEmbed(message)], files: toFiles(message.files), allowedMentions: { parse: [] } });
+			// The person behind the log as the embed author (avatar), when only their ID is known
+			let full = message;
+			if (!message.author && /^\d{17,20}$/.test(String(message.authorId ?? ''))) {
+				const user = await client.users.fetch(message.authorId).catch(() => null);
+				if (user) full = { ...message, author: { name: `${user.globalName ?? user.username} (@${user.username})`, iconUrl: user.displayAvatarURL({ size: 128 }) } };
+			}
+			if (!message.thumbnail && /^\d{17,20}$/.test(String(message.thumbnailUserId ?? ''))) {
+				const user = await client.users.fetch(message.thumbnailUserId).catch(() => null);
+				if (user) full = { ...full, thumbnail: user.displayAvatarURL({ size: 256 }) };
+			}
+			await channel.send({ embeds: [toEmbed(full)], files: toFiles(message.files), allowedMentions: { parse: [] } });
 		},
 
 		async getTextChannel(guildId, channelId) {

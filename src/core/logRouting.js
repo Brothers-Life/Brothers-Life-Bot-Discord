@@ -75,6 +75,11 @@ export function createLogRouting({ db, executor, network, audit, logger = consol
 		}
 	}
 
+	// "Rangs et permissions" for the footer of a log, the type label when there is one
+	function shortLabel(category) {
+		return categories.get(category)?.label?.replace(/\s*\(.*\)$/, '') ?? category;
+	}
+
 	// The type route wins over the category route (a disabled type route = that type is not logged)
 	function activeRoute(guildId, category, type = null) {
 		const row = (type && q.route.get(guildId, `${category}:${type}`)) || q.route.get(guildId, category);
@@ -87,6 +92,8 @@ export function createLogRouting({ db, executor, network, audit, logger = consol
 		const target = guildId ?? mainId;
 		const sent = [];
 		if (!target) return sent;
+		// The category (emoji, footer) travels with the message
+		message = { categoryLabel: shortLabel(category), ...message, category, type };
 
 		const channelId = activeRoute(target, category, type);
 		if (channelId) {
