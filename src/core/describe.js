@@ -99,6 +99,7 @@ const TITLES = {
 	'embeds.edit': 'Embed modifié',
 	'embeds.delete': 'Embed supprimé',
 	'music.play': 'Musique ajoutée',
+	'music.join': 'Bot appelé en vocal (lecteur ouvert)',
 	'music.skip': 'Musique passée',
 	'music.stop': 'Musique arrêtée',
 	'music.config': 'Réglages de la musique modifiés',

@@ -40,7 +40,9 @@ export function musicPayload(view) {
 	const track = view.current;
 	const embed = new EmbedBuilder().setColor(view.paused ? 0x4f545c : 0xff9628);
 	if (!track) {
-		embed.setDescription('La file est terminée. Ajoute de la musique avec `/musique jouer`.');
+		embed.setDescription(view.queue?.length
+			? 'La file est terminée. Clique sur ➕ **Ajouter** pour chercher un titre ou coller un lien.'
+			: '🎧 **Lecteur prêt.** Clique sur ➕ **Ajouter** pour chercher un titre ou coller un lien (YouTube, Spotify, SoundCloud), ou lance une playlist avec `/musique playlist jouer`.');
 	}
 	else {
 		embed.setAuthor({ name: view.loading ? '⏳ Chargement…' : view.paused ? '⏸️ En pause' : '🎶 En cours' })

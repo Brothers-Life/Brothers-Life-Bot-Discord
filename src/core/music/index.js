@@ -200,20 +200,26 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 
 	// Adds tracks to the queue (joining the voice channel first if needed). The now-playing message goes
 	// into the chat of the voice channel; the channel where the music was asked for is the fallback.
-	async function enqueue(ctx, guildId, found, { channelId = ctx.voiceChannelId, textChannelId = ctx.textChannelId ?? null, next = false, now: playNow = false, label = null, playlist = null } = {}) {
+	// The player of this server, joining the voice channel first if the bot is not there yet
+	async function ensurePlayer(guildId, channelId, textChannelId) {
 		let player = players.get(guildId);
-		const cfg = config();
 		if (!player) {
 			await backend.join(guildId, channelId).catch((error) => { throw new ValidationError(error.message); });
 			player = {
 				guildId, channelId, textChannelId: channelId, fallbackTextChannelId: textChannelId,
-				queue: [], index: 0, loop: 'off', volume: cfg.defaultVolume, speed: 1, filters: new Set(), paused: false, messageId: null, idleSince: null, loading: false,
+				queue: [], index: 0, loop: 'off', volume: config().defaultVolume, speed: 1, filters: new Set(), paused: false, messageId: null, idleSince: null, loading: false,
 			};
 			players.set(guildId, player);
 		}
 		else if (textChannelId && !player.fallbackTextChannelId) {
 			player.fallbackTextChannelId = textChannelId;
 		}
+		return player;
+	}
+
+	async function enqueue(ctx, guildId, found, { channelId = ctx.voiceChannelId, textChannelId = ctx.textChannelId ?? null, next = false, now: playNow = false, label = null, playlist = null } = {}) {
+		const player = await ensurePlayer(guildId, channelId, textChannelId);
+		const cfg = config();
 		const room = cfg.maxQueue - (player.queue.length - player.index);
 		if (room <= 0) throw new ValidationError(`La file est pleine (${cfg.maxQueue} titres).`);
 		// Fresh queue entries (a track coming from a playlist or the history has no id, error or requester of its own)
@@ -274,6 +280,21 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 			const found = await resolver.resolve(text).catch((error) => { throw error instanceof ValidationError ? error : new ValidationError(error.message); });
 			if (!found.tracks.length) throw new ValidationError('Rien trouvé pour cette recherche.');
 			return enqueue(ctx, guildId, found.tracks, { ...options, label: found.playlist?.title, playlist: found.playlist ?? null });
+		},
+
+		// The bot comes into the voice channel with an empty queue and posts its player, to search and add from there.
+		// Already there: the player message comes back to the bottom of the chat.
+		async join(ctx, guildId, { channelId = ctx.voiceChannelId, textChannelId = ctx.textChannelId ?? null } = {}) {
+			checkBefore(ctx, guildId, { channelId });
+			const existing = players.get(guildId);
+			const player = await ensurePlayer(guildId, channelId, textChannelId);
+			if (!existing) {
+				// Nothing asked within the idle delay: it leaves like after the end of a queue
+				player.idleSince = now();
+				record(ctx, guildId, 'join');
+			}
+			emit(guildId);
+			return { joined: !existing, state: view(player) };
 		},
 
 		// A saved playlist, in the queue

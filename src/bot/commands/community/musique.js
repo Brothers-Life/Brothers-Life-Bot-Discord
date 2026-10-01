@@ -8,8 +8,8 @@ export const data = new SlashCommandBuilder()
 	.setName('musique')
 	.setDescription('Musique en vocal : YouTube, Spotify, SoundCloud…')
 	.setContexts(InteractionContextType.Guild)
-	.addSubcommand(s => s.setName('jouer').setDescription('Jouer un titre ou une playlist (lien ou recherche)')
-		.addStringOption(o => o.setName('recherche').setDescription('Lien YouTube / Spotify / SoundCloud, ou titre à chercher').setRequired(true).setAutocomplete(true).setMaxLength(300))
+	.addSubcommand(s => s.setName('jouer').setDescription('Jouer un titre ou une playlist ; sans recherche, le bot vient en vocal avec son lecteur')
+		.addStringOption(o => o.setName('recherche').setDescription('Lien YouTube / Spotify / SoundCloud, ou titre à chercher (vide : ouvrir le lecteur)').setAutocomplete(true).setMaxLength(300))
 		.addStringOption(o => o.setName('quand').setDescription('Où le mettre dans la file').addChoices(
 			{ name: 'À la fin de la file', value: 'end' },
 			{ name: 'Juste après le titre en cours', value: 'next' },
@@ -105,8 +105,9 @@ export async function execute(interaction) {
 	const guildId = interaction.guildId;
 	if (group === 'playlist') return playlistCommand(interaction, sub);
 	// A link (or a pick from the suggestions) is played and said publicly; a search first shows its results, privately
-	const searching = sub === 'jouer' && !URL_LIKE.test(interaction.options.getString('recherche').trim());
-	await interaction.deferReply(sub === 'jouer' && !searching ? {} : { flags: MessageFlags.Ephemeral });
+	const query = sub === 'jouer' ? (interaction.options.getString('recherche') ?? '').trim() : '';
+	const publicReply = sub === 'jouer' && URL_LIKE.test(query);
+	await interaction.deferReply(publicReply ? {} : { flags: MessageFlags.Ephemeral });
 	try {
 		const ctx = await musicContext(interaction);
 		const state = () => music.state(guildId);
@@ -119,7 +120,8 @@ export async function execute(interaction) {
 		let reply;
 		switch (sub) {
 		case 'jouer':
-			return await interaction.editReply(await playOrPick(interaction, ctx, interaction.options.getString('recherche').trim(), interaction.options.getString('quand') ?? 'end'));
+			if (!query) return await interaction.editReply(await openPlayer(interaction, ctx));
+			return await interaction.editReply(await playOrPick(interaction, ctx, query, interaction.options.getString('quand') ?? 'end'));
 		case 'pause': reply = (await music.pause(ctx, guildId)).paused ? '⏸️ En pause.' : '▶️ Reprise.'; break;
 		case 'passer':
 			await music.skip(ctx, guildId, interaction.options.getInteger('nombre') ?? 1);
@@ -182,6 +184,18 @@ export async function execute(interaction) {
 		if (!(error instanceof AppError)) throw error;
 		await interaction.editReply({ content: `Impossible : ${error.message}` });
 	}
+}
+
+// No search: the bot joins the voice channel and posts its player (in the chat of the voice channel)
+async function openPlayer(interaction, ctx) {
+	const { music } = interaction.client.core;
+	const { joined, state } = await music.join(ctx, interaction.guildId);
+	const where = state.textChannelId ? `<#${state.textChannelId}>` : 'ce salon';
+	if (!music.config().announce) {
+		const payload = musicPayload(state);
+		return { content: joined ? `🎧 Je suis dans <#${state.channelId}>.` : null, ...payload };
+	}
+	return { content: `${joined ? `🎧 J’arrive dans <#${state.channelId}>.` : '🎧 Je suis déjà là.'} Le lecteur est dans ${where} : ➕ **Ajouter** pour chercher un titre, ou \`/musique jouer recherche:…\`.`, components: [] };
 }
 
 async function playlistCommand(interaction, sub) {

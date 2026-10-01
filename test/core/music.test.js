@@ -161,3 +161,25 @@ test('playlists: saved from the queue, personal or shared, played (shuffled or n
 	music.playlists.remove(member(ALICE), saved.id);
 	assert.equal(music.playlists.list(ALICE).length, 0);
 });
+
+test('join without music: the bot comes with its player, the first search starts it, and it leaves if nothing is asked', async () => {
+	const { music, member, backend, executor, advance } = await setup();
+	await assert.rejects(music.join(member(ALICE, { voiceChannelId: null }), MAIN), /salon vocal/);
+	const out = await music.join(member(ALICE), MAIN);
+	assert.equal(out.joined, true);
+	assert.equal(backend.joined.get(MAIN), VOICE);
+	assert.equal(out.state.connected, true);
+	assert.equal(out.state.current, null);
+	await new Promise(resolve => setTimeout(resolve, 5));
+	assert.equal(executor.musicMessages.at(-1).channelId, VOICE, 'player posted in the chat of the voice channel');
+	assert.equal((await music.join(member(BOB), MAIN)).joined, false, 'already there: nothing new');
+
+	await music.play(member(ALICE), MAIN, 'Titre A');
+	assert.equal(music.state(MAIN).current.title, 'Titre A', 'first track starts right away');
+
+	await music.stop(member(ALICE), MAIN);
+	await music.join(member(ALICE), MAIN);
+	advance(60 * 60_000);
+	await music.tick();
+	assert.equal(music.state(MAIN).connected, false, 'left after the idle delay with nothing to play');
+});
