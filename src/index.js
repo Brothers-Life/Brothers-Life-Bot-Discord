@@ -12,6 +12,7 @@ import { schemaVersion } from './db/migrate.js';
 import { createCore } from './core/context.js';
 import { createVersionService } from './core/versions.js';
 import { createBot } from './bot/client.js';
+import { setPanelUrl } from './bot/musicUi.js';
 import { createWebServer } from './web/server.js';
 import { createRuntime } from './runtime.js';
 
@@ -67,6 +68,7 @@ async function main() {
 	}
 
 	const bot = createBot({ dataDir: config.DATA_DIR });
+	setPanelUrl(config.WEB_PUBLIC_URL);
 	const core = createCore({ db, config, executor: bot.executor, logger });
 	const versions = createVersionService({
 		config,

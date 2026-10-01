@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parsePosition } from '../../src/bot/commands/community/musique.js';
-import { clock, musicPayload, queuePayload, watchUrl } from '../../src/bot/musicUi.js';
+import { clock, musicPayload, queuePayload, setPanelUrl, watchUrl } from '../../src/bot/musicUi.js';
 
 const track = { id: 1, title: 'One More Time', author: 'Daft Punk', url: 'https://www.youtube.com/watch?v=FGBhQbmPwH8', durationMs: 320_000, thumbnail: null, source: 'youtube', live: false, requestedBy: '100000000000000002' };
 
@@ -27,4 +27,14 @@ test('now-playing message: controls, clip link at the current time, queue pages'
 	assert.equal(watchUrl({ ...track, source: 'spotify', url: 'https://open.spotify.com/track/x' }), null, 'no clip before the YouTube match is known');
 	assert.deepEqual(musicPayload({ connected: false, ended: true, reason: 'file terminée' }).components, []);
 	assert.match(queuePayload(view).toJSON().description, /Aerodynamic/);
+});
+
+test('now-playing message: button to manage the music from the panel, on the right server', () => {
+	const view = { guildId: '900000000000000001', connected: true, current: track, position: 0, paused: false, volume: 80, speed: 1, loop: 'off', filters: [], index: 0, queue: [track], upcoming: [] };
+	setPanelUrl('');
+	assert.equal(musicPayload(view).components.flatMap(r => r.toJSON().components).some(b => b.label === 'Gérer sur le panel'), false);
+	setPanelUrl('https://panel.example.com:3001/');
+	const button = musicPayload(view).components.flatMap(r => r.toJSON().components).find(b => b.label === 'Gérer sur le panel');
+	assert.equal(button.url, 'https://panel.example.com:3001/music?guild=900000000000000001');
+	setPanelUrl(null);
 });

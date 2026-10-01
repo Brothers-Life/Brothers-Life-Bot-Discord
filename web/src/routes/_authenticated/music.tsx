@@ -23,6 +23,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Playlists, usePlaylists } from '@/features/music/playlists'
 
 export const Route = createFileRoute('/_authenticated/music')({
+  // ?guild= opens that server's player (link of the Discord control message)
+  validateSearch: (search: Record<string, unknown>): { guild?: string } => ({ guild: typeof search.guild === 'string' && /^\d{17,20}$/.test(search.guild) ? search.guild : undefined }),
   component: MusicPage,
 })
 
@@ -59,7 +61,8 @@ function youtubeId(track?: Track | null) {
 function MusicPage() {
   const { can } = useMe()
   const { data, isLoading } = useQuery({ queryKey: ['music'], queryFn: () => api<Payload>('/music'), refetchInterval: 15_000 })
-  const [selected, setSelected] = useState<string | null>(null)
+  const { guild: linked } = Route.useSearch()
+  const [selected, setSelected] = useState<string | null>(linked ?? null)
   const guild = data?.guilds.find((g) => g.id === selected) ?? data?.guilds.find((g) => g.state.connected) ?? data?.guilds[0]
 
   return (

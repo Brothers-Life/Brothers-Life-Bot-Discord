@@ -19,6 +19,12 @@ function bar(position, duration, size = 18) {
 	return `${'▬'.repeat(done)}🔘${'▬'.repeat(Math.max(0, size - done))}`;
 }
 
+// Panel address, for the "Gérer sur le panel" button (set once at startup)
+let panelUrl = null;
+export function setPanelUrl(url) {
+	panelUrl = /^https?:\/\//.test(url ?? '') ? url.replace(/\/+$/, '') : null;
+}
+
 // YouTube link at the current position ("watch the clip")
 export function watchUrl(track, position = 0) {
 	const url = track?.youtubeUrl ?? (track?.source === 'youtube' ? track.url : null);
@@ -87,8 +93,9 @@ export function musicPayload(view) {
 	const last = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('mu:save').setEmoji('💾').setLabel('Enregistrer en playlist').setStyle(ButtonStyle.Secondary).setDisabled(!view.queue?.length));
 	const watch = watchUrl(track, view.position);
 	if (watch) last.addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(watch).setLabel('Voir le clip').setEmoji('🎬'));
+	if (panelUrl) last.addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(`${panelUrl}/music${view.guildId ? `?guild=${view.guildId}` : ''}`).setLabel('Gérer sur le panel').setEmoji('🖥️'));
 	rows.push(last);
-	embed.setFooter({ text: '⏮ précédent · ⏯ pause · ⏭ suivant · ⏹ arrêter · 🔀 mélanger · 🔉🔊 volume · ➕ ajouter un titre · /musique pour tout le reste' });
+	embed.setFooter({ text: '⏮ précédent · ⏯ pause · ⏭ suivant · ⏹ arrêter · 🔀 mélanger · 🔉🔊 volume · ➕ ajouter un titre · /musique ou le panel pour tout le reste' });
 	return { embeds: [embed], components: rows };
 }
 
