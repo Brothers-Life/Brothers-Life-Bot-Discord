@@ -18,7 +18,7 @@ export const FONTS = {
 	'Permanent Marker': 'PermanentMarker-Regular.ttf',
 };
 let fontsReady = false;
-function registerFonts() {
+export function registerFonts() {
 	if (fontsReady) return;
 	for (const [family, file] of Object.entries(FONTS)) GlobalFonts.registerFromPath(path.join(FONTS_DIR, file), family);
 	fontsReady = true;

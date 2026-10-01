@@ -18,10 +18,12 @@ import { Route as AuthenticatedAuditRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedAutomodRouteImport } from './routes/_authenticated/automod'
 import { Route as AuthenticatedBackupsRouteImport } from './routes/_authenticated/backups'
 import { Route as AuthenticatedChangelogRouteImport } from './routes/_authenticated/changelog'
+import { Route as AuthenticatedChannelFeaturesRouteImport } from './routes/_authenticated/channel-features'
 import { Route as AuthenticatedCommandsRouteImport } from './routes/_authenticated/commands'
 import { Route as AuthenticatedConsoleRouteImport } from './routes/_authenticated/console'
 import { Route as AuthenticatedCustomCommandsRouteImport } from './routes/_authenticated/custom-commands'
 import { Route as AuthenticatedDmsRouteImport } from './routes/_authenticated/dms'
+import { Route as AuthenticatedEmbedsRouteImport } from './routes/_authenticated/embeds'
 import { Route as AuthenticatedEventsRouteImport } from './routes/_authenticated/events'
 import { Route as AuthenticatedFeedbackRouteImport } from './routes/_authenticated/feedback'
 import { Route as AuthenticatedFivemRouteImport } from './routes/_authenticated/fivem'
@@ -46,6 +48,7 @@ import { Route as AuthenticatedStatsRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedStreamsRouteImport } from './routes/_authenticated/streams'
 import { Route as AuthenticatedTemplatesRouteImport } from './routes/_authenticated/templates'
 import { Route as AuthenticatedTicketsRouteImport } from './routes/_authenticated/tickets'
+import { Route as AuthenticatedVerificationRouteImport } from './routes/_authenticated/verification'
 import { Route as AuthenticatedVersionsRouteImport } from './routes/_authenticated/versions'
 import { Route as AuthenticatedVoiceRouteImport } from './routes/_authenticated/voice'
 import { Route as AuthenticatedAnnouncementsIndexRouteImport } from './routes/_authenticated/announcements/index'
@@ -96,6 +99,12 @@ const AuthenticatedChangelogRoute = AuthenticatedChangelogRouteImport.update({
   path: '/changelog',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedChannelFeaturesRoute =
+  AuthenticatedChannelFeaturesRouteImport.update({
+    id: '/channel-features',
+    path: '/channel-features',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedCommandsRoute = AuthenticatedCommandsRouteImport.update({
   id: '/commands',
   path: '/commands',
@@ -115,6 +124,11 @@ const AuthenticatedCustomCommandsRoute =
 const AuthenticatedDmsRoute = AuthenticatedDmsRouteImport.update({
   id: '/dms',
   path: '/dms',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedEmbedsRoute = AuthenticatedEmbedsRouteImport.update({
+  id: '/embeds',
+  path: '/embeds',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedEventsRoute = AuthenticatedEventsRouteImport.update({
@@ -240,6 +254,12 @@ const AuthenticatedTicketsRoute = AuthenticatedTicketsRouteImport.update({
   path: '/tickets',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedVerificationRoute =
+  AuthenticatedVerificationRouteImport.update({
+    id: '/verification',
+    path: '/verification',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedVersionsRoute = AuthenticatedVersionsRouteImport.update({
   id: '/versions',
   path: '/versions',
@@ -277,10 +297,12 @@ export interface FileRoutesByFullPath {
   '/automod': typeof AuthenticatedAutomodRoute
   '/backups': typeof AuthenticatedBackupsRoute
   '/changelog': typeof AuthenticatedChangelogRoute
+  '/channel-features': typeof AuthenticatedChannelFeaturesRoute
   '/commands': typeof AuthenticatedCommandsRoute
   '/console': typeof AuthenticatedConsoleRoute
   '/custom-commands': typeof AuthenticatedCustomCommandsRoute
   '/dms': typeof AuthenticatedDmsRoute
+  '/embeds': typeof AuthenticatedEmbedsRoute
   '/events': typeof AuthenticatedEventsRoute
   '/feedback': typeof AuthenticatedFeedbackRoute
   '/fivem': typeof AuthenticatedFivemRoute
@@ -305,6 +327,7 @@ export interface FileRoutesByFullPath {
   '/streams': typeof AuthenticatedStreamsRoute
   '/templates': typeof AuthenticatedTemplatesRoute
   '/tickets': typeof AuthenticatedTicketsRoute
+  '/verification': typeof AuthenticatedVerificationRoute
   '/versions': typeof AuthenticatedVersionsRoute
   '/voice': typeof AuthenticatedVoiceRoute
   '/announcements/$id': typeof AuthenticatedAnnouncementsIdRoute
@@ -319,10 +342,12 @@ export interface FileRoutesByTo {
   '/automod': typeof AuthenticatedAutomodRoute
   '/backups': typeof AuthenticatedBackupsRoute
   '/changelog': typeof AuthenticatedChangelogRoute
+  '/channel-features': typeof AuthenticatedChannelFeaturesRoute
   '/commands': typeof AuthenticatedCommandsRoute
   '/console': typeof AuthenticatedConsoleRoute
   '/custom-commands': typeof AuthenticatedCustomCommandsRoute
   '/dms': typeof AuthenticatedDmsRoute
+  '/embeds': typeof AuthenticatedEmbedsRoute
   '/events': typeof AuthenticatedEventsRoute
   '/feedback': typeof AuthenticatedFeedbackRoute
   '/fivem': typeof AuthenticatedFivemRoute
@@ -347,6 +372,7 @@ export interface FileRoutesByTo {
   '/streams': typeof AuthenticatedStreamsRoute
   '/templates': typeof AuthenticatedTemplatesRoute
   '/tickets': typeof AuthenticatedTicketsRoute
+  '/verification': typeof AuthenticatedVerificationRoute
   '/versions': typeof AuthenticatedVersionsRoute
   '/voice': typeof AuthenticatedVoiceRoute
   '/': typeof AuthenticatedIndexRoute
@@ -364,10 +390,12 @@ export interface FileRoutesById {
   '/_authenticated/automod': typeof AuthenticatedAutomodRoute
   '/_authenticated/backups': typeof AuthenticatedBackupsRoute
   '/_authenticated/changelog': typeof AuthenticatedChangelogRoute
+  '/_authenticated/channel-features': typeof AuthenticatedChannelFeaturesRoute
   '/_authenticated/commands': typeof AuthenticatedCommandsRoute
   '/_authenticated/console': typeof AuthenticatedConsoleRoute
   '/_authenticated/custom-commands': typeof AuthenticatedCustomCommandsRoute
   '/_authenticated/dms': typeof AuthenticatedDmsRoute
+  '/_authenticated/embeds': typeof AuthenticatedEmbedsRoute
   '/_authenticated/events': typeof AuthenticatedEventsRoute
   '/_authenticated/feedback': typeof AuthenticatedFeedbackRoute
   '/_authenticated/fivem': typeof AuthenticatedFivemRoute
@@ -392,6 +420,7 @@ export interface FileRoutesById {
   '/_authenticated/streams': typeof AuthenticatedStreamsRoute
   '/_authenticated/templates': typeof AuthenticatedTemplatesRoute
   '/_authenticated/tickets': typeof AuthenticatedTicketsRoute
+  '/_authenticated/verification': typeof AuthenticatedVerificationRoute
   '/_authenticated/versions': typeof AuthenticatedVersionsRoute
   '/_authenticated/voice': typeof AuthenticatedVoiceRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
@@ -410,10 +439,12 @@ export interface FileRouteTypes {
     | '/automod'
     | '/backups'
     | '/changelog'
+    | '/channel-features'
     | '/commands'
     | '/console'
     | '/custom-commands'
     | '/dms'
+    | '/embeds'
     | '/events'
     | '/feedback'
     | '/fivem'
@@ -438,6 +469,7 @@ export interface FileRouteTypes {
     | '/streams'
     | '/templates'
     | '/tickets'
+    | '/verification'
     | '/versions'
     | '/voice'
     | '/announcements/$id'
@@ -452,10 +484,12 @@ export interface FileRouteTypes {
     | '/automod'
     | '/backups'
     | '/changelog'
+    | '/channel-features'
     | '/commands'
     | '/console'
     | '/custom-commands'
     | '/dms'
+    | '/embeds'
     | '/events'
     | '/feedback'
     | '/fivem'
@@ -480,6 +514,7 @@ export interface FileRouteTypes {
     | '/streams'
     | '/templates'
     | '/tickets'
+    | '/verification'
     | '/versions'
     | '/voice'
     | '/'
@@ -496,10 +531,12 @@ export interface FileRouteTypes {
     | '/_authenticated/automod'
     | '/_authenticated/backups'
     | '/_authenticated/changelog'
+    | '/_authenticated/channel-features'
     | '/_authenticated/commands'
     | '/_authenticated/console'
     | '/_authenticated/custom-commands'
     | '/_authenticated/dms'
+    | '/_authenticated/embeds'
     | '/_authenticated/events'
     | '/_authenticated/feedback'
     | '/_authenticated/fivem'
@@ -524,6 +561,7 @@ export interface FileRouteTypes {
     | '/_authenticated/streams'
     | '/_authenticated/templates'
     | '/_authenticated/tickets'
+    | '/_authenticated/verification'
     | '/_authenticated/versions'
     | '/_authenticated/voice'
     | '/_authenticated/'
@@ -602,6 +640,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedChangelogRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/channel-features': {
+      id: '/_authenticated/channel-features'
+      path: '/channel-features'
+      fullPath: '/channel-features'
+      preLoaderRoute: typeof AuthenticatedChannelFeaturesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/commands': {
       id: '/_authenticated/commands'
       path: '/commands'
@@ -628,6 +673,13 @@ declare module '@tanstack/react-router' {
       path: '/dms'
       fullPath: '/dms'
       preLoaderRoute: typeof AuthenticatedDmsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/embeds': {
+      id: '/_authenticated/embeds'
+      path: '/embeds'
+      fullPath: '/embeds'
+      preLoaderRoute: typeof AuthenticatedEmbedsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/events': {
@@ -798,6 +850,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTicketsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/verification': {
+      id: '/_authenticated/verification'
+      path: '/verification'
+      fullPath: '/verification'
+      preLoaderRoute: typeof AuthenticatedVerificationRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/versions': {
       id: '/_authenticated/versions'
       path: '/versions'
@@ -843,10 +902,12 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAutomodRoute: typeof AuthenticatedAutomodRoute
   AuthenticatedBackupsRoute: typeof AuthenticatedBackupsRoute
   AuthenticatedChangelogRoute: typeof AuthenticatedChangelogRoute
+  AuthenticatedChannelFeaturesRoute: typeof AuthenticatedChannelFeaturesRoute
   AuthenticatedCommandsRoute: typeof AuthenticatedCommandsRoute
   AuthenticatedConsoleRoute: typeof AuthenticatedConsoleRoute
   AuthenticatedCustomCommandsRoute: typeof AuthenticatedCustomCommandsRoute
   AuthenticatedDmsRoute: typeof AuthenticatedDmsRoute
+  AuthenticatedEmbedsRoute: typeof AuthenticatedEmbedsRoute
   AuthenticatedEventsRoute: typeof AuthenticatedEventsRoute
   AuthenticatedFeedbackRoute: typeof AuthenticatedFeedbackRoute
   AuthenticatedFivemRoute: typeof AuthenticatedFivemRoute
@@ -871,6 +932,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedStreamsRoute: typeof AuthenticatedStreamsRoute
   AuthenticatedTemplatesRoute: typeof AuthenticatedTemplatesRoute
   AuthenticatedTicketsRoute: typeof AuthenticatedTicketsRoute
+  AuthenticatedVerificationRoute: typeof AuthenticatedVerificationRoute
   AuthenticatedVersionsRoute: typeof AuthenticatedVersionsRoute
   AuthenticatedVoiceRoute: typeof AuthenticatedVoiceRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
@@ -886,10 +948,12 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAutomodRoute: AuthenticatedAutomodRoute,
   AuthenticatedBackupsRoute: AuthenticatedBackupsRoute,
   AuthenticatedChangelogRoute: AuthenticatedChangelogRoute,
+  AuthenticatedChannelFeaturesRoute: AuthenticatedChannelFeaturesRoute,
   AuthenticatedCommandsRoute: AuthenticatedCommandsRoute,
   AuthenticatedConsoleRoute: AuthenticatedConsoleRoute,
   AuthenticatedCustomCommandsRoute: AuthenticatedCustomCommandsRoute,
   AuthenticatedDmsRoute: AuthenticatedDmsRoute,
+  AuthenticatedEmbedsRoute: AuthenticatedEmbedsRoute,
   AuthenticatedEventsRoute: AuthenticatedEventsRoute,
   AuthenticatedFeedbackRoute: AuthenticatedFeedbackRoute,
   AuthenticatedFivemRoute: AuthenticatedFivemRoute,
@@ -914,6 +978,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedStreamsRoute: AuthenticatedStreamsRoute,
   AuthenticatedTemplatesRoute: AuthenticatedTemplatesRoute,
   AuthenticatedTicketsRoute: AuthenticatedTicketsRoute,
+  AuthenticatedVerificationRoute: AuthenticatedVerificationRoute,
   AuthenticatedVersionsRoute: AuthenticatedVersionsRoute,
   AuthenticatedVoiceRoute: AuthenticatedVoiceRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,

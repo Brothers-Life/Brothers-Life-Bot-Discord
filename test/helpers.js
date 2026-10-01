@@ -458,6 +458,22 @@ export function createFakeExecutor() {
 			this.musicMessages.push({ channelId, messageId, view });
 			return messageId ?? '890000000000000001';
 		},
+		reactions: [],
+		async react(channelId, messageId, emoji) { this.reactions.push([channelId, messageId, emoji]); },
+		crossposted: [],
+		async crosspost(channelId, messageId) { this.crossposted.push([channelId, messageId]); },
+		temporary: [],
+		async sendTemporary(channelId, content) { this.temporary.push({ channelId, content }); return '880000000000000999'; },
+		verificationPanels: [],
+		async publishVerificationPanel(channelId, messageId, config) {
+			this.verificationPanels.push({ channelId, messageId, config });
+			return messageId ?? '881000000000000001';
+		},
+		builtMessages: [],
+		async upsertBuiltMessage(channelId, messageId, payload) {
+			this.builtMessages.push({ channelId, messageId, payload });
+			return messageId ?? String(882000000000000000n + BigInt(this.builtMessages.length));
+		},
 		logPacks: [],
 		async createLogChannels(guildId, { categoryName, channels: names, staffRoleIds }) {
 			this.logPacks.push({ guildId, categoryName, names, staffRoleIds });

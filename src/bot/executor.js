@@ -10,6 +10,7 @@ import { fivemPayload } from './fivemUi.js';
 import { rpEventPayload } from './rpEventsUi.js';
 import { absencePayload } from './absencesUi.js';
 import { musicPayload } from './musicUi.js';
+import { builtPayload, verificationPanelPayload } from './channelsUi.js';
 
 const COLORS = {
 	info: 0x5865f2,
@@ -336,6 +337,53 @@ export function createExecutor(client) {
 		async announceGiveawayWinners(channelId, messageId, data) {
 			const channel = await client.channels.fetch(channelId);
 			await channel.send({ ...winnersPayload(data), reply: { messageReference: messageId, failIfNotExists: false } });
+		},
+
+		// --- Automatic channels, verification, embed builder ---------------------------------
+		async react(channelId, messageId, emoji) {
+			const channel = await client.channels.fetch(channelId);
+			await (await channel.messages.fetch(messageId)).react(emoji);
+		},
+
+		// Announcement channel: pushed to the servers that follow it
+		async crosspost(channelId, messageId) {
+			const channel = await client.channels.fetch(channelId);
+			const message = await channel.messages.fetch(messageId);
+			if (message.crosspostable) await message.crosspost();
+		},
+
+		// A short notice, deleted after a few seconds
+		async sendTemporary(channelId, content, ms = 6000) {
+			const channel = await client.channels.fetch(channelId);
+			const message = await channel.send({ content, allowedMentions: { users: [...content.matchAll(/<@(\d+)>/g)].map(m => m[1]) } });
+			setTimeout(() => message.delete().catch(() => null), ms).unref?.();
+			return message.id;
+		},
+
+		async publishVerificationPanel(channelId, messageId, config) {
+			const channel = await client.channels.fetch(channelId);
+			const payload = verificationPanelPayload(config);
+			if (messageId) {
+				const existing = await channel.messages.fetch(messageId).catch(() => null);
+				if (existing) {
+					await existing.edit(payload);
+					return messageId;
+				}
+			}
+			return (await channel.send(payload)).id;
+		},
+
+		async upsertBuiltMessage(channelId, messageId, payload) {
+			const channel = await client.channels.fetch(channelId);
+			const data = builtPayload(payload);
+			if (messageId) {
+				const existing = await channel.messages.fetch(messageId).catch(() => null);
+				if (existing) {
+					await existing.edit(data);
+					return messageId;
+				}
+			}
+			return (await channel.send({ ...data, allowedMentions: { parse: [] } })).id;
 		},
 
 		// --- Music -----------------------------------------------------------------------------

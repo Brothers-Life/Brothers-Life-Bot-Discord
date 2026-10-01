@@ -25,6 +25,7 @@ export const COMMANDS = [
 	{ name: 'raid', category: 'Modération', description: 'Activer ou arrêter le mode raid', permissions: ['antiraid.manage'] },
 	{ name: 'ticket', category: 'Tickets', description: 'Gérer le ticket du salon : ajouter, statut, priorité, transférer, fermer…', permissions: ['tickets.handle'] },
 	{ name: 'musique', category: 'Communauté', description: 'Musique en vocal (YouTube, Spotify…) : jouer, file, volume, vitesse, position, boucle, effets', permissions: ['music.use'] },
+	{ name: 'embed', category: 'Communauté', description: 'Créer ou modifier un embed (le panel permet plusieurs embeds et des boutons)', permissions: ['embeds.manage'] },
 	{ name: 'stats', category: 'Communauté', description: 'Statistiques du serveur, d’un membre, classements', permissions: [] },
 	{ name: 'changelog', category: 'Communauté', description: 'Voir les dernières nouveautés', permissions: [] },
 	{ name: 'sondage', category: 'Communauté', description: 'Créer un sondage rapide, fermer un sondage', permissions: ['polls.manage'] },
