@@ -117,7 +117,15 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const archives = createArchives({ db, network, audit, executor, dataDir: config.DATA_DIR });
 	logs.registerCategory('archives', 'Archives de salons');
 	const meetings = createMeetings({ db, network, ranks, audit, executor, logs, logger });
-	const fivemData = createFivemData({ audit, settings, logger });
+	// The crossed FiveM stats compare play time with the Discord activity the bot records
+	const discordActivity = db.prepare('SELECT user_id, day, SUM(messages) AS messages, SUM(voice_seconds) AS voice_seconds FROM stats_activity WHERE day >= ? GROUP BY user_id, day');
+	const fivemData = createFivemData({ audit, settings, logger, discord: {
+		activity: sinceDay => discordActivity.all(sinceDay),
+		members: async () => {
+			const mainId = network.getMainId();
+			return mainId ? new Set((await executor.listMembers(mainId)).filter(m => !m.bot).map(m => m.id)) : null;
+		},
+	} });
 	const fivemRoles = createFivemRoles({ fivemData, settings, executor, network, audit, logs, logger });
 	const dms = createDms({ db, audit, executor, settings, logs, uploads, logger });
 	const templates = createTemplates({ db, network, audit, executor, events, automod, tickets, logs, settings, logger });

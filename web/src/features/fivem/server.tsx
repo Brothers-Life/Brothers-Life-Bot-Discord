@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, Tooltip, XAxis, YAxis } from 'recharts'
 import { Banknote, Car, ChevronDown, Clock, Coins, Gavel, Landmark, MapPin, ShieldCheck, Siren, TrendingUp, Users, Warehouse, Wrench } from 'lucide-react'
 import { api, errorMessage } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -9,6 +9,8 @@ import { EmptyState, Notice, Pill, Section, StatCards } from '@/components/app/u
 import { Skeleton } from '@/components/ui/skeleton'
 import { count, hours, money, plural } from './format'
 import type { Job, ServerReport } from './types'
+import { Bars, Chart } from './charts'
+import { WEEK, axis, shortDay, tooltip } from './chart-style'
 
 export function useServerReport() {
   return useQuery({ queryKey: ['fivem-server'], queryFn: () => api<ServerReport>('/fivem-data/server'), retry: false, staleTime: 60_000, refetchInterval: 120_000 })
@@ -21,41 +23,6 @@ export function ServerTab({ children }: { children: (report: ServerReport) => Re
   if (!data) return <Skeleton className='h-96 w-full' />
   return <div className='grid grid-cols-[minmax(0,1fr)] gap-6'>{children(data)}</div>
 }
-
-const shortDay = (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}`
-const axis = { stroke: 'var(--muted-foreground)', fontSize: 12, tickLine: false, axisLine: false }
-const tooltip = {
-  contentStyle: { background: 'var(--popover)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--popover-foreground)', fontSize: 12 },
-  labelFormatter: (label: unknown) => shortDay(String(label)),
-}
-
-function Chart({ title, children, className }: { title: string; children: React.ReactElement; className?: string }) {
-  return (
-    <div className={cn('rounded-lg border bg-card p-4', className)}>
-      <h3 className='mb-3 text-sm font-semibold'>{title}</h3>
-      <div className='h-60'><ResponsiveContainer>{children}</ResponsiveContainer></div>
-    </div>
-  )
-}
-
-// A ranked list with a proportional bar behind each line
-function Bars({ rows, format = count, tone = 'bg-primary/20' }: { rows: { key: string; label: React.ReactNode; value: number }[]; format?: (n: number) => string; tone?: string }) {
-  const max = Math.max(1, ...rows.map((r) => r.value))
-  if (!rows.length) return <EmptyState title='Rien pour l’instant' />
-  return (
-    <ul className='grid gap-1 p-3'>
-      {rows.map((r) => (
-        <li key={r.key} className='relative flex items-center gap-2 overflow-hidden rounded-md px-2 py-1.5 text-sm'>
-          <span className={cn('absolute inset-y-0 start-0 rounded-md', tone)} style={{ width: `${(r.value / max) * 100}%` }} aria-hidden />
-          <span className='relative min-w-0 flex-1 truncate'>{r.label}</span>
-          <span className='relative font-medium tabular-nums'>{format(r.value)}</span>
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-const WEEK = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
 
 export function ActivityTab({ r }: { r: ServerReport }) {
   const a = r.activity

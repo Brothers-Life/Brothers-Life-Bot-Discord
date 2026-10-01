@@ -107,7 +107,7 @@ const statTones: Record<Tone, string> = {
 }
 export function StatCards({ items, className }: { items: Stat[]; className?: string }) {
   return (
-    <div className={cn('stagger grid gap-3 sm:grid-cols-2 lg:grid-cols-4', className)}>
+    <div className={cn('stagger grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-4', className)}>
       {items.map(({ label, value, tone = 'neutral', icon: Icon, hint }) => (
         <div key={label} className={cn('flex items-center gap-3 rounded-lg border bg-card px-4 py-3 transition-colors hover:border-brand/40', statTones[tone])}>
           {Icon && <span className='stat-icon grid size-10 shrink-0 place-items-center rounded-lg' aria-hidden><Icon className='size-5' /></span>}

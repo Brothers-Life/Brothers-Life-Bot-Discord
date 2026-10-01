@@ -3,6 +3,7 @@ import { definePermission } from './permissions.js';
 import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
 import { LOG_SOURCES, sourceSelect, unix } from './fivem/logSources.js';
 import { serverReport } from './fivem/serverReport.js';
+import { insightsReport } from './fivem/insights.js';
 
 definePermission('fivemdata.view', { label: 'Voir les fiches joueurs FiveM (personnages, métier, temps de jeu, sanctions en jeu)', category: 'FiveM' });
 definePermission('fivemdata.economy', { label: 'Voir l’argent, la banque et la boutique premium des joueurs FiveM', category: 'FiveM' });
@@ -39,7 +40,8 @@ export function normalizeDbConfig(input = {}, previous = {}) {
 
 // Read-only access to the FiveM (Qbox) database: player sheets for the staff, from the panel and the bot.
 // Only SELECT queries; tables that do not exist on this server are simply skipped.
-export function createFivemData({ audit, settings, logger = console, now = Date.now, createPool = mysql.createPool }) {
+// discord: { activity(sinceDay) -> rows of the bot's Discord stats, members() -> ids on the main server } for the crossed stats
+export function createFivemData({ audit, settings, logger = console, now = Date.now, createPool = mysql.createPool, discord = null }) {
 	let pool = null;
 	let poolKey = null;
 	let tables = null;
@@ -471,6 +473,12 @@ export function createFivemData({ audit, settings, logger = console, now = Date.
 				gangs: [...groups.entries()].filter(([, g]) => g.type === 'gang').map(([name, g]) => ({ name, label: g.label, grades: Object.entries(g.grades ?? {}).map(([grade, v]) => ({ grade: Number(grade), name: v?.name ?? grade })) })),
 				staff: staff.map(s => ({ name: s.name, label: s.label })),
 			};
+		},
+
+		// Crossed statistics: attendance, retention, staff coverage, wealth, justice, phone, and Discord activity of the players
+		async insights(actor) {
+			need(actor, 'fivemdata.view');
+			return insightsReport({ query, when, groupsMap, canMoney: actor.can('fivemdata.economy'), discordActivity: discord?.activity, discordMembers: discord?.members, now });
 		},
 
 		// The whole server: activity, jobs and gangs, vehicles, justice, world, staff, economy

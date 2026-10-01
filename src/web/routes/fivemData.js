@@ -42,6 +42,11 @@ export function registerFivemDataRoutes(app, { core }) {
 	}, async (request) => fivemData.gameLogs(request.actor, { search: request.query.q ?? '', source: request.query.source ?? '', before: request.query.before ?? null }));
 	app.get('/api/fivem-data/log-sources', { config: { permission: 'fivemdata.logs' } }, async request => fivemData.logSources(request.actor));
 	app.get('/api/fivem-data/server', { config: { permission: 'fivemdata.view' } }, async request => fivemData.server(request.actor));
+	app.get('/api/fivem-data/insights', { config: { permission: 'fivemdata.view' } }, async (request) => {
+		const report = await fivemData.insights(request.actor);
+		const names = await resolveNames(executor, report.discord.crossed.map(c => c.discordId));
+		return { ...report, discord: { ...report.discord, crossed: report.discord.crossed.map(c => ({ ...c, discord: names.get(c.discordId) ?? null })) } };
+	});
 
 	// Discord roles checked against the game
 	const { fivemRoles } = core;

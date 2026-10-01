@@ -2,7 +2,7 @@ import { useDeferredValue, useState } from 'react'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Activity, ArrowLeft, Backpack, Banknote, Briefcase, Link2, Car, Clock, Database, Gamepad2, Gavel, HeartPulse, IdCard, Search, Settings, ShieldCheck, Siren, Wallet, Users,
+  Activity, ArrowLeft, Backpack, Banknote, Briefcase, ChartNoAxesCombined, Link2, Car, Clock, Database, Gamepad2, Gavel, HeartPulse, IdCard, Search, Settings, ShieldCheck, Siren, Wallet, Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, errorMessage } from '@/lib/api'
@@ -22,10 +22,11 @@ import type { Character, Item, Overview, Sheet, Summary } from '@/features/fivem
 import { ActivityTab, EconomyTab, JobsTab, JusticeTab, ServerTab, StaffTab, VehiclesTab, WorldTab } from '@/features/fivem/server'
 import { GameLogs } from '@/features/fivem/logs'
 import { RolesTab } from '@/features/fivem/roles'
+import { InsightsTab } from '@/features/fivem/insights'
 import { PlayerActivityChart, PlayerPhone, PlayerPolice, PlayerShop, PlayerStaff, PlayerWork } from '@/features/fivem/player-extras'
 import { hasPoliceTab, hasStaffTab, hasWorkTab } from '@/features/fivem/sheet'
 
-const TABS = ['players', 'activity', 'jobs', 'vehicles', 'justice', 'world', 'staff', 'economy', 'roles', 'logs'] as const
+const TABS = ['players', 'stats', 'activity', 'jobs', 'vehicles', 'justice', 'world', 'staff', 'economy', 'roles', 'logs'] as const
 type Tab = (typeof TABS)[number]
 
 export const Route = createFileRoute('/_authenticated/fivem-players')({
@@ -91,6 +92,7 @@ function Directory({ tab, onTab, onOpen }: { tab: Tab; onTab: (tab: Tab) => void
       <Tabs value={tab} onValueChange={(v) => onTab(v as Tab)}>
         <TabsList className='h-auto max-w-full flex-wrap justify-start [&>button]:h-8 [&>button]:flex-none'>
           <TabsTrigger value='players'><Users /> Joueurs</TabsTrigger>
+          <TabsTrigger value='stats'><ChartNoAxesCombined /> Statistiques</TabsTrigger>
           <TabsTrigger value='activity'><Activity /> Activité</TabsTrigger>
           <TabsTrigger value='jobs'><Briefcase /> Métiers et gangs</TabsTrigger>
           <TabsTrigger value='vehicles'><Car /> Véhicules</TabsTrigger>
@@ -102,6 +104,7 @@ function Directory({ tab, onTab, onOpen }: { tab: Tab; onTab: (tab: Tab) => void
           {can('fivemdata.logs') && <TabsTrigger value='logs'><Database /> Logs du jeu</TabsTrigger>}
         </TabsList>
         <TabsContent value='players' className='mt-4'><Players onOpen={onOpen} top={o?.topPlaytime ?? []} /></TabsContent>
+        <TabsContent value='stats' className='mt-4'><InsightsTab onOpen={onOpen} /></TabsContent>
         <TabsContent value='activity' className='mt-4'><ServerTab>{(r) => <ActivityTab r={r} />}</ServerTab></TabsContent>
         <TabsContent value='jobs' className='mt-4'><ServerTab>{(r) => <JobsTab r={r} economy={economy} />}</ServerTab></TabsContent>
         <TabsContent value='vehicles' className='mt-4'><ServerTab>{(r) => <VehiclesTab r={r} />}</ServerTab></TabsContent>
