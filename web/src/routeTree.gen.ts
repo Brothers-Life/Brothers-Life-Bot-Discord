@@ -14,11 +14,14 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedAbsencesRouteImport } from './routes/_authenticated/absences'
 import { Route as AuthenticatedAntiraidRouteImport } from './routes/_authenticated/antiraid'
+import { Route as AuthenticatedAppealsRouteImport } from './routes/_authenticated/appeals'
+import { Route as AuthenticatedArchivesRouteImport } from './routes/_authenticated/archives'
 import { Route as AuthenticatedAuditRouteImport } from './routes/_authenticated/audit'
 import { Route as AuthenticatedAutomodRouteImport } from './routes/_authenticated/automod'
 import { Route as AuthenticatedBackupsRouteImport } from './routes/_authenticated/backups'
 import { Route as AuthenticatedChangelogRouteImport } from './routes/_authenticated/changelog'
 import { Route as AuthenticatedChannelFeaturesRouteImport } from './routes/_authenticated/channel-features'
+import { Route as AuthenticatedChannelSchedulesRouteImport } from './routes/_authenticated/channel-schedules'
 import { Route as AuthenticatedCommandsRouteImport } from './routes/_authenticated/commands'
 import { Route as AuthenticatedConsoleRouteImport } from './routes/_authenticated/console'
 import { Route as AuthenticatedCustomCommandsRouteImport } from './routes/_authenticated/custom-commands'
@@ -79,6 +82,16 @@ const AuthenticatedAntiraidRoute = AuthenticatedAntiraidRouteImport.update({
   path: '/antiraid',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAppealsRoute = AuthenticatedAppealsRouteImport.update({
+  id: '/appeals',
+  path: '/appeals',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedArchivesRoute = AuthenticatedArchivesRouteImport.update({
+  id: '/archives',
+  path: '/archives',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedAuditRoute = AuthenticatedAuditRouteImport.update({
   id: '/audit',
   path: '/audit',
@@ -103,6 +116,12 @@ const AuthenticatedChannelFeaturesRoute =
   AuthenticatedChannelFeaturesRouteImport.update({
     id: '/channel-features',
     path: '/channel-features',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedChannelSchedulesRoute =
+  AuthenticatedChannelSchedulesRouteImport.update({
+    id: '/channel-schedules',
+    path: '/channel-schedules',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedCommandsRoute = AuthenticatedCommandsRouteImport.update({
@@ -293,11 +312,14 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/absences': typeof AuthenticatedAbsencesRoute
   '/antiraid': typeof AuthenticatedAntiraidRoute
+  '/appeals': typeof AuthenticatedAppealsRoute
+  '/archives': typeof AuthenticatedArchivesRoute
   '/audit': typeof AuthenticatedAuditRoute
   '/automod': typeof AuthenticatedAutomodRoute
   '/backups': typeof AuthenticatedBackupsRoute
   '/changelog': typeof AuthenticatedChangelogRoute
   '/channel-features': typeof AuthenticatedChannelFeaturesRoute
+  '/channel-schedules': typeof AuthenticatedChannelSchedulesRoute
   '/commands': typeof AuthenticatedCommandsRoute
   '/console': typeof AuthenticatedConsoleRoute
   '/custom-commands': typeof AuthenticatedCustomCommandsRoute
@@ -338,11 +360,14 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/absences': typeof AuthenticatedAbsencesRoute
   '/antiraid': typeof AuthenticatedAntiraidRoute
+  '/appeals': typeof AuthenticatedAppealsRoute
+  '/archives': typeof AuthenticatedArchivesRoute
   '/audit': typeof AuthenticatedAuditRoute
   '/automod': typeof AuthenticatedAutomodRoute
   '/backups': typeof AuthenticatedBackupsRoute
   '/changelog': typeof AuthenticatedChangelogRoute
   '/channel-features': typeof AuthenticatedChannelFeaturesRoute
+  '/channel-schedules': typeof AuthenticatedChannelSchedulesRoute
   '/commands': typeof AuthenticatedCommandsRoute
   '/console': typeof AuthenticatedConsoleRoute
   '/custom-commands': typeof AuthenticatedCustomCommandsRoute
@@ -386,11 +411,14 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_authenticated/absences': typeof AuthenticatedAbsencesRoute
   '/_authenticated/antiraid': typeof AuthenticatedAntiraidRoute
+  '/_authenticated/appeals': typeof AuthenticatedAppealsRoute
+  '/_authenticated/archives': typeof AuthenticatedArchivesRoute
   '/_authenticated/audit': typeof AuthenticatedAuditRoute
   '/_authenticated/automod': typeof AuthenticatedAutomodRoute
   '/_authenticated/backups': typeof AuthenticatedBackupsRoute
   '/_authenticated/changelog': typeof AuthenticatedChangelogRoute
   '/_authenticated/channel-features': typeof AuthenticatedChannelFeaturesRoute
+  '/_authenticated/channel-schedules': typeof AuthenticatedChannelSchedulesRoute
   '/_authenticated/commands': typeof AuthenticatedCommandsRoute
   '/_authenticated/console': typeof AuthenticatedConsoleRoute
   '/_authenticated/custom-commands': typeof AuthenticatedCustomCommandsRoute
@@ -435,11 +463,14 @@ export interface FileRouteTypes {
     | '/login'
     | '/absences'
     | '/antiraid'
+    | '/appeals'
+    | '/archives'
     | '/audit'
     | '/automod'
     | '/backups'
     | '/changelog'
     | '/channel-features'
+    | '/channel-schedules'
     | '/commands'
     | '/console'
     | '/custom-commands'
@@ -480,11 +511,14 @@ export interface FileRouteTypes {
     | '/login'
     | '/absences'
     | '/antiraid'
+    | '/appeals'
+    | '/archives'
     | '/audit'
     | '/automod'
     | '/backups'
     | '/changelog'
     | '/channel-features'
+    | '/channel-schedules'
     | '/commands'
     | '/console'
     | '/custom-commands'
@@ -527,11 +561,14 @@ export interface FileRouteTypes {
     | '/login'
     | '/_authenticated/absences'
     | '/_authenticated/antiraid'
+    | '/_authenticated/appeals'
+    | '/_authenticated/archives'
     | '/_authenticated/audit'
     | '/_authenticated/automod'
     | '/_authenticated/backups'
     | '/_authenticated/changelog'
     | '/_authenticated/channel-features'
+    | '/_authenticated/channel-schedules'
     | '/_authenticated/commands'
     | '/_authenticated/console'
     | '/_authenticated/custom-commands'
@@ -612,6 +649,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAntiraidRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/appeals': {
+      id: '/_authenticated/appeals'
+      path: '/appeals'
+      fullPath: '/appeals'
+      preLoaderRoute: typeof AuthenticatedAppealsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/archives': {
+      id: '/_authenticated/archives'
+      path: '/archives'
+      fullPath: '/archives'
+      preLoaderRoute: typeof AuthenticatedArchivesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/audit': {
       id: '/_authenticated/audit'
       path: '/audit'
@@ -645,6 +696,13 @@ declare module '@tanstack/react-router' {
       path: '/channel-features'
       fullPath: '/channel-features'
       preLoaderRoute: typeof AuthenticatedChannelFeaturesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/channel-schedules': {
+      id: '/_authenticated/channel-schedules'
+      path: '/channel-schedules'
+      fullPath: '/channel-schedules'
+      preLoaderRoute: typeof AuthenticatedChannelSchedulesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/commands': {
@@ -898,11 +956,14 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAbsencesRoute: typeof AuthenticatedAbsencesRoute
   AuthenticatedAntiraidRoute: typeof AuthenticatedAntiraidRoute
+  AuthenticatedAppealsRoute: typeof AuthenticatedAppealsRoute
+  AuthenticatedArchivesRoute: typeof AuthenticatedArchivesRoute
   AuthenticatedAuditRoute: typeof AuthenticatedAuditRoute
   AuthenticatedAutomodRoute: typeof AuthenticatedAutomodRoute
   AuthenticatedBackupsRoute: typeof AuthenticatedBackupsRoute
   AuthenticatedChangelogRoute: typeof AuthenticatedChangelogRoute
   AuthenticatedChannelFeaturesRoute: typeof AuthenticatedChannelFeaturesRoute
+  AuthenticatedChannelSchedulesRoute: typeof AuthenticatedChannelSchedulesRoute
   AuthenticatedCommandsRoute: typeof AuthenticatedCommandsRoute
   AuthenticatedConsoleRoute: typeof AuthenticatedConsoleRoute
   AuthenticatedCustomCommandsRoute: typeof AuthenticatedCustomCommandsRoute
@@ -944,11 +1005,14 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAbsencesRoute: AuthenticatedAbsencesRoute,
   AuthenticatedAntiraidRoute: AuthenticatedAntiraidRoute,
+  AuthenticatedAppealsRoute: AuthenticatedAppealsRoute,
+  AuthenticatedArchivesRoute: AuthenticatedArchivesRoute,
   AuthenticatedAuditRoute: AuthenticatedAuditRoute,
   AuthenticatedAutomodRoute: AuthenticatedAutomodRoute,
   AuthenticatedBackupsRoute: AuthenticatedBackupsRoute,
   AuthenticatedChangelogRoute: AuthenticatedChangelogRoute,
   AuthenticatedChannelFeaturesRoute: AuthenticatedChannelFeaturesRoute,
+  AuthenticatedChannelSchedulesRoute: AuthenticatedChannelSchedulesRoute,
   AuthenticatedCommandsRoute: AuthenticatedCommandsRoute,
   AuthenticatedConsoleRoute: AuthenticatedConsoleRoute,
   AuthenticatedCustomCommandsRoute: AuthenticatedCustomCommandsRoute,

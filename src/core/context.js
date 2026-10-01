@@ -12,6 +12,9 @@ import { createMemberInsights } from './memberInsights.js';
 import { createChannelFeatures } from './channelFeatures.js';
 import { createVerification } from './verification.js';
 import { createEmbedBuilder } from './embedBuilder.js';
+import { createAppeals } from './appeals.js';
+import { createChannelSchedules } from './channelSchedules.js';
+import { createArchives } from './archives.js';
 import { createRestrictions } from './restrictions.js';
 import { createModeration } from './moderation.js';
 import { createEvents } from './events.js';
@@ -105,6 +108,11 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const verification = createVerification({ db, network, audit, settings, executor, logs, logger });
 	const embedBuilder = createEmbedBuilder({ db, network, audit, executor });
 	logs.registerCategory('embeds', 'Créateur d’embeds (messages postés, modifiés)');
+	const appeals = createAppeals({ db, audit, settings, sanctions, executor, logs, logger });
+	const channelSchedules = createChannelSchedules({ db, network, audit, executor, logger });
+	logs.registerCategory('schedules', 'Horaires des salons (ouverture, fermeture)');
+	const archives = createArchives({ db, network, audit, executor, dataDir: config.DATA_DIR });
+	logs.registerCategory('archives', 'Archives de salons');
 	const dms = createDms({ db, audit, executor, settings, logs, uploads, logger });
 	const templates = createTemplates({ db, network, audit, executor, events, automod, tickets, logs, settings, logger });
 	const rpEvents = createRpEvents({ db, network, audit, executor, uploads, logger });
@@ -151,5 +159,5 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 		sanctions.syncGuild(guild.id).catch(error => logger.error(`Ban sync failed on ${guild.name}:`, error));
 	});
 
-	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, sanctionTemplates, music, memberInsights, channelFeatures, verification, embedBuilder, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents };
+	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, sanctionTemplates, music, memberInsights, channelFeatures, verification, embedBuilder, appeals, channelSchedules, archives, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents };
 }

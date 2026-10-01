@@ -47,6 +47,9 @@ import {
   Server,
   Eye,
   Cog,
+  Scale,
+  CalendarClock,
+  Archive,
 } from 'lucide-react'
 
 export type NavEntry = {
@@ -81,6 +84,7 @@ export const navSections: NavSection[] = [
       { title: 'Automod', url: '/automod', icon: ShieldAlert, permission: 'automod.view', keywords: 'spam filtre' },
       { title: 'Anti-raid', url: '/antiraid', icon: Siren, permission: 'antiraid.view' },
       { title: 'Vérification', url: '/verification', icon: ShieldCheck, permission: 'verification.view', keywords: 'captcha nouveaux robot' },
+      { title: 'Appels de sanction', url: '/appeals', icon: Scale, permission: 'appeals.view', keywords: 'appel débannir contester' },
     ],
   },
   {
@@ -108,6 +112,7 @@ export const navSections: NavSection[] = [
     icon: Hash,
     items: [
       { title: 'Salons automatiques', url: '/channel-features', icon: Hash, permission: 'channelfeatures.view', keywords: 'compteur un mot sticky publication média' },
+      { title: 'Horaires des salons', url: '/channel-schedules', icon: CalendarClock, permission: 'schedules.view', keywords: 'ouvrir fermer heure date programmer' },
       { title: 'Musique', url: '/music', icon: Music, permission: 'music.use', keywords: 'youtube spotify playlist' },
       { title: 'Vocaux perso', url: '/voice', icon: Headphones, permission: 'voice.view' },
       { title: 'Commandes', url: '/commands', icon: SquareSlash, permission: null, keywords: 'slash' },
@@ -146,6 +151,7 @@ export const navSections: NavSection[] = [
       { title: 'Événements', url: '/events', icon: Activity, permission: 'events.view', keywords: 'historique discord' },
       { title: 'Salons de logs', url: '/logs', icon: ScrollText, permission: 'logs.manage' },
       { title: 'Journal', url: '/audit', icon: History, permission: 'audit.view', keywords: 'audit' },
+      { title: 'Archives de salons', url: '/archives', icon: Archive, permission: 'archives.view', keywords: 'export sauvegarde html transcript' },
       { title: 'Sessions', url: '/sessions', icon: KeyRound, permission: null },
     ],
   },

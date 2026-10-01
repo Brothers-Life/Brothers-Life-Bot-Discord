@@ -11,6 +11,7 @@ import { rpEventPayload } from './rpEventsUi.js';
 import { absencePayload } from './absencesUi.js';
 import { musicPayload } from './musicUi.js';
 import { builtPayload, verificationPanelPayload } from './channelsUi.js';
+import { appealPayload } from './appealsUi.js';
 
 const COLORS = {
 	info: 0x5865f2,
@@ -337,6 +338,61 @@ export function createExecutor(client) {
 		async announceGiveawayWinners(channelId, messageId, data) {
 			const channel = await client.channels.fetch(channelId);
 			await channel.send({ ...winnersPayload(data), reply: { messageReference: messageId, failIfNotExists: false } });
+		},
+
+		// --- Opening hours, archives, appeals ------------------------------------------------
+		// closed: @everyone can no longer write (or no longer see the channel with hide); open: back to the category's rules
+		async setChannelAccess(channelId, { closed, hide = false }, reason) {
+			const channel = await client.channels.fetch(channelId);
+			const everyone = channel.guild.roles.everyone;
+			const perms = hide
+				? { ViewChannel: closed ? false : null }
+				: { SendMessages: closed ? false : null, SendMessagesInThreads: closed ? false : null, AddReactions: closed ? false : null, Connect: channel.isVoiceBased() ? (closed ? false : null) : undefined };
+			for (const key of Object.keys(perms)) if (perms[key] === undefined) delete perms[key];
+			await channel.permissionOverwrites.edit(everyone, perms, { reason });
+		},
+
+		// Messages of a channel, oldest first: the last `limit`, or those of a period
+		async fetchChannelHistory(channelId, { limit = 1000, from = null, to = null }) {
+			const channel = await client.channels.fetch(channelId);
+			if (!channel?.isTextBased()) throw new Error('Ce salon n’a pas de messages.');
+			const collected = [];
+			let before;
+			while (collected.length < limit) {
+				const batch = await channel.messages.fetch({ limit: 100, before });
+				if (!batch.size) break;
+				before = batch.last().id;
+				const list = [...batch.values()].filter(m => (!to || m.createdTimestamp <= to) && (!from || m.createdTimestamp >= from));
+				collected.push(...list);
+				if (from && batch.last().createdTimestamp < from) break;
+			}
+			const messages = collected.slice(0, limit).reverse().map(m => ({
+				id: m.id,
+				authorName: m.member?.displayName ?? m.author.globalName ?? m.author.username,
+				authorAvatar: m.author.displayAvatarURL({ size: 64 }),
+				bot: m.author.bot,
+				content: m.content,
+				createdAt: m.createdTimestamp,
+				editedAt: m.editedTimestamp,
+				replyTo: m.reference?.messageId ? (channel.messages.cache.get(m.reference.messageId)?.author.username ?? 'un message') : null,
+				attachments: [...m.attachments.values()].map(a => ({ name: a.name, url: a.url, contentType: a.contentType, size: a.size })),
+				embeds: m.embeds.map(e => ({ title: e.title, description: e.description, color: e.hexColor })),
+			}));
+			return { channelName: channel.name, messages };
+		},
+
+		async upsertAppealMessage(channelId, messageId, view, { pingRoleIds = [] } = {}) {
+			const channel = await client.channels.fetch(channelId);
+			const payload = appealPayload(view);
+			if (messageId) {
+				const existing = await channel.messages.fetch(messageId).catch(() => null);
+				if (existing) {
+					await existing.edit(payload);
+					return messageId;
+				}
+			}
+			const content = pingRoleIds.length ? pingRoleIds.map(id => `<@&${id}>`).join(' ') : undefined;
+			return (await channel.send({ ...payload, content, allowedMentions: { roles: pingRoleIds, users: [] } })).id;
 		},
 
 		// --- Automatic channels, verification, embed builder ---------------------------------
@@ -875,6 +931,16 @@ export function createExecutor(client) {
 		async sendDM(userId, content, files) {
 			const user = await client.users.fetch(userId);
 			await user.send({ content, files: toFiles(files), allowedMentions: { parse: [] } });
+		},
+
+		// The DM of a sanction, with its "Faire appel" button (customId appeal:open:<sanctionId>)
+		async sendSanctionDM(userId, content, sanctionId) {
+			const user = await client.users.fetch(userId);
+			await user.send({
+				content,
+				components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`appeal:open:${sanctionId}`).setLabel('Faire appel').setEmoji('⚖️').setStyle(ButtonStyle.Primary))],
+				allowedMentions: { parse: [] },
+			});
 		},
 
 		// --- Role permissions (names of PermissionFlagsBits) --------------------------------

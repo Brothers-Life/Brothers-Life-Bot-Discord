@@ -104,13 +104,22 @@ export function createSanctions({ db, audit, network, ranks, executor, restricti
 		return results;
 	}
 
-	async function dm(userId, type, reason, durationMs, profile) {
+	// Set by the appeals service: whether this kind of sanction can be appealed (a button in the DM)
+	let appealable = () => false;
+
+	async function dm(userId, type, reason, durationMs, profile, sanctionId) {
 		const what = type === 'restrict' && profile ? `${LABELS[type]} (${restrictions.getProfile(profile).label.toLowerCase()})` : LABELS[type];
 		const lines = [`Tu as été **${what}** sur le réseau Brothers Life.`];
 		if (reason) lines.push(`Raison : ${reason}`);
 		if (DURABLE.has(type)) lines.push(`Durée : ${formatDuration(durationMs)}`);
 		try {
-			await executor.sendDM(userId, lines.join('\n'));
+			if (appealable(type)) {
+				lines.push('', 'Tu penses que c’est une erreur ? Tu peux faire appel avec le bouton ci-dessous.');
+				await executor.sendSanctionDM(userId, lines.join('\n'), sanctionId);
+			}
+			else {
+				await executor.sendDM(userId, lines.join('\n'));
+			}
 		}
 		catch {
 			// Closed DMs are common: never block a sanction on it
@@ -160,7 +169,7 @@ export function createSanctions({ db, audit, network, ranks, executor, restricti
 		const id = Number(lastInsertRowid);
 
 		// DM first: after a ban or kick we may no longer share a server with them
-		if (source !== 'native') await dm(userId, type, reason, durationMs, profile);
+		if (source !== 'native') await dm(userId, type, reason, durationMs, profile, id);
 
 		const guilds = targetGuilds(scope, originGuildId).filter(g => g !== skipGuild);
 		const auditReason = `${reason || 'Sans raison'} (sanction #${id})`.slice(0, 500);
@@ -177,6 +186,10 @@ export function createSanctions({ db, audit, network, ranks, executor, restricti
 
 	const service = {
 		get: getOrThrow,
+
+		setAppealable(check) {
+			appealable = check;
+		},
 
 		list({ userId, type, active, guildId, before, limit = 50 } = {}) {
 			const params = { limit: Math.min(Math.max(Number(limit) || 50, 1), 200), now: now(), userId, type, guildId, before };

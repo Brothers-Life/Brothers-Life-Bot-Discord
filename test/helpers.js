@@ -200,6 +200,9 @@ export function createFakeExecutor() {
 		async sendDM(userId, content, files) {
 			this.dms.push([userId, content, files]);
 		},
+		async sendSanctionDM(userId, content, sanctionId) {
+			this.dms.push([userId, content, undefined, { appealSanctionId: sanctionId }]);
+		},
 		// Moderation commands
 		async purgeMessages(channelId, options) {
 			this.calls.push(['purge', channelId, options]);
@@ -457,6 +460,17 @@ export function createFakeExecutor() {
 		async upsertMusicMessage(channelId, messageId, view) {
 			this.musicMessages.push({ channelId, messageId, view });
 			return messageId ?? '890000000000000001';
+		},
+		access: [],
+		async setChannelAccess(channelId, state) { this.access.push({ channelId, ...state }); },
+		history: new Map(),
+		async fetchChannelHistory(channelId, { limit }) {
+			return { channelName: this.channels.get(channelId)?.name ?? 'salon', messages: (this.history.get(channelId) ?? []).slice(-limit) };
+		},
+		appealMessages: [],
+		async upsertAppealMessage(channelId, messageId, view, options = {}) {
+			this.appealMessages.push({ channelId, messageId, view, options });
+			return messageId ?? String(883000000000000000n + BigInt(this.appealMessages.length));
 		},
 		reactions: [],
 		async react(channelId, messageId, emoji) { this.reactions.push([channelId, messageId, emoji]); },

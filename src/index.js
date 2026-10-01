@@ -121,6 +121,8 @@ async function main() {
 		setInterval(() => core.streams.tick().catch(error => logger.error('Streams failed:', error)), 60_000),
 		// Music: leaves when alone or with nothing to play, refreshes the now-playing message
 		setInterval(() => core.music.tick().catch(error => logger.error('Music tick failed:', error)), 30_000),
+		// Channels opening or closing at set hours
+		setInterval(() => core.channelSchedules.tick().catch(error => logger.error('Channel schedules failed:', error)), 60_000),
 		// Newcomers not verified in time
 		setInterval(() => core.verification.tick().catch(error => logger.error('Verification tick failed:', error)), 60_000),
 		// Staff absences that start or end
