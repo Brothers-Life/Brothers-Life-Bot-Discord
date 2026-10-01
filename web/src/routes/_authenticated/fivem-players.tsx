@@ -2,7 +2,7 @@ import { useDeferredValue, useState } from 'react'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Activity, ArrowLeft, Backpack, Banknote, Briefcase, Car, Clock, Database, Gamepad2, Gavel, HeartPulse, IdCard, Search, Settings, ShieldCheck, Siren, Wallet, Users,
+  Activity, ArrowLeft, Backpack, Banknote, Briefcase, Link2, Car, Clock, Database, Gamepad2, Gavel, HeartPulse, IdCard, Search, Settings, ShieldCheck, Siren, Wallet, Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, errorMessage } from '@/lib/api'
@@ -21,10 +21,11 @@ import { hours, money } from '@/features/fivem/format'
 import type { Character, Item, Overview, Sheet, Summary } from '@/features/fivem/types'
 import { ActivityTab, EconomyTab, JobsTab, JusticeTab, ServerTab, StaffTab, VehiclesTab, WorldTab } from '@/features/fivem/server'
 import { GameLogs } from '@/features/fivem/logs'
+import { RolesTab } from '@/features/fivem/roles'
 import { PlayerActivityChart, PlayerPhone, PlayerPolice, PlayerShop, PlayerStaff, PlayerWork } from '@/features/fivem/player-extras'
 import { hasPoliceTab, hasStaffTab, hasWorkTab } from '@/features/fivem/sheet'
 
-const TABS = ['players', 'activity', 'jobs', 'vehicles', 'justice', 'world', 'staff', 'economy', 'logs'] as const
+const TABS = ['players', 'activity', 'jobs', 'vehicles', 'justice', 'world', 'staff', 'economy', 'roles', 'logs'] as const
 type Tab = (typeof TABS)[number]
 
 export const Route = createFileRoute('/_authenticated/fivem-players')({
@@ -97,6 +98,7 @@ function Directory({ tab, onTab, onOpen }: { tab: Tab; onTab: (tab: Tab) => void
           <TabsTrigger value='world'><Siren /> Carte</TabsTrigger>
           <TabsTrigger value='staff'><ShieldCheck /> Staff</TabsTrigger>
           {economy && <TabsTrigger value='economy'><Banknote /> Économie</TabsTrigger>}
+          {can('fivemdata.roles') && <TabsTrigger value='roles'><Link2 /> Rôles Discord</TabsTrigger>}
           {can('fivemdata.logs') && <TabsTrigger value='logs'><Database /> Logs du jeu</TabsTrigger>}
         </TabsList>
         <TabsContent value='players' className='mt-4'><Players onOpen={onOpen} top={o?.topPlaytime ?? []} /></TabsContent>
@@ -107,6 +109,7 @@ function Directory({ tab, onTab, onOpen }: { tab: Tab; onTab: (tab: Tab) => void
         <TabsContent value='world' className='mt-4'><ServerTab>{(r) => <WorldTab r={r} />}</ServerTab></TabsContent>
         <TabsContent value='staff' className='mt-4'><ServerTab>{(r) => <StaffTab r={r} />}</ServerTab></TabsContent>
         {economy && <TabsContent value='economy' className='mt-4'><ServerTab>{(r) => <EconomyTab r={r} />}</ServerTab></TabsContent>}
+        {can('fivemdata.roles') && <TabsContent value='roles' className='mt-4'><RolesTab onOpen={onOpen} /></TabsContent>}
         {can('fivemdata.logs') && <TabsContent value='logs' className='mt-4'><GameLogs /></TabsContent>}
       </Tabs>
     </div>

@@ -423,6 +423,56 @@ export function createFivemData({ audit, settings, logger = console, now = Date.
 			});
 		},
 
+		// Who holds what in game, per account: jobs and gangs (current and multi-job, with grade) and the staff role
+		// seen at the last admin-menu session. Used to check Discord roles against the game.
+		async memberships() {
+			const groups = await groupsMap();
+			const [users, chars, multi, staff] = await Promise.all([
+				query('SELECT userid, username, discord, license, license2 FROM users'),
+				query('SELECT userId, citizenid, charinfo, job, gang FROM players'),
+				when('player_groups', () => query('SELECT citizenid, `group` AS name, type, grade FROM player_groups')),
+				when('admindash_staff_sessions', () => query(`SELECT s.license, s.role_name, s.last_seen_at FROM admindash_staff_sessions s
+					JOIN (SELECT license, MAX(id) AS id FROM admindash_staff_sessions WHERE started_at > NOW() - INTERVAL 60 DAY GROUP BY license) last ON last.id = s.id`)),
+			]);
+			return users.map((u) => {
+				const own = chars.filter(c => c.userId === u.userid);
+				const held = new Map();
+				const add = (name, type, grade, holder) => {
+					if (!name || name === 'none' || name === 'unemployed') return;
+					const key = `${type}:${name}`;
+					const cur = held.get(key);
+					if (!cur || grade > cur.grade) held.set(key, { name, type, grade, label: groups.get(name)?.label ?? name, gradeLabel: groups.get(name)?.grades?.[grade]?.name ?? null, character: holder });
+				};
+				for (const c of own) {
+					const name = character(c, groups).name;
+					const job = json(c.job, {});
+					const gang = json(c.gang, {});
+					add(job.name, 'job', Number(job.grade?.level ?? job.grade ?? 0), name);
+					add(gang.name, 'gang', Number(gang.grade?.level ?? gang.grade ?? 0), name);
+					for (const g of multi.filter(m => m.citizenid === c.citizenid)) add(g.name, g.type === 'gang' ? 'gang' : 'job', Number(g.grade ?? 0), name);
+				}
+				const hash = l => String(l ?? '').replace(/^license2?:/, '');
+				const role = staff.find(s => [u.license, u.license2].some(l => l && hash(l) === hash(s.license)));
+				return {
+					userId: u.userid, username: u.username, discordId: u.discord?.replace(/^discord:/, '') ?? null,
+					groups: [...held.values()],
+					staff: role ? { name: role.role_name, lastSeen: ms(role.last_seen_at) } : null,
+				};
+			});
+		},
+
+		// Every job, gang and staff role of the game, to link them to Discord roles
+		async catalog(actor) {
+			need(actor, 'fivemdata.view');
+			const groups = await groupsMap();
+			const staff = await when('admindash_roles', () => query('SELECT name, label FROM admindash_roles ORDER BY label'));
+			return {
+				jobs: [...groups.entries()].filter(([, g]) => g.type !== 'gang').map(([name, g]) => ({ name, label: g.label, grades: Object.entries(g.grades ?? {}).map(([grade, v]) => ({ grade: Number(grade), name: v?.name ?? grade })) })),
+				gangs: [...groups.entries()].filter(([, g]) => g.type === 'gang').map(([name, g]) => ({ name, label: g.label, grades: Object.entries(g.grades ?? {}).map(([grade, v]) => ({ grade: Number(grade), name: v?.name ?? grade })) })),
+				staff: staff.map(s => ({ name: s.name, label: s.label })),
+			};
+		},
+
 		// The whole server: activity, jobs and gangs, vehicles, justice, world, staff, economy
 		async server(actor) {
 			need(actor, 'fivemdata.view');
