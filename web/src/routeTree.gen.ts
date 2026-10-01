@@ -30,6 +30,7 @@ import { Route as AuthenticatedEmbedsRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedEventsRouteImport } from './routes/_authenticated/events'
 import { Route as AuthenticatedFeedbackRouteImport } from './routes/_authenticated/feedback'
 import { Route as AuthenticatedFivemRouteImport } from './routes/_authenticated/fivem'
+import { Route as AuthenticatedFivemPlayersRouteImport } from './routes/_authenticated/fivem-players'
 import { Route as AuthenticatedGiveawaysRouteImport } from './routes/_authenticated/giveaways'
 import { Route as AuthenticatedLogsRouteImport } from './routes/_authenticated/logs'
 import { Route as AuthenticatedMeetingsRouteImport } from './routes/_authenticated/meetings'
@@ -166,6 +167,12 @@ const AuthenticatedFivemRoute = AuthenticatedFivemRouteImport.update({
   path: '/fivem',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedFivemPlayersRoute =
+  AuthenticatedFivemPlayersRouteImport.update({
+    id: '/fivem-players',
+    path: '/fivem-players',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedGiveawaysRoute = AuthenticatedGiveawaysRouteImport.update({
   id: '/giveaways',
   path: '/giveaways',
@@ -334,6 +341,7 @@ export interface FileRoutesByFullPath {
   '/events': typeof AuthenticatedEventsRoute
   '/feedback': typeof AuthenticatedFeedbackRoute
   '/fivem': typeof AuthenticatedFivemRoute
+  '/fivem-players': typeof AuthenticatedFivemPlayersRoute
   '/giveaways': typeof AuthenticatedGiveawaysRoute
   '/logs': typeof AuthenticatedLogsRoute
   '/meetings': typeof AuthenticatedMeetingsRoute
@@ -383,6 +391,7 @@ export interface FileRoutesByTo {
   '/events': typeof AuthenticatedEventsRoute
   '/feedback': typeof AuthenticatedFeedbackRoute
   '/fivem': typeof AuthenticatedFivemRoute
+  '/fivem-players': typeof AuthenticatedFivemPlayersRoute
   '/giveaways': typeof AuthenticatedGiveawaysRoute
   '/logs': typeof AuthenticatedLogsRoute
   '/meetings': typeof AuthenticatedMeetingsRoute
@@ -435,6 +444,7 @@ export interface FileRoutesById {
   '/_authenticated/events': typeof AuthenticatedEventsRoute
   '/_authenticated/feedback': typeof AuthenticatedFeedbackRoute
   '/_authenticated/fivem': typeof AuthenticatedFivemRoute
+  '/_authenticated/fivem-players': typeof AuthenticatedFivemPlayersRoute
   '/_authenticated/giveaways': typeof AuthenticatedGiveawaysRoute
   '/_authenticated/logs': typeof AuthenticatedLogsRoute
   '/_authenticated/meetings': typeof AuthenticatedMeetingsRoute
@@ -488,6 +498,7 @@ export interface FileRouteTypes {
     | '/events'
     | '/feedback'
     | '/fivem'
+    | '/fivem-players'
     | '/giveaways'
     | '/logs'
     | '/meetings'
@@ -537,6 +548,7 @@ export interface FileRouteTypes {
     | '/events'
     | '/feedback'
     | '/fivem'
+    | '/fivem-players'
     | '/giveaways'
     | '/logs'
     | '/meetings'
@@ -588,6 +600,7 @@ export interface FileRouteTypes {
     | '/_authenticated/events'
     | '/_authenticated/feedback'
     | '/_authenticated/fivem'
+    | '/_authenticated/fivem-players'
     | '/_authenticated/giveaways'
     | '/_authenticated/logs'
     | '/_authenticated/meetings'
@@ -771,6 +784,13 @@ declare module '@tanstack/react-router' {
       path: '/fivem'
       fullPath: '/fivem'
       preLoaderRoute: typeof AuthenticatedFivemRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/fivem-players': {
+      id: '/_authenticated/fivem-players'
+      path: '/fivem-players'
+      fullPath: '/fivem-players'
+      preLoaderRoute: typeof AuthenticatedFivemPlayersRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/giveaways': {
@@ -991,6 +1011,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedEventsRoute: typeof AuthenticatedEventsRoute
   AuthenticatedFeedbackRoute: typeof AuthenticatedFeedbackRoute
   AuthenticatedFivemRoute: typeof AuthenticatedFivemRoute
+  AuthenticatedFivemPlayersRoute: typeof AuthenticatedFivemPlayersRoute
   AuthenticatedGiveawaysRoute: typeof AuthenticatedGiveawaysRoute
   AuthenticatedLogsRoute: typeof AuthenticatedLogsRoute
   AuthenticatedMeetingsRoute: typeof AuthenticatedMeetingsRoute
@@ -1041,6 +1062,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedEventsRoute: AuthenticatedEventsRoute,
   AuthenticatedFeedbackRoute: AuthenticatedFeedbackRoute,
   AuthenticatedFivemRoute: AuthenticatedFivemRoute,
+  AuthenticatedFivemPlayersRoute: AuthenticatedFivemPlayersRoute,
   AuthenticatedGiveawaysRoute: AuthenticatedGiveawaysRoute,
   AuthenticatedLogsRoute: AuthenticatedLogsRoute,
   AuthenticatedMeetingsRoute: AuthenticatedMeetingsRoute,

@@ -86,6 +86,7 @@ async function main() {
 	cleanups.push(() => core.logs.flush());
 	// Statistics still in memory are written before stopping
 	cleanups.push(() => core.stats.flush());
+	cleanups.push(() => core.fivemData.close());
 
 	await bot.login(config.TOKEN);
 	core.audit.record({ actorId: 'system', source: 'system', action: 'system.start', details: { version: `v${pkg.version}`, supervised: ipc.supervised } });

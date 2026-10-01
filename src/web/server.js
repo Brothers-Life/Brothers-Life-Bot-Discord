@@ -40,6 +40,7 @@ import { registerMusicRoutes, registerPlaylistRoutes } from './routes/music.js';
 import { registerChannelRoutes } from './routes/channels.js';
 import { registerModerationToolRoutes } from './routes/moderationTools.js';
 import { registerMeetingRoutes } from './routes/meetings.js';
+import { registerFivemDataRoutes } from './routes/fivemData.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_STATIC_DIR = path.resolve(__dirname, '..', '..', 'web', 'dist');
@@ -116,6 +117,7 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	registerChannelRoutes(app, { core });
 	registerModerationToolRoutes(app, { core });
 	registerMeetingRoutes(app, { core });
+	registerFivemDataRoutes(app, { core });
 
 	const hasPanel = fs.existsSync(path.join(staticDir, 'index.html'));
 	const sendPanel = (reply) => {

@@ -73,6 +73,8 @@ const TITLES = {
 	'sanctions.restrict': 'Membre restreint',
 	'sanctions.unrestrict': 'Restriction levée',
 	'sanctions.edit': 'Raison d’une sanction modifiée',
+	'fivemdata.config': 'Connexion à la base FiveM modifiée',
+	'fivemdata.view': 'Fiche joueur FiveM consultée',
 	'meetings.create': 'Réunion programmée',
 	'meetings.update': 'Réunion modifiée',
 	'meetings.cancel': 'Réunion annulée',

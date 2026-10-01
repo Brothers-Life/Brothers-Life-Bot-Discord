@@ -80,7 +80,7 @@ function MeetingsPage() {
           ]} />
           {live && <LiveBanner meeting={live} onOpen={() => setOpen(live.id)} />}
           <Tabs defaultValue='upcoming'>
-            <TabsList className='flex-wrap'>
+            <TabsList className='h-auto flex-wrap'>
               <TabsTrigger value='upcoming'>À venir ({upcoming.length})</TabsTrigger>
               <TabsTrigger value='past'>Passées ({past.length})</TabsTrigger>
               <TabsTrigger value='stats'>Présences</TabsTrigger>

@@ -7,6 +7,7 @@ import {
   LayoutTemplate,
   Mail,
   Gamepad2,
+  Contact,
   Radio,
   Music,
   UserPlus,
@@ -73,6 +74,7 @@ export const navSections: NavSection[] = [
     items: [
       { title: 'Serveurs', url: '/network', icon: Network, permission: 'network.view' },
       { title: 'FiveM', url: '/fivem', icon: Gamepad2, permission: 'fivem.view', keywords: 'jeu serveur statut' },
+      { title: 'Joueurs FiveM', url: '/fivem-players', icon: Contact, permission: 'fivemdata.view', keywords: 'joueur personnage citizen véhicule plaque inventaire argent bdd base' },
       { title: 'Modèles de serveur', url: '/templates', icon: LayoutTemplate, permission: 'templates.view' },
       { title: 'Sauvegardes', url: '/backups', icon: DatabaseBackup, permission: 'backups.view', keywords: 'backup restaurer' },
     ],

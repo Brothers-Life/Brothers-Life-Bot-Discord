@@ -142,7 +142,7 @@ function Editor({ initial, data, onClose }: { initial: CustomCommand; data: Data
       <DialogContent className='max-h-[94svh] overflow-y-auto sm:max-w-4xl'>
         <DialogHeader><DialogTitle>{c.id ? `Modifier ${displayName(initial)}` : 'Nouvelle commande'}</DialogTitle></DialogHeader>
         <Tabs defaultValue='general'>
-          <TabsList className='flex-wrap'>
+          <TabsList className='h-auto flex-wrap'>
             <TabsTrigger value='general'>Déclencheur</TabsTrigger>
             {t === 'slash' && <TabsTrigger value='options'>Options ({c.options.length})</TabsTrigger>}
             <TabsTrigger value='access'>Accès</TabsTrigger>

@@ -10,6 +10,7 @@ import { useMe } from '@/hooks/use-me'
 import { Page, Section, EmptyState, Pill, RankBadge, UserAvatar } from '@/components/app/ui'
 import { TempRoles } from '@/features/people/temp-roles'
 import { MemberInsights, age, snowflakeTime } from '@/features/people/insights'
+import { FivemLink } from '@/features/people/fivem'
 import { SanctionDialog } from '@/features/sanctions/sanction-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -215,7 +216,7 @@ function Profile({ userId }: { userId: string }) {
       </div>
       </div>
 
-
+      {can('fivemdata.view') && <FivemLink userId={userId} />}
       {data.guilds.map((guild) => <GuildMembership key={guild.id} userId={userId} guild={guild} />)}
       <MemberInsights userId={userId} />
       {sanctioning && <SanctionDialog userId={userId} onClose={() => setSanctioning(false)} />}

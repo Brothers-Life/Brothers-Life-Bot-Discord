@@ -29,6 +29,7 @@ export const COMMANDS = [
 	{ name: 'embed', category: 'Communauté', description: 'Créer ou modifier un embed (le panel permet plusieurs embeds et des boutons)', permissions: ['embeds.manage'] },
 	{ name: 'info', category: 'Communauté', description: 'Informations : serveur, avatar, rôle, salon, bot', permissions: [] },
 	{ name: 'reunion', category: 'Staff', description: 'Réunions du staff : prochaines, présences en direct, démarrer, terminer, notes et tâches', permissions: ['meetings.view', 'meetings.manage'] },
+	{ name: 'joueur', category: 'FiveM', description: 'Fiche FiveM d’un joueur : personnages, métier, temps de jeu, véhicules, sanctions', permissions: ['fivemdata.view', 'fivemdata.economy', 'fivemdata.inventory'] },
 	{ name: 'stats', category: 'Communauté', description: 'Statistiques du serveur, d’un membre, classements', permissions: [] },
 	{ name: 'changelog', category: 'Communauté', description: 'Voir les dernières nouveautés', permissions: [] },
 	{ name: 'sondage', category: 'Communauté', description: 'Créer un sondage rapide, fermer un sondage', permissions: ['polls.manage'] },
