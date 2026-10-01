@@ -470,7 +470,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
           <div className='grid gap-4'>
             <label className='flex items-center gap-2 text-sm'><Switch checked={f.enabled} onCheckedChange={(enabled) => set({ enabled })} /> Activée</label>
             <div className='grid gap-4 sm:grid-cols-[minmax(0,1fr)_6rem]'>
-              <div className='grid gap-1.5'><Label htmlFor='db-host'>Hôte</Label><Input id='db-host' value={f.host} onChange={(e) => set({ host: e.target.value })} placeholder='192.168.1.41' /></div>
+              <div className='grid gap-1.5'><Label htmlFor='db-host'>Hôte</Label><Input id='db-host' value={f.host} onChange={(e) => set({ host: e.target.value })} placeholder='127.0.0.1' /></div>
               <div className='grid gap-1.5'><Label htmlFor='db-port'>Port</Label><Input id='db-port' type='number' value={f.port} onChange={(e) => set({ port: Number(e.target.value) })} /></div>
             </div>
             <div className='grid gap-4 sm:grid-cols-2'>
