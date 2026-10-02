@@ -1,4 +1,7 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { definePermission } from './permissions.js';
+import { inlineImages, renderTicketTranscript, transcriptText } from './transcript.js';
 import { createVariables } from './variables.js';
 import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
 import { normalizePayload } from './announcements.js';
@@ -13,6 +16,8 @@ definePermission('tickets.handle', { label: 'Traiter les tickets (prendre en cha
 definePermission('tickets.manage', { label: 'Configurer les tickets', category: 'Tickets' });
 
 const FORM_TTL_MS = 15 * 60_000;
+// Discord refuses bot files above 10 Mo: the inlined images of a transcript stay well below
+const TRANSCRIPT_IMAGES_MAX = 6 * 1024 * 1024;
 const SNOWFLAKE = /^\d{17,20}$/;
 
 const DEFAULT_PANEL_PAYLOAD = {
@@ -21,7 +26,8 @@ const DEFAULT_PANEL_PAYLOAD = {
 };
 
 // variables: shared template variables (member, server, FiveM account), see variables.js
-export function createTickets({ db, network, ranks, audit, executor, logs, logger = console, now = Date.now, variables = createVariables({ executor, logger, now }) }) {
+// dataDir: where the HTML transcripts are kept for the panel (none in some tests)
+export function createTickets({ db, network, ranks, audit, executor, logs, logger = console, now = Date.now, dataDir = null, fetchImpl = fetch, variables = createVariables({ executor, logger, now }) }) {
 	logs.registerCategory('tickets', 'Tickets (ouverture, fermeture, transcripts)');
 
 	const q = {
@@ -291,6 +297,33 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			'tickets.count': q.openedBy.get(guildId, userId).n,
 			...Object.fromEntries(answers.map(a => [`answer.${a.id}`, a.value])),
 		};
+	}
+
+	function transcriptPath(ticketId) {
+		return dataDir ? path.join(dataDir, 'transcripts', `ticket-${Number(ticketId)}.html`) : null;
+	}
+
+	// Staff page (with the internal notes of the panel, kept on disk for the panel) and member page
+	async function transcriptPages(ticket, category, history, { closerId, reason, closedAt }) {
+		await inlineImages(history.messages, { fetchImpl, maxTotal: TRANSCRIPT_IMAGES_MAX });
+		const nameOf = async id => (id ? (await executor.getUser(id).catch(() => null)) : null);
+		const [guild, claimer, closer] = await Promise.all([executor.getGuildInfo(ticket.guildId).catch(() => null), nameOf(ticket.claimedBy), nameOf(closerId)]);
+		const display = user => user?.globalName ?? user?.username ?? null;
+		const notes = service.messages(ticket.id).filter(m => m.internal);
+		const base = {
+			guild: { name: guild?.name ?? '', icon: guild?.iconUrl ?? null },
+			ticket, category, status: 'Fermé', opener: ticket.openerName,
+			claimer: display(claimer) ?? (ticket.claimedBy ? ticket.claimedBy : null),
+			closer: closerId ? display(closer) ?? closerId : 'le bot',
+			closedAt, reason, messages: history.messages, mentions: history.mentions ?? {}, notes,
+		};
+		const pages = { staff: renderTicketTranscript({ ...base, audience: 'staff' }), member: renderTicketTranscript({ ...base, audience: 'member' }) };
+		const file = transcriptPath(ticket.id);
+		if (file) {
+			fs.mkdirSync(path.dirname(file), { recursive: true });
+			fs.writeFileSync(file, pages.staff);
+		}
+		return pages;
 	}
 
 	function statusOf(guildId, key) {
@@ -739,7 +772,11 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 				if (config.close.requireReason && !reason.trim()) throw new ValidationError('Une raison est obligatoire pour fermer ce ticket.');
 			}
 
-			const transcript = await executor.fetchTranscript(ticket.channelId).catch(() => null);
+			const history = ticket.channelId ? await executor.fetchChannelHistory(ticket.channelId, { limit: 2000 }).catch((error) => {
+				logger.warn(`Transcript of ticket #${ticket.number} not read:`, error.message);
+				return null;
+			}) : null;
+			const transcript = history ? transcriptText(history.messages, history.mentions) : null;
 			const header = [
 				`Ticket #${ticket.number} — ${ticket.subject ?? 'sans sujet'}`,
 				`Ouvert par ${ticket.openerName} (${ticket.openerId}) le ${new Date(ticket.createdAt).toLocaleString('fr-FR')}`,
@@ -753,7 +790,14 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			if (!changed) throw new ValidationError('Ce ticket est déjà fermé.');
 			openChannels.delete(ticket.channelId);
 
-			const file = { name: `ticket-${ticket.number}.txt`, content: text };
+			const closedAt = now();
+			const pages = history ? await transcriptPages(getTicket(ticketId), category, history, { closerId: system ? null : userId, reason, closedAt }).catch((error) => {
+				logger.warn(`HTML transcript of ticket #${ticket.number} failed:`, error.message);
+				return null;
+			}) : null;
+			const fileName = `ticket-${String(ticket.number).padStart(4, '0')}`;
+			const file = pages ? { name: `${fileName}.html`, content: pages.staff } : { name: `ticket-${ticket.number}.txt`, content: text };
+			const memberFile = pages ? { name: `${fileName}.html`, content: pages.member } : file;
 			const summary = {
 				title: `Ticket #${ticket.number} fermé`,
 				description: `Ouvert par <@${ticket.openerId}> · fermé par ${system ? 'le bot' : `<@${userId}>`}`,
@@ -772,7 +816,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			}
 			logs.log(ticket.guildId, 'tickets', summary);
 			if (config.transcriptDm) {
-				executor.sendDM(ticket.openerId, `Ton ticket #${ticket.number} a été fermé${reason ? ` : ${reason}` : ''}. Voici la conversation.`, [file]).catch(() => null);
+				executor.sendDM(ticket.openerId, `Ton ticket #${ticket.number} a été fermé${reason ? ` : ${reason}` : ''}. Voici la conversation : ouvre le fichier dans ton navigateur.`, [memberFile]).catch(() => null);
 			}
 			if (config.rating.enabled) executor.sendTicketRating(ticket.openerId, getTicket(ticketId)).catch(() => null);
 			record(userId, source, 'tickets.close', ticket, { reason: reason || null });
@@ -856,6 +900,13 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			const saved = toMessage(q.message.get(id));
 			emit({ type: 'message_delete', guildId: getTicket(saved.ticketId).guildId, message: saved });
 			return saved;
+		},
+
+		// Path of the staff HTML transcript, when it exists
+		transcriptFile(ticketId) {
+			const ticket = getTicket(ticketId);
+			const file = transcriptPath(ticket.id);
+			return file && fs.existsSync(file) ? { ticket, file } : null;
 		},
 
 		messages(ticketId) {

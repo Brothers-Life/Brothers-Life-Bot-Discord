@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { definePermission } from './permissions.js';
 import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
+import { inlineImages } from './transcript.js';
 
 definePermission('archives.view', { label: 'Voir et télécharger les archives de salons', category: 'Logs' });
 definePermission('archives.manage', { label: 'Archiver des salons', category: 'Logs' });
@@ -9,7 +10,6 @@ definePermission('archives.manage', { label: 'Archiver des salons', category: 'L
 const MAX_MESSAGES = 10_000;
 const MAX_IMAGE = 3 * 1024 * 1024;
 const MAX_IMAGES_TOTAL = 40 * 1024 * 1024;
-const DISCORD_CDN = /^https:\/\/(cdn|media)\.discordapp\.(com|net)\//;
 const escape = text => String(text ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' })[c]);
 const time = at => new Date(at).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', dateStyle: 'short', timeStyle: 'short' });
 
@@ -82,28 +82,6 @@ export function createArchives({ db, network, audit, executor, dataDir, fetchImp
 		messageCount: row.message_count, firstAt: row.first_at, lastAt: row.last_at, file: row.file, size: row.size, createdAt: row.created_at,
 	});
 
-	// Discord's attachment links expire after a while: images are copied into the file (within limits)
-	async function inlineImages(messages) {
-		let total = 0;
-		for (const m of messages) {
-			for (const a of m.attachments) {
-				const image = /^image\//.test(a.contentType ?? '') || /\.(png|jpe?g|gif|webp)$/i.test(a.name);
-				if (!image || !DISCORD_CDN.test(a.url) || (a.size ?? 0) > MAX_IMAGE || total + (a.size ?? 0) > MAX_IMAGES_TOTAL) continue;
-				try {
-					const response = await fetchImpl(a.url);
-					if (!response.ok) continue;
-					const buffer = Buffer.from(await response.arrayBuffer());
-					if (buffer.length > MAX_IMAGE) continue;
-					total += buffer.length;
-					a.url = `data:${a.contentType ?? 'image/png'};base64,${buffer.toString('base64')}`;
-				}
-				catch {
-					// kept as a link
-				}
-			}
-		}
-	}
-
 	const service = {
 		list: () => q.list.all().map(toArchive),
 
@@ -126,7 +104,7 @@ export function createArchives({ db, network, audit, executor, dataDir, fetchImp
 			const max = Math.min(MAX_MESSAGES, Math.max(1, Math.round(Number(limit) || 1000)));
 			if (from && to && to <= from) throw new ValidationError('La fin de la période est avant son début.');
 			const { channelName, messages } = await executor.fetchChannelHistory(channelId, { limit: max, from, to });
-			await inlineImages(messages);
+			await inlineImages(messages, { fetchImpl, maxImage: MAX_IMAGE, maxTotal: MAX_IMAGES_TOTAL });
 			const at = now();
 			const html = renderArchive({ guildName: guild.name, channelName, messages, createdAt: at, createdBy: actor.name ?? actor.id });
 			const file = `${guildId}-${channelId}-${at}.html`;

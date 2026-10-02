@@ -357,3 +357,18 @@ test('/api/variables gives the shared variables of the message editors', async (
 	const server = (await call('GET', '/api/variables?scope=server')).json().groups;
 	assert.ok(!server.some(g => g.items.some(v => v.key === 'user')));
 });
+
+test('the HTML transcript of a closed ticket opens from the panel, without scripts', async () => {
+	const { app, core, owner } = await setup();
+	const category = await core.tickets.saveCategory(owner, MAIN, { name: 'Support' });
+	const ticket = await core.tickets.open({ guildId: MAIN, userId: BOB, userName: 'bob', categoryId: category.id });
+	const call = api(app, await sessionFor(app, OWNER));
+	assert.equal((await call('GET', `/api/tickets/${ticket.id}/transcript`)).statusCode, 404);
+	await core.tickets.close(OWNER, ticket.id);
+	assert.equal((await call('GET', `/api/tickets/${ticket.id}`)).json().htmlTranscript, true);
+	const res = await call('GET', `/api/tickets/${ticket.id}/transcript`);
+	assert.equal(res.statusCode, 200);
+	assert.match(res.headers['content-type'], /text\/html/);
+	assert.doesNotMatch(res.headers['content-security-policy'], /script-src[^;]*unsafe-inline/);
+	assert.match(res.body, /Ticket #0001/);
+});

@@ -63,7 +63,7 @@ test('closing: transcript to the logs and to the opener, channel deleted later',
 	await core.tickets.close(MEMBER, ticket.id);
 	await core.logs.flush();
 	const log = executor.sent.find(s => s.channelId === 'c-tickets');
-	assert.equal(log.message.files[0].name, 'ticket-1.txt');
+	assert.equal(log.message.files[0].name, 'ticket-0001.html');
 	assert.equal(executor.dms.at(-1)[0], MEMBER);
 	await assert.rejects(core.tickets.close(MEMBER, ticket.id), ValidationError);
 });
@@ -115,7 +115,7 @@ test('each category can send its transcripts to its own channel', async () => {
 	await new Promise(r => setImmediate(r));
 	assert.deepEqual(executor.sent.map(s => s.channelId).sort(), ['c-tickets', 'c-transcripts-support']);
 	const transcript = executor.sent.find(s => s.channelId === 'c-transcripts-support');
-	assert.equal(transcript.message.files[0].name, `ticket-${ticket.number}.txt`);
+	assert.equal(transcript.message.files[0].name, `ticket-000${ticket.number}.html`);
 	assert.equal(transcript.message.fields[0].value, 'Support 2');
 });
 
@@ -152,4 +152,24 @@ test('a slow or broken FiveM database never blocks a ticket', async () => {
 	const ticket = await core.tickets.open({ guildId: MAIN, userId: MEMBER, userName: 'bob', categoryId: category.id });
 	assert.equal(ticket.status, 'open');
 	assert.equal(ticket.vars['fivem.dbid'], undefined);
+});
+
+test('HTML transcript: Discord-like page, internal notes for the staff only, kept for the panel', async () => {
+	const { core, owner, executor, category } = await setup();
+	const ticket = await core.tickets.open({ guildId: MAIN, userId: MEMBER, userName: 'bob', categoryId: category.id, answers: [{ id: 'pseudo', label: 'Pseudo', type: 'short', value: 'John <b>Doe</b>' }] });
+	await core.tickets.reply(owner, ticket.id, { content: 'Note secrète du staff', internal: true });
+	executor.sent.length = 0;
+	await core.tickets.close(MEMBER, ticket.id, 'Réglé');
+	await core.logs.flush();
+	const staff = executor.sent.find(s => s.channelId === 'c-tickets').message.files[0].content;
+	const member = executor.dms.at(-1)[2][0].content;
+	assert.match(staff, /^<!doctype html>/);
+	assert.match(staff, /Ticket #0001/);
+	assert.match(staff, /bonjour <span class="mention">@alice<\/span>/, 'mentions shown with names');
+	assert.match(staff, /John &lt;b&gt;Doe&lt;\/b&gt;/, 'answers escaped');
+	assert.match(staff, /Note secrète du staff/);
+	assert.doesNotMatch(member, /Note secrète du staff/);
+	assert.match(member, /Réglé/);
+	const saved = core.tickets.transcriptFile(ticket.id);
+	assert.ok(saved && saved.file.endsWith(`ticket-${ticket.id}.html`));
 });

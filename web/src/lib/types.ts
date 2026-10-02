@@ -273,6 +273,7 @@ export type Ticket = {
   rating: number | null
   ratingComment: string | null
   hasTranscript?: boolean
+  htmlTranscript?: boolean
   transcript?: string | null
   opener: { name: string | null; avatar: string | null } | null
   claimer: { name: string | null; avatar: string | null } | null

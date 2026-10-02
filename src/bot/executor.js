@@ -427,19 +427,39 @@ export function createExecutor(client) {
 				collected.push(...list);
 				if (from && batch.last().createdTimestamp < from) break;
 			}
-			const messages = collected.slice(0, limit).reverse().map(m => ({
-				id: m.id,
-				authorName: m.member?.displayName ?? m.author.globalName ?? m.author.username,
-				authorAvatar: m.author.displayAvatarURL({ size: 64 }),
-				bot: m.author.bot,
-				content: m.content,
-				createdAt: m.createdTimestamp,
-				editedAt: m.editedTimestamp,
-				replyTo: m.reference?.messageId ? (channel.messages.cache.get(m.reference.messageId)?.author.username ?? 'un message') : null,
-				attachments: [...m.attachments.values()].map(a => ({ name: a.name, url: a.url, contentType: a.contentType, size: a.size })),
-				embeds: m.embeds.map(e => ({ title: e.title, description: e.description, color: e.hexColor })),
-			}));
-			return { channelName: channel.name, messages };
+			// Names behind the <@id>, <@&id> and <#id> of the texts, for readable exports
+			const mentions = { users: {}, roles: {}, channels: {} };
+			const messages = collected.slice(0, limit).reverse().map((m) => {
+				for (const u of m.mentions.users.values()) mentions.users[u.id] = m.mentions.members?.get(u.id)?.displayName ?? u.globalName ?? u.username;
+				for (const r of m.mentions.roles.values()) mentions.roles[r.id] = { name: r.name, color: r.hexColor !== '#000000' ? r.hexColor : null };
+				for (const c of m.mentions.channels.values()) mentions.channels[c.id] = c.name;
+				const replied = m.reference?.messageId ? channel.messages.cache.get(m.reference.messageId) : null;
+				return {
+					id: m.id,
+					authorId: m.author.id,
+					authorName: m.member?.displayName ?? m.author.globalName ?? m.author.username,
+					authorAvatar: m.author.displayAvatarURL({ size: 64 }),
+					authorColor: m.member && m.member.displayHexColor !== '#000000' ? m.member.displayHexColor : null,
+					bot: m.author.bot,
+					content: m.content,
+					createdAt: m.createdTimestamp,
+					editedAt: m.editedTimestamp,
+					replyTo: m.reference?.messageId ? (replied?.member?.displayName ?? replied?.author.username ?? 'un message') : null,
+					replyText: replied?.content?.slice(0, 100) ?? null,
+					attachments: [...m.attachments.values()].map(a => ({ name: a.name, url: a.url, contentType: a.contentType, size: a.size })),
+					embeds: m.embeds.map(e => ({
+						title: e.title, description: e.description, color: e.hexColor, url: e.url,
+						author: e.author?.name ?? null, authorIcon: e.author?.iconURL ?? null,
+						fields: e.fields.map(f => ({ name: f.name, value: f.value, inline: f.inline })),
+						image: e.image?.url ?? null, thumbnail: e.thumbnail?.url ?? null,
+						footer: e.footer?.text ?? null, timestamp: e.timestamp ? Date.parse(e.timestamp) : null,
+					})),
+					stickers: [...m.stickers.values()].map(s => ({ id: s.id, name: s.name, format: s.format })),
+					reactions: [...m.reactions.cache.values()].map(r => ({ emoji: r.emoji.id ? `<${r.emoji.animated ? 'a' : ''}:${r.emoji.name}:${r.emoji.id}>` : r.emoji.name, count: r.count })),
+					components: m.components.flatMap(row => row.components ?? []).filter(c => c.label).map(c => ({ label: c.label, url: c.url ?? null })),
+				};
+			});
+			return { channelName: channel.name, messages, mentions };
 		},
 
 		async upsertAppealMessage(channelId, messageId, view, { pingRoleIds = [] } = {}) {

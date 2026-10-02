@@ -87,7 +87,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	// Template variables shared by every message of the bot; {fivem.*} come from fivemData, created further down
 	const variables = createVariables({ executor, logger, fivemVars: discordId => fivemData.discordVars(discordId), fivemEnabled: () => fivemData.settingsView().enabled });
 	const announcements = createAnnouncements({ db, network, audit, executor, logs, uploads, variables, logger });
-	const tickets = createTickets({ db, network, ranks, audit, executor, logs, variables, logger });
+	const tickets = createTickets({ db, network, ranks, audit, executor, logs, variables, logger, dataDir: config.DATA_DIR, fetchImpl });
 	const onboarding = createOnboarding({ db, network, audit, executor, uploads, variables, logger, fetchImpl });
 	logs.registerCategory('onboarding', 'Accueil (règlement accepté, boosts, réglages)');
 	const antiraid = createAntiraid({ db, network, audit, executor, sanctions, logs, logger });

@@ -487,7 +487,9 @@ export function createFakeExecutor() {
 		async setChannelAccess(channelId, state) { this.access.push({ channelId, ...state }); },
 		history: new Map(),
 		async fetchChannelHistory(channelId, { limit }) {
-			return { channelName: this.channels.get(channelId)?.name ?? 'salon', messages: (this.history.get(channelId) ?? []).slice(-limit) };
+			// A ticket channel always has the member's first message
+			const fallback = this.ticketChannels.has(channelId) ? [{ id: '1', authorId: '300000000000000001', authorName: 'alice', authorAvatar: null, bot: false, content: 'bonjour <@300000000000000001>', createdAt: 1_700_000_000_000, attachments: [], embeds: [] }] : [];
+			return { channelName: this.channels.get(channelId)?.name ?? 'salon', messages: (this.history.get(channelId) ?? fallback).slice(-limit), mentions: { users: { '300000000000000001': 'alice' } } };
 		},
 		appealMessages: [],
 		async upsertAppealMessage(channelId, messageId, view, options = {}) {

@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { NotFoundError } from '../../core/errors.js';
 import { authenticate } from '../guard.js';
 import { resolveNames, snowflake } from './helpers.js';
@@ -71,7 +72,21 @@ export function registerTicketRoutes(app, { core }) {
 			messages: tickets.messages(ticket.id),
 			statuses: tickets.statuses(ticket.guildId),
 			priorities: tickets.priorities(),
+			htmlTranscript: Boolean(tickets.transcriptFile(ticket.id)),
 		};
+	});
+
+	// The staff HTML transcript, opened in a new tab (or downloaded); the panel's CSP blocks any inline script
+	app.get('/api/tickets/:id/transcript', {
+		config: { permission: 'tickets.view' },
+		schema: { params: idParam, querystring: { type: 'object', properties: { download: { type: 'boolean' } } } },
+	}, async (request, reply) => {
+		const found = tickets.transcriptFile(request.params.id);
+		if (!found) throw new NotFoundError('Pas de transcript web pour ce ticket (fermé avant cette fonction, ou salon illisible).');
+		const name = `ticket-${String(found.ticket.number).padStart(4, '0')}.html`;
+		return reply.type('text/html; charset=utf-8')
+			.header('Content-Disposition', `${request.query.download ? 'attachment' : 'inline'}; filename="${name}"`)
+			.send(fs.createReadStream(found.file));
 	});
 
 	const handle = { permission: 'tickets.handle' };
