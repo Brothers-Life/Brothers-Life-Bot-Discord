@@ -339,3 +339,12 @@ test('stats: overview for the network, CSV export with a French header', async (
 	assert.match(csv.body, /^\uFEFFMembre;ID;Messages/);
 	assert.equal((await call('GET', '/api/stats/overview?guildId=123')).statusCode, 400);
 });
+
+test('/api/emojis lists the custom emojis of the active servers', async () => {
+	const { app, core } = await setup();
+	core.executor.emojis.set(MAIN, [{ id: '123456789012345678', name: 'brl', animated: false }]);
+	const res = await api(app, await sessionFor(app, OWNER))('GET', '/api/emojis');
+	assert.equal(res.statusCode, 200);
+	const main = res.json().guilds.find(g => g.id === MAIN);
+	assert.deepEqual(main.emojis, [{ id: '123456789012345678', name: 'brl', animated: false }]);
+});

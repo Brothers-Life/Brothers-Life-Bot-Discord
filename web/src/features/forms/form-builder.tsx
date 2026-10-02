@@ -5,6 +5,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { EmojiField } from '@/components/app/emoji-picker'
 
 const TYPES: { value: FormFieldType; label: string }[] = [
   { value: 'short', label: 'Texte court' },
@@ -159,10 +160,10 @@ export function FormBuilder({ value, onChange, disabled, allowEmpty = true }: {
                     <div className='grid gap-2'>
                       <span className='text-sm font-medium'>Choix ({q.options?.length ?? 0}/25)</span>
                       {q.options?.map((o, oi) => (
-                        <div key={oi} className='grid gap-2 sm:grid-cols-[4rem_1fr_1.5fr_auto]'>
-                          <Input value={o.emoji} maxLength={64} placeholder='🙂' aria-label={`Émoji du choix ${oi + 1}`} disabled={disabled} onChange={(e) => patchField(si, qi, { options: q.options!.map((x, j) => (j === oi ? { ...x, emoji: e.target.value } : x)) })} />
+                        <div key={oi} className='grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 sm:grid-cols-[auto_1fr_1.5fr_auto]'>
+                          <EmojiField value={o.emoji} label={`Émoji du choix ${oi + 1}`} disabled={disabled} onChange={(v) => patchField(si, qi, { options: q.options!.map((x, j) => (j === oi ? { ...x, emoji: v } : x)) })} />
                           <Input value={o.label} maxLength={100} placeholder='Libellé' aria-label={`Libellé du choix ${oi + 1}`} disabled={disabled} onChange={(e) => patchField(si, qi, { options: q.options!.map((x, j) => (j === oi ? { ...x, label: e.target.value, value: e.target.value.slice(0, 100) } : x)) })} />
-                          <Input value={o.description} maxLength={100} placeholder='Description (facultatif)' aria-label={`Description du choix ${oi + 1}`} disabled={disabled} onChange={(e) => patchField(si, qi, { options: q.options!.map((x, j) => (j === oi ? { ...x, description: e.target.value } : x)) })} />
+                          <Input value={o.description} maxLength={100} placeholder='Description (facultatif)' className='col-span-2 sm:col-span-1' aria-label={`Description du choix ${oi + 1}`} disabled={disabled} onChange={(e) => patchField(si, qi, { options: q.options!.map((x, j) => (j === oi ? { ...x, description: e.target.value } : x)) })} />
                           <Button type='button' size='icon' variant='ghost' aria-label={`Supprimer le choix ${oi + 1}`} disabled={disabled || q.options!.length === 1} onClick={() => patchField(si, qi, { options: q.options!.filter((_, j) => j !== oi) })}><X /></Button>
                         </div>
                       ))}

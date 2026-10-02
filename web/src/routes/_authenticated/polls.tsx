@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
+import { EmojiField } from '@/components/app/emoji-picker'
 
 export const Route = createFileRoute('/_authenticated/polls')({
   component: PollsPage,
@@ -165,10 +166,10 @@ function PollForm({ poll, guilds, onSaved, onDeleted }: { poll: Poll | null; gui
           <fieldset className='grid gap-2'>
             <legend className='mb-1 text-sm font-medium'>Choix ({options.length}/25){locked && <span className='font-normal text-muted-foreground'> · figés une fois publié</span>}</legend>
             {options.map((o, i) => (
-              <div key={i} className='grid gap-2 sm:grid-cols-[4rem_1fr_1.2fr_auto]'>
-                <Input value={o.emoji} maxLength={64} placeholder='🙂' aria-label={`Émoji du choix ${i + 1}`} disabled={!editable} onChange={(e) => setOptions(options.map((x, j) => (j === i ? { ...x, emoji: e.target.value } : x)))} />
+              <div key={i} className='grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 sm:grid-cols-[auto_1fr_1.2fr_auto]'>
+                <EmojiField value={o.emoji} label={`Émoji du choix ${i + 1}`} disabled={!editable} onChange={(v) => setOptions(options.map((x, j) => (j === i ? { ...x, emoji: v } : x)))} />
                 <Input value={o.label} maxLength={80} placeholder={`Choix ${i + 1}`} aria-label={`Choix ${i + 1}`} disabled={!editable || locked} onChange={(e) => setOptions(options.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} />
-                <Input value={o.description} maxLength={100} placeholder='Description (menu seulement)' aria-label={`Description du choix ${i + 1}`} disabled={!editable} onChange={(e) => setOptions(options.map((x, j) => (j === i ? { ...x, description: e.target.value } : x)))} />
+                <Input value={o.description} maxLength={100} placeholder='Description (menu seulement)' className='col-span-2 sm:col-span-1' aria-label={`Description du choix ${i + 1}`} disabled={!editable} onChange={(e) => setOptions(options.map((x, j) => (j === i ? { ...x, description: e.target.value } : x)))} />
                 <Button size='icon' variant='ghost' aria-label='Supprimer le choix' disabled={!editable || locked || options.length <= 2} onClick={() => setOptions(options.filter((_, j) => j !== i))}><X /></Button>
               </div>
             ))}

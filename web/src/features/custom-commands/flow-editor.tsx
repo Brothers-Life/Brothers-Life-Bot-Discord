@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { BLOCK_LABELS, PERMISSIONS, newBlock, type Block, type Condition, type EditorContext, type Message } from './model'
+import { EmojiField } from '@/components/app/emoji-picker'
 
 const ICONS: Record<Block['type'], LucideIcon> = {
   if: GitBranch, reply: MessageSquare, send: Send, dm: MessagesSquare, role: Tag, nickname: UserCog, sanction: ShieldAlert,
@@ -306,7 +307,7 @@ function BlockBody({ block: b, onChange, ctx, depth, id }: { block: Block; onCha
           <p className='text-xs text-muted-foreground sm:col-span-2'>La sanction est donnée avec les droits de la personne qui lance la commande : sans la permission de sanctionner, le bloc échoue.</p>
         </div>
       )
-    case 'react': return <div className='grid max-w-xs gap-1.5'><Label htmlFor={`${id}-emoji`}>Émoji</Label><Input id={`${id}-emoji`} value={b.emoji} maxLength={64} onChange={(e) => set({ emoji: e.target.value })} placeholder='👍 ou <:nom:id>' /></div>
+    case 'react': return <div className='grid max-w-xs gap-1.5'><Label htmlFor={`${id}-emoji`}>Émoji</Label><EmojiField id={`${id}-emoji`} value={b.emoji} clearable={false} onChange={(v) => set({ emoji: v })} /></div>
     case 'wait': return <div className='flex items-center gap-2 text-sm'><Input type='number' min={1} max={30} className='w-24' value={b.seconds} onChange={(e) => set({ seconds: Number(e.target.value) || 1 })} aria-label='Secondes' /> secondes (30 au total par commande)</div>
     case 'counter':
       return (

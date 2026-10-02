@@ -1182,6 +1182,16 @@ export function createExecutor(client) {
 				.map(c => ({ id: c.id, name: c.name, parent: c.parent?.name ?? null, canSend: canSend(c), announcement: c.type === ChannelType.GuildAnnouncement }));
 		},
 
+		// Custom emojis of a server, for the panel emoji picker
+		async listEmojis(guildId) {
+			const guild = client.guilds.cache.get(guildId);
+			if (!guild) return [];
+			return [...guild.emojis.cache.values()]
+				.filter(e => e.available !== false && e.name)
+				.sort((a, b) => a.name.localeCompare(b.name))
+				.map(e => ({ id: e.id, name: e.name, animated: Boolean(e.animated) }));
+		},
+
 		async listRoles(guildId) {
 			const guild = client.guilds.cache.get(guildId);
 			if (!guild) return [];

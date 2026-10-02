@@ -43,6 +43,11 @@ export function createFakeExecutor() {
 		async listTextChannels(guildId) {
 			return [...channels].filter(([, c]) => c.guildId === guildId).map(([id, c]) => ({ id, parent: null, canSend: true, ...c }));
 		},
+		// guildId -> [{ id, name, animated }]
+		emojis: new Map(),
+		async listEmojis(guildId) {
+			return this.emojis.get(guildId) ?? [];
+		},
 		// guildId -> [{ id, name, editable, dangerous }]
 		roles: new Map(),
 		async listRoles(guildId) {

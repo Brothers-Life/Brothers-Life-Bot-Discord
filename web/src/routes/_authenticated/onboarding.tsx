@@ -20,6 +20,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { EmojiField } from '@/components/app/emoji-picker'
 
 export const Route = createFileRoute('/_authenticated/onboarding')({
   component: OnboardingPage,
@@ -121,7 +122,7 @@ function Editor({ guildId, data }: { guildId: string; data: OnboardingPayload })
     <div className='grid gap-4'>
       <Tabs defaultValue='welcome'>
         <div className='flex flex-wrap items-center gap-3'>
-          <TabsList className='flex h-auto flex-wrap'>
+          <TabsList className='h-auto flex-wrap [&>button]:h-8 [&>button]:flex-none'>
             <TabsTrigger value='welcome'>Bienvenue {config.welcome.enabled && <Dot />}</TabsTrigger>
             <TabsTrigger value='leave'>Départ {config.leave.enabled && <Dot />}</TabsTrigger>
             <TabsTrigger value='boost'>Boosts {config.boost.enabled && <Dot />}</TabsTrigger>
@@ -210,10 +211,10 @@ function Editor({ guildId, data }: { guildId: string; data: OnboardingPayload })
                   <Label>Salon</Label>
                   <ChannelSelect channels={data.channels} value={config.rules.channelId} disabled={!manage} onChange={(v) => set('rules', { channelId: v, messageId: v === config.rules.channelId ? config.rules.messageId : null })} label='Salon du règlement' />
                 </div>
-                <div className='grid grid-cols-[5rem_1fr_8rem] gap-2'>
+                <div className='grid grid-cols-[auto_minmax(0,1fr)_8rem] gap-2'>
                   <div className='grid gap-1.5'>
                     <Label htmlFor='r-emoji'>Émoji</Label>
-                    <Input id='r-emoji' value={config.rules.buttonEmoji} disabled={!manage} onChange={(e) => set('rules', { buttonEmoji: e.target.value })} />
+                    <EmojiField id='r-emoji' value={config.rules.buttonEmoji} disabled={!manage} onChange={(v) => set('rules', { buttonEmoji: v })} />
                   </div>
                   <div className='grid gap-1.5'>
                     <Label htmlFor='r-label'>Texte du bouton</Label>

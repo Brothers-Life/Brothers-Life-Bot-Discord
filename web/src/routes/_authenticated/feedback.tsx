@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { EmojiField } from '@/components/app/emoji-picker'
 
 export const Route = createFileRoute('/_authenticated/feedback')({
   component: FeedbackPage,
@@ -299,8 +300,8 @@ function BoxSettings({ box, data, guildId, onDeleted }: { box: Box; data: Payloa
       <Section title='Statuts' description='Le premier statut est celui des nouvelles propositions. Un statut « final » ferme le vote et verrouille le fil.'>
         <ul className='divide-y'>
           {c.statuses.map((s, i) => (
-            <li key={i} className='grid gap-2 px-4 py-2 sm:grid-cols-[4rem_1fr_6rem_auto_auto] sm:items-center'>
-              <Input value={s.emoji} maxLength={64} aria-label='Émoji' disabled={!manage} onChange={(e) => patchStatus(i, { emoji: e.target.value })} />
+            <li key={i} className='grid gap-2 px-4 py-2 sm:grid-cols-[auto_1fr_6rem_auto_auto] sm:items-center'>
+              <EmojiField value={s.emoji} label='Émoji du statut' disabled={!manage} onChange={(v) => patchStatus(i, { emoji: v })} />
               <Input value={s.label} maxLength={40} aria-label='Nom' disabled={!manage} onChange={(e) => patchStatus(i, { label: e.target.value })} />
               <Input type='color' className='h-9 p-1' value={s.color} aria-label='Couleur' disabled={!manage} onChange={(e) => patchStatus(i, { color: e.target.value })} />
               <label className='flex items-center gap-1.5 text-xs'><Checkbox checked={s.final} disabled={!manage} onCheckedChange={(v) => patchStatus(i, { final: v === true })} /> Final</label>

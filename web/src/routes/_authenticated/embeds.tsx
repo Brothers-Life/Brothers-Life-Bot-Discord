@@ -20,6 +20,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { EMPTY_EMBED, EmbedFields, cleanEmbed } from '@/features/announcements/embed-editor'
 import { DiscordPreview } from '@/features/announcements/discord-preview'
+import { EmojiField } from '@/components/app/emoji-picker'
 
 export const Route = createFileRoute('/_authenticated/embeds')({
   component: EmbedsPage,
@@ -44,8 +45,18 @@ function toDiscord(b: Built) {
       footer: e.footerText ? { text: e.footerText, icon_url: e.footerIconUrl || undefined } : undefined,
       timestamp: e.timestamp ? new Date().toISOString() : undefined, fields: e.fields.length ? e.fields : undefined,
     })),
-    components: b.buttons.length ? [{ type: 1, components: b.buttons.map((x) => ({ type: 2, style: 5, label: x.label || undefined, url: x.url, emoji: x.emoji ? { name: x.emoji } : undefined })) }] : undefined,
+    components: b.buttons.length ? [{ type: 1, components: b.buttons.map((x) => ({ type: 2, style: 5, label: x.label || undefined, url: x.url, emoji: x.emoji ? toDiscordEmoji(x.emoji) : undefined })) }] : undefined,
   }
+}
+type DiscordEmoji = { id?: string; name?: string; animated?: boolean }
+// '<:name:id>' (server emoji) or unicode, as Discord's component JSON wants it
+function toDiscordEmoji(value: string): DiscordEmoji {
+  const m = /^<(a?):(\w+):(\d+)>$/.exec(value)
+  return m ? { id: m[3], name: m[2], animated: m[1] === 'a' } : { name: value }
+}
+function fromDiscordEmoji(e?: DiscordEmoji): string | null {
+  if (!e?.name) return null
+  return e.id ? `<${e.animated ? 'a' : ''}:${e.name}:${e.id}>` : e.name
 }
 function fromDiscord(text: string): Built {
   const raw = JSON.parse(text)
@@ -57,8 +68,8 @@ function fromDiscord(text: string): Built {
     footerText: d.footer?.text ?? '', footerIconUrl: d.footer?.icon_url ?? null, timestamp: Boolean(d.timestamp),
     fields: (d.fields ?? []).map((f) => ({ name: f.name, value: f.value, inline: Boolean(f.inline) })),
   }))
-  const buttons = (message.components ?? []).flatMap((row: { components?: { style?: number; label?: string; url?: string; emoji?: { name?: string } }[] }) => row.components ?? [])
-    .filter((c: { style?: number; url?: string }) => c.style === 5 && c.url).map((c: { label?: string; url?: string; emoji?: { name?: string } }) => ({ label: c.label ?? '', url: c.url!, emoji: c.emoji?.name ?? null }))
+  const buttons = (message.components ?? []).flatMap((row: { components?: { style?: number; label?: string; url?: string; emoji?: DiscordEmoji }[] }) => row.components ?? [])
+    .filter((c: { style?: number; url?: string }) => c.style === 5 && c.url).map((c: { label?: string; url?: string; emoji?: DiscordEmoji }) => ({ label: c.label ?? '', url: c.url!, emoji: fromDiscordEmoji(c.emoji) }))
   return { content: message.content ?? '', embeds, buttons }
 }
 
@@ -182,8 +193,8 @@ function Editor({ saved, guilds, onSaved, onDeleted }: { saved?: Saved; guilds: 
               {manage && b.buttons.length < 25 && <Button size='sm' variant='ghost' onClick={() => setB({ ...b, buttons: [...b.buttons, { label: '', url: 'https://', emoji: null }] })}><Link2 /> Bouton</Button>}
             </div>
             {b.buttons.map((x, i) => (
-              <div key={i} className='grid gap-2 sm:grid-cols-[4rem_minmax(0,1fr)_minmax(0,1.5fr)_auto]'>
-                <Input aria-label='Émoji' value={x.emoji ?? ''} placeholder='🔗' maxLength={64} onChange={(e) => setButton(i, { emoji: e.target.value || null })} disabled={!manage} />
+              <div key={i} className='grid gap-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1.5fr)_auto]'>
+                <EmojiField value={x.emoji} label='Émoji du bouton' placeholder='🔗' onChange={(v) => setButton(i, { emoji: v || null })} disabled={!manage} />
                 <Input aria-label='Texte du bouton' value={x.label} placeholder='Site web' maxLength={80} onChange={(e) => setButton(i, { label: e.target.value })} disabled={!manage} />
                 <Input aria-label='Lien' value={x.url} placeholder='https://…' onChange={(e) => setButton(i, { url: e.target.value })} disabled={!manage} />
                 <Button size='icon' variant='danger-ghost' aria-label='Retirer le bouton' onClick={() => setB({ ...b, buttons: b.buttons.filter((_, j) => j !== i) })} disabled={!manage}><X /></Button>

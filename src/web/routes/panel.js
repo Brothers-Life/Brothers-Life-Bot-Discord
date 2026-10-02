@@ -35,6 +35,14 @@ export function registerPanelRoutes(app, { core, runtime }) {
 		};
 	});
 
+	// Custom emojis of the network servers, for the emoji picker
+	app.get('/api/emojis', { config: { permission: null } }, async () => ({
+		guilds: await Promise.all(network.list().filter(g => g.status === 'active' && g.botPresent).map(async g => ({
+			id: g.id, name: g.name, icon: g.icon ?? null, isMain: g.isMain,
+			emojis: await executor.listEmojis(g.id).catch(() => []),
+		}))),
+	}));
+
 	app.get('/api/overview', { config: { permission: null } }, async (request) => {
 		const guilds = network.list();
 		return {

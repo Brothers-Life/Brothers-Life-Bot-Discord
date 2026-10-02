@@ -1,5 +1,4 @@
-import { useState } from 'react'
-import { Plus, X } from 'lucide-react'
+import { Plus, SmilePlus, X } from 'lucide-react'
 import type { AnnouncementOptions } from '@/lib/types'
 import { imageUrl } from '@/features/uploads/upload'
 import { ImageInput, UploadButton } from '@/features/uploads/image-input'
@@ -7,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { EmojiField, EmojiPicker, EmojiView } from '@/components/app/emoji-picker'
 
 export const EMPTY_OPTIONS: AnnouncementOptions = { autoDeleteHours: 0, pin: false, thread: { enabled: false, name: '' }, reactions: [], buttons: [], gallery: [], attachments: [] }
 
@@ -17,11 +17,8 @@ export function cleanOptions(o: AnnouncementOptions): AnnouncementOptions {
 
 export function OptionsEditor({ value: o, onChange, disabled }: { value: AnnouncementOptions; onChange: (o: AnnouncementOptions) => void; disabled?: boolean }) {
   const set = (patch: Partial<AnnouncementOptions>) => onChange({ ...o, ...patch })
-  const [reaction, setReaction] = useState('')
-  const addReaction = () => {
-    const r = reaction.trim()
+  const addReaction = (r: string) => {
     if (r && !o.reactions.includes(r) && o.reactions.length < 10) set({ reactions: [...o.reactions, r] })
-    setReaction('')
   }
   return (
     <div className='grid gap-6'>
@@ -57,10 +54,10 @@ export function OptionsEditor({ value: o, onChange, disabled }: { value: Announc
         {o.buttons.map((b, i) => {
           const patch = (p: Partial<typeof b>) => set({ buttons: o.buttons.map((x, j) => (j === i ? { ...x, ...p } : x)) })
           return (
-            <div key={i} className='grid gap-2 sm:grid-cols-[4rem_1fr_1.5fr_auto]'>
-              <Input value={b.emoji ?? ''} maxLength={64} placeholder='🔗' aria-label={`Émoji du bouton ${i + 1}`} disabled={disabled} onChange={(e) => patch({ emoji: e.target.value })} />
+            <div key={i} className='grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 sm:grid-cols-[auto_1fr_1.5fr_auto]'>
+              <EmojiField value={b.emoji} placeholder='🔗' label={`Émoji du bouton ${i + 1}`} disabled={disabled} onChange={(v) => patch({ emoji: v })} />
               <Input value={b.label} maxLength={80} placeholder='Texte' aria-label={`Texte du bouton ${i + 1}`} disabled={disabled} onChange={(e) => patch({ label: e.target.value })} />
-              <Input value={b.url} placeholder='https://…' aria-label={`Lien du bouton ${i + 1}`} disabled={disabled} onChange={(e) => patch({ url: e.target.value })} />
+              <Input value={b.url} placeholder='https://…' aria-label={`Lien du bouton ${i + 1}`} className='col-span-2 sm:col-span-1' disabled={disabled} onChange={(e) => patch({ url: e.target.value })} />
               <Button type='button' size='icon' variant='ghost' aria-label={`Supprimer le bouton ${i + 1}`} disabled={disabled} onClick={() => set({ buttons: o.buttons.filter((_, j) => j !== i) })}><X /></Button>
             </div>
           )
@@ -71,19 +68,18 @@ export function OptionsEditor({ value: o, onChange, disabled }: { value: Announc
       </div>
 
       <div className='grid gap-2'>
-        <Label htmlFor='opt-reaction'>Réactions ajoutées par le bot</Label>
+        <Label>Réactions ajoutées par le bot</Label>
         <div className='flex flex-wrap items-center gap-2'>
           {o.reactions.map((r) => (
             <span key={r} className='flex items-center gap-1 rounded-full border px-2 py-0.5 text-sm'>
-              {r}
+              <EmojiView value={r} />
               {!disabled && <button type='button' aria-label={`Retirer ${r}`} onClick={() => set({ reactions: o.reactions.filter((x) => x !== r) })}><X className='size-3' /></button>}
             </span>
           ))}
           {!disabled && o.reactions.length < 10 && (
-            <form className='flex gap-2' onSubmit={(e) => { e.preventDefault(); addReaction() }}>
-              <Input id='opt-reaction' value={reaction} maxLength={64} placeholder='🎉 ou <:nom:id>' className='w-40' onChange={(e) => setReaction(e.target.value)} />
-              <Button type='submit' variant='outline' size='sm' disabled={!reaction.trim()}>Ajouter</Button>
-            </form>
+            <EmojiPicker onSelect={addReaction}>
+              <Button type='button' variant='outline' size='sm'><SmilePlus /> Ajouter une réaction</Button>
+            </EmojiPicker>
           )}
         </div>
       </div>
