@@ -11,6 +11,7 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { BLOCK_LABELS, PERMISSIONS, newBlock, type Block, type Condition, type EditorContext, type Message } from './model'
 import { EmojiField } from '@/components/app/emoji-picker'
+import { ColorPicker } from '@/components/app/color-picker'
 
 const ICONS: Record<Block['type'], LucideIcon> = {
   if: GitBranch, reply: MessageSquare, send: Send, dm: MessagesSquare, role: Tag, nickname: UserCog, sanction: ShieldAlert,
@@ -91,7 +92,7 @@ function MessageFields({ value, onChange, id }: { value: Message; onChange: (m: 
         <div className='grid gap-3 rounded-md border-s-2 bg-muted/40 p-3' style={{ borderColor: e.color }}>
           <div className='grid gap-3 sm:grid-cols-[1fr_7rem]'>
             <Input value={e.title} maxLength={256} placeholder='Titre' aria-label='Titre de l’embed' onChange={(ev) => onChange({ embed: { ...e, title: ev.target.value } })} />
-            <Input type='color' value={e.color} className='h-9 p-1' aria-label='Couleur' onChange={(ev) => onChange({ embed: { ...e, color: ev.target.value } })} />
+            <ColorPicker value={e.color} onChange={(hex) => onChange({ embed: { ...e, color: hex } })} label='Couleur' />
           </div>
           <Textarea rows={3} maxLength={4000} value={e.description} placeholder='Description' aria-label='Description de l’embed' onChange={(ev) => onChange({ embed: { ...e, description: ev.target.value } })} />
           <div className='grid gap-3 sm:grid-cols-2'>

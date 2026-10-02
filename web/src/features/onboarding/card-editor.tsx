@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { ColorPicker } from '@/components/app/color-picker'
 
 const SIZES = [
   { label: 'Bannière 1024 × 450', width: 1024, height: 450 },
@@ -212,13 +213,13 @@ export function CardEditor({ design, onChange, fonts, renderPreview }: {
           <div className='flex flex-wrap items-end gap-3'>
             {bg.type !== 'image' && (
               <Field label={bg.type === 'gradient' ? 'Couleur de départ' : 'Couleur'}>
-                <Input type='color' value={bg.color} className='h-8 w-16 p-1' onChange={(e) => setBg({ color: e.target.value })} />
+                <ColorPicker value={bg.color} onChange={(hex) => setBg({ color: hex })} />
               </Field>
             )}
             {bg.type === 'gradient' && (
               <>
                 <Field label='Couleur d’arrivée'>
-                  <Input type='color' value={bg.color2} className='h-8 w-16 p-1' onChange={(e) => setBg({ color2: e.target.value })} />
+                  <ColorPicker value={bg.color2} onChange={(hex) => setBg({ color2: hex })} />
                 </Field>
                 <Field label={`Angle : ${bg.angle}°`} className='min-w-40'>
                   <input type='range' min={0} max={360} value={bg.angle} onChange={(e) => setBg({ angle: Number(e.target.value) })} className='h-8 accent-primary' />
@@ -282,7 +283,7 @@ export function CardEditor({ design, onChange, fonts, renderPreview }: {
                   <Field label='Taille'><NumberInput value={layer.size} min={8} max={200} onChange={(size) => patchLayer(layer.id, { size })} /></Field>
                 </div>
                 <div className='grid grid-cols-[4rem_1fr_6rem] gap-2'>
-                  <Field label='Couleur'><Input type='color' className='h-8 p-1' value={layer.color} onChange={(e) => patchLayer(layer.id, { color: e.target.value })} /></Field>
+                  <Field label='Couleur'><ColorPicker value={layer.color} onChange={(hex) => patchLayer(layer.id, { color: hex })} /></Field>
                   <Field label='Alignement'>
                     <Select value={layer.align} onValueChange={(align) => patchLayer(layer.id, { align: align as 'left' | 'center' | 'right' })}>
                       <SelectTrigger className='h-8'><SelectValue /></SelectTrigger>
@@ -318,7 +319,7 @@ export function CardEditor({ design, onChange, fonts, renderPreview }: {
                 </div>
                 <div className='grid grid-cols-2 gap-2'>
                   <Field label='Bordure'><NumberInput value={layer.borderWidth} min={0} max={40} onChange={(borderWidth) => patchLayer(layer.id, { borderWidth })} /></Field>
-                  <Field label='Couleur'><Input type='color' className='h-8 p-1' value={layer.borderColor} onChange={(e) => patchLayer(layer.id, { borderColor: e.target.value })} /></Field>
+                  <Field label='Couleur'><ColorPicker value={layer.borderColor} onChange={(hex) => patchLayer(layer.id, { borderColor: hex })} /></Field>
                 </div>
               </>
             )}
@@ -331,7 +332,7 @@ export function CardEditor({ design, onChange, fonts, renderPreview }: {
             )}
             {layer.type === 'rect' && (
               <div className='grid grid-cols-[4rem_1fr] gap-2'>
-                <Field label='Couleur'><Input type='color' className='h-8 p-1' value={layer.color} onChange={(e) => patchLayer(layer.id, { color: e.target.value })} /></Field>
+                <Field label='Couleur'><ColorPicker value={layer.color} onChange={(hex) => patchLayer(layer.id, { color: hex })} /></Field>
                 <Field label={`Opacité : ${Math.round(layer.opacity * 100)} %`}>
                   <input type='range' min={0} max={1} step={0.05} value={layer.opacity} onChange={(e) => patchLayer(layer.id, { opacity: Number(e.target.value) })} className='h-8 accent-primary' />
                 </Field>

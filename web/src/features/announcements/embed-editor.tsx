@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { ImageInput } from '@/features/uploads/image-input'
+import { ColorPicker } from '@/components/app/color-picker'
 
 export const EMPTY_EMBED: AnnouncementEmbed = {
   enabled: true, title: '', url: null, description: '', color: '#d6a249', authorName: '', authorIconUrl: null,
@@ -36,10 +37,7 @@ export function EmbedFields({ embed: e, onChange, disabled, idPrefix = 'e', uplo
         </div>
         <div className='grid gap-1.5'>
           <Label htmlFor={id('color')}>Couleur</Label>
-          <div className='flex gap-2'>
-            <Input id={id('color')} type='color' value={e.color} className='h-9 w-12 p-1' disabled={disabled} onChange={(ev) => onChange({ color: ev.target.value })} />
-            <Input value={e.color} maxLength={7} disabled={disabled} onChange={(ev) => onChange({ color: ev.target.value })} aria-label='Code couleur' />
-          </div>
+          <ColorPicker disabled={disabled} id={id('color')} value={e.color} onChange={(hex) => onChange({ color: hex })} />
         </div>
       </div>
       <div className='grid gap-1.5'>

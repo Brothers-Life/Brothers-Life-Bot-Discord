@@ -22,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { EmojiField } from '@/components/app/emoji-picker'
 import { VariableButton } from '@/components/app/variable-picker'
+import { ButtonStylePicker } from '@/components/app/color-picker'
 
 export const Route = createFileRoute('/_authenticated/onboarding')({
   component: OnboardingPage,
@@ -223,15 +224,7 @@ function Editor({ guildId, data }: { guildId: string; data: OnboardingPayload })
                   </div>
                   <div className='grid gap-1.5'>
                     <Label>Couleur</Label>
-                    <Select value={config.rules.buttonStyle} disabled={!manage} onValueChange={(v) => set('rules', { buttonStyle: v as OnboardingConfig['rules']['buttonStyle'] })}>
-                      <SelectTrigger aria-label='Couleur du bouton'><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value='success'>Vert</SelectItem>
-                        <SelectItem value='primary'>Bleu</SelectItem>
-                        <SelectItem value='secondary'>Gris</SelectItem>
-                        <SelectItem value='danger'>Rouge</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <ButtonStylePicker value={config.rules.buttonStyle} disabled={!manage} text={config.rules.buttonLabel || undefined} onChange={(v) => set('rules', { buttonStyle: v })} />
                   </div>
                 </div>
                 <div className='grid gap-1.5'>

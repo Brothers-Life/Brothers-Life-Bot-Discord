@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
+import { ColorPicker } from '@/components/app/color-picker'
 
 export const Route = createFileRoute('/_authenticated/changelog')({
   component: ChangelogPage,
@@ -129,7 +130,7 @@ function EntryEditor({ entry, guilds, onSaved, onDeleted }: { entry: Entry | nul
             <div className='grid gap-4 sm:grid-cols-[8rem_1fr_6rem]'>
               <div className='grid gap-1.5'><Label htmlFor='cl-v'>Version</Label><Input id='cl-v' value={e.version} maxLength={30} placeholder='v2.4' disabled={!manage} onChange={(ev) => setE({ ...e, version: ev.target.value })} /></div>
               <div className='grid gap-1.5'><Label htmlFor='cl-t'>Titre</Label><Input id='cl-t' value={e.title} maxLength={150} placeholder='Mise à jour d’automne' disabled={!manage} onChange={(ev) => setE({ ...e, title: ev.target.value })} /></div>
-              <div className='grid gap-1.5'><Label htmlFor='cl-c'>Couleur</Label><Input id='cl-c' type='color' className='h-9 p-1' value={e.color} disabled={!manage} onChange={(ev) => setE({ ...e, color: ev.target.value })} /></div>
+              <div className='grid gap-1.5'><Label htmlFor='cl-c'>Couleur</Label><ColorPicker disabled={!manage} id='cl-c' value={e.color} onChange={(hex) => setE({ ...e, color: hex })} /></div>
             </div>
             <div className='grid gap-1.5'><Label htmlFor='cl-i'>Introduction</Label><Textarea id='cl-i' rows={3} maxLength={1500} value={e.intro} disabled={!manage} onChange={(ev) => setE({ ...e, intro: ev.target.value })} /></div>
             <div className='grid gap-1.5'><Label htmlFor='cl-img'>Image (adresse https, facultatif)</Label><Input id='cl-img' value={e.image} placeholder='https://…' disabled={!manage} onChange={(ev) => setE({ ...e, image: ev.target.value })} /></div>

@@ -21,6 +21,7 @@ import { BlockList, MultiPicker, channelItems, roleItems } from '@/features/cust
 import { EMPTY_COMMAND, PERMISSIONS, TRIGGERS, VARIABLES, type Component, type CustomCommand, type Data, type EditorContext, type Option } from '@/features/custom-commands/model'
 import { EmojiField } from '@/components/app/emoji-picker'
 import { VariableButton } from '@/components/app/variable-picker'
+import { ButtonStylePicker } from '@/components/app/color-picker'
 
 export const Route = createFileRoute('/_authenticated/custom-commands')({
   component: CustomCommandsPage,
@@ -319,10 +320,7 @@ function ComponentEditor({ value: comp, onChange, onRemove, ctx }: { value: Comp
           <>
             <Input className='w-48' value={comp.label ?? ''} maxLength={80} aria-label='Texte du bouton' onChange={(e) => set({ label: e.target.value })} />
             <EmojiField value={comp.emoji} label='Émoji du bouton' onChange={(v) => set({ emoji: v || null })} />
-            <Select value={comp.style} onValueChange={(style) => set({ style: style as Component['style'] })}>
-              <SelectTrigger className='w-36' aria-label='Couleur'><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value='primary'>Bleu</SelectItem><SelectItem value='secondary'>Gris</SelectItem><SelectItem value='success'>Vert</SelectItem><SelectItem value='danger'>Rouge</SelectItem></SelectContent>
-            </Select>
+            <ButtonStylePicker value={comp.style ?? 'primary'} onChange={(style) => set({ style })} />
           </>
         ) : (
           <>

@@ -25,6 +25,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { EmojiField } from '@/components/app/emoji-picker'
 import { VariablePicker, type VariableGroup } from '@/components/app/variable-picker'
 import { insertAtCursor } from '@/lib/utils'
+import { ButtonStylePicker, ColorPicker } from '@/components/app/color-picker'
 
 // Variables of the ticket texts: the shared ones (member, server, FiveM), the ticket's, the form answers of this type
 function variableGroups(config: TicketConfig, cfg: TicketCategoryConfig): VariableGroup[] {
@@ -32,12 +33,6 @@ function variableGroups(config: TicketConfig, cfg: TicketCategoryConfig): Variab
   return [...config.variables, ...(answers.length ? [{ title: 'Réponses du formulaire', items: answers }] : [])]
 }
 
-const BUTTON_STYLES = [
-  { value: 'secondary', label: 'Gris' },
-  { value: 'primary', label: 'Bleu' },
-  { value: 'success', label: 'Vert' },
-  { value: 'danger', label: 'Rouge' },
-] as const
 
 export function TicketConfigPanel({ guildId }: { guildId: string }) {
   const { can } = useMe()
@@ -233,7 +228,7 @@ function StatusesEditor({ guildId, config, disabled }: { guildId: string; config
               <Input value={s.label} maxLength={50} aria-label='Nom du statut' disabled={disabled} onChange={(e) => patch(i, { label: e.target.value })} />
               {s.builtin && <Pill>intégré</Pill>}
             </div>
-            <Input type='color' value={s.color} className='h-9 p-1' aria-label={`Couleur du statut ${s.label}`} disabled={disabled} onChange={(e) => patch(i, { color: e.target.value })} />
+            <ColorPicker disabled={disabled} value={s.color} onChange={(hex) => patch(i, { color: hex })} label={`Couleur du statut ${s.label}`} />
             <CategorySelect
               categories={config.categoryChannels}
               value={s.parentChannelId}
@@ -332,7 +327,7 @@ function CategoryDialog({ guildId, config, initial, onClose }: { guildId: string
             </TabsList>
 
             <TabsContent value='general' className='mt-4 grid gap-4'>
-              <div className='grid gap-4 sm:grid-cols-[auto_1fr_9rem]'>
+              <div className='grid gap-4 sm:grid-cols-[auto_1fr]'>
                 <div className='grid gap-1.5'>
                   <Label htmlFor='cat-emoji'>Émoji</Label>
                   <EmojiField id='cat-emoji' value={c.emoji} placeholder='🛟' onChange={(v) => setC({ ...c, emoji: v })} />
@@ -341,12 +336,9 @@ function CategoryDialog({ guildId, config, initial, onClose }: { guildId: string
                   <Label htmlFor='cat-name'>Nom</Label>
                   <Input id='cat-name' value={c.name ?? ''} maxLength={50} required onChange={(e) => setC({ ...c, name: e.target.value })} placeholder='Support' />
                 </div>
-                <div className='grid gap-1.5'>
+                <div className='grid gap-1.5 sm:col-span-2'>
                   <Label>Couleur du bouton</Label>
-                  <Select value={cfg.buttonStyle} onValueChange={(v) => setCfg({ ...cfg, buttonStyle: v as TicketCategoryConfig['buttonStyle'] })}>
-                    <SelectTrigger aria-label='Couleur du bouton'><SelectValue /></SelectTrigger>
-                    <SelectContent>{BUTTON_STYLES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <ButtonStylePicker value={cfg.buttonStyle} text={c.name || undefined} onChange={(v) => setCfg({ ...cfg, buttonStyle: v })} />
                 </div>
               </div>
               <div className='grid gap-1.5'>
@@ -456,7 +448,7 @@ function CategoryDialog({ guildId, config, initial, onClose }: { guildId: string
                 </div>
                 <div className='grid gap-1.5'>
                   <Label htmlFor='w-color'>Couleur</Label>
-                  <Input id='w-color' type='color' value={cfg.welcome.color} className='h-9 p-1' onChange={(e) => patch('welcome', { color: e.target.value })} />
+                  <ColorPicker id='w-color' value={cfg.welcome.color} onChange={(hex) => patch('welcome', { color: hex })} />
                 </div>
               </div>
               <div className='grid gap-1.5'>

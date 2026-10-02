@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { ColorPicker } from '@/components/app/color-picker'
 
 export const Route = createFileRoute('/_authenticated/giveaways')({
   component: GiveawaysPage,
@@ -240,7 +241,7 @@ function Form({ giveaway, guilds, onSaved, onDeleted }: { giveaway: Giveaway | n
           <div className='grid gap-4 sm:grid-cols-[1fr_8rem_6rem]'>
             <div className='grid gap-1.5'><Label htmlFor='g-prize'>Lot</Label><Input id='g-prize' value={prize} maxLength={200} disabled={!editable} onChange={(e) => setPrize(e.target.value)} placeholder='Voiture de sport en jeu' /></div>
             <div className='grid gap-1.5'><Label htmlFor='g-w'>Gagnants</Label><Input id='g-w' type='number' min={1} max={50} value={winnersCount} disabled={!editable} onChange={(e) => setWinnersCount(Number(e.target.value) || 1)} /></div>
-            <div className='grid gap-1.5'><Label htmlFor='g-c'>Couleur</Label><Input id='g-c' type='color' className='h-9 p-1' value={s.color} disabled={!editable} onChange={(e) => set({ color: e.target.value })} /></div>
+            <div className='grid gap-1.5'><Label htmlFor='g-c'>Couleur</Label><ColorPicker disabled={!editable} id='g-c' value={s.color} onChange={(hex) => set({ color: hex })} /></div>
           </div>
           <div className='grid gap-1.5'><Label htmlFor='g-desc'>Description</Label><Textarea id='g-desc' rows={3} maxLength={2000} value={description} disabled={!editable} onChange={(e) => setDescription(e.target.value)} /></div>
           <div className='grid gap-1.5'><Label htmlFor='g-img'>Image (adresse https)</Label><Input id='g-img' value={s.image ?? ''} placeholder='https://…' disabled={!editable} onChange={(e) => set({ image: e.target.value })} /></div>

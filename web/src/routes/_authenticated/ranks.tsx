@@ -17,6 +17,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
+import { ColorPicker } from '@/components/app/color-picker'
 
 export const Route = createFileRoute('/_authenticated/ranks')({
   component: RanksPage,
@@ -263,7 +264,7 @@ function RankDialog({ draft, payload, maxLevel, canGrant, saving, onClose, onSav
             </div>
             <div className='grid gap-1.5'>
               <Label htmlFor='rank-color'>Couleur</Label>
-              <Input id='rank-color' type='color' value={d.color || '#ff9628'} className='h-9 p-1' onChange={(e) => setD({ ...d, color: e.target.value })} />
+              <ColorPicker id='rank-color' value={d.color || '#ff9628'} onChange={(hex) => setD({ ...d, color: hex })} />
             </div>
           </div>
           {d.level > maxLevel && <p className='-mt-4 text-sm text-destructive'>Le niveau doit être inférieur au tien (maximum {maxLevel}).</p>}

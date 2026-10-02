@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { EmojiField } from '@/components/app/emoji-picker'
+import { ColorPicker } from '@/components/app/color-picker'
 
 export const Route = createFileRoute('/_authenticated/polls')({
   component: PollsPage,
@@ -195,7 +196,7 @@ function PollForm({ poll, guilds, onSaved, onDeleted }: { poll: Poll | null; gui
                 <SelectContent><SelectItem value='live'>En direct</SelectItem><SelectItem value='end'>À la fin</SelectItem><SelectItem value='never'>Jamais (panel seulement)</SelectItem></SelectContent>
               </Select>
             </div>
-            <div className='grid gap-1.5'><Label htmlFor='p-color'>Couleur</Label><Input id='p-color' type='color' className='h-9 p-1' value={settings.color} disabled={!editable} onChange={(e) => set({ color: e.target.value })} /></div>
+            <div className='grid gap-1.5'><Label htmlFor='p-color'>Couleur</Label><ColorPicker disabled={!editable} id='p-color' value={settings.color} onChange={(hex) => set({ color: hex })} /></div>
           </div>
           <div className='grid gap-2 text-sm sm:grid-cols-2'>
             <label className='flex items-center gap-2'><Checkbox checked={settings.multiple} disabled={!editable || locked} onCheckedChange={(v) => set({ multiple: v === true, maxChoices: v === true ? options.length : 1 })} /> Plusieurs choix possibles</label>

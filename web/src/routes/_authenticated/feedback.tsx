@@ -21,6 +21,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { EmojiField } from '@/components/app/emoji-picker'
+import { ColorPicker } from '@/components/app/color-picker'
 
 export const Route = createFileRoute('/_authenticated/feedback')({
   component: FeedbackPage,
@@ -303,7 +304,7 @@ function BoxSettings({ box, data, guildId, onDeleted }: { box: Box; data: Payloa
             <li key={i} className='grid gap-2 px-4 py-2 sm:grid-cols-[auto_1fr_6rem_auto_auto] sm:items-center'>
               <EmojiField value={s.emoji} label='Émoji du statut' disabled={!manage} onChange={(v) => patchStatus(i, { emoji: v })} />
               <Input value={s.label} maxLength={40} aria-label='Nom' disabled={!manage} onChange={(e) => patchStatus(i, { label: e.target.value })} />
-              <Input type='color' className='h-9 p-1' value={s.color} aria-label='Couleur' disabled={!manage} onChange={(e) => patchStatus(i, { color: e.target.value })} />
+              <ColorPicker disabled={!manage} value={s.color} onChange={(hex) => patchStatus(i, { color: hex })} label='Couleur' />
               <label className='flex items-center gap-1.5 text-xs'><Checkbox checked={s.final} disabled={!manage} onCheckedChange={(v) => patchStatus(i, { final: v === true })} /> Final</label>
               <Button size='icon' variant='ghost' aria-label='Supprimer' disabled={!manage || c.statuses.length <= 2} onClick={() => set({ statuses: c.statuses.filter((_, j) => j !== i) })}><X /></Button>
             </li>
@@ -318,7 +319,7 @@ function BoxSettings({ box, data, guildId, onDeleted }: { box: Box; data: Payloa
             {c.urgencies.map((u, i) => (
               <li key={i} className='grid gap-2 px-4 py-2 sm:grid-cols-[1fr_6rem_1.4fr_8rem] sm:items-center'>
                 <Input value={u.label} maxLength={30} aria-label='Nom' disabled={!manage} onChange={(e) => patchUrgency(i, { label: e.target.value })} />
-                <Input type='color' className='h-9 p-1' value={u.color} aria-label='Couleur' disabled={!manage} onChange={(e) => patchUrgency(i, { color: e.target.value })} />
+                <ColorPicker disabled={!manage} value={u.color} onChange={(hex) => patchUrgency(i, { color: hex })} label='Couleur' />
                 <RolesPicker roles={data.roles} value={u.pingRoleIds} disabled={!manage} onChange={(ids) => patchUrgency(i, { pingRoleIds: ids })} placeholder='Aucun ping' label={`Rôles pour ${u.label}`} />
                 <Input type='number' min={0} value={u.slaMinutes} aria-label='Relance après (minutes)' title='Relance après (minutes, 0 = jamais)' disabled={!manage} onChange={(e) => patchUrgency(i, { slaMinutes: Number(e.target.value) || 0 })} />
               </li>

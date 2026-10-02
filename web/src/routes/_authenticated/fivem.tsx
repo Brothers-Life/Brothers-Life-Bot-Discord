@@ -18,6 +18,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
+import { ColorPicker } from '@/components/app/color-picker'
 
 export const Route = createFileRoute('/_authenticated/fivem')({
   component: FivemPage,
@@ -177,7 +178,7 @@ function ServerDialog({ initial, onClose }: { initial: Partial<Server>; onClose:
           </div>
           <div className='flex flex-wrap items-center gap-6'>
             <label className='flex items-center gap-2 text-sm'><Switch checked={showPlayers} onCheckedChange={setShowPlayers} /> Liste des joueurs dans les messages</label>
-            <label className='flex items-center gap-2 text-sm'>Couleur <Input type='color' value={color} onChange={(e) => setColor(e.target.value)} className='h-8 w-12 p-1' /></label>
+            <label className='flex items-center gap-2 text-sm'>Couleur <ColorPicker className='w-36' value={color} onChange={(hex) => setColor(hex)} /></label>
           </div>
         </div>
         <DialogFooter>
