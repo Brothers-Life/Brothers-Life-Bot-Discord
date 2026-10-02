@@ -73,3 +73,19 @@ export function getDisplayNameInitials(displayName: string): string {
   const last = parts[parts.length - 1]?.[0] ?? ''
   return (first + last).toUpperCase()
 }
+
+type Field = HTMLInputElement | HTMLTextAreaElement
+
+// Inserts `{key}` at the cursor of a text field (or at the end) and keeps the caret after it
+export function insertAtCursor(field: Field | null, value: string, token: string): string {
+  // A field never clicked reports its caret at 0: add at the end then
+  const untouched = !field || (!field.selectionStart && !field.selectionEnd)
+  if (!field) return value + token
+  const start = untouched ? value.length : field.selectionStart ?? value.length
+  const end = untouched ? value.length : field.selectionEnd ?? start
+  requestAnimationFrame(() => {
+    field.focus()
+    field.setSelectionRange(start + token.length, start + token.length)
+  })
+  return value.slice(0, start) + token + value.slice(end)
+}

@@ -1,4 +1,5 @@
 import { NotFoundError } from '../../core/errors.js';
+import { FIVEM_VARIABLES } from '../../core/fivemData.js';
 import { authenticate } from '../guard.js';
 import { resolveNames, snowflake } from './helpers.js';
 
@@ -126,6 +127,8 @@ export function registerTicketRoutes(app, { core }) {
 			categoryChannels,
 			roles,
 			ranks: ranks.list().map(({ id, name, level, color }) => ({ id, name, level, color })),
+			// {fivem.*} variables, filled when the opener's Discord account is linked in the FiveM database
+			fivemVariables: core.fivemData.settingsView().enabled ? FIVEM_VARIABLES : [],
 		};
 	});
 

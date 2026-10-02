@@ -129,3 +129,27 @@ test('no duplicate when the category channel is the tickets log channel', async 
 	await new Promise(r => setImmediate(r));
 	assert.deepEqual(executor.sent.map(s => s.channelId), ['c-tickets']);
 });
+
+test('ticket texts get member, form and linked FiveM account variables', async () => {
+	const { core, owner, executor, category } = await setup();
+	core.fivemData.discordVars = async id => (id === MEMBER ? { 'fivem.linked': 'Oui', 'fivem.dbid': 42, 'fivem.citizenid': 'ABC123' } : null);
+	await core.tickets.saveCategory(owner, MAIN, {
+		id: category.id, name: 'Support', emoji: '🛟', description: 'Une question',
+		config: { nameTemplate: '{type}-{fivem.dbid}-{number}', welcome: { title: 'Ticket #{number}', message: '{user} dbid {fivem.dbid} · {fivem.citizenid} · pseudo {answer.pseudo} · inconnu {nope}' } },
+	});
+	const ticket = await core.tickets.open({ guildId: MAIN, userId: MEMBER, userName: 'bob', categoryId: category.id, answers: [{ id: 'pseudo', label: 'Pseudo', type: 'short', value: 'John_Doe' }] });
+	assert.equal(ticket.vars['fivem.dbid'], 42);
+	assert.equal(ticket.vars['user.id'], MEMBER);
+	assert.equal(ticket.vars['tickets.count'], 0);
+	assert.equal(executor.ticketChannels.get(ticket.channelId).name, '🟢┃support-42-0001');
+	const welcome = core.tickets.welcomeData(ticket);
+	assert.equal(welcome.message, `<@${MEMBER}> dbid 42 · ABC123 · pseudo John_Doe · inconnu {nope}`);
+});
+
+test('a slow or broken FiveM database never blocks a ticket', async () => {
+	const { core, category } = await setup();
+	core.fivemData.discordVars = async () => { throw new Error('ECONNREFUSED'); };
+	const ticket = await core.tickets.open({ guildId: MAIN, userId: MEMBER, userName: 'bob', categoryId: category.id });
+	assert.equal(ticket.status, 'open');
+	assert.equal(ticket.vars['fivem.dbid'], undefined);
+});

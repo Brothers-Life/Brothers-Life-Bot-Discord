@@ -145,7 +145,7 @@ function StatsPage() {
       </div>
 
       <Tabs defaultValue='overview'>
-        <TabsList className='flex h-auto flex-wrap'>
+        <TabsList className='h-auto flex-wrap [&>button]:h-8 [&>button]:flex-none'>
           <TabsTrigger value='overview'>Vue d’ensemble</TabsTrigger>
           <TabsTrigger value='activity'>Heures de pointe</TabsTrigger>
           <TabsTrigger value='members'>Membres</TabsTrigger>

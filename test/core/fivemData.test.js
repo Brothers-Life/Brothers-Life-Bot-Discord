@@ -171,3 +171,28 @@ test('fivem data: most players at once per day', () => {
 	], day + 16 * 3_600_000);
 	assert.equal(byDay.get('2026-10-01'), 3);
 });
+
+test('discordVars: template variables of a linked account, no IP, token nor money', async () => {
+	const { data, log, store } = setup();
+	const vars = await data.discordVars(DISCORD);
+	assert.equal(vars['fivem.linked'], 'Oui');
+	assert.equal(vars['fivem.dbid'], 7);
+	assert.equal(vars['fivem.license'], 'abc');
+	assert.equal(vars['fivem.character'], 'John Doe');
+	assert.equal(vars['fivem.citizenid'], 'ABC123');
+	assert.equal(vars['fivem.phone'], '555');
+	assert.equal(vars['fivem.job'], 'LSPD');
+	assert.equal(vars['fivem.job.grade'], 'Sergent');
+	assert.equal(vars['fivem.gang'], 'aucun');
+	assert.equal(vars['fivem.playtime'], '2 h');
+	assert.equal(vars['fivem.online'], 'Oui');
+	assert.ok(!log.some(sql => /\bip\b|tokens|sky_phone_accounts/i.test(sql)));
+	assert.ok(!Object.keys(vars).some(k => /money|bank|cash/.test(k)));
+
+	const unknown = await data.discordVars('300000000000000099');
+	assert.equal(unknown['fivem.linked'], 'Non');
+	assert.equal(unknown['fivem.dbid'], 'inconnu');
+
+	store.set('fivemdb.config', { enabled: false });
+	assert.equal(await data.discordVars(DISCORD), null);
+});

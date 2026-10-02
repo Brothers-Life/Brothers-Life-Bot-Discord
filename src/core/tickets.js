@@ -4,7 +4,7 @@ import { normalizePayload } from './announcements.js';
 import { nextStep, readStep } from './forms.js';
 import {
 	BUILTIN_KEYS, BUILTIN_STATUSES, PRIORITIES, PRIORITY_LABELS,
-	accountCreatedAt, fill, isWithinHours, normalizeCategoryConfig, normalizeGuildConfig, normalizeStatuses, slugName,
+	TICKET_VARIABLES, accountCreatedAt, fill, isWithinHours, normalizeCategoryConfig, normalizeGuildConfig, normalizeStatuses, slugName,
 } from './ticketConfig.js';
 
 definePermission('tickets.view', { label: 'Voir les tickets et leurs transcripts', category: 'Tickets' });
@@ -12,6 +12,23 @@ definePermission('tickets.handle', { label: 'Traiter les tickets (prendre en cha
 definePermission('tickets.manage', { label: 'Configurer les tickets', category: 'Tickets' });
 
 const FORM_TTL_MS = 15 * 60_000;
+
+// The promise's value, or null after `ms` (the timer never keeps the process alive)
+function withTimeout(promise, ms) {
+	let timer;
+	const limit = new Promise((resolve) => {
+		timer = setTimeout(resolve, ms, null);
+		timer.unref?.();
+	});
+	return Promise.race([promise, limit]).finally(() => clearTimeout(timer));
+}
+
+function ageText(ms) {
+	const days = Math.floor(ms / 86_400_000);
+	if (days >= 365) return `${Math.floor(days / 365)} an${days >= 730 ? 's' : ''}`;
+	if (days >= 30) return `${Math.floor(days / 30)} mois`;
+	return `${days} jour${days > 1 ? 's' : ''}`;
+}
 const SNOWFLAKE = /^\d{17,20}$/;
 
 const DEFAULT_PANEL_PAYLOAD = {
@@ -19,7 +36,8 @@ const DEFAULT_PANEL_PAYLOAD = {
 	embed: { enabled: true, title: 'Besoin d’aide ?', description: 'Choisis le type de demande : un salon privé s’ouvre avec l’équipe.', color: '#d6a249' },
 };
 
-export function createTickets({ db, network, ranks, audit, executor, logs, logger = console, now = Date.now }) {
+// profileVars(discordId) -> extra variables such as {fivem.dbid} (null when unavailable)
+export function createTickets({ db, network, ranks, audit, executor, logs, logger = console, now = Date.now, profileVars = async () => null }) {
 	logs.registerCategory('tickets', 'Tickets (ouverture, fermeture, transcripts)');
 
 	const q = {
@@ -59,12 +77,13 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 		`),
 		nextNumber: db.prepare('SELECT COALESCE(MAX(number), 0) + 1 AS n FROM tickets WHERE guild_id = ?'),
 		insertTicket: db.prepare(`
-			INSERT INTO tickets (guild_id, number, category_id, opener_id, opener_name, subject, answers, status_history, created_at, last_activity_at)
-			VALUES (@guildId, @number, @categoryId, @openerId, @openerName, @subject, @answers, @history, @createdAt, @createdAt)
+			INSERT INTO tickets (guild_id, number, category_id, opener_id, opener_name, subject, answers, vars, status_history, created_at, last_activity_at)
+			VALUES (@guildId, @number, @categoryId, @openerId, @openerName, @subject, @answers, @vars, @history, @createdAt, @createdAt)
 		`),
 		setChannel: db.prepare('UPDATE tickets SET channel_id = ? WHERE id = ?'),
 		deleteTicket: db.prepare('DELETE FROM tickets WHERE id = ?'),
 		ticket: db.prepare('SELECT * FROM tickets WHERE id = ?'),
+		openedBy: db.prepare('SELECT COUNT(*) AS n FROM tickets WHERE guild_id = ? AND opener_id = ?'),
 		byChannel: db.prepare('SELECT * FROM tickets WHERE channel_id = ? AND status = \'open\''),
 		byChannelAny: db.prepare('SELECT * FROM tickets WHERE channel_id = ? ORDER BY id DESC LIMIT 1'),
 		openChannels: db.prepare('SELECT channel_id FROM tickets WHERE status = \'open\' AND channel_id IS NOT NULL'),
@@ -162,6 +181,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			openerName: row.opener_name,
 			subject: row.subject,
 			answers: row.answers ? JSON.parse(row.answers) : [],
+			vars: row.vars ? JSON.parse(row.vars) : {},
 			status: row.status,
 			statusKey: row.status_key,
 			statusHistory: JSON.parse(row.status_history || '[]'),
@@ -273,6 +293,39 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 		return saved;
 	}
 
+	// Variables known when a ticket opens: member, server, form answers, linked FiveM account.
+	// Nothing here may block the opening: every source has a fallback and FiveM a time limit.
+	async function ticketVars({ guildId, userId, userName, answers }) {
+		const [user, member, guild, extra] = await Promise.all([
+			executor.getUser(userId).catch(() => null),
+			executor.getMemberInfo(guildId, userId).catch(() => null),
+			executor.getGuildInfo(guildId).catch(() => null),
+			withTimeout(Promise.resolve().then(() => profileVars(userId)), 4000).catch((error) => {
+				logger.warn('Ticket profile variables:', error.message);
+				return null;
+			}),
+		]);
+		const at = new Date(now());
+		const day = (ms) => new Date(ms).toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris' });
+		return {
+			'user.name': user?.globalName ?? userName ?? user?.username ?? userId,
+			'user.username': user?.username ?? userName ?? userId,
+			'user.id': userId,
+			'user.avatar': user?.avatar ?? 'https://cdn.discordapp.com/embed/avatars/0.png',
+			'account.age': ageText(now() - accountCreatedAt(userId)),
+			'member.since': member?.joinedAt ? day(member.joinedAt) : 'inconnu',
+			'member.nickname': member?.nickname ?? user?.globalName ?? userName ?? 'aucun',
+			'member.roles': member?.roles?.map(r => r.name).join(', ') || 'aucun',
+			'tickets.count': q.openedBy.get(guildId, userId).n,
+			'server': guild?.name ?? '',
+			'memberCount': guild?.memberCount ?? '',
+			'date': day(at),
+			'time': at.toLocaleTimeString('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit' }),
+			...Object.fromEntries(answers.map(a => [`answer.${a.id}`, a.value])),
+			...(extra ?? {}),
+		};
+	}
+
 	function statusOf(guildId, key) {
 		return statusesOf(guildId).find(s => s.key === key) ?? BUILTIN_STATUSES.find(s => s.key === key) ?? { key, label: key, emoji: null };
 	}
@@ -286,13 +339,15 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 	function channelName(category, ticket, statusKey = ticket.statusKey) {
 		const status = statusOf(ticket.guildId, statusKey);
 		const base = slugName(fill(category?.config.nameTemplate ?? 'ticket-{number}-{user}', {
+			...ticket.vars,
 			number: String(ticket.number).padStart(4, '0'),
 			user: ticket.openerName ?? ticket.openerId,
 			type: category?.name ?? 'ticket',
 			status: status.label,
 			claimer: ticket.claimedBy ?? '',
 		}));
-		return settingsOf(ticket.guildId).statusPrefix && status.emoji ? `${status.emoji}┃${base}`.slice(0, 100) : base;
+		// Server emojis (<:name:id>) cannot go in a channel name
+		return settingsOf(ticket.guildId).statusPrefix && status.emoji && !status.emoji.startsWith('<') ? `${status.emoji}┃${base}`.slice(0, 100) : base;
 	}
 
 	// Moves / renames the channel after a status change; Discord rate limits renames, never wait for it
@@ -373,6 +428,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 				categories: q.categories.all(guildId).map(toCategory),
 				panels: q.panels.all(guildId).map(toPanel),
 				statuses: statusesOf(guildId),
+				variables: TICKET_VARIABLES,
 			};
 		},
 
@@ -531,6 +587,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			await checkAccess(guildId, userId, category);
 
 			const cleanAnswers = answers.filter(a => a.value).slice(0, 25).map(a => ({ id: a.id, label: a.label.slice(0, 45), type: a.type ?? 'paragraph', value: a.value.slice(0, 4000) }));
+			const vars = await ticketVars({ guildId, userId, userName, answers: cleanAnswers });
 			const number = q.nextNumber.get(guildId).n;
 			const id = Number(q.insertTicket.run({
 				guildId,
@@ -541,6 +598,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 				// First written answer, else the first one (a choice)
 				subject: (subject ?? (cleanAnswers.find(a => a.type === 'short' || a.type === 'paragraph') ?? cleanAnswers[0])?.value)?.slice(0, 200) || null,
 				answers: cleanAnswers.length ? JSON.stringify(cleanAnswers) : null,
+				vars: JSON.stringify(vars),
 				history: JSON.stringify([{ key: 'open', by: userId, at: now() }]),
 				createdAt: now(),
 			}).lastInsertRowid);
@@ -573,7 +631,16 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 		// What the welcome message of a ticket shows (texts filled, pings, statuses for the menu)
 		welcomeData(ticket, category = categoryOf(ticket)) {
 			const config = category?.config ?? normalizeCategoryConfig();
-			const vars = { user: `<@${ticket.openerId}>`, 'user.name': ticket.openerName, number: ticket.number, type: category?.name ?? 'Ticket' };
+			const vars = {
+				...ticket.vars,
+				user: `<@${ticket.openerId}>`,
+				'user.name': ticket.vars['user.name'] ?? ticket.openerName,
+				number: ticket.number,
+				type: category?.name ?? 'Ticket',
+				subject: ticket.subject ?? 'aucun',
+				status: statusOf(ticket.guildId, ticket.statusKey).label,
+				claimer: ticket.claimedBy ? `<@${ticket.claimedBy}>` : 'personne',
+			};
 			const staff = staffRoleIds(category);
 			const pingRoleIds = config.ping === 'staff' ? staff : config.ping === 'roles' ? config.pingRoleIds : [];
 			return {

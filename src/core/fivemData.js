@@ -12,6 +12,27 @@ definePermission('fivemdata.logs', { label: 'Voir tous les logs du jeu (menu adm
 definePermission('fivemdata.manage', { label: 'Configurer la connexion à la base de données FiveM', category: 'FiveM' });
 
 const SNOWFLAKE = /^\d{17,20}$/;
+
+// Template variables about the FiveM account linked to a Discord member (see discordVars)
+export const FIVEM_VARIABLES = [
+	{ key: 'fivem.linked', label: 'Compte FiveM lié (Oui / Non)' },
+	{ key: 'fivem.dbid', label: 'ID de compte en base (dbid)' },
+	{ key: 'fivem.account', label: 'Nom du compte FiveM' },
+	{ key: 'fivem.license', label: 'Licence Rockstar' },
+	{ key: 'fivem.characters', label: 'Nombre de personnages' },
+	{ key: 'fivem.characters.list', label: 'Tous les personnages avec leur citizenid' },
+	{ key: 'fivem.character', label: 'Dernier personnage joué' },
+	{ key: 'fivem.citizenid', label: 'Citizenid du dernier personnage' },
+	{ key: 'fivem.phone', label: 'Téléphone du dernier personnage' },
+	{ key: 'fivem.job', label: 'Métier' },
+	{ key: 'fivem.job.grade', label: 'Grade dans le métier' },
+	{ key: 'fivem.gang', label: 'Gang' },
+	{ key: 'fivem.playtime', label: 'Temps de jeu total' },
+	{ key: 'fivem.sessions', label: 'Nombre de connexions' },
+	{ key: 'fivem.lastseen', label: 'Dernière connexion' },
+	{ key: 'fivem.online', label: 'En jeu en ce moment (Oui / Non)' },
+	{ key: 'fivem.sanctions', label: 'Sanctions reçues en jeu' },
+];
 const json = (text, fallback = null) => {
 	try {
 		return typeof text === 'string' ? JSON.parse(text) : text ?? fallback;
@@ -307,6 +328,45 @@ export function createFivemData({ audit, settings, logger = console, now = Date.
 			if (!SNOWFLAKE.test(String(discordId))) return null;
 			const [row] = await query('SELECT userid FROM users WHERE discord = ? LIMIT 1', [`discord:${discordId}`]);
 			return row?.userid ?? null;
+		},
+
+		// Variables {fivem.*} of a Discord member for message templates (tickets…). No IP, token or money.
+		// null when the database is off; every key set to "inconnu" when the account is not linked.
+		async discordVars(discordId) {
+			if (!config().enabled) return null;
+			const empty = Object.fromEntries(FIVEM_VARIABLES.map(v => [v.key, 'inconnu']));
+			const userId = await service.findByDiscord(discordId);
+			if (!userId) return { ...empty, 'fivem.linked': 'Non' };
+			const [[u], [summary], groups, rows, [sanctions]] = await Promise.all([
+				query('SELECT userid, username, license FROM users WHERE userid = ?', [userId]),
+				service.summaries([userId]),
+				groupsMap(),
+				query('SELECT * FROM players WHERE userId = ? ORDER BY last_updated DESC', [userId]),
+				when('admindash_sanctions', () => query('SELECT COUNT(*) AS n FROM admindash_sanctions WHERE target_dbid = ?', [userId]), [{ n: 0 }]),
+			]);
+			const chars = rows.map(r => character(r, groups));
+			const main = chars[0];
+			const or = (value, fallback = 'aucun') => (value === null || value === undefined || value === '' ? fallback : value);
+			return {
+				...empty,
+				'fivem.linked': 'Oui',
+				'fivem.dbid': userId,
+				'fivem.account': or(u?.username, 'inconnu'),
+				'fivem.license': or(u?.license?.replace(/^license:/, ''), 'inconnu'),
+				'fivem.characters': chars.length,
+				'fivem.characters.list': or(chars.map(c => `${c.name} (${c.citizenId})`).join(', ')),
+				'fivem.character': or(main?.name),
+				'fivem.citizenid': or(main?.citizenId),
+				'fivem.phone': or(main?.phone),
+				'fivem.job': or(main?.job?.label),
+				'fivem.job.grade': or(main?.job?.gradeLabel ?? main?.job?.grade),
+				'fivem.gang': or(main?.gang?.label),
+				'fivem.playtime': `${Math.round((summary?.playSeconds ?? 0) / 3600)} h`,
+				'fivem.sessions': summary?.sessions ?? 0,
+				'fivem.lastseen': summary?.lastSeen ? new Date(summary.lastSeen).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', dateStyle: 'short', timeStyle: 'short' }) : 'jamais',
+				'fivem.online': summary?.online ? 'Oui' : 'Non',
+				'fivem.sanctions': Number(sanctions?.n) || 0,
+			};
 		},
 
 		// Everything the staff may see about one account, filtered by permissions

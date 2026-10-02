@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, Pencil, Plus, Send, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
@@ -22,6 +22,24 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { EmojiField } from '@/components/app/emoji-picker'
+import { VariablePicker, type VariableGroup } from '@/components/app/variable-picker'
+import { insertAtCursor } from '@/lib/utils'
+
+// Variables of the ticket texts: the server catalogue, the form answers of this type, the FiveM account
+function variableGroups(config: TicketConfig, cfg: TicketCategoryConfig): VariableGroup[] {
+  const groups = new Map<string, VariableGroup>()
+  for (const v of config.variables) {
+    if (!groups.has(v.group)) groups.set(v.group, { title: v.group, items: [] })
+    groups.get(v.group)!.items.push(v)
+  }
+  const answers = cfg.form.steps.flatMap((s) => s.questions).map((q) => ({ key: `answer.${q.id}`, label: q.label || q.id }))
+  return [
+    ...groups.values(),
+    ...(answers.length ? [{ title: 'Réponses du formulaire', items: answers }] : []),
+    ...(config.fivemVariables.length ? [{ title: 'Compte FiveM', hint: 'Rempli si le compte Discord du membre est lié en jeu, sinon « inconnu ».', items: config.fivemVariables }] : []),
+  ]
+}
 
 const BUTTON_STYLES = [
   { value: 'secondary', label: 'Gris' },
@@ -218,8 +236,8 @@ function StatusesEditor({ guildId, config, disabled }: { guildId: string; config
     >
       <ul className='divide-y'>
         {statuses.map((s, i) => (
-          <li key={i} className='grid gap-2 px-4 py-3 md:grid-cols-[4rem_1fr_7rem_14rem_auto] md:items-center'>
-            <Input value={s.emoji ?? ''} maxLength={64} aria-label={`Émoji du statut ${s.label}`} disabled={disabled} onChange={(e) => patch(i, { emoji: e.target.value })} />
+          <li key={i} className='grid gap-2 px-4 py-3 md:grid-cols-[auto_1fr_7rem_14rem_auto] md:items-center'>
+            <EmojiField value={s.emoji} label={`Émoji du statut ${s.label}`} allowCustom={false} disabled={disabled} onChange={(v) => patch(i, { emoji: v })} />
             <div className='flex items-center gap-2'>
               <Input value={s.label} maxLength={50} aria-label='Nom du statut' disabled={disabled} onChange={(e) => patch(i, { label: e.target.value })} />
               {s.builtin && <Pill>intégré</Pill>}
@@ -301,13 +319,19 @@ function CategoryDialog({ guildId, config, initial, onClose }: { guildId: string
   })
 
   const hours = cfg.access.hours
+  const vars = variableGroups(config, cfg)
+  const nameRef = useRef<HTMLInputElement>(null)
+  const titleRef = useRef<HTMLInputElement>(null)
+  const messageRef = useRef<HTMLTextAreaElement>(null)
+  // The welcome variables go in the last focused of title / message
+  const [welcomeTarget, setWelcomeTarget] = useState<'title' | 'message'>('message')
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className='max-h-[92svh] overflow-y-auto sm:max-w-3xl'>
         <DialogHeader><DialogTitle>{c.id ? `Modifier ${initial.name}` : 'Nouveau type de ticket'}</DialogTitle></DialogHeader>
         <form id='category-form' className='grid gap-4' onSubmit={(e) => { e.preventDefault(); if (c.name?.trim()) save.mutate() }}>
           <Tabs defaultValue='general'>
-            <TabsList className='flex h-auto flex-wrap'>
+            <TabsList className='h-auto flex-wrap [&>button]:h-8 [&>button]:flex-none'>
               <TabsTrigger value='general'>Général</TabsTrigger>
               <TabsTrigger value='form'>Formulaire</TabsTrigger>
               <TabsTrigger value='access'>Accès</TabsTrigger>
@@ -317,10 +341,10 @@ function CategoryDialog({ guildId, config, initial, onClose }: { guildId: string
             </TabsList>
 
             <TabsContent value='general' className='mt-4 grid gap-4'>
-              <div className='grid gap-4 sm:grid-cols-[5rem_1fr_9rem]'>
+              <div className='grid gap-4 sm:grid-cols-[auto_1fr_9rem]'>
                 <div className='grid gap-1.5'>
                   <Label htmlFor='cat-emoji'>Émoji</Label>
-                  <Input id='cat-emoji' value={c.emoji ?? ''} onChange={(e) => setC({ ...c, emoji: e.target.value })} placeholder='🛟' />
+                  <EmojiField id='cat-emoji' value={c.emoji} placeholder='🛟' onChange={(v) => setC({ ...c, emoji: v })} />
                 </div>
                 <div className='grid gap-1.5'>
                   <Label htmlFor='cat-name'>Nom</Label>
@@ -340,8 +364,11 @@ function CategoryDialog({ guildId, config, initial, onClose }: { guildId: string
               </div>
               <div className='grid gap-1.5'>
                 <Label htmlFor='cat-template'>Nom des salons</Label>
-                <Input id='cat-template' value={cfg.nameTemplate} maxLength={90} onChange={(e) => setCfg({ ...cfg, nameTemplate: e.target.value })} />
-                <p className='text-xs text-muted-foreground'>Variables : {'{number}'} {'{user}'} {'{type}'} {'{status}'}. Exemple : support-{'{number}'}-{'{user}'}</p>
+                <Input id='cat-template' ref={nameRef} value={cfg.nameTemplate} maxLength={90} onChange={(e) => setCfg({ ...cfg, nameTemplate: e.target.value })} />
+                <div className='flex flex-wrap items-center gap-2'>
+                  <VariablePicker groups={vars} onPick={(t) => setCfg((prev) => ({ ...prev, nameTemplate: insertAtCursor(nameRef.current, prev.nameTemplate, t).slice(0, 90) }))} />
+                  <p className='text-xs text-muted-foreground'>Exemple : support-{'{number}'}-{'{user}'} ou dossier-{'{fivem.dbid}'}. Accents et espaces sont retirés.</p>
+                </div>
               </div>
               <div className='grid gap-4 sm:grid-cols-2'>
                 <div className='grid gap-1.5'>
@@ -434,7 +461,7 @@ function CategoryDialog({ guildId, config, initial, onClose }: { guildId: string
               <div className='grid gap-4 sm:grid-cols-[1fr_8rem]'>
                 <div className='grid gap-1.5'>
                   <Label htmlFor='w-title'>Titre du message d’accueil</Label>
-                  <Input id='w-title' value={cfg.welcome.title} maxLength={256} onChange={(e) => patch('welcome', { title: e.target.value })} />
+                  <Input id='w-title' ref={titleRef} value={cfg.welcome.title} maxLength={256} onFocus={() => setWelcomeTarget('title')} onChange={(e) => patch('welcome', { title: e.target.value })} />
                 </div>
                 <div className='grid gap-1.5'>
                   <Label htmlFor='w-color'>Couleur</Label>
@@ -443,8 +470,17 @@ function CategoryDialog({ guildId, config, initial, onClose }: { guildId: string
               </div>
               <div className='grid gap-1.5'>
                 <Label htmlFor='w-msg'>Texte</Label>
-                <Textarea id='w-msg' rows={5} maxLength={4000} value={cfg.welcome.message} onChange={(e) => patch('welcome', { message: e.target.value })} />
-                <p className='text-xs text-muted-foreground'>Variables : {'{user}'} (mention), {'{user.name}'}, {'{number}'}, {'{type}'}</p>
+                <Textarea id='w-msg' ref={messageRef} rows={5} maxLength={4000} value={cfg.welcome.message} onFocus={() => setWelcomeTarget('message')} onChange={(e) => patch('welcome', { message: e.target.value })} />
+                <div className='flex flex-wrap items-center gap-2'>
+                  <VariablePicker
+                    groups={vars}
+                    label={welcomeTarget === 'title' ? 'Variables (titre)' : 'Variables'}
+                    onPick={(t) => welcomeTarget === 'title'
+                      ? patch('welcome', { title: insertAtCursor(titleRef.current, cfg.welcome.title, t).slice(0, 256) })
+                      : patch('welcome', { message: insertAtCursor(messageRef.current, cfg.welcome.message, t).slice(0, 4000) })}
+                  />
+                  <p className='text-xs text-muted-foreground'>Insérée dans le champ (titre ou texte) où se trouve le curseur.</p>
+                </div>
               </div>
               <Toggle checked={cfg.welcome.showAnswers} onChange={(v) => patch('welcome', { showAnswers: v })}>Afficher les réponses du formulaire dans le message</Toggle>
               <div className='grid gap-4 sm:grid-cols-2'>

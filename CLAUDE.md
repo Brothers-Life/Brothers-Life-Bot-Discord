@@ -21,7 +21,7 @@ Avant tout commit : `npm run lint`, `npm test`, et pour le panel `npx tsc -b` + 
 
 ## Architecture
 
-- **Node ESM**, discord.js 14, **better-sqlite3** (migrations numérotées `src/db/migrations/NNN_*.sql`, dernière : `034_meetings.sql`), **Fastify** pour l'API du panel.
+- **Node ESM**, discord.js 14, **better-sqlite3** (migrations numérotées `src/db/migrations/NNN_*.sql`, dernière : `035_ticket_vars.sql`), **Fastify** pour l'API du panel.
 - **Panel** (`web/`) : React 19, Vite, TanStack Router (routes fichiers dans `web/src/routes/_authenticated/`, `routeTree.gen.ts` généré par Vite) + TanStack Query, shadcn/ui, Tailwind v4, recharts. Composants maison dans `web/src/components/app/ui.tsx` (`Page`, `Section`, `StatCards`, `Pill`, `EmptyState`, `Notice`, `UserAvatar`…) et `pickers.tsx`.
 - `src/core/` : toute la logique, **sans discord.js**. Chaque service est créé dans `src/core/context.js` (`createCore`) et reçoit `executor` (accès Discord), `audit`, `settings`, `logs`, `network`, `ranks`…
 - `src/bot/executor.js` : la seule couche qui parle à Discord (envoyer, rôles, membres, vocal, messages de log…). Dans les tests, `test/helpers.js` fournit un **faux exécuteur** (`createTestCore`, `withNetwork`).

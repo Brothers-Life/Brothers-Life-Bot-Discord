@@ -84,7 +84,8 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const roleImport = createRoleImport({ db, network, ranks, staffSync, executor, audit });
 	const uploads = createUploads({ dir: path.join(config.DATA_DIR, 'uploads') });
 	const announcements = createAnnouncements({ db, network, audit, executor, logs, uploads, logger });
-	const tickets = createTickets({ db, network, ranks, audit, executor, logs, logger });
+	// {fivem.*} variables of the ticket texts (fivemData is created further down, called later)
+	const tickets = createTickets({ db, network, ranks, audit, executor, logs, logger, profileVars: discordId => fivemData.discordVars(discordId) });
 	const onboarding = createOnboarding({ db, network, audit, executor, uploads, logger, fetchImpl });
 	logs.registerCategory('onboarding', 'Accueil (règlement accepté, boosts, réglages)');
 	const antiraid = createAntiraid({ db, network, audit, executor, sanctions, logs, logger });
