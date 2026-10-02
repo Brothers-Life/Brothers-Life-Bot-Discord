@@ -39,7 +39,7 @@ export function registerPanelRoutes(app, { core, runtime }) {
 	app.get('/api/variables', {
 		config: { permission: null },
 		schema: { querystring: { type: 'object', properties: { scope: { type: 'string', enum: ['member', 'server'] } } } },
-	}, async request => ({ groups: core.variables.catalog(request.query.scope ?? 'member') }));
+	}, async request => ({ groups: core.variables.catalog(request.query.scope ?? 'member', request.actor) }));
 
 	// Custom emojis of the network servers, for the emoji picker
 	app.get('/api/emojis', { config: { permission: null } }, async () => ({

@@ -1,3 +1,4 @@
+import { ForbiddenError } from './errors.js';
 import { FIVEM_VARIABLES } from './fivemData.js';
 import { accountCreatedAt } from './ticketConfig.js';
 
@@ -45,9 +46,26 @@ export function withTimeout(promise, ms) {
 	return Promise.race([promise, limit]).finally(() => clearTimeout(timer));
 }
 
-// True when one of the texts uses a {fivem.*} variable: the FiveM database is only asked then
+const FIVEM_KEYS = new Set(FIVEM_VARIABLES.map(v => v.key));
+const textOf = texts => texts.map(t => (typeof t === 'string' ? t : t ? JSON.stringify(t) : '')).join('\n');
+
+// The {fivem.*} account variables used by the texts ({fivem.players} of the server counters is not one)
+export function fivemKeysIn(...texts) {
+	return [...new Set([...textOf(texts).matchAll(/\{(fivem\.[\w.]+)\}/g)].map(m => m[1]).filter(k => FIVEM_KEYS.has(k)))];
+}
+
+// True when one of the texts uses a FiveM account variable: the FiveM database is only asked then
 export function usesFivem(...texts) {
-	return texts.some(t => typeof t === 'string' ? t.includes('{fivem.') : t && JSON.stringify(t).includes('{fivem.'));
+	return fivemKeysIn(...texts).length > 0;
+}
+
+// Putting FiveM account data in a message needs the right to see it: no way around fivemdata.view.
+// Only the variables added compared to `previous` count, so anyone may still edit the rest of the text.
+export function assertFivemAllowed(actor, next, previous = null) {
+	if (actor?.can?.('fivemdata.view')) return;
+	const before = new Set(fivemKeysIn(previous));
+	const added = fivemKeysIn(next).filter(k => !before.has(k));
+	if (added.length) throw new ForbiddenError(`Les variables {fivem.*} (${added.map(k => `{${k}}`).join(', ')}) demandent la permission fivemdata.view (voir les fiches joueurs FiveM).`);
 }
 
 // fivemVars(discordId) -> { 'fivem.*': … } or null (database off); fivemEnabled() -> boolean
@@ -99,7 +117,8 @@ export function createVariables({ executor, fivemVars = async () => null, fivemE
 		},
 
 		// Groups shown by the panel "Variables" button; FiveM only when its database is set up
-		catalog(scope = 'member') {
+		// actor: the FiveM group is only offered to people allowed to see that data
+		catalog(scope = 'member', actor = null) {
 			const list = scope === 'member' ? [...MEMBER_VARIABLES, ...SERVER_VARIABLES] : SERVER_VARIABLES;
 			const groups = new Map();
 			for (const v of list) {
@@ -107,7 +126,7 @@ export function createVariables({ executor, fivemVars = async () => null, fivemE
 				groups.get(v.group).items.push({ key: v.key, label: v.label });
 			}
 			const out = [...groups.values()];
-			if (scope === 'member' && fivemEnabled()) {
+			if (scope === 'member' && fivemEnabled() && (!actor || actor.can('fivemdata.view'))) {
 				out.push({ title: 'Compte FiveM', hint: 'Rempli si le compte Discord du membre est lié en jeu, sinon « inconnu ».', items: FIVEM_VARIABLES });
 			}
 			return out;

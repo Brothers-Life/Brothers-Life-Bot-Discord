@@ -20,6 +20,8 @@ export function registerTicketRoutes(app, { core }) {
 			const category = categories.get(t.guildId).get(t.categoryId);
 			return {
 				...t,
+				// The variables computed at opening may hold FiveM data: never sent to the panel
+				vars: undefined,
 				guildName: guilds.get(t.guildId) ?? t.guildId,
 				categoryName: category?.name ?? null,
 				categoryEmoji: category?.emoji ?? null,
@@ -136,7 +138,7 @@ export function registerTicketRoutes(app, { core }) {
 			executor.listRoles(guildId),
 		]);
 		return {
-			...tickets.describe(guildId),
+			...tickets.describe(guildId, request.actor),
 			channels,
 			categoryChannels,
 			roles,

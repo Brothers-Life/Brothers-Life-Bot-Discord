@@ -2,7 +2,7 @@ import { definePermission } from './permissions.js';
 import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
 import { normalizeForm, nextStep, readStep } from './forms.js';
 import { accountCreatedAt, fill } from './ticketConfig.js';
-import { createVariables, usesFivem } from './variables.js';
+import { assertFivemAllowed, createVariables, usesFivem } from './variables.js';
 
 definePermission('recruitment.view', { label: 'Voir les candidatures', category: 'Recrutement' });
 definePermission('recruitment.vote', { label: 'Voter et commenter les candidatures', category: 'Recrutement' });
@@ -171,6 +171,7 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 			need(actor, 'recruitment.manage');
 			if (network.find(guildId)?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
 			const p = normalizePosition(input);
+			assertFivemAllowed(actor, p.config?.dm ?? p, input.id ? q.position.get(input.id)?.config : null);
 			const panelChannelId = SNOWFLAKE.test(input.panelChannelId) ? input.panelChannelId : null;
 			let id = input.id;
 			if (id) {

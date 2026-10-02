@@ -3,7 +3,7 @@ import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
 import { normalizePayload } from './announcements.js';
 import { DEFAULT_CARD, fetchImage, fillVars, normalizeCard, renderCard } from './cards.js';
 import { accountCreatedAt } from './ticketConfig.js';
-import { createVariables, usesFivem } from './variables.js';
+import { assertFivemAllowed, createVariables, usesFivem } from './variables.js';
 
 definePermission('onboarding.view', { label: 'Voir l’accueil (bienvenue, règlement, rôles auto)', category: 'Accueil' });
 definePermission('onboarding.manage', { label: 'Configurer l’accueil, les boosts et le règlement', category: 'Accueil' });
@@ -190,6 +190,7 @@ export function createOnboarding({ db, network, audit, executor, uploads, logger
 			if (!actor.can('onboarding.manage')) throw new ForbiddenError('Permission manquante : onboarding.manage');
 			if (!active(guildId)) throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
 			const current = configOf(guildId);
+			assertFivemAllowed(actor, input, current);
 			const config = normalizeOnboarding({ ...input, rules: { ...input.rules, messageId: current.rules.messageId } });
 			for (const [key, value] of [['welcome', config.welcome.card.design], ['leave', config.leave.card.design], ['boost', config.boost.card.design]]) {
 				for (const source of [value.background.image, ...value.layers.map(l => l.src)]) {

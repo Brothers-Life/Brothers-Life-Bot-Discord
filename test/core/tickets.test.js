@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { withNetwork, ALICE, BOB, MAIN, OTHER } from '../helpers.js';
@@ -139,6 +140,7 @@ test('ticket texts get member, form and linked FiveM account variables', async (
 	});
 	const ticket = await core.tickets.open({ guildId: MAIN, userId: MEMBER, userName: 'bob', categoryId: category.id, answers: [{ id: 'pseudo', label: 'Pseudo', type: 'short', value: 'John_Doe' }] });
 	assert.equal(ticket.vars['fivem.dbid'], 42);
+	assert.equal(ticket.vars['fivem.linked'], undefined, 'FiveM data not used by the texts is not kept');
 	assert.equal(ticket.vars['user.id'], MEMBER);
 	assert.equal(ticket.vars['tickets.count'], 0);
 	assert.equal(executor.ticketChannels.get(ticket.channelId).name, '🟢┃support-42-0001');
@@ -154,15 +156,18 @@ test('a slow or broken FiveM database never blocks a ticket', async () => {
 	assert.equal(ticket.vars['fivem.dbid'], undefined);
 });
 
-test('HTML transcript: Discord-like page, internal notes for the staff only, kept for the panel', async () => {
+test('HTML transcript: Discord-like page, internal notes only in the panel copy', async () => {
 	const { core, owner, executor, category } = await setup();
 	const ticket = await core.tickets.open({ guildId: MAIN, userId: MEMBER, userName: 'bob', categoryId: category.id, answers: [{ id: 'pseudo', label: 'Pseudo', type: 'short', value: 'John <b>Doe</b>' }] });
 	await core.tickets.reply(owner, ticket.id, { content: 'Note secrète du staff', internal: true });
 	executor.sent.length = 0;
 	await core.tickets.close(MEMBER, ticket.id, 'Réglé');
 	await core.logs.flush();
-	const staff = executor.sent.find(s => s.channelId === 'c-tickets').message.files[0].content;
+	const logged = executor.sent.find(s => s.channelId === 'c-tickets').message.files[0].content;
 	const member = executor.dms.at(-1)[2][0].content;
+	const saved = core.tickets.transcriptFile(ticket.id);
+	const staff = fs.readFileSync(saved.file, 'utf8');
+	assert.doesNotMatch(logged, /Note secrète du staff/, 'Discord copies never carry the internal notes');
 	assert.match(staff, /^<!doctype html>/);
 	assert.match(staff, /Ticket #0001/);
 	assert.match(staff, /bonjour <span class="mention">@alice<\/span>/, 'mentions shown with names');
@@ -170,8 +175,7 @@ test('HTML transcript: Discord-like page, internal notes for the staff only, kep
 	assert.match(staff, /Note secrète du staff/);
 	assert.doesNotMatch(member, /Note secrète du staff/);
 	assert.match(member, /Réglé/);
-	const saved = core.tickets.transcriptFile(ticket.id);
-	assert.ok(saved && saved.file.endsWith(`ticket-${ticket.id}.html`));
+	assert.ok(saved.file.endsWith(`ticket-${ticket.id}.html`));
 });
 
 test('the whole ticket system is copied to another server, without its channels and roles', async () => {
@@ -192,4 +196,17 @@ test('the whole ticket system is copied to another server, without its channels 
 	assert.deepEqual(copied.panels[0].categoryIds, [type.id]);
 	assert.ok(copied.statuses.some(s => s.key === 'waiting'));
 	await assert.rejects(core.tickets.copySystem(owner, MAIN, MAIN), /autre serveur/);
+});
+
+test('{fivem.*} in ticket texts needs fivemdata.view, existing ones can still be edited around', async () => {
+	const { core, owner, modo, category } = await setup();
+	const manager = core.ranks.create(owner, { name: 'Gestion tickets', level: 30, permissions: ['tickets.manage'] });
+	await core.ranks.assignDirect(owner, ALICE, manager.id);
+	const alice = await core.ranks.resolve(ALICE);
+	const withFivem = { welcome: { title: 'Ticket', message: 'tel {fivem.phone}' } };
+	await assert.rejects(core.tickets.saveCategory(alice, MAIN, { id: category.id, name: 'Support', config: withFivem }), /fivemdata\.view/);
+	await core.tickets.saveCategory(owner, MAIN, { id: category.id, name: 'Support', rankIds: [modo.id], config: withFivem });
+	const saved = await core.tickets.saveCategory(alice, MAIN, { id: category.id, name: 'Support 2', rankIds: [modo.id], config: { welcome: { title: 'Nouveau titre', message: 'tel {fivem.phone}' } } });
+	assert.equal(saved.name, 'Support 2', 'an existing variable does not block the edit');
+	assert.ok(!core.tickets.describe(MAIN, alice).variables.some(g => g.title === 'Compte FiveM'));
 });

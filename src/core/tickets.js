@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { definePermission } from './permissions.js';
 import { inlineImages, renderTicketTranscript, transcriptText } from './transcript.js';
-import { createVariables } from './variables.js';
+import { assertFivemAllowed, createVariables, fivemKeysIn } from './variables.js';
 import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
 import { normalizePayload } from './announcements.js';
 import { nextStep, readStep } from './forms.js';
@@ -285,13 +285,15 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 
 	// Variables known when a ticket opens: member, server, form answers, linked FiveM account.
 	// Nothing here may block the opening: the shared variables have fallbacks and FiveM a time limit.
-	async function ticketVars({ guildId, userId, userName, answers }) {
-		const shared = await variables.member(guildId, userId, { fivem: true }).catch((error) => {
+	// Only the FiveM data the texts of the type use is read and kept (no phone or license stored for nothing).
+	async function ticketVars({ guildId, userId, userName, answers, category }) {
+		const used = new Set(fivemKeysIn(category?.config.nameTemplate, category?.config.welcome));
+		const shared = await variables.member(guildId, userId, { fivem: used.size > 0 }).catch((error) => {
 			logger.warn('Ticket variables:', error.message);
 			return {};
 		});
 		return {
-			...shared,
+			...Object.fromEntries(Object.entries(shared).filter(([key]) => !key.startsWith('fivem.') || used.has(key))),
 			// The name Discord gave with the interaction is the freshest
 			'user.name': userName || shared['user.name'] || userId,
 			'tickets.count': q.openedBy.get(guildId, userId).n,
@@ -422,13 +424,13 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 		statuses: statusesOf,
 		priorities: () => PRIORITIES.map(key => ({ key, label: PRIORITY_LABELS[key] })),
 
-		describe(guildId) {
+		describe(guildId, actor = null) {
 			return {
 				settings: settingsOf(guildId),
 				categories: q.categories.all(guildId).map(toCategory),
 				panels: q.panels.all(guildId).map(toPanel),
 				statuses: statusesOf(guildId),
-				variables: [{ title: 'Ticket', items: TICKET_VARIABLES }, ...variables.catalog('member')],
+				variables: [{ title: 'Ticket', items: TICKET_VARIABLES }, ...variables.catalog('member', actor)],
 			};
 		},
 
@@ -462,6 +464,8 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 		async saveCategory(actor, guildId, input) {
 			requireManage(actor, guildId);
 			validateCategory(input);
+			const before = input.id ? q.category.get(input.id) : null;
+			assertFivemAllowed(actor, input.config, before?.config ?? null);
 			if (input.transcriptChannelId && !await executor.getTextChannel(guildId, input.transcriptChannelId)) {
 				throw new ValidationError('Le salon des transcripts n’existe pas sur ce serveur, ou le bot ne peut pas y écrire.');
 			}
@@ -621,7 +625,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			await checkAccess(guildId, userId, category);
 
 			const cleanAnswers = answers.filter(a => a.value).slice(0, 25).map(a => ({ id: a.id, label: a.label.slice(0, 45), type: a.type ?? 'paragraph', value: a.value.slice(0, 4000) }));
-			const vars = await ticketVars({ guildId, userId, userName, answers: cleanAnswers });
+			const vars = await ticketVars({ guildId, userId, userName, answers: cleanAnswers, category });
 			const number = q.nextNumber.get(guildId).n;
 			const id = Number(q.insertTicket.run({
 				guildId,
@@ -830,8 +834,9 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 				return null;
 			}) : null;
 			const fileName = `ticket-${String(ticket.number).padStart(4, '0')}`;
-			const file = pages ? { name: `${fileName}.html`, content: pages.staff } : { name: `ticket-${ticket.number}.txt`, content: text };
-			const memberFile = pages ? { name: `${fileName}.html`, content: pages.member } : file;
+			// Internal notes stay in the panel (staff page on disk): what goes to Discord never has them
+			const file = pages ? { name: `${fileName}.html`, content: pages.member } : { name: `ticket-${ticket.number}.txt`, content: text };
+			const memberFile = file;
 			const summary = {
 				title: `Ticket #${ticket.number} fermé`,
 				description: `Ouvert par <@${ticket.openerId}> · fermé par ${system ? 'le bot' : `<@${userId}>`}`,

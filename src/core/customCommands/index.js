@@ -2,7 +2,7 @@ import { definePermission } from '../permissions.js';
 import { ForbiddenError, NotFoundError, ValidationError } from '../errors.js';
 import { everyBlock, normalizeCommand, sensitiveBlocks } from './schema.js';
 import { runFlow } from './engine.js';
-import { createVariables } from '../variables.js';
+import { assertFivemAllowed, createVariables } from '../variables.js';
 
 definePermission('customcommands.view', { label: 'Voir les commandes personnalisées', category: 'Commandes perso' });
 definePermission('customcommands.manage', { label: 'Créer et modifier les commandes personnalisées', category: 'Commandes perso' });
@@ -146,6 +146,7 @@ export function createCustomCommands({ db, network, ranks, audit, executor, logs
 			need(actor, 'customcommands.manage');
 			const current = input.id ? getOrThrow(input.id) : null;
 			const def = normalizeCommand(input, { reservedNames: reserved });
+			assertFivemAllowed(actor, def, current);
 			await checkRights(actor, def, current?.id ?? null);
 			const row = { name: def.name, definition: JSON.stringify(def), by: actor.id, at: now() };
 			let id = current?.id;
