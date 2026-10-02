@@ -2,7 +2,7 @@
 
 Bot Discord multi-serveurs pour la communauté RP **Brothers Life** (serveur FiveM Qbox) : il gère plusieurs serveurs Discord comme un seul réseau et s'administre depuis un panel web React en français. Tout le texte visible (Discord, panel, commits) est en **français** ; le code et ses commentaires en anglais.
 
-État au 2026-10-01 : **v1.5.1 publiée**, tout est poussé, 287 tests verts.
+État au 2026-10-02 : **v1.7.0 publiée**, tout est poussé, 304 tests verts.
 
 ## Commandes
 
@@ -39,6 +39,7 @@ Avant tout commit : `npm run lint`, `npm test`, et pour le panel `npx tsc -b` + 
 - **Variables de modèles** : service commun `src/core/variables.js` (`variables.member(guildId, userId, { fivem })`, `.server(guildId)`, `.catalog(scope)`) pour membre/serveur/date/compte FiveM (`{fivem.*}` seulement si le texte les utilise, délai max 4 s). Chaque module ajoute les siennes. Panel : `VariableButton` (`web/src/components/app/variable-picker.tsx`) insère dans le dernier champ cliqué du conteneur.
 - **Émojis** : `EmojiField`/`EmojiPicker` (`web/src/components/app/emoji-picker.tsx`), valeurs unicode ou `<:nom:id>` ; autocollants : `StickerPicker`.
 - **Messages de log** (`logs.log(guildId, category, message, type)`) : objet `{ title, description, fields, color, author, authorId, thumbnail, thumbnailUserId, image, url, footer }`. `color` = nom (`info`, `success`, `warning`, `danger`, `neutral`, `brand`, `purple`, `pink`, `teal`) ou hex. L'exécuteur ajoute l'émoji de catégorie, résout `authorId`/`thumbnailUserId` en avatar.
+- **Données FiveM dans les messages** : ajouter une variable `{fivem.*}` exige `fivemdata.view` (`assertFivemAllowed` dans les `save`), ne garder que les clés utilisées (`fivemKeysIn`), ne jamais renvoyer `ticket.vars` au panel ni mettre les notes internes dans ce qui part sur Discord.
 - **Panel** : grilles avec `grid-cols-[minmax(0,1fr)]` (sinon débordement mobile), `TabsList` qui passe à la ligne : `h-auto flex-wrap [&>button]:h-8 [&>button]:flex-none`. Vérifier au navigateur (Playwright) desktop **et** 390 px.
 - **DA** : ambre `#ff9628`, noir chaud, Bahnschrift/Barlow, coins « brackets » (`brackets`, `live-dot` dans `web/src/styles/index.css`).
 - Pour une fonctionnalité : service core + tests (`test/core/*.test.js`) → câblage `context.js` → routes → page panel + entrée de nav (`web/src/components/layout/nav.ts`) → commande/composants bot → catalogue → titres d'audit.
@@ -92,6 +93,8 @@ Réseau de serveurs, rangs et permissions synchronisés, staff sync, sanctions (
 - **v1.4.0** : FiveM — fiches joueurs, page Données FiveM, logs du jeu, check des rôles Discord, bouton panel du lecteur musique.
 - **v1.5.0** : statistiques FiveM croisées, `/musique jouer` sans recherche.
 - **v1.5.1** : logs Discord enrichis (avatars, images supprimées, dates, couleurs, durées).
+- **v1.6.0** : sélecteur d'émojis façon Discord, variables communes (membre, serveur, compte FiveM lié) partout, émojis perso et autocollants, transcripts de tickets en page web style Discord.
+- **v1.7.0** : molette dans les popovers des fenêtres, sélecteur de couleur libre + styles de bouton Discord, dupliquer partout, copie du système de tickets vers un autre serveur, `{fivem.*}` réservé à `fivemdata.view` (audit).
 
 ## Pistes proposées, pas encore faites
 
