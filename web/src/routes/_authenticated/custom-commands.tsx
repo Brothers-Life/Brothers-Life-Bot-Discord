@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Hash, History, MousePointerClick, Pencil, Plus, Save, SquareSlash, Trash2, Wand2, X, Zap } from 'lucide-react'
@@ -20,12 +20,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { BlockList, MultiPicker, channelItems, roleItems } from '@/features/custom-commands/flow-editor'
 import { EMPTY_COMMAND, PERMISSIONS, TRIGGERS, VARIABLES, type Component, type CustomCommand, type Data, type EditorContext, type Option } from '@/features/custom-commands/model'
 import { EmojiField } from '@/components/app/emoji-picker'
+import { VariableButton } from '@/components/app/variable-picker'
 
 export const Route = createFileRoute('/_authenticated/custom-commands')({
   component: CustomCommandsPage,
 })
 
 const TRIGGER_ICONS = { slash: SquareSlash, user: MousePointerClick, message: MousePointerClick, keyword: Zap }
+
+const COMMAND_VARIABLE_LABELS: Record<string, string> = {
+  '{user}': 'Mention de l’auteur', '{user.name}': 'Nom de l’auteur', '{server}': 'Nom du serveur', '{server.members}': 'Nombre de membres',
+  '{channel}': 'Salon', '{date}': 'Date', '{time}': 'Heure', '{option.nom}': 'Valeur d’une option', '{counter.clé}': 'Compteur du serveur',
+  '{counter.clé.user}': 'Compteur du membre', '{random:1-100}': 'Nombre au hasard', '{choice:a|b|c}': 'Choix au hasard',
+}
 
 function displayName(c: CustomCommand) {
   if (c.trigger.type === 'slash') return `/${c.name}`
@@ -137,6 +144,7 @@ function Editor({ initial, data, onClose }: { initial: CustomCommand; data: Data
     onSuccess: () => { toast.success('Commande enregistrée : elle arrive sur Discord'); onClose() },
   })
   const kw = c.trigger.keyword ?? { mode: 'contains' as const, patterns: [], caseSensitive: false, channelIds: [] }
+  const flowBox = useRef<HTMLDivElement>(null)
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -241,10 +249,10 @@ function Editor({ initial, data, onClose }: { initial: CustomCommand; data: Data
             <p className='text-xs text-muted-foreground sm:col-span-2'>Le chef du réseau passe toujours. Rangs et rôles autorisés : il suffit d’en avoir un.</p>
           </TabsContent>
 
-          <TabsContent value='flow' className='mt-4 grid gap-3'>
-            <div className='flex flex-wrap gap-1.5 text-xs'>
-              <span className='text-muted-foreground'>Variables :</span>
-              {[...VARIABLES, ...optionNames.map((n) => `{option.${n}}`)].map((v) => <code key={v} className='rounded bg-muted px-1.5 py-0.5'>{v}</code>)}
+          <TabsContent value='flow' className='mt-4 grid gap-3' ref={flowBox}>
+            <div className='flex flex-wrap items-center gap-2'>
+              <VariableButton container={flowBox} extra={[{ title: 'Commande', items: [...VARIABLES, ...optionNames.map((n) => `{option.${n}}`)].map((v) => ({ key: v.slice(1, -1), label: COMMAND_VARIABLE_LABELS[v] ?? 'Option de la commande' })) }]} />
+              <span className='text-xs text-muted-foreground'>Insérée dans le dernier champ texte cliqué d’un bloc.</span>
             </div>
             <BlockList blocks={c.flow} onChange={(flow) => set({ flow })} ctx={ctx} />
           </TabsContent>

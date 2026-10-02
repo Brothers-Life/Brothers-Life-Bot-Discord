@@ -1,4 +1,5 @@
 import { definePermission } from './permissions.js';
+import { createVariables } from './variables.js';
 import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
 import { normalizePayload } from './announcements.js';
 import { nextStep, readStep } from './forms.js';
@@ -12,23 +13,6 @@ definePermission('tickets.handle', { label: 'Traiter les tickets (prendre en cha
 definePermission('tickets.manage', { label: 'Configurer les tickets', category: 'Tickets' });
 
 const FORM_TTL_MS = 15 * 60_000;
-
-// The promise's value, or null after `ms` (the timer never keeps the process alive)
-function withTimeout(promise, ms) {
-	let timer;
-	const limit = new Promise((resolve) => {
-		timer = setTimeout(resolve, ms, null);
-		timer.unref?.();
-	});
-	return Promise.race([promise, limit]).finally(() => clearTimeout(timer));
-}
-
-function ageText(ms) {
-	const days = Math.floor(ms / 86_400_000);
-	if (days >= 365) return `${Math.floor(days / 365)} an${days >= 730 ? 's' : ''}`;
-	if (days >= 30) return `${Math.floor(days / 30)} mois`;
-	return `${days} jour${days > 1 ? 's' : ''}`;
-}
 const SNOWFLAKE = /^\d{17,20}$/;
 
 const DEFAULT_PANEL_PAYLOAD = {
@@ -36,8 +20,8 @@ const DEFAULT_PANEL_PAYLOAD = {
 	embed: { enabled: true, title: 'Besoin d’aide ?', description: 'Choisis le type de demande : un salon privé s’ouvre avec l’équipe.', color: '#d6a249' },
 };
 
-// profileVars(discordId) -> extra variables such as {fivem.dbid} (null when unavailable)
-export function createTickets({ db, network, ranks, audit, executor, logs, logger = console, now = Date.now, profileVars = async () => null }) {
+// variables: shared template variables (member, server, FiveM account), see variables.js
+export function createTickets({ db, network, ranks, audit, executor, logs, logger = console, now = Date.now, variables = createVariables({ executor, logger, now }) }) {
 	logs.registerCategory('tickets', 'Tickets (ouverture, fermeture, transcripts)');
 
 	const q = {
@@ -294,35 +278,18 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 	}
 
 	// Variables known when a ticket opens: member, server, form answers, linked FiveM account.
-	// Nothing here may block the opening: every source has a fallback and FiveM a time limit.
+	// Nothing here may block the opening: the shared variables have fallbacks and FiveM a time limit.
 	async function ticketVars({ guildId, userId, userName, answers }) {
-		const [user, member, guild, extra] = await Promise.all([
-			executor.getUser(userId).catch(() => null),
-			executor.getMemberInfo(guildId, userId).catch(() => null),
-			executor.getGuildInfo(guildId).catch(() => null),
-			withTimeout(Promise.resolve().then(() => profileVars(userId)), 4000).catch((error) => {
-				logger.warn('Ticket profile variables:', error.message);
-				return null;
-			}),
-		]);
-		const at = new Date(now());
-		const day = (ms) => new Date(ms).toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris' });
+		const shared = await variables.member(guildId, userId, { fivem: true }).catch((error) => {
+			logger.warn('Ticket variables:', error.message);
+			return {};
+		});
 		return {
-			'user.name': user?.globalName ?? userName ?? user?.username ?? userId,
-			'user.username': user?.username ?? userName ?? userId,
-			'user.id': userId,
-			'user.avatar': user?.avatar ?? 'https://cdn.discordapp.com/embed/avatars/0.png',
-			'account.age': ageText(now() - accountCreatedAt(userId)),
-			'member.since': member?.joinedAt ? day(member.joinedAt) : 'inconnu',
-			'member.nickname': member?.nickname ?? user?.globalName ?? userName ?? 'aucun',
-			'member.roles': member?.roles?.map(r => r.name).join(', ') || 'aucun',
+			...shared,
+			// The name Discord gave with the interaction is the freshest
+			'user.name': userName || shared['user.name'] || userId,
 			'tickets.count': q.openedBy.get(guildId, userId).n,
-			'server': guild?.name ?? '',
-			'memberCount': guild?.memberCount ?? '',
-			'date': day(at),
-			'time': at.toLocaleTimeString('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit' }),
 			...Object.fromEntries(answers.map(a => [`answer.${a.id}`, a.value])),
-			...(extra ?? {}),
 		};
 	}
 
@@ -428,7 +395,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 				categories: q.categories.all(guildId).map(toCategory),
 				panels: q.panels.all(guildId).map(toPanel),
 				statuses: statusesOf(guildId),
-				variables: TICKET_VARIABLES,
+				variables: [{ title: 'Ticket', items: TICKET_VARIABLES }, ...variables.catalog('member')],
 			};
 		},
 

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Rocket, Save, Send } from 'lucide-react'
@@ -21,12 +21,13 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { EmojiField } from '@/components/app/emoji-picker'
+import { VariableButton } from '@/components/app/variable-picker'
 
 export const Route = createFileRoute('/_authenticated/onboarding')({
   component: OnboardingPage,
 })
 
-const VARIABLES = '{user} {user.name} {server} {memberCount} {inviter} {account.age} {boosts} {boost.tier} {date} · images : {user.avatar} {server.icon}'
+const WELCOME_VARIABLES = [{ title: 'Accueil', items: [{ key: 'inviter', label: 'Qui a invité le membre' }, { key: 'avatarUrl', label: 'Avatar (pour les images)' }] }]
 
 function OnboardingPage() {
   const guilds = useQuery({ queryKey: ['network'], queryFn: () => api<Guild[]>('/network') })
@@ -297,12 +298,16 @@ function PayloadEditor({ payload, onChange, disabled, idPrefix, withPreview = fa
   withPreview?: boolean
 }) {
   const embed = { ...EMPTY_EMBED, ...payload.embed }
+  const box = useRef<HTMLDivElement>(null)
   const editor = (
-    <div className='grid gap-3'>
+    <div className='grid gap-3' ref={box}>
       <div className='grid gap-1.5'>
         <Label htmlFor={`${idPrefix}-content`}>Texte</Label>
         <Textarea id={`${idPrefix}-content`} rows={2} maxLength={2000} value={payload.content} disabled={disabled} onChange={(e) => onChange({ ...payload, content: e.target.value })} />
-        <p className='text-xs text-muted-foreground'>Variables : {VARIABLES}</p>
+        <div className='flex flex-wrap items-center gap-2'>
+          <VariableButton container={box} extra={WELCOME_VARIABLES} disabled={disabled} />
+          <span className='text-xs text-muted-foreground'>Insérée dans le dernier champ cliqué (texte, titre, champs de l’embed…).</span>
+        </div>
       </div>
       <label className='flex items-center gap-2 text-sm font-medium'>
         <Switch checked={embed.enabled} disabled={disabled} onCheckedChange={(v) => onChange({ ...payload, embed: { ...embed, enabled: v } })} /> Embed

@@ -7,7 +7,8 @@ import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { GuildIcon } from '@/components/app/ui'
 
-type GuildEmojis = { id: string; name: string; icon: string | null; isMain: boolean; emojis: { id: string; name: string; animated: boolean }[] }
+export type Sticker = { id: string; name: string; format: number; description: string }
+export type GuildEmojis = { id: string; name: string; icon: string | null; isMain: boolean; emojis: { id: string; name: string; animated: boolean }[]; stickers: Sticker[] }
 type Item = { value: string; label: string; unicode?: string; url?: string }
 type Section = { key: string; title: string; items: Item[]; icon?: LucideIcon; guild?: GuildEmojis }
 
@@ -56,7 +57,8 @@ export function EmojiView({ value, className }: { value: string | null | undefin
   return <span className={className}>{value}</span>
 }
 
-function useServerEmojis(enabled: boolean) {
+// Emojis and stickers of the network servers
+export function useServerEmojis(enabled = true) {
   return useQuery({ queryKey: ['emojis'], queryFn: () => api<{ guilds: GuildEmojis[] }>('/emojis'), enabled, staleTime: 5 * 60_000 })
 }
 

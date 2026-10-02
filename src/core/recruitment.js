@@ -1,7 +1,8 @@
 import { definePermission } from './permissions.js';
 import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
 import { normalizeForm, nextStep, readStep } from './forms.js';
-import { accountCreatedAt } from './ticketConfig.js';
+import { accountCreatedAt, fill } from './ticketConfig.js';
+import { createVariables, usesFivem } from './variables.js';
 
 definePermission('recruitment.view', { label: 'Voir les candidatures', category: 'Recrutement' });
 definePermission('recruitment.vote', { label: 'Voter et commenter les candidatures', category: 'Recrutement' });
@@ -76,7 +77,7 @@ export function normalizePosition(input = {}) {
 	};
 }
 
-export function createRecruitment({ db, network, ranks, audit, executor, sanctions, stats, logger = console, now = Date.now }) {
+export function createRecruitment({ db, network, ranks, audit, executor, sanctions, stats, logger = console, now = Date.now, variables = createVariables({ executor, logger, now }) }) {
 	const q = {
 		positions: db.prepare('SELECT * FROM recruit_positions WHERE guild_id = ? ORDER BY id'),
 		position: db.prepare('SELECT * FROM recruit_positions WHERE id = ?'),
@@ -146,8 +147,12 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 		return reasons;
 	}
 
-	function dmText(position, status) {
-		return position.config.dm[status]?.replace(/\{position\}/g, position.name) ?? null;
+	// Message sent to the candidate: {position} and the shared member variables
+	async function dmText(position, status, guildId, userId) {
+		const text = position.config.dm[status];
+		if (!text) return null;
+		const vars = await variables.member(guildId, userId, { fivem: usesFivem(text) }).catch(() => ({}));
+		return fill(text, { ...vars, position: position.name });
 	}
 
 	async function refreshReview(application) {
@@ -255,7 +260,7 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 				if (posted) q.setReview.run(position.config.reviewChannelId, posted.messageId, posted.threadId ?? null, id);
 				application = getApplication(id);
 			}
-			const text = dmText(position, 'received');
+			const text = await dmText(position, 'received', guildId, userId);
 			if (text) await executor.sendDM(userId, text).catch(() => null);
 			audit.record({ actorId: userId, source: 'bot', action: 'recruitment.apply', guildId, target: String(id), details: { position: position.name, member: `<@${userId}>` } });
 			return application;
@@ -321,7 +326,7 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 			}
 			const updated = getApplication(applicationId);
 			await refreshReview(updated);
-			const text = dmText(position, status);
+			const text = await dmText(position, status, application.guildId, application.userId);
 			if (text && status !== 'withdrawn') await executor.sendDM(application.userId, `${text}${reason ? `\n${reason}` : ''}`).catch(() => null);
 			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'recruitment.status', guildId: application.guildId, target: String(applicationId), details: { position: position.name, member: `<@${application.userId}>`, status: STATUSES[status].label, reason: reason || null } });
 			return updated;

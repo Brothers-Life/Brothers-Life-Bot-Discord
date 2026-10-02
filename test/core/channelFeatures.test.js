@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { withNetwork, ALICE, BOB, MAIN } from '../helpers.js';
+import { withNetwork, ALICE, BOB, MAIN, OTHER } from '../helpers.js';
 import { ForbiddenError, ValidationError } from '../../src/core/errors.js';
 import { normalizeBuilt } from '../../src/core/embedBuilder.js';
 
@@ -130,4 +130,15 @@ test('embed builder: several embeds and link buttons, posted then edited in plac
 	assert.ok(executor.deleted.some(([c, m]) => c === '610000000000000300' && m === posted.messageId), 'moved: the old message is deleted');
 	await core.embedBuilder.remove(owner, saved.id);
 	assert.equal(core.embedBuilder.list().length, 0);
+});
+
+test('embed builder: up to 3 stickers, only from the server where the message is posted', async () => {
+	const { core, owner, executor } = await withNetwork();
+	executor.stickers.set(MAIN, [{ id: '990000000000000001', name: 'brl', format: 1 }]);
+	assert.deepEqual(normalizeBuilt({ stickers: ['990000000000000001', 'x', '990000000000000001'] }).stickers, ['990000000000000001'], 'a sticker alone is a message');
+	const saved = await core.embedBuilder.save(owner, { payload: { content: 'Salut', stickers: ['990000000000000001'] } });
+	await core.embedBuilder.post(owner, saved.id, { guildId: MAIN, channelId: '610000000000000300' });
+	assert.deepEqual(executor.builtMessages.at(-1).payload.stickers, ['990000000000000001']);
+	core.network.activate(owner, OTHER);
+	await assert.rejects(core.embedBuilder.post(owner, saved.id, { guildId: OTHER, channelId: '620000000000000300' }), /autre serveur/);
 });

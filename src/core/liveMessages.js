@@ -3,6 +3,7 @@ import { definePermission } from './permissions.js';
 import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
 import { normalizePayload } from './announcements.js';
 import { fillPayload } from './onboarding.js';
+import { createVariables } from './variables.js';
 
 definePermission('messages.view', { label: 'Voir les messages dynamiques', category: 'Messages' });
 definePermission('messages.manage', { label: 'Créer, modifier et publier les messages dynamiques', category: 'Messages' });
@@ -32,7 +33,7 @@ function normalizeVariables(input = {}) {
 const hash = payload => createHash('sha1').update(JSON.stringify(payload)).digest('hex');
 
 // Messages kept up to date in several channels: edited in place, with live variables
-export function createLiveMessages({ db, network, audit, executor, stats, logger = console, now = Date.now }) {
+export function createLiveMessages({ db, network, audit, executor, stats, logger = console, now = Date.now, variables = createVariables({ executor, logger, now }) }) {
 	const q = {
 		list: db.prepare('SELECT * FROM live_messages ORDER BY id DESC'),
 		get: db.prepare('SELECT * FROM live_messages WHERE id = ?'),
@@ -86,6 +87,7 @@ export function createLiveMessages({ db, network, audit, executor, stats, logger
 		const date = new Date(now());
 		const custom = Object.fromEntries(Object.entries(message.variables).map(([k, v]) => [`var.${k}`, v]));
 		return {
+			...(await variables.server(guildId)),
 			...own,
 			...network_,
 			...custom,
@@ -201,10 +203,10 @@ export function createLiveMessages({ db, network, audit, executor, stats, logger
 		},
 
 		// Free variables ({var.xxx}) changed from the panel without editing the message
-		async setVariables(actor, id, variables) {
+		async setVariables(actor, id, values) {
 			need(actor);
 			const message = getOrThrow(id);
-			q.setVariables.run(JSON.stringify(normalizeVariables({ ...message.variables, ...variables })), now(), id);
+			q.setVariables.run(JSON.stringify(normalizeVariables({ ...message.variables, ...values })), now(), id);
 			const results = await sync(getOrThrow(id));
 			return { ...getOrThrow(id), results };
 		},

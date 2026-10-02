@@ -386,8 +386,7 @@ export type TicketConfig = {
   categoryChannels: { id: string; name: string }[]
   roles: Role[]
   ranks: RankSummary[]
-  variables: { group: string; key: string; label: string }[]
-  fivemVariables: { key: string; label: string }[]
+  variables: { title: string; hint?: string; items: { key: string; label: string }[] }[]
 }
 
 export type DiscordPermission = { key: string; label: string; group: string; ownerOnly: boolean }

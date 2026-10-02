@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, RefreshCw, Save, Send, Trash2, X } from 'lucide-react'
@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { VariableButton } from '@/components/app/variable-picker'
 
 export const Route = createFileRoute('/_authenticated/messages')({
   component: MessagesPage,
@@ -46,6 +47,12 @@ const REFRESH = [
   { value: 60, label: 'Toutes les heures' },
   { value: 1440, label: 'Une fois par jour' },
 ]
+const COUNTER_LABELS: Record<string, string> = {
+  members: 'Membres', humans: 'Humains', bots: 'Bots', voice: 'En vocal', boosts: 'Boosts', staff: 'Staff',
+  'network.members': 'Membres du réseau', 'network.voice': 'En vocal sur le réseau', 'network.servers': 'Serveurs du réseau',
+  'tickets.open': 'Tickets ouverts', 'sanctions.today': 'Sanctions du jour', date: 'Date', time: 'Heure',
+  'fivem.players': 'Joueurs FiveM', 'fivem.max': 'Places FiveM', 'fivem.status': 'État du serveur FiveM',
+}
 const BUILT_IN = ['members', 'humans', 'bots', 'voice', 'boosts', 'staff', 'network.members', 'network.voice', 'network.servers', 'tickets.open', 'sanctions.today', 'date', 'time', 'fivem.players', 'fivem.max', 'fivem.status']
 
 function toDraft(m: LiveMessage | null): Draft {
@@ -143,10 +150,11 @@ function Editor({ message, guilds, onSaved, onDeleted }: { message: LiveMessage 
     mutationFn: () => api(`/messages/${message!.id}`, { method: 'DELETE', body: { confirm: true } }),
     onSuccess: () => { toast.success('Message supprimé partout'); qc.invalidateQueries({ queryKey: ['live-messages'] }); onDeleted() },
   })
+  const varsBox = useRef<HTMLDivElement>(null)
 
   return (
     <div className='grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]'>
-      <div className='grid content-start gap-6'>
+      <div className='grid content-start gap-6' ref={varsBox}>
         <Section title={message ? message.name : 'Nouveau message'} actions={message && manage && (
           <div className='flex gap-2'>
             <Button size='sm' variant='outline' onClick={() => republish.mutate()} disabled={republish.isPending}><Send /> Renvoyer</Button>
@@ -170,7 +178,10 @@ function Editor({ message, guilds, onSaved, onDeleted }: { message: LiveMessage 
             <div className='grid gap-1.5'>
               <Label htmlFor='lm-content'>Texte</Label>
               <Textarea id='lm-content' rows={3} maxLength={2000} value={d.content} disabled={!manage} onChange={(e) => set({ content: e.target.value })} />
-              <p className='text-xs text-muted-foreground'>Variables : {BUILT_IN.map((v) => `{${v}}`).join(' ')} {d.variables.filter(([k]) => k).map(([k]) => `{var.${k}}`).join(' ')}</p>
+              <VariableButton scope='server' container={varsBox} disabled={!manage} extra={[
+                { title: 'Compteurs', items: BUILT_IN.map((key) => ({ key, label: COUNTER_LABELS[key] ?? key })) },
+                ...(d.variables.some(([k]) => k) ? [{ title: 'Variables libres', items: d.variables.filter(([k]) => k).map(([k, v]) => ({ key: `var.${k}`, label: v || 'vide' })) }] : []),
+              ]} />
             </div>
             <label className='flex items-center gap-2 text-sm font-medium'><Switch checked={d.embed.enabled} disabled={!manage} onCheckedChange={(v) => set({ embed: { ...d.embed, enabled: v } })} /> Embed</label>
             {d.embed.enabled && <EmbedFields idPrefix='lm' embed={d.embed} disabled={!manage} onChange={(patch) => set({ embed: { ...d.embed, ...patch } })} />}

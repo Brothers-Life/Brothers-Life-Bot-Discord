@@ -150,28 +150,14 @@ export function fill(template, vars) {
 	return template.replace(/\{([a-zA-Z0-9_.-]+)\}/g, (match, key) => (vars[key] !== undefined && vars[key] !== null ? String(vars[key]) : match));
 }
 
-// Variables of the ticket texts (channel name, welcome message), shown in the panel.
-// {answer.<id>} (form answers) and {fivem.*} (FIVEM_VARIABLES) come on top.
+// Variables of the ticket texts on top of the shared ones (variables.js); {answer.<id>} for the form answers
 export const TICKET_VARIABLES = [
-	{ group: 'Membre', key: 'user', label: 'Mention du membre (pseudo dans le nom du salon)' },
-	{ group: 'Membre', key: 'user.name', label: 'Nom affiché' },
-	{ group: 'Membre', key: 'user.username', label: 'Nom d’utilisateur Discord' },
-	{ group: 'Membre', key: 'user.id', label: 'ID Discord' },
-	{ group: 'Membre', key: 'user.avatar', label: 'URL de l’avatar' },
-	{ group: 'Membre', key: 'account.age', label: 'Âge du compte Discord' },
-	{ group: 'Membre', key: 'member.since', label: 'Arrivée sur le serveur' },
-	{ group: 'Membre', key: 'member.nickname', label: 'Pseudo sur le serveur' },
-	{ group: 'Membre', key: 'member.roles', label: 'Rôles du membre' },
-	{ group: 'Ticket', key: 'number', label: 'Numéro du ticket' },
-	{ group: 'Ticket', key: 'type', label: 'Type de ticket' },
-	{ group: 'Ticket', key: 'subject', label: 'Sujet (première réponse écrite)' },
-	{ group: 'Ticket', key: 'status', label: 'Statut' },
-	{ group: 'Ticket', key: 'claimer', label: 'Staff qui a pris le ticket' },
-	{ group: 'Ticket', key: 'tickets.count', label: 'Tickets déjà ouverts par le membre' },
-	{ group: 'Serveur', key: 'server', label: 'Nom du serveur' },
-	{ group: 'Serveur', key: 'memberCount', label: 'Nombre de membres' },
-	{ group: 'Serveur', key: 'date', label: 'Date d’ouverture' },
-	{ group: 'Serveur', key: 'time', label: 'Heure d’ouverture' },
+	{ key: 'number', label: 'Numéro du ticket' },
+	{ key: 'type', label: 'Type de ticket' },
+	{ key: 'subject', label: 'Sujet (première réponse écrite)' },
+	{ key: 'status', label: 'Statut' },
+	{ key: 'claimer', label: 'Staff qui a pris le ticket' },
+	{ key: 'tickets.count', label: 'Tickets déjà ouverts par le membre' },
 ];
 
 // Creation time of a Discord account, read from its ID

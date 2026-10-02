@@ -35,11 +35,18 @@ export function registerPanelRoutes(app, { core, runtime }) {
 		};
 	});
 
+	// Shared template variables, for the « Variables » button of the message editors
+	app.get('/api/variables', {
+		config: { permission: null },
+		schema: { querystring: { type: 'object', properties: { scope: { type: 'string', enum: ['member', 'server'] } } } },
+	}, async request => ({ groups: core.variables.catalog(request.query.scope ?? 'member') }));
+
 	// Custom emojis of the network servers, for the emoji picker
 	app.get('/api/emojis', { config: { permission: null } }, async () => ({
 		guilds: await Promise.all(network.list().filter(g => g.status === 'active' && g.botPresent).map(async g => ({
 			id: g.id, name: g.name, icon: g.icon ?? null, isMain: g.isMain,
 			emojis: await executor.listEmojis(g.id).catch(() => []),
+			stickers: await executor.listStickers(g.id).catch(() => []),
 		}))),
 	}));
 

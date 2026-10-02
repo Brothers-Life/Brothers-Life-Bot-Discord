@@ -2,6 +2,7 @@ import { definePermission } from '../permissions.js';
 import { ForbiddenError, NotFoundError, ValidationError } from '../errors.js';
 import { everyBlock, normalizeCommand, sensitiveBlocks } from './schema.js';
 import { runFlow } from './engine.js';
+import { createVariables } from '../variables.js';
 
 definePermission('customcommands.view', { label: 'Voir les commandes personnalisées', category: 'Commandes perso' });
 definePermission('customcommands.manage', { label: 'Créer et modifier les commandes personnalisées', category: 'Commandes perso' });
@@ -10,7 +11,7 @@ definePermission('customcommands.sensitive', { label: 'Mettre des actions sensib
 // Discord's limit per server and per kind (user / message), raised from 5 to 15
 const MAX_CONTEXT_MENUS = 15;
 
-export function createCustomCommands({ db, network, ranks, audit, executor, logs, members, moderation, sanctions, reservedNames = [], logger = console, now = Date.now, sleep = ms => new Promise(r => setTimeout(r, ms)), random = Math.random }) {
+export function createCustomCommands({ db, network, ranks, audit, executor, logs, members, moderation, sanctions, reservedNames = [], logger = console, now = Date.now, sleep = ms => new Promise(r => setTimeout(r, ms)), random = Math.random, variables = createVariables({ executor, logger, now }) }) {
 	logs.registerCategory('customcommands', 'Commandes personnalisées (blocs « log »)');
 	const reserved = new Set(reservedNames);
 	const listeners = new Set();
@@ -231,8 +232,13 @@ export function createCustomCommands({ db, network, ranks, audit, executor, logs
 			// Checked again at every run: a role that became dangerous or linked to a rank is never handed out
 			const roleCheck = { id: 'customcommand', isOwner: false, can: () => true };
 			const reason = `Commande ${c.trigger.type === 'slash' ? '/' : ''}${c.name}`;
+			let shared = null;
 			const io = {
 				now, random,
+				sharedVars: async (fivem) => {
+					if (!shared || (fivem && !shared.fivem)) shared = { fivem, vars: await variables.member(guildId, user.id, { fivem }) };
+					return shared.vars;
+				},
 				reply: (msg, opts) => respond.reply(msg, { ...opts, components: (opts.components ?? []).map(id => c.components.find(x => x.id === id)).filter(Boolean), commandId: c.id }),
 				send: (channel, msg, opts) => respond.send(channel, msg, { components: (opts.components ?? []).map(id => c.components.find(x => x.id === id)).filter(Boolean), commandId: c.id }),
 				dm: (userId, msg) => respond.dm(userId, msg),

@@ -20,14 +20,15 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { EMPTY_EMBED, EmbedFields, cleanEmbed } from '@/features/announcements/embed-editor'
 import { DiscordPreview } from '@/features/announcements/discord-preview'
-import { EmojiField } from '@/components/app/emoji-picker'
+import { EmojiField, useServerEmojis } from '@/components/app/emoji-picker'
+import { StickerPicker } from '@/components/app/sticker-picker'
 
 export const Route = createFileRoute('/_authenticated/embeds')({
   component: EmbedsPage,
 })
 
 type ButtonDraft = { label: string; url: string; emoji: string | null }
-type Built = { content: string; embeds: AnnouncementEmbed[]; buttons: ButtonDraft[] }
+type Built = { content: string; embeds: AnnouncementEmbed[]; buttons: ButtonDraft[]; stickers?: string[] }
 type Saved = { id: number; name: string; guildId: string | null; channelId: string | null; messageId: string | null; payload: Built; updatedAt: number }
 type Payload = { messages: Saved[]; guilds: { id: string; name: string; channels: Channel[] }[] }
 
@@ -121,6 +122,7 @@ function Editor({ saved, guilds, onSaved, onDeleted }: { saved?: Saved; guilds: 
   const [b, setB] = useState<Built>(saved?.payload ?? { content: '', embeds: [NEW_EMBED()], buttons: [] })
   const [tab, setTab] = useState(0)
   const [guildId, setGuildId] = useState(saved?.guildId ?? guilds[0]?.id ?? '')
+  const stickers = (useServerEmojis().data?.guilds ?? []).flatMap((g) => g.stickers ?? [])
   const [channelId, setChannelId] = useState<string | null>(saved?.channelId ?? null)
   const [json, setJson] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -202,6 +204,11 @@ function Editor({ saved, guilds, onSaved, onDeleted }: { saved?: Saved; guilds: 
             ))}
           </div>
 
+          <div className='grid gap-2'>
+            <Label>Autocollants <span className='font-normal text-muted-foreground'>({(b.stickers ?? []).length}/3, envoyés sous le message)</span></Label>
+            <StickerPicker value={b.stickers ?? []} onChange={(stickers) => setB({ ...b, stickers })} disabled={!manage} guildId={guildId} />
+          </div>
+
           {manage && (
             <div className='grid gap-3 rounded-lg border bg-muted/30 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end'>
               <div className='grid gap-1.5'>
@@ -224,7 +231,7 @@ function Editor({ saved, guilds, onSaved, onDeleted }: { saved?: Saved; guilds: 
 
       <Section title='Aperçu' description={b.embeds.length > 1 ? `Embed ${tab + 1} sur ${b.embeds.length} (les autres suivent en dessous sur Discord).` : undefined}>
         <div className={cn('grid gap-2 p-4')}>
-          <DiscordPreview content={b.content} embed={embed ?? { ...NEW_EMBED(), enabled: false }} roles={new Map()} extras={{ buttons: b.buttons }} />
+          <DiscordPreview content={b.content} embed={embed ?? { ...NEW_EMBED(), enabled: false }} roles={new Map()} extras={{ buttons: b.buttons, stickers: (b.stickers ?? []).map((id) => stickers.find((s) => s.id === id)).filter((s) => s !== undefined) }} />
           {b.embeds.length > 1 && <div className='flex flex-wrap gap-1'>{b.embeds.map((e, i) => <Pill key={i} tone={i === tab ? 'accent' : 'neutral'}>{e.title || `Embed ${i + 1}`}</Pill>)}</div>}
         </div>
       </Section>

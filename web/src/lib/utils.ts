@@ -89,3 +89,14 @@ export function insertAtCursor(field: Field | null, value: string, token: string
   })
   return value.slice(0, start) + token + value.slice(end)
 }
+
+// Types text at the caret of a React-controlled field: the native setter + an input event fire onChange
+export function typeInto(field: Field, token: string) {
+  const start = field.selectionStart ?? field.value.length
+  const end = field.selectionEnd ?? start
+  const proto = field instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+  Object.getOwnPropertyDescriptor(proto, 'value')?.set?.call(field, field.value.slice(0, start) + token + field.value.slice(end))
+  field.dispatchEvent(new Event('input', { bubbles: true }))
+  field.focus()
+  field.setSelectionRange(start + token.length, start + token.length)
+}

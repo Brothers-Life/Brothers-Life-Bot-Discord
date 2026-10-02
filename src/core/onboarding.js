@@ -3,6 +3,7 @@ import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
 import { normalizePayload } from './announcements.js';
 import { DEFAULT_CARD, fetchImage, fillVars, normalizeCard, renderCard } from './cards.js';
 import { accountCreatedAt } from './ticketConfig.js';
+import { createVariables, usesFivem } from './variables.js';
 
 definePermission('onboarding.view', { label: 'Voir l’accueil (bienvenue, règlement, rôles auto)', category: 'Accueil' });
 definePermission('onboarding.manage', { label: 'Configurer l’accueil, les boosts et le règlement', category: 'Accueil' });
@@ -96,13 +97,6 @@ export function normalizeOnboarding(input = {}) {
 	return out;
 }
 
-function ageText(ms) {
-	const days = Math.floor(ms / 86_400_000);
-	if (days >= 365) return `${Math.floor(days / 365)} an${days >= 730 ? 's' : ''}`;
-	if (days >= 30) return `${Math.floor(days / 30)} mois`;
-	return `${days} jour${days > 1 ? 's' : ''}`;
-}
-
 // Fills the variables everywhere in a message (text, embed, image URLs such as {user.avatar})
 export function fillPayload(payload, vars) {
 	const f = value => (typeof value === 'string' ? fillVars(value, vars) : value);
@@ -119,7 +113,7 @@ export function fillPayload(payload, vars) {
 }
 
 // Welcome, leave and boost messages (with an image card), automatic roles and rules to accept
-export function createOnboarding({ db, network, audit, executor, uploads, logger = console, now = Date.now, fetchImpl = fetch }) {
+export function createOnboarding({ db, network, audit, executor, uploads, logger = console, now = Date.now, fetchImpl = fetch, variables = createVariables({ executor, logger, now }) }) {
 	const q = {
 		get: db.prepare('SELECT * FROM onboarding_config WHERE guild_id = ?'),
 		upsert: db.prepare(`
@@ -149,24 +143,14 @@ export function createOnboarding({ db, network, audit, executor, uploads, logger
 		return network.find(guildId)?.status === 'active';
 	}
 
-	async function varsFor(guildId, member, extra = {}) {
-		const guild = await executor.getGuildInfo(guildId).catch(() => null);
-		const created = member.createdAt ?? accountCreatedAt(member.id);
+	// Shared member variables (+ {fivem.*} only when `uses` mentions them) and the welcome ones
+	async function varsFor(guildId, member, extra = {}, uses = null) {
+		const user = { username: member.username, globalName: member.globalName, avatar: member.avatarUrl, createdAt: member.createdAt ?? accountCreatedAt(member.id) };
+		const shared = await variables.member(guildId, member.id, { user, fivem: usesFivem(uses) });
 		return {
-			'user': `<@${member.id}>`,
-			'user.name': member.globalName ?? member.username ?? member.id,
-			'user.username': member.username ?? member.id,
-			'user.id': member.id,
-			'user.avatar': member.avatarUrl ?? 'https://cdn.discordapp.com/embed/avatars/0.png',
-			'avatarUrl': member.avatarUrl ?? 'https://cdn.discordapp.com/embed/avatars/0.png',
-			'account.age': ageText(now() - created),
-			'server': guild?.name ?? '',
-			'server.icon': guild?.iconUrl ?? 'https://cdn.discordapp.com/embed/avatars/0.png',
-			'memberCount': guild?.memberCount ?? '',
-			'boosts': guild?.boosts ?? 0,
-			'boost.tier': guild?.tier ?? 0,
+			...shared,
+			'avatarUrl': shared['user.avatar'],
 			'inviter': extra.inviterId ? `<@${extra.inviterId}>` : 'inconnu',
-			'date': new Date(now()).toLocaleDateString('fr-FR'),
 		};
 	}
 
@@ -182,7 +166,7 @@ export function createOnboarding({ db, network, audit, executor, uploads, logger
 
 	// Sends the message of a section (welcome, leave, boost) with its card if enabled
 	async function sendSection(guildId, kind, section, member, extra = {}) {
-		const vars = await varsFor(guildId, member, extra);
+		const vars = await varsFor(guildId, member, extra, section);
 		const payload = fillPayload(section.payload, vars);
 		const files = [];
 		if (section.card?.enabled) {
@@ -247,7 +231,7 @@ export function createOnboarding({ db, network, audit, executor, uploads, logger
 				await sendSection(guildId, 'welcome', config.welcome, member, { inviterId }).catch(error => logger.warn(`Welcome on ${guildId} failed:`, error.message));
 			}
 			if (config.welcome.dm.enabled && !member.bot) {
-				const vars = await varsFor(guildId, member, { inviterId });
+				const vars = await varsFor(guildId, member, { inviterId }, config.welcome.dm.payload);
 				await executor.sendDMPayload(member.id, fillPayload(config.welcome.dm.payload, vars)).catch(() => null);
 			}
 		},
@@ -268,7 +252,7 @@ export function createOnboarding({ db, network, audit, executor, uploads, logger
 			}
 			if (config.boost.enabled) await sendSection(guildId, 'boost', config.boost, member).catch(error => logger.warn(`Boost message on ${guildId} failed:`, error.message));
 			if (config.boost.dm.enabled) {
-				const vars = await varsFor(guildId, member);
+				const vars = await varsFor(guildId, member, {}, config.boost.dm.payload);
 				await executor.sendDMPayload(member.id, fillPayload(config.boost.dm.payload, vars)).catch(() => null);
 			}
 			audit.record({ actorId: member.id, source: 'bot', action: 'onboarding.boost', guildId, target: member.id, details: { member: `<@${member.id}>` } });
@@ -281,7 +265,7 @@ export function createOnboarding({ db, network, audit, executor, uploads, logger
 				await executor.removeRole(guildId, member.id, roleId, 'Fin du boost').catch(() => null);
 			}
 			if (config.boost.end.enabled && config.boost.channelId) {
-				const vars = await varsFor(guildId, member);
+				const vars = await varsFor(guildId, member, {}, config.boost.end.payload);
 				await executor.sendMessage(config.boost.channelId, { payload: fillPayload(config.boost.end.payload, vars), files: [], mentionUserIds: [] }).catch(() => null);
 			}
 		},

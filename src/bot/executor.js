@@ -493,14 +493,18 @@ export function createExecutor(client) {
 		async upsertBuiltMessage(channelId, messageId, payload) {
 			const channel = await client.channels.fetch(channelId);
 			const data = builtPayload(payload);
+			const stickers = payload.stickers ?? [];
 			if (messageId) {
 				const existing = await channel.messages.fetch(messageId).catch(() => null);
-				if (existing) {
+				// Discord cannot change the stickers of a sent message: other stickers mean a new message
+				const sameStickers = existing && [...existing.stickers.keys()].sort().join() === [...stickers].sort().join();
+				if (existing && sameStickers) {
 					await existing.edit(data);
 					return messageId;
 				}
+				if (existing) await existing.delete().catch(() => null);
 			}
-			return (await channel.send({ ...data, allowedMentions: { parse: [] } })).id;
+			return (await channel.send({ ...data, ...(stickers.length ? { stickers } : {}), allowedMentions: { parse: [] } })).id;
 		},
 
 		// --- Music -----------------------------------------------------------------------------
@@ -1180,6 +1184,17 @@ export function createExecutor(client) {
 				.filter(c => TEXT_TYPES.has(c.type))
 				.sort((a, b) => (a.parent?.rawPosition ?? -1) - (b.parent?.rawPosition ?? -1) || a.rawPosition - b.rawPosition)
 				.map(c => ({ id: c.id, name: c.name, parent: c.parent?.name ?? null, canSend: canSend(c), announcement: c.type === ChannelType.GuildAnnouncement }));
+		},
+
+		// Stickers of a server (format: 1 png, 2 apng, 3 lottie, 4 gif), for the embed builder
+		async listStickers(guildId) {
+			const guild = client.guilds.cache.get(guildId);
+			if (!guild) return [];
+			const stickers = guild.stickers.cache.size ? guild.stickers.cache : await guild.stickers.fetch().catch(() => guild.stickers.cache);
+			return [...stickers.values()]
+				.filter(s => s.available !== false)
+				.sort((a, b) => a.name.localeCompare(b.name))
+				.map(s => ({ id: s.id, name: s.name, format: s.format, description: s.description ?? '' }));
 		},
 
 		// Custom emojis of a server, for the panel emoji picker

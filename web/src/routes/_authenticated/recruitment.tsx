@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, Download, Inbox, MessageSquarePlus, MessagesSquare, Plus, Save, Send, ThumbsDown, ThumbsUp, Trash2, Minus } from 'lucide-react'
@@ -20,6 +20,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { VariableButton } from '@/components/app/variable-picker'
 
 export const Route = createFileRoute('/_authenticated/recruitment')({
   component: RecruitmentPage,
@@ -293,6 +294,7 @@ function PositionDialog({ initial, data, guildId, onClose }: { initial: Omit<Pos
   const num = (label: string, value: number, onChange: (n: number) => void) => (
     <div className='grid gap-1.5'><Label>{label}</Label><Input type='number' min={0} value={value} onChange={(e) => onChange(Number(e.target.value) || 0)} /></div>
   )
+  const dmBox = useRef<HTMLDivElement>(null)
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className='max-h-[92svh] overflow-y-auto sm:max-w-3xl'>
@@ -331,8 +333,11 @@ function PositionDialog({ initial, data, guildId, onClose }: { initial: Omit<Pos
             {num('…sur les derniers (jours)', c.requirements.activityDays, (n) => setReq({ activityDays: n || 30 }))}
             <div className='grid gap-1.5'><Label>Rôles requis</Label><RolesPicker roles={data.roles} value={c.requirements.requiredRoleIds} onChange={(ids) => setReq({ requiredRoleIds: ids })} placeholder='Aucun' label='Rôles requis' /></div>
           </TabsContent>
-          <TabsContent value='messages' className='mt-4 grid gap-3'>
-            <p className='text-sm text-muted-foreground'>Messages privés envoyés au candidat. {'{position}'} = nom du poste. Vide = texte par défaut.</p>
+          <TabsContent value='messages' className='mt-4 grid gap-3' ref={dmBox}>
+            <div className='flex flex-wrap items-center gap-2'>
+              <VariableButton container={dmBox} extra={[{ title: 'Candidature', items: [{ key: 'position', label: 'Nom du poste' }] }]} />
+              <p className='text-sm text-muted-foreground'>Messages privés envoyés au candidat. Vide = texte par défaut.</p>
+            </div>
             {(['received', 'review', 'interview', 'accepted', 'rejected'] as const).map((k) => (
               <div key={k} className='grid gap-1.5'>
                 <Label htmlFor={`dm-${k}`}>{data.statuses[k].emoji} {data.statuses[k].label}</Label>

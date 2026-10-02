@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, BookmarkPlus, CalendarClock, Copy, Repeat, Send, Trash2 } from 'lucide-react'
@@ -23,6 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { VariableButton } from '@/components/app/variable-picker'
 
 export const Route = createFileRoute('/_authenticated/announcements/$id')({
   component: AnnouncementEditor,
@@ -143,6 +144,7 @@ function Editor({ announcement, guilds }: { announcement: Announcement | null; g
   const guildName = guilds.find((g) => g.id === target?.guildId)?.name ?? guilds[0]?.name ?? ''
   const status = announcement ? STATUS[announcement.status] : null
   const e = draft.embed
+  const varsBox = useRef<HTMLDivElement>(null)
 
   return (
     <Page
@@ -167,7 +169,7 @@ function Editor({ announcement, guilds }: { announcement: Announcement | null; g
       }
     >
       <div className='grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,28rem)]'>
-        <div className='grid content-start gap-6'>
+        <div className='grid content-start gap-6' ref={varsBox}>
           <Section title='Message'>
             <div className='grid gap-4 p-4'>
               <div className='grid gap-1.5'>
@@ -177,7 +179,10 @@ function Editor({ announcement, guilds }: { announcement: Announcement | null; g
               <div className='grid gap-1.5'>
                 <Label htmlFor='a-content'>Texte au-dessus de l’embed <span className='text-muted-foreground'>({draft.content.length}/2000)</span></Label>
                 <Textarea id='a-content' rows={3} maxLength={2000} value={draft.content} disabled={!editable} onChange={(ev) => setDraft({ ...draft, content: ev.target.value })} placeholder='Markdown Discord accepté : **gras**, *italique*, liens…' />
-                <span className='text-xs text-muted-foreground'>Variables : {'{server}'} nom du serveur, {'{memberCount}'} nombre de membres, {'{date}'} date du jour.</span>
+                <div className='flex flex-wrap items-center gap-2'>
+                  <VariableButton scope='server' container={varsBox} disabled={!editable} />
+                  <span className='text-xs text-muted-foreground'>Remplies pour chaque serveur. Insérée dans le dernier champ cliqué.</span>
+                </div>
               </div>
             </div>
           </Section>

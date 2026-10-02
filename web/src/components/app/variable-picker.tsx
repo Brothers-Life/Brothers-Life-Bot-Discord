@@ -1,6 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Braces, Search } from 'lucide-react'
+import { toast } from 'sonner'
+import { api } from '@/lib/api'
 import { normalize } from '@/lib/emoji-data'
+import { typeInto } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
@@ -50,4 +54,33 @@ export function VariablePicker({ groups, onPick, label = 'Variables', disabled }
       </PopoverContent>
     </Popover>
   )
+}
+
+// The shared variables (member / server / FiveM) of the bot, plus the editor's own ones.
+// A click types the variable into the last text field used inside `container`, else copies it.
+export function VariableButton({ scope = 'member', extra = [], container, disabled, label }: {
+  scope?: 'member' | 'server'
+  extra?: VariableGroup[]
+  container: RefObject<HTMLElement | null>
+  disabled?: boolean
+  label?: string
+}) {
+  const { data } = useQuery({ queryKey: ['variables', scope], queryFn: () => api<{ groups: VariableGroup[] }>(`/variables?scope=${scope}`), staleTime: 5 * 60_000 })
+  const last = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null)
+  useEffect(() => {
+    const box = container.current
+    if (!box) return
+    const onFocus = (e: FocusEvent) => {
+      const el = e.target
+      if (el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && ['text', 'url', 'search', ''].includes(el.type))) last.current = el
+    }
+    box.addEventListener('focusin', onFocus)
+    return () => box.removeEventListener('focusin', onFocus)
+  }, [container])
+  const pick = (token: string) => {
+    const field = last.current
+    if (field && field.isConnected && !field.disabled) return typeInto(field, token)
+    navigator.clipboard?.writeText(token).then(() => toast.success(`${token} copiée : colle-la dans un champ.`), () => toast.error('Clique d’abord dans un champ texte.'))
+  }
+  return <VariablePicker groups={[...extra, ...(data?.groups ?? [])]} onPick={pick} disabled={disabled} label={label} />
 }

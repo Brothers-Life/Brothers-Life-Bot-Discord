@@ -27,6 +27,7 @@ import { createMembers } from './members.js';
 import { createRoleImport } from './roleImport.js';
 import { createAnnouncements } from './announcements.js';
 import { createTickets } from './tickets.js';
+import { createVariables } from './variables.js';
 import { createUploads } from './uploads.js';
 import { createOnboarding } from './onboarding.js';
 import { createAntiraid } from './antiraid.js';
@@ -83,15 +84,16 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const moderation = createModeration({ db, network, ranks, audit, executor, settings, members, logs, logger });
 	const roleImport = createRoleImport({ db, network, ranks, staffSync, executor, audit });
 	const uploads = createUploads({ dir: path.join(config.DATA_DIR, 'uploads') });
-	const announcements = createAnnouncements({ db, network, audit, executor, logs, uploads, logger });
-	// {fivem.*} variables of the ticket texts (fivemData is created further down, called later)
-	const tickets = createTickets({ db, network, ranks, audit, executor, logs, logger, profileVars: discordId => fivemData.discordVars(discordId) });
-	const onboarding = createOnboarding({ db, network, audit, executor, uploads, logger, fetchImpl });
+	// Template variables shared by every message of the bot; {fivem.*} come from fivemData, created further down
+	const variables = createVariables({ executor, logger, fivemVars: discordId => fivemData.discordVars(discordId), fivemEnabled: () => fivemData.settingsView().enabled });
+	const announcements = createAnnouncements({ db, network, audit, executor, logs, uploads, variables, logger });
+	const tickets = createTickets({ db, network, ranks, audit, executor, logs, variables, logger });
+	const onboarding = createOnboarding({ db, network, audit, executor, uploads, variables, logger, fetchImpl });
 	logs.registerCategory('onboarding', 'Accueil (règlement accepté, boosts, réglages)');
 	const antiraid = createAntiraid({ db, network, audit, executor, sanctions, logs, logger });
 	const stats = createStats({ db, network, audit, executor, logger });
 	const voiceRooms = createVoiceRooms({ db, network, audit, executor, logger });
-	const liveMessages = createLiveMessages({ db, network, audit, executor, stats, logger });
+	const liveMessages = createLiveMessages({ db, network, audit, executor, stats, variables, logger });
 	const changelog = createChangelog({ db, network, audit, executor, logger });
 	logs.registerCategory('changelog', 'Changelog publié');
 	const polls = createPolls({ db, network, audit, executor, logger });
@@ -100,7 +102,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	logs.registerCategory('giveaways', 'Giveaways (lancés, gagnants, relances, lots réclamés)');
 	const feedback = createFeedback({ db, network, ranks, audit, executor, logger });
 	logs.registerCategory('feedback', 'Suggestions et bugs (nouveaux, statuts)');
-	const recruitment = createRecruitment({ db, network, ranks, audit, executor, sanctions, stats, logger });
+	const recruitment = createRecruitment({ db, network, ranks, audit, executor, sanctions, stats, variables, logger });
 	logs.registerCategory('recruitment', 'Recrutement (candidatures, décisions)');
 	const absences = createAbsences({ db, network, ranks, audit, executor, settings, logger });
 	const streams = createStreams({ db, network, audit, executor, settings, logs, fetchImpl, logger });
@@ -134,7 +136,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	logs.registerCategory('rpevents', 'Événements RP');
 	const staffActivity = createStaffActivity({ db, network, ranks, audit, executor, settings, logs, logger });
 	const backups = createBackups({ db, network, audit, executor, settings, templates, logs, logger });
-	const customCommands = createCustomCommands({ db, network, ranks, audit, executor, logs, members, moderation, sanctions, reservedNames: COMMANDS.map(c => c.name), logger });
+	const customCommands = createCustomCommands({ db, network, ranks, audit, executor, logs, members, moderation, sanctions, reservedNames: COMMANDS.map(c => c.name), variables, logger });
 	logs.registerCategory('absences', 'Absences du staff');
 	const music = createMusic({ db, network, audit, settings, backend: executor.music, resolver: executor.musicResolver, executor, logger });
 	logs.registerCategory('music', 'Musique (lancée, arrêtée, réglages)');
@@ -174,5 +176,5 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 		sanctions.syncGuild(guild.id).catch(error => logger.error(`Ban sync failed on ${guild.name}:`, error));
 	});
 
-	return { db, config, executor, settings, audit, network, ranks, logs, sessions, sanctions, sanctionTemplates, music, memberInsights, channelFeatures, verification, embedBuilder, appeals, channelSchedules, archives, meetings, fivemData, fivemRoles, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents };
+	return { db, config, executor, variables, settings, audit, network, ranks, logs, sessions, sanctions, sanctionTemplates, music, memberInsights, channelFeatures, verification, embedBuilder, appeals, channelSchedules, archives, meetings, fivemData, fivemRoles, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents };
 }

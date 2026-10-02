@@ -9,8 +9,9 @@ const SNOWFLAKE = /^\d{17,20}$/;
 const MAX_EMBEDS = 10;
 const MAX_BUTTONS = 25;
 const TOTAL = 6000;
+const MAX_STICKERS = 3;
 
-// { content, embeds: [embed], buttons: [{ label, url, emoji }] }: several embeds and link buttons
+// { content, embeds: [embed], buttons: [{ label, url, emoji }], stickers: [id] }: several embeds, link buttons, server stickers
 export function normalizeBuilt(input = {}) {
 	const content = String(input.content ?? '').slice(0, 2000);
 	const embeds = (Array.isArray(input.embeds) ? input.embeds : []).slice(0, MAX_EMBEDS).map((embed) => {
@@ -27,8 +28,9 @@ export function normalizeBuilt(input = {}) {
 		if (!label && !b?.emoji) throw new ValidationError('Chaque bouton a besoin d’un texte ou d’un émoji.');
 		return { label, url: url.slice(0, 512), emoji: String(b?.emoji ?? '').slice(0, 64) || null };
 	});
-	if (!content.trim() && !embeds.length) throw new ValidationError('Le message est vide : écris un texte ou remplis un embed.');
-	return { content, embeds, buttons };
+	const stickers = [...new Set((Array.isArray(input.stickers) ? input.stickers : []).map(String).filter(id => SNOWFLAKE.test(id)))].slice(0, MAX_STICKERS);
+	if (!content.trim() && !embeds.length && !stickers.length) throw new ValidationError('Le message est vide : écris un texte, remplis un embed ou ajoute un autocollant.');
+	return { content, embeds, buttons, stickers };
 }
 
 // Messages composed in the panel (or with /embed), posted anywhere, and edited in place afterwards
@@ -82,6 +84,11 @@ export function createEmbedBuilder({ db, network, audit, executor, now = Date.no
 			const message = service.get(id);
 			if (network.find(guildId)?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
 			if (!SNOWFLAKE.test(channelId)) throw new ValidationError('Salon invalide.');
+			// A sticker can only be sent on the server it belongs to
+			if (message.payload.stickers?.length) {
+				const own = new Set((await executor.listStickers(guildId)).map(s => s.id));
+				if (message.payload.stickers.some(sticker => !own.has(sticker))) throw new ValidationError('Un autocollant de ce message vient d’un autre serveur : choisis ceux du serveur où tu postes.');
+			}
 			const sameChannel = message.channelId === channelId && message.messageId;
 			const messageId = await executor.upsertBuiltMessage(channelId, sameChannel ? message.messageId : null, message.payload);
 			if (!sameChannel && message.messageId) await executor.deleteMessage(message.channelId, message.messageId).catch(() => undefined);

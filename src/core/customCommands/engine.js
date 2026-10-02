@@ -5,12 +5,13 @@
 
 const DAY = 86_400_000;
 const MAX_STEPS = 200;
+const SHARED = /^(user|member|account|server|memberCount|boosts|boost|fivem)(\.|$)/;
 
 function pad(n) {
 	return String(n).padStart(2, '0');
 }
 
-// {user}, {option.x}, {counter.key}, {random:1-100}, {choice:a|b}… in a text
+// {user}, {option.x}, {counter.key}, {random:1-100}, {choice:a|b}, shared variables… in a text
 export async function fillText(textValue, ctx, io, now = Date.now) {
 	if (!textValue) return textValue;
 	const d = new Date(now());
@@ -44,6 +45,10 @@ export async function fillText(textValue, ctx, io, now = Date.now) {
 		else if (key.startsWith('choice:')) {
 			const items = key.slice(7).split('|');
 			value = items[Math.floor(io.random() * items.length)];
+		}
+		// Shared variables of the member ({member.roles}, {fivem.dbid}…), fetched once and only when used
+		else if (io.sharedVars && SHARED.test(key)) {
+			value = (await io.sharedVars(key.startsWith('fivem.')))[key];
 		}
 		if (value !== undefined) out = out.split(token).join(String(value));
 	}

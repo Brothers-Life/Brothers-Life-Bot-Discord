@@ -26,19 +26,10 @@ import { EmojiField } from '@/components/app/emoji-picker'
 import { VariablePicker, type VariableGroup } from '@/components/app/variable-picker'
 import { insertAtCursor } from '@/lib/utils'
 
-// Variables of the ticket texts: the server catalogue, the form answers of this type, the FiveM account
+// Variables of the ticket texts: the shared ones (member, server, FiveM), the ticket's, the form answers of this type
 function variableGroups(config: TicketConfig, cfg: TicketCategoryConfig): VariableGroup[] {
-  const groups = new Map<string, VariableGroup>()
-  for (const v of config.variables) {
-    if (!groups.has(v.group)) groups.set(v.group, { title: v.group, items: [] })
-    groups.get(v.group)!.items.push(v)
-  }
   const answers = cfg.form.steps.flatMap((s) => s.questions).map((q) => ({ key: `answer.${q.id}`, label: q.label || q.id }))
-  return [
-    ...groups.values(),
-    ...(answers.length ? [{ title: 'Réponses du formulaire', items: answers }] : []),
-    ...(config.fivemVariables.length ? [{ title: 'Compte FiveM', hint: 'Rempli si le compte Discord du membre est lié en jeu, sinon « inconnu ».', items: config.fivemVariables }] : []),
-  ]
+  return [...config.variables, ...(answers.length ? [{ title: 'Réponses du formulaire', items: answers }] : [])]
 }
 
 const BUTTON_STYLES = [

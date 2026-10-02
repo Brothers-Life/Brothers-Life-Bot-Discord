@@ -348,3 +348,12 @@ test('/api/emojis lists the custom emojis of the active servers', async () => {
 	const main = res.json().guilds.find(g => g.id === MAIN);
 	assert.deepEqual(main.emojis, [{ id: '123456789012345678', name: 'brl', animated: false }]);
 });
+
+test('/api/variables gives the shared variables of the message editors', async () => {
+	const { app } = await setup();
+	const call = api(app, await sessionFor(app, OWNER));
+	const member = (await call('GET', '/api/variables?scope=member')).json().groups;
+	assert.ok(member.some(g => g.items.some(v => v.key === 'member.roles')));
+	const server = (await call('GET', '/api/variables?scope=server')).json().groups;
+	assert.ok(!server.some(g => g.items.some(v => v.key === 'user')));
+});

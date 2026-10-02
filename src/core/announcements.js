@@ -1,6 +1,7 @@
 import { definePermission } from './permissions.js';
 import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
 import { fillVars } from './cards.js';
+import { createVariables } from './variables.js';
 import { DEFAULT_TIME_ZONE, nextOccurrence, normalizeRecurrence, occurrences } from './recurrence.js';
 
 definePermission('announcements.view', { label: 'Voir les annonces', category: 'Annonces' });
@@ -136,7 +137,7 @@ function dateText(at, timeZone = DEFAULT_TIME_ZONE) {
 	return new Date(at).toLocaleDateString('fr-FR', { timeZone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-export function createAnnouncements({ db, network, audit, executor, logs, uploads = null, logger = console, now = Date.now }) {
+export function createAnnouncements({ db, network, audit, executor, logs, uploads = null, logger = console, now = Date.now, variables = createVariables({ executor, logger, now }) }) {
 	logs.registerCategory('announcements', 'Annonces envoyées');
 
 	const q = {
@@ -232,9 +233,8 @@ export function createAnnouncements({ db, network, audit, executor, logs, upload
 
 	// Panel images become attached files ("attachment://<name>"), variables are filled for the server
 	async function render(a, target, guildCache) {
-		if (!guildCache.has(target.guildId)) guildCache.set(target.guildId, await executor.getGuildInfo(target.guildId).catch(() => null));
-		const guild = guildCache.get(target.guildId);
-		const vars = { date: dateText(now(), a.recurrence?.timeZone), server: guild?.name ?? '', memberCount: guild?.memberCount ?? '' };
+		if (!guildCache.has(target.guildId)) guildCache.set(target.guildId, await variables.server(target.guildId));
+		const vars = { ...guildCache.get(target.guildId), date: dateText(now(), a.recurrence?.timeZone) };
 		const files = new Map();
 		const swap = (value) => {
 			if (!value || !UPLOAD.test(value)) return value;
