@@ -487,6 +487,40 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			return toCategory(q.category.get(id));
 		},
 
+		// The whole ticket system of a server copied to another: settings, statuses, types, panels.
+		// Channels and Discord roles belong to one server: they are left empty, to choose again.
+		async copySystem(actor, fromGuildId, toGuildId) {
+			requireManage(actor, fromGuildId);
+			requireManage(actor, toGuildId);
+			if (fromGuildId === toGuildId) throw new ValidationError('Choisis un autre serveur que celui-ci.');
+			const copy = { ...actor, source: actor.source ?? 'panel' };
+			service.saveSettings(copy, toGuildId, settingsOf(fromGuildId));
+			const statuses = service.saveStatuses(copy, toGuildId, statusesOf(fromGuildId).map(s => ({ ...s, parentChannelId: null })));
+			const ids = new Map();
+			for (const row of q.categories.all(fromGuildId)) {
+				const c = toCategory(row);
+				const created = await service.saveCategory(copy, toGuildId, {
+					name: c.name, emoji: c.emoji, description: c.description, rankIds: c.rankIds, roleIds: [], position: c.position,
+					config: {
+						...c.config,
+						statusParents: {},
+						pingRoleIds: [],
+						ping: c.config.ping === 'roles' ? 'staff' : c.config.ping,
+						access: { ...c.config.access, requiredRoleIds: [], blockedRoleIds: [] },
+					},
+				});
+				ids.set(c.id, created.id);
+			}
+			let panels = 0;
+			for (const row of q.panels.all(fromGuildId)) {
+				const p = toPanel(row);
+				await service.savePanel(copy, toGuildId, { name: p.name, payload: p.payload, style: p.style, placeholder: p.placeholder, categoryIds: p.categoryIds.map(id => ids.get(id)).filter(Boolean), channelId: null });
+				panels++;
+			}
+			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'tickets.copy', guildId: toGuildId, target: toGuildId, details: { depuis: network.find(fromGuildId)?.name ?? fromGuildId, types: ids.size, panneaux: panels } });
+			return { categories: ids.size, panels, statuses: statuses.length };
+		},
+
 		deleteCategory(actor, guildId, id) {
 			requireManage(actor, guildId);
 			const existing = q.category.get(id);

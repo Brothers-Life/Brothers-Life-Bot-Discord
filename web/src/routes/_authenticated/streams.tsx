@@ -22,6 +22,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { DuplicateButton } from '@/components/app/duplicate-button'
+import { copyOf } from '@/lib/utils'
 
 export const Route = createFileRoute('/_authenticated/streams')({
   component: StreamsPage,
@@ -114,6 +116,7 @@ function StreamsPage() {
                         <Switch checked={s.enabled} onCheckedChange={() => toggle.mutate(s)} aria-label={`Activer ${s.displayName}`} />
                         <Button size='sm' variant='outline' onClick={() => test.mutate(s)} disabled={test.isPending}><FlaskConical /> Tester</Button>
                         <Button size='icon' variant='ghost' aria-label={`Modifier ${s.displayName}`} onClick={() => setEditing(s)}><Pencil /></Button>
+                        <DuplicateButton name={s.displayName} onClick={() => setEditing(copyOf(s))} />
                         <Button size='icon' variant='danger-ghost' aria-label={`Supprimer ${s.displayName}`} onClick={() => setDeleting(s)}><Trash2 /></Button>
                       </div>
                     )}

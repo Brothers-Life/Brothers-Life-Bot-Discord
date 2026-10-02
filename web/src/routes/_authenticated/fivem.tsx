@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Channel } from '@/lib/types'
 import { ago } from '@/lib/format'
-import { cn } from '@/lib/utils'
+import { cn, copyOf } from '@/lib/utils'
 import { useMe } from '@/hooks/use-me'
 import { Page, Section, EmptyState, Pill, StatCards } from '@/components/app/ui'
 import { ChannelSelect } from '@/components/app/pickers'
@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { ColorPicker } from '@/components/app/color-picker'
+import { DuplicateButton } from '@/components/app/duplicate-button'
 
 export const Route = createFileRoute('/_authenticated/fivem')({
   component: FivemPage,
@@ -55,7 +56,7 @@ function FivemPage() {
           )}
           {!data.servers.length
             ? <Section title='Serveurs'><EmptyState title='Aucun serveur FiveM'>Ajoute l’adresse ip:port de ton serveur.</EmptyState></Section>
-            : <div className='stagger grid gap-4 lg:grid-cols-2'>{data.servers.map((s) => <ServerCard key={s.id} server={s} data={data} manage={manage} onEdit={() => setEditing(s)} />)}</div>}
+            : <div className='stagger grid gap-4 lg:grid-cols-2'>{data.servers.map((s) => <ServerCard key={s.id} server={s} data={data} manage={manage} onEdit={() => setEditing(s)} onDuplicate={() => setEditing(copyOf(s, 'name'))} />)}</div>}
           {manage && data.servers.length > 0 && <PresenceSection key={JSON.stringify(data.presence)} data={data} />}
         </div>
       )}
@@ -64,7 +65,7 @@ function FivemPage() {
   )
 }
 
-function ServerCard({ server: s, data, manage, onEdit }: { server: Server; data: Data; manage: boolean; onEdit: () => void }) {
+function ServerCard({ server: s, data, manage, onEdit, onDuplicate }: { server: Server; data: Data; manage: boolean; onEdit: () => void; onDuplicate: () => void }) {
   const qc = useQueryClient()
   const refresh = () => qc.invalidateQueries({ queryKey: ['fivem'] })
   const [showPlayers, setShowPlayers] = useState(false)
@@ -89,6 +90,7 @@ function ServerCard({ server: s, data, manage, onEdit }: { server: Server; data:
         {manage && (
           <div className='flex gap-1'>
             <Button size='icon' variant='ghost' aria-label={`Modifier ${s.name}`} onClick={onEdit}><Pencil /></Button>
+            <DuplicateButton name={s.name} onClick={onDuplicate} />
             <Button size='icon' variant='danger-ghost' aria-label={`Supprimer ${s.name}`} onClick={() => setDeleting(true)}><Trash2 /></Button>
           </div>
         )}

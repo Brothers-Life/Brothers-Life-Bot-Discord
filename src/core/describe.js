@@ -55,6 +55,7 @@ const TITLES = {
 	'tickets.add_member': 'Membre ajouté à un ticket',
 	'tickets.settings': 'Réglages des tickets modifiés',
 	'tickets.category': 'Catégorie de tickets enregistrée',
+	'tickets.copy': 'Système de tickets copié depuis un autre serveur',
 	'tickets.category_delete': 'Catégorie de tickets supprimée',
 	'tickets.panel': 'Panneau des tickets publié',
 	'tickets.panel_save': 'Panneau de tickets enregistré',

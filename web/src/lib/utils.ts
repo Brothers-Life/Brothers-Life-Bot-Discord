@@ -100,3 +100,11 @@ export function typeInto(field: Field, token: string) {
   field.focus()
   field.setSelectionRange(start + token.length, start + token.length)
 }
+
+// Copy of a saved item, ready to open in its editor as a new one: no id, and « (copie) » after its name
+export function copyOf<T extends object>(item: T, nameKey?: keyof T, drop: (keyof T)[] = []): T {
+  const copy = structuredClone(item) as Record<string, unknown>
+  for (const key of ['id', ...drop] as string[]) delete copy[key]
+  if (nameKey && typeof copy[nameKey as string] === 'string') copy[nameKey as string] = `${copy[nameKey as string]} (copie)`
+  return copy as T
+}

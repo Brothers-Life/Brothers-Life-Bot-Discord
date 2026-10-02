@@ -5,7 +5,7 @@ import { CalendarClock, CalendarPlus, Clock, Lock, LockOpen, Pencil, Plus, Trash
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Channel } from '@/lib/types'
-import { cn } from '@/lib/utils'
+import { cn, copyOf } from '@/lib/utils'
 import { dateTime } from '@/lib/format'
 import { useMe } from '@/hooks/use-me'
 import { Page, Section, EmptyState, Pill, GuildIcon } from '@/components/app/ui'
@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { toLocalInput } from '@/features/announcements/schedule-editor'
+import { DuplicateButton } from '@/components/app/duplicate-button'
 
 export const Route = createFileRoute('/_authenticated/channel-schedules')({
   component: SchedulesPage,
@@ -72,7 +73,7 @@ function SchedulesPage() {
           )}
           {!list.length ? <Section title='Horaires'><EmptyState title='Aucun horaire' icon={CalendarClock}>Par exemple : salon « events » ouvert le vendredi et le samedi de 20 h à 2 h, et fermé du 24 au 26 décembre.</EmptyState></Section> : (
             <div className='stagger grid gap-4 lg:grid-cols-2'>
-              {list.map((s) => <ScheduleCard key={s.id} schedule={s} guild={guild} manage={manage} onEdit={() => setEditing({ ...s })} />)}
+              {list.map((s) => <ScheduleCard key={s.id} schedule={s} guild={guild} manage={manage} onEdit={() => setEditing({ ...s })} onDuplicate={() => setEditing(copyOf(s, 'name'))} />)}
             </div>
           )}
         </div>
@@ -82,7 +83,7 @@ function SchedulesPage() {
   )
 }
 
-function ScheduleCard({ schedule: s, guild, manage, onEdit }: { schedule: Schedule; guild: GuildData; manage: boolean; onEdit: () => void }) {
+function ScheduleCard({ schedule: s, guild, manage, onEdit, onDuplicate }: { schedule: Schedule; guild: GuildData; manage: boolean; onEdit: () => void; onDuplicate: () => void }) {
   const qc = useQueryClient()
   const [deleting, setDeleting] = useState(false)
   const remove = useMutation({ mutationFn: () => api(`/channel-schedules/${s.id}`, { method: 'DELETE' }), onSuccess: () => { toast.success('Horaire supprimé, salons rouverts'); qc.invalidateQueries({ queryKey: ['channel-schedules'] }) } })
@@ -95,7 +96,7 @@ function ScheduleCard({ schedule: s, guild, manage, onEdit }: { schedule: Schedu
           <div className='flex flex-wrap items-center gap-2'><h3 className='font-display text-lg font-semibold'>{s.name}</h3>{!s.enabled ? <Pill tone='neutral'>En pause</Pill> : <Pill tone={open ? 'success' : 'danger'}>{open ? 'Ouvert' : 'Fermé'}</Pill>}</div>
           <p className='text-sm text-muted-foreground'>{s.next && s.enabled ? <>{s.next.state === 'open' ? 'Ouvre' : 'Ferme'} le {dateTime(s.next.at)}</> : 'Pas de changement prévu'}</p>
         </div>
-        {manage && <div className='flex gap-1'><Button size='icon' variant='ghost' aria-label={`Modifier ${s.name}`} onClick={onEdit}><Pencil /></Button><Button size='icon' variant='danger-ghost' aria-label={`Supprimer ${s.name}`} onClick={() => setDeleting(true)}><Trash2 /></Button></div>}
+        {manage && <div className='flex gap-1'><Button size='icon' variant='ghost' aria-label={`Modifier ${s.name}`} onClick={onEdit}><Pencil /></Button><DuplicateButton name={s.name} onClick={onDuplicate} /><Button size='icon' variant='danger-ghost' aria-label={`Supprimer ${s.name}`} onClick={() => setDeleting(true)}><Trash2 /></Button></div>}
       </div>
       <div className='flex flex-wrap gap-1'>{s.channelIds.map((id) => { const c = guild.channels.find((x) => x.id === id); return <Pill key={id} tone='neutral'>{c?.voice ? '🔊' : '#'}{c?.name ?? 'supprimé'}</Pill> })}</div>
       <ul className='grid gap-1 text-sm'>

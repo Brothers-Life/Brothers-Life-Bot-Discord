@@ -17,6 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { EMPTY_EMBED, EmbedFields, cleanEmbed } from '@/features/announcements/embed-editor'
+import { DuplicateButton } from '@/components/app/duplicate-button'
 
 export const Route = createFileRoute('/_authenticated/channel-features')({
   component: ChannelFeaturesPage,
@@ -78,7 +79,7 @@ function ChannelFeaturesPage() {
           <Section title={`Salons configurés sur ${guild.name}`}>
             {!guild.features.length ? <EmptyState title='Aucun salon automatique' icon={Hash}>Choisis un type ci-dessus pour l’appliquer à un salon.</EmptyState> : (
               <ul className='divide-y'>
-                {guild.features.map((f) => <FeatureRow key={`${f.channelId}-${f.kind}`} feature={f} guild={guild} label={data.kinds[f.kind]} manage={manage} onEdit={() => setEditing({ kind: f.kind, feature: f })} />)}
+                {guild.features.map((f) => <FeatureRow key={`${f.channelId}-${f.kind}`} feature={f} guild={guild} label={data.kinds[f.kind]} manage={manage} onEdit={() => setEditing({ kind: f.kind, feature: f })} onDuplicate={() => setEditing({ kind: f.kind, feature: { ...structuredClone(f), channelId: '' } })} />)}
               </ul>
             )}
           </Section>
@@ -89,7 +90,7 @@ function ChannelFeaturesPage() {
   )
 }
 
-function FeatureRow({ feature: f, guild, label, manage, onEdit }: { feature: Feature; guild: GuildData; label: string; manage: boolean; onEdit: () => void }) {
+function FeatureRow({ feature: f, guild, label, manage, onEdit, onDuplicate }: { feature: Feature; guild: GuildData; label: string; manage: boolean; onEdit: () => void; onDuplicate: () => void }) {
   const qc = useQueryClient()
   const [removing, setRemoving] = useState(false)
   const [count, setCount] = useState('')
@@ -122,6 +123,7 @@ function FeatureRow({ feature: f, guild, label, manage, onEdit }: { feature: Fea
             </form>
           )}
           <Button size='icon' variant='ghost' aria-label={`Modifier ${label}`} onClick={onEdit}><Pencil /></Button>
+          {f.kind !== 'counting' && f.kind !== 'oneword' && <DuplicateButton name={`${label} vers un autre salon`} onClick={onDuplicate} />}
           <Button size='icon' variant='danger-ghost' aria-label={`Retirer ${label}`} onClick={() => setRemoving(true)}><Trash2 /></Button>
         </div>
       )}
@@ -132,7 +134,8 @@ function FeatureRow({ feature: f, guild, label, manage, onEdit }: { feature: Fea
 
 function FeatureDialog({ guild, kind, label, feature, onClose }: { guild: GuildData; kind: Kind; label: string; feature?: Feature; onClose: () => void }) {
   const qc = useQueryClient()
-  const [channelId, setChannelId] = useState<string | null>(feature?.channelId ?? null)
+  // A duplicated feature comes without channel: the same settings go to another one
+  const [channelId, setChannelId] = useState<string | null>(feature?.channelId || null)
   const [c, setC] = useState<Config>(feature?.config ?? (kind === 'sticky' ? { delaySeconds: 8, payload: { content: '', embed: { ...EMPTY_EMBED, color: '#ff9628' } } } : kind === 'oneword' ? { minWords: 3, maxLength: 30 } : kind === 'mediaonly' ? { allowLinks: true, notice: true } : kind === 'counting' ? { resetOnFail: true, deleteOthers: true } : {}))
   const set = (patch: Config) => setC((prev) => ({ ...prev, ...patch }))
   const channels = kind === 'autopublish' ? guild.channels.filter((ch) => ch.announcement) : guild.channels

@@ -13,6 +13,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { DuplicateButton } from '@/components/app/duplicate-button'
+import { copyOf } from '@/lib/utils'
 
 export type SanctionTemplate = {
   id: number; name: string; type: SanctionType; reason: string; durationMs: number | null; durationLabel: string | null
@@ -85,6 +87,7 @@ export function SanctionTemplates() {
                   <Button size='icon' variant='ghost' aria-label='Monter' disabled={i === 0 || order.isPending} onClick={() => move(i, -1)}><ArrowUp /></Button>
                   <Button size='icon' variant='ghost' aria-label='Descendre' disabled={i === data.length - 1 || order.isPending} onClick={() => move(i, 1)}><ArrowDown /></Button>
                   <Button size='icon' variant='ghost' aria-label={`Modifier ${t.name}`} onClick={() => setEditing(t)}><Pencil /></Button>
+                  <DuplicateButton name={t.name} onClick={() => setEditing(copyOf(t, 'name'))} />
                   <Button size='icon' variant='danger-ghost' aria-label={`Supprimer ${t.name}`} onClick={() => setDeleting(t)}><Trash2 /></Button>
                 </div>
               )}

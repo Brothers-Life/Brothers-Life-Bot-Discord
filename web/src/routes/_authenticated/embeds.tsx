@@ -22,6 +22,7 @@ import { EMPTY_EMBED, EmbedFields, cleanEmbed } from '@/features/announcements/e
 import { DiscordPreview } from '@/features/announcements/discord-preview'
 import { EmojiField, useServerEmojis } from '@/components/app/emoji-picker'
 import { StickerPicker } from '@/components/app/sticker-picker'
+import { DuplicateButton } from '@/components/app/duplicate-button'
 
 export const Route = createFileRoute('/_authenticated/embeds')({
   component: EmbedsPage,
@@ -134,6 +135,11 @@ function Editor({ saved, guilds, onSaved, onDeleted }: { saved?: Saved; guilds: 
     mutationFn: () => api<Saved>('/embeds', { method: 'POST', body: body() }),
     onSuccess: (s) => { toast.success(s.messageId ? 'Enregistré et mis à jour sur Discord' : 'Enregistré'); refresh(); onSaved(s.id) },
   })
+  // A new saved message with the same content (not posted), opened right away
+  const duplicate = useMutation({
+    mutationFn: () => api<Saved>('/embeds', { method: 'POST', body: { ...body(), id: undefined, name: `${name || 'Message'} (copie)` } }),
+    onSuccess: (s) => { toast.success('Copie créée : retouche-la puis poste-la'); refresh(); onSaved(s.id) },
+  })
   const post = useMutation({
     mutationFn: async () => {
       const s = await api<Saved>('/embeds', { method: 'POST', body: body() })
@@ -160,6 +166,7 @@ function Editor({ saved, guilds, onSaved, onDeleted }: { saved?: Saved; guilds: 
         actions={manage && (
           <div className='flex flex-wrap gap-2'>
             <Button size='sm' variant='ghost' onClick={() => setJson(JSON.stringify(toDiscord(b), null, 2))}><Braces /> JSON</Button>
+            {saved && manage && <DuplicateButton name={name} loading={duplicate.isPending} onClick={() => duplicate.mutate()} />}
             {saved && <Button size='sm' variant='danger-ghost' onClick={() => setDeleting(true)}><Trash2 /></Button>}
             <Button size='sm' variant='outline' loading={save.isPending} onClick={() => save.mutate()}><Save /> Enregistrer</Button>
           </div>

@@ -22,6 +22,8 @@ import { EMPTY_COMMAND, PERMISSIONS, TRIGGERS, VARIABLES, type Component, type C
 import { EmojiField } from '@/components/app/emoji-picker'
 import { VariableButton } from '@/components/app/variable-picker'
 import { ButtonStylePicker } from '@/components/app/color-picker'
+import { DuplicateButton } from '@/components/app/duplicate-button'
+import { copyOf } from '@/lib/utils'
 
 export const Route = createFileRoute('/_authenticated/custom-commands')({
   component: CustomCommandsPage,
@@ -88,6 +90,7 @@ function CustomCommandsPage() {
                         {manage && <Switch checked={Boolean(c.enabled)} onCheckedChange={() => toggle.mutate(c)} aria-label={`Activer ${c.name}`} />}
                         <Button size='icon' variant='ghost' aria-label={`Historique de ${c.name}`} onClick={() => setHistory(c)}><History /></Button>
                         {manage && <Button size='icon' variant='ghost' aria-label={`Modifier ${c.name}`} onClick={() => setEditing(structuredClone(c))}><Pencil /></Button>}
+                        {manage && <DuplicateButton name={c.name} onClick={() => setEditing({ ...copyOf(c), name: `${c.name}-copie`.slice(0, 32) })} />}
                         {manage && <Button size='icon' variant='danger-ghost' aria-label={`Supprimer ${c.name}`} onClick={() => setDeleting(c)}><Trash2 /></Button>}
                       </div>
                     </li>

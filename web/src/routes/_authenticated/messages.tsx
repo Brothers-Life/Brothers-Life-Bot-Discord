@@ -21,6 +21,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { VariableButton } from '@/components/app/variable-picker'
+import { DuplicateButton } from '@/components/app/duplicate-button'
 
 export const Route = createFileRoute('/_authenticated/messages')({
   component: MessagesPage,
@@ -142,6 +143,11 @@ function Editor({ message, guilds, onSaved, onDeleted }: { message: LiveMessage 
     },
     onSuccess: (m) => done(m, message ? 'Enregistré et mis à jour partout' : 'Message publié'),
   })
+  // A copy that is not published: retouch its channels and text, then save to post it
+  const duplicate = useMutation({
+    mutationFn: () => api<LiveMessage>('/messages', { method: 'POST', body: { ...body(), name: `${d.name} (copie)` } }),
+    onSuccess: (m) => { toast.success('Copie créée : choisis ses salons puis enregistre pour la publier'); qc.invalidateQueries({ queryKey: ['live-messages'] }); onSaved(m.id) },
+  })
   const republish = useMutation({
     mutationFn: () => api<LiveMessage>(`/messages/${message!.id}/publish`, { method: 'POST' }),
     onSuccess: (m) => done(m, 'Message renvoyé dans chaque salon'),
@@ -158,6 +164,7 @@ function Editor({ message, guilds, onSaved, onDeleted }: { message: LiveMessage 
         <Section title={message ? message.name : 'Nouveau message'} actions={message && manage && (
           <div className='flex gap-2'>
             <Button size='sm' variant='outline' onClick={() => republish.mutate()} disabled={republish.isPending}><Send /> Renvoyer</Button>
+            <DuplicateButton text loading={duplicate.isPending} onClick={() => duplicate.mutate()} />
             <Button size='sm' variant='danger-ghost' onClick={() => setDeleting(true)}><Trash2 /> Supprimer</Button>
           </div>
         )}>

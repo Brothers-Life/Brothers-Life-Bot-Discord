@@ -28,7 +28,7 @@ export function registerFeedbackRoutes(app, { core }) {
 
 	app.post('/api/feedback/:guildId/boxes', {
 		config: { permission: 'feedback.manage' },
-		schema: { params: guildParam, body: { type: 'object', properties: { preset: { type: 'string', enum: ['suggestions', 'bugs', 'staff'] }, name: { type: 'string', maxLength: 60 } } } },
+		schema: { params: guildParam, body: { type: 'object', properties: { preset: { type: 'string', enum: ['suggestions', 'bugs', 'staff'] }, name: { type: 'string', maxLength: 60 }, config: { type: 'object' } } } },
 	}, async (request, reply) => {
 		reply.code(201);
 		return feedback.createBox(request.actor, request.params.guildId, request.body);

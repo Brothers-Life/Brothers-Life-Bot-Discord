@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { withNetwork, ALICE, BOB, MAIN } from '../helpers.js';
+import { withNetwork, ALICE, BOB, MAIN, OTHER } from '../helpers.js';
 import { ForbiddenError, ValidationError } from '../../src/core/errors.js';
 
 const MEMBER = '300000000000000001';
@@ -172,4 +172,24 @@ test('HTML transcript: Discord-like page, internal notes for the staff only, kep
 	assert.match(member, /Réglé/);
 	const saved = core.tickets.transcriptFile(ticket.id);
 	assert.ok(saved && saved.file.endsWith(`ticket-${ticket.id}.html`));
+});
+
+test('the whole ticket system is copied to another server, without its channels and roles', async () => {
+	const { core, owner, executor, category } = await setup();
+	core.network.activate(owner, OTHER);
+	executor.channels.set('610000000000000001', { guildId: MAIN, name: 'support' });
+	await core.tickets.saveCategory(owner, MAIN, { id: category.id, name: 'Support', emoji: '🛟', description: 'Une question', rankIds: category.rankIds, roleIds: ['800000000000000009'], config: { ping: 'roles', pingRoleIds: ['800000000000000009'], form: { steps: [{ questions: [{ id: 'pseudo', type: 'short', label: 'Pseudo' }] }] } } });
+	core.tickets.saveStatuses(owner, MAIN, [{ key: 'open', label: 'Ouvert' }, { key: 'claimed', label: 'Pris' }, { key: 'waiting', label: 'En attente', emoji: '⏳', color: '#e5b25d' }, { key: 'closed', label: 'Fermé' }]);
+	await core.tickets.savePanel(owner, MAIN, { name: 'Support général', channelId: '610000000000000001', categoryIds: [category.id] });
+	assert.deepEqual(await core.tickets.copySystem(owner, MAIN, OTHER), { categories: 1, panels: 1, statuses: 4 });
+	const copied = core.tickets.describe(OTHER);
+	const type = copied.categories[0];
+	assert.equal(type.name, 'Support');
+	assert.deepEqual(type.roleIds, []);
+	assert.equal(type.config.ping, 'staff');
+	assert.equal(type.config.form.steps[0].questions[0].id, 'pseudo');
+	assert.equal(copied.panels[0].channelId, null);
+	assert.deepEqual(copied.panels[0].categoryIds, [type.id]);
+	assert.ok(copied.statuses.some(s => s.key === 'waiting'));
+	await assert.rejects(core.tickets.copySystem(owner, MAIN, MAIN), /autre serveur/);
 });

@@ -5,7 +5,7 @@ import { Ban, CalendarDays, CalendarPlus, Clock, MapPin, Pencil, Save, Trash2, U
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { AnnouncementTarget, AnnouncementTargetsPayload } from '@/lib/types'
-import { cn } from '@/lib/utils'
+import { cn, copyOf } from '@/lib/utils'
 import { useMe } from '@/hooks/use-me'
 import { Page, Section, EmptyState, Pill, StatCards, UserAvatar } from '@/components/app/ui'
 import { ConfirmDialog } from '@/components/confirm-dialog'
@@ -21,6 +21,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { DuplicateButton } from '@/components/app/duplicate-button'
 
 export const Route = createFileRoute('/_authenticated/rp-events')({
   component: RpEventsPage,
@@ -78,6 +79,7 @@ function RpEventsPage() {
         <Button size='sm' variant='outline' onClick={() => setParticipants(e)}><Users /> Inscrits</Button>
         {manage && (e.status === 'scheduled' || e.status === 'live') && <Button size='icon' variant='ghost' aria-label={`Modifier ${e.title}`} onClick={() => setEditing(e)}><Pencil /></Button>}
         {manage && (e.status === 'scheduled' || e.status === 'live') && <Button size='icon' variant='ghost' className='text-warning' aria-label={`Annuler ${e.title}`} onClick={() => setCancelling(e)}><Ban /></Button>}
+        {manage && <DuplicateButton name={e.title} onClick={() => setEditing(copyOf(e, 'title', ['status', 'startsAt', 'messageId'] as (keyof typeof e)[]))} />}
         {manage && <Button size='icon' variant='danger-ghost' aria-label={`Supprimer ${e.title}`} onClick={() => setDeleting(e)}><Trash2 /></Button>}
       </div>
     </li>

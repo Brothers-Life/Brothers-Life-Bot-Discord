@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, Pencil, Plus, Send, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Copy, Pencil, Plus, Send, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import type { TicketCategory, TicketCategoryConfig, TicketConfig, TicketPanel, TicketStatus } from '@/lib/types'
+import type { Guild, TicketCategory, TicketCategoryConfig, TicketConfig, TicketPanel, TicketStatus } from '@/lib/types'
 import { useMe } from '@/hooks/use-me'
 import { Section, EmptyState, Pill, RankBadge } from '@/components/app/ui'
 import { CategorySelect, ChannelSelect, RolesPicker } from '@/components/app/pickers'
@@ -14,7 +14,7 @@ import { DiscordPreview } from '@/features/announcements/discord-preview'
 import { DAYS, DEFAULT_CATEGORY_CONFIG } from './defaults'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -24,8 +24,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { EmojiField } from '@/components/app/emoji-picker'
 import { VariablePicker, type VariableGroup } from '@/components/app/variable-picker'
-import { insertAtCursor } from '@/lib/utils'
+import { insertAtCursor, copyOf } from '@/lib/utils'
 import { ButtonStylePicker, ColorPicker } from '@/components/app/color-picker'
+import { DuplicateButton } from '@/components/app/duplicate-button'
 
 // Variables of the ticket texts: the shared ones (member, server, FiveM), the ticket's, the form answers of this type
 function variableGroups(config: TicketConfig, cfg: TicketCategoryConfig): VariableGroup[] {
@@ -33,6 +34,48 @@ function variableGroups(config: TicketConfig, cfg: TicketCategoryConfig): Variab
   return [...config.variables, ...(answers.length ? [{ title: 'Réponses du formulaire', items: answers }] : [])]
 }
 
+
+// Copies types, statuses, panels and settings to another server of the network (channels and roles to choose again there)
+function CopySystemButton({ guildId }: { guildId: string }) {
+  const qc = useQueryClient()
+  const [open, setOpen] = useState(false)
+  const [target, setTarget] = useState('')
+  const network = useQuery({ queryKey: ['network'], queryFn: () => api<Guild[]>('/network'), enabled: open })
+  const others = (network.data ?? []).filter((g) => g.status === 'active' && g.botPresent && g.id !== guildId)
+  const copy = useMutation({
+    mutationFn: () => api<{ categories: number; panels: number; statuses: number }>(`/tickets/config/${guildId}/copy`, { method: 'POST', body: { toGuildId: target } }),
+    onSuccess: (r) => {
+      toast.success(`Copié : ${r.categories} type(s), ${r.panels} panneau(x), ${r.statuses} statuts. Choisis maintenant les salons et rôles sur l’autre serveur.`)
+      qc.invalidateQueries({ queryKey: ['ticket-config', target] })
+      setOpen(false)
+    },
+  })
+  return (
+    <>
+      <Button size='sm' variant='outline' onClick={() => setOpen(true)}><Copy /> Copier vers un autre serveur</Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Copier le système de tickets</DialogTitle>
+            <DialogDescription>Types de tickets (formulaires, accès, messages…), statuts, panneaux et réglages sont ajoutés sur le serveur choisi. Les salons et rôles Discord sont propres à chaque serveur : ils restent à choisir là-bas. Les rangs du réseau sont gardés.</DialogDescription>
+          </DialogHeader>
+          <div className='grid gap-1.5'>
+            <Label>Serveur de destination</Label>
+            <Select value={target} onValueChange={setTarget}>
+              <SelectTrigger aria-label='Serveur de destination'><SelectValue placeholder={network.isLoading ? 'Chargement…' : 'Choisir un serveur'} /></SelectTrigger>
+              <SelectContent>{others.map((g) => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
+            </Select>
+            {!network.isLoading && !others.length && <p className='text-xs text-muted-foreground'>Aucun autre serveur actif dans le réseau.</p>}
+          </div>
+          <DialogFooter>
+            <Button variant='outline' onClick={() => setOpen(false)}>Annuler</Button>
+            <Button disabled={!target} loading={copy.isPending} onClick={() => copy.mutate()}><Copy /> Copier</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
 
 export function TicketConfigPanel({ guildId }: { guildId: string }) {
   const { can } = useMe()
@@ -66,7 +109,7 @@ export function TicketConfigPanel({ guildId }: { guildId: string }) {
 
   return (
     <div className='grid gap-6'>
-      <Section title='Réglages du serveur'>
+      <Section title='Réglages du serveur' actions={manage && <CopySystemButton guildId={guildId} />}>
         <div className='flex flex-wrap items-end gap-6 p-4'>
           <div className='grid gap-1.5'>
             <Label htmlFor='max-open'>Tickets ouverts par personne (tous types)</Label>
@@ -111,6 +154,7 @@ export function TicketConfigPanel({ guildId }: { guildId: string }) {
                   {manage && (
                     <div className='flex gap-2'>
                       <Button size='sm' variant='outline' onClick={() => setEditing(c)}><Pencil /> Modifier</Button>
+                      <DuplicateButton name={c.name} onClick={() => setEditing(copyOf(c, 'name'))} />
                       <Button size='sm' variant='danger-ghost' onClick={() => setDeleting(c)}>Supprimer</Button>
                     </div>
                   )}
@@ -151,6 +195,7 @@ export function TicketConfigPanel({ guildId }: { guildId: string }) {
                       <Send /> {p.messageId ? 'Mettre à jour' : 'Publier'}
                     </Button>
                     <Button size='sm' variant='outline' onClick={() => setEditingPanel(p)}><Pencil /> Modifier</Button>
+                    <DuplicateButton name={p.name} onClick={() => setEditingPanel(copyOf(p, 'name', ['messageId']))} />
                     <Button size='sm' variant='danger-ghost' onClick={() => setDeletingPanel(p)}>Supprimer</Button>
                   </div>
                 )}

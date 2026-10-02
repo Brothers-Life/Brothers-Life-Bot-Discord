@@ -21,6 +21,8 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { VariableButton } from '@/components/app/variable-picker'
+import { DuplicateButton } from '@/components/app/duplicate-button'
+import { copyOf } from '@/lib/utils'
 
 export const Route = createFileRoute('/_authenticated/recruitment')({
   component: RecruitmentPage,
@@ -259,6 +261,7 @@ function Positions({ data, guildId }: { data: Payload; guildId: string }) {
                       <span className='hidden sm:inline'>{p.config.open ? 'Ouvert' : 'Fermé'}</span>
                     </label>
                     <Button size='sm' variant='outline' onClick={() => setEditing(p)}>Modifier</Button>
+                    <DuplicateButton name={p.name} onClick={() => setEditing(copyOf(p, 'name'))} />
                     <Button size='sm' variant='danger-ghost' onClick={() => setDeleting(p)}><Trash2 /></Button>
                   </div>
                 )}

@@ -25,6 +25,7 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { toLocalInput } from '@/features/announcements/schedule-editor'
+import { DuplicateButton } from '@/components/app/duplicate-button'
 
 export const Route = createFileRoute('/_authenticated/meetings')({
   component: MeetingsPage,
@@ -88,7 +89,7 @@ function MeetingsPage() {
             </TabsList>
             <TabsContent value='upcoming' className='mt-4'>
               {!upcoming.length ? <Section title='À venir'><EmptyState title='Aucune réunion prévue' icon={CalendarDays}>Programme la prochaine réunion du staff : le bot convoque, rappelle et compte les présents.</EmptyState></Section> : (
-                <div className='stagger grid gap-4 lg:grid-cols-2'>{upcoming.map((m) => <MeetingCard key={m.id} meeting={m} data={data} onOpen={() => setOpen(m.id)} onEdit={() => setEditing(m)} />)}</div>
+                <div className='stagger grid gap-4 lg:grid-cols-2'>{upcoming.map((m) => <MeetingCard key={m.id} meeting={m} data={data} onOpen={() => setOpen(m.id)} onEdit={() => setEditing(m)} onDuplicate={() => setEditing(meetingCopy(m))} />)}</div>
               )}
             </TabsContent>
             <TabsContent value='past' className='mt-4'>
@@ -135,7 +136,13 @@ function LiveBanner({ meeting: m, onOpen }: { meeting: Meeting; onOpen: () => vo
   )
 }
 
-function MeetingCard({ meeting: m, data, onOpen, onEdit }: { meeting: Meeting; data: Payload; onOpen: () => void; onEdit: () => void }) {
+// Planning fields only: the new meeting starts fresh (no attendance, notes or status)
+function meetingCopy(m: Meeting): Partial<Meeting> {
+  const { guildId, title, durationMinutes, voiceChannelId, announceChannelId, invites, agenda, recurrence } = m
+  return structuredClone({ guildId, title: `${title} (copie)`, durationMinutes, voiceChannelId, announceChannelId, invites, agenda, recurrence })
+}
+
+function MeetingCard({ meeting: m, data, onOpen, onEdit, onDuplicate }: { meeting: Meeting; data: Payload; onOpen: () => void; onEdit: () => void; onDuplicate: () => void }) {
   const { can } = useMe()
   const guild = data.guilds.find((g) => g.id === m.guildId)
   const voice = guild?.voiceChannels.find((c) => c.id === m.voiceChannelId)
@@ -158,6 +165,7 @@ function MeetingCard({ meeting: m, data, onOpen, onEdit }: { meeting: Meeting; d
       <div className='flex flex-wrap gap-2'>
         <Button size='sm' variant='outline' onClick={onOpen}>Ouvrir</Button>
         {can('meetings.manage') && m.status === 'scheduled' && <Button size='sm' variant='ghost' onClick={onEdit}><Pencil /> Modifier</Button>}
+        {can('meetings.manage') && <DuplicateButton name={m.title} onClick={onDuplicate} />}
       </div>
     </section>
   )

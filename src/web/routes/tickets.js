@@ -144,6 +144,11 @@ export function registerTicketRoutes(app, { core }) {
 		};
 	});
 
+	app.post('/api/tickets/config/:guildId/copy', {
+		config: { permission: 'tickets.manage' },
+		schema: { params: guildParam, body: { type: 'object', required: ['toGuildId'], properties: { toGuildId: snowflake } } },
+	}, async request => tickets.copySystem(request.actor, request.params.guildId, request.body.toGuildId));
+
 	app.put('/api/tickets/config/:guildId/settings', {
 		config: { permission: 'tickets.manage' },
 		schema: {

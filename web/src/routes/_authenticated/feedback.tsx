@@ -22,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { EmojiField } from '@/components/app/emoji-picker'
 import { ColorPicker } from '@/components/app/color-picker'
+import { DuplicateButton } from '@/components/app/duplicate-button'
 
 export const Route = createFileRoute('/_authenticated/feedback')({
   component: FeedbackPage,
@@ -104,7 +105,7 @@ function Boxes({ guildId }: { guildId: string }) {
             <TabsTrigger value='settings'>Réglages</TabsTrigger>
           </TabsList>
           <TabsContent value='items' className='mt-4'><Items box={box} /></TabsContent>
-          <TabsContent value='settings' className='mt-4'><BoxSettings key={JSON.stringify(box)} box={box} data={data} guildId={guildId} onDeleted={() => setSelected(null)} /></TabsContent>
+          <TabsContent value='settings' className='mt-4'><BoxSettings key={JSON.stringify(box)} box={box} data={data} guildId={guildId} onDeleted={() => setSelected(null)} onDuplicated={setSelected} /></TabsContent>
         </Tabs>
       )}
     </div>
@@ -250,7 +251,7 @@ function StatusDialog({ box, item, onClose }: { box: Box; item: Item; onClose: (
   )
 }
 
-function BoxSettings({ box, data, guildId, onDeleted }: { box: Box; data: Payload; guildId: string; onDeleted: () => void }) {
+function BoxSettings({ box, data, guildId, onDeleted, onDuplicated }: { box: Box; data: Payload; guildId: string; onDeleted: () => void; onDuplicated: (id: number) => void }) {
   const { can } = useMe()
   const manage = can('feedback.manage')
   const qc = useQueryClient()
@@ -269,12 +270,17 @@ function BoxSettings({ box, data, guildId, onDeleted }: { box: Box; data: Payloa
     onSuccess: () => { toast.success('Panneau publié'); refresh() },
   })
   const remove = useMutation({ mutationFn: () => api(`/feedback/boxes/${box.id}`, { method: 'DELETE', body: { confirm: true } }), onSuccess: () => { toast.success('Boîte supprimée'); refresh(); onDeleted() } })
+  // Same settings in a new box (no panel yet)
+  const duplicate = useMutation({
+    mutationFn: () => api<Box>(`/feedback/${guildId}/boxes`, { method: 'POST', body: { preset: box.kind === 'staff' ? 'staff' : 'suggestions', name: `${name} (copie)`.slice(0, 60), config: c } }),
+    onSuccess: (copy) => { toast.success('Boîte dupliquée : choisis son salon puis publie son panneau'); refresh(); onDuplicated(copy.id) },
+  })
   const patchStatus = (i: number, patch: Partial<Status>) => set({ statuses: c.statuses.map((s, j) => (j === i ? { ...s, ...patch } : s)) })
   const patchUrgency = (i: number, patch: Partial<Urgency>) => set({ urgencies: c.urgencies.map((u, j) => (j === i ? { ...u, ...patch } : u)) })
 
   return (
     <div className='grid gap-6'>
-      <Section title='Général' actions={manage && <Button size='sm' variant='danger-ghost' onClick={() => setDeleting(true)}><Trash2 /> Supprimer la boîte</Button>}>
+      <Section title='Général' actions={manage && <div className='flex gap-2'><DuplicateButton text loading={duplicate.isPending} onClick={() => duplicate.mutate()} /><Button size='sm' variant='danger-ghost' onClick={() => setDeleting(true)}><Trash2 /> Supprimer la boîte</Button></div>}>
         <div className='grid gap-4 p-4'>
           <div className='grid gap-4 sm:grid-cols-2'>
             <div className='grid gap-1.5'><Label htmlFor='b-name'>Nom</Label><Input id='b-name' value={name} maxLength={60} disabled={!manage} onChange={(e) => setName(e.target.value)} /></div>
