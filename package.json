@@ -1,6 +1,6 @@
 {
   "name": "bot-discord-brl",
-  "version": "1.8.2",
+  "version": "1.9.0",
   "description": "Bot Discord BRL (based on arthurcorberes/discordjs-bot-template)",
   "main": "src/index.js",
   "type": "module",

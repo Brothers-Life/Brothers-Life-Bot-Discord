@@ -2,7 +2,7 @@
 
 Bot Discord multi-serveurs pour la communauté RP **Brothers Life** (serveur FiveM Qbox) : il gère plusieurs serveurs Discord comme un seul réseau et s'administre depuis un panel web React en français. Tout le texte visible (Discord, panel, commits) est en **français** ; le code et ses commentaires en anglais.
 
-État au 2026-10-03 : **v1.8.2 publiée**, tout est poussé, 325 tests verts.
+État au 2026-10-03 : **v1.9.0 publiée**, tout est poussé, 330 tests verts.
 
 ## Commandes
 
@@ -55,6 +55,7 @@ Réseau de serveurs, rangs et permissions synchronisés, staff sync, sanctions (
 - `opusscript` est **épinglé en ^0.0.8** (pair de prism-media ; 0.1.x casse `npm ci`).
 - Le lecteur (embed + boutons `mu:`) est posté dans le **salon écrit du vocal** ; bouton « Gérer sur le panel » (URL = `WEB_PUBLIC_URL`, `setPanelUrl` dans `src/index.js`). `/musique jouer` sans recherche fait venir le bot avec son lecteur (`music.join`).
 - Discord : une seule connexion vocale par serveur et par bot.
+- Recherche par plateforme (`src/core/music/platforms.js`) : yt-dlp `ytsearch`/`scsearch`/`music.youtube.com/search#songs` (titre seul en flat) ; Spotify = API Web en client credentials (`settings` `music.spotify`, secret jamais renvoyé), son joué depuis YouTube (le son Spotify est sous DRM, pas de lecture directe).
 
 ### FiveM — base de données du serveur (`src/core/fivemData.js`, `src/core/fivem/`)
 - **Lecture seule** de la base Qbox (MariaDB, `mysql2`), connexion réglée dans le panel (Données FiveM → Connexion), mot de passe jamais renvoyé au panel. Les tables absentes sont ignorées (`when(table, …)`).
@@ -106,6 +107,7 @@ Réseau de serveurs, rangs et permissions synchronisés, staff sync, sanctions (
 - **v1.8.0** : API publique à clés (Bearer `brl_…`, permissions limitées, 240 req/min), page « API » du panel, OpenAPI + collection Bruno (`bruno/`).
 - **v1.8.1** : émojis validés (`src/core/emoji.js`) : un émoji invalide est ignoré au lieu de faire refuser la modale/le message par Discord.
 - **v1.8.2** : sélecteur d'émojis limité à Unicode ≤ 15.1 (`DISCORD_EMOJI_VERSION`, Discord refuse les plus récents) ; `showFormModal` réaffiche une modale sans émojis si Discord en refuse un.
+- **v1.9.0** : recherche de musique par plateforme (YouTube, YouTube Music, SoundCloud, Spotify via l'API Web avec clés dans les réglages musique), préfixes `yt:` `ytm:` `sc:` `sp:`, plateforme par défaut.
 
 ## Pistes proposées, pas encore faites
 
