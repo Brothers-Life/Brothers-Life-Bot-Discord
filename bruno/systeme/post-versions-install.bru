@@ -1,0 +1,32 @@
+meta {
+  name: POST /versions/install
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/versions/install
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "version": "",
+    "confirm": true,
+    "acceptDataLoss": false
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/versions/install`
+
+  Permission requise : `versions.install`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+
+  Corps JSON :
+  - `version` (string) — obligatoire
+  - `confirm` (boolean)
+  - `acceptDataLoss` (boolean)
+}

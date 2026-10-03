@@ -1,0 +1,27 @@
+meta {
+  name: PUT /tickets/config/:guildId/statuses
+  type: http
+  seq: 19
+}
+
+put {
+  url: {{baseUrl}}/api/tickets/config/:guildId/statuses
+  body: json
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+body:json {
+  [
+    {}
+  ]
+}
+
+docs {
+  Remplacer — `PUT /api/tickets/config/:guildId/statuses`
+
+  Permission requise : `tickets.manage`
+}

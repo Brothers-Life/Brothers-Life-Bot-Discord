@@ -1,0 +1,34 @@
+meta {
+  name: DELETE /stats/counters/:id
+  type: http
+  seq: 4
+}
+
+delete {
+  url: {{baseUrl}}/api/stats/counters/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "confirm": true,
+    "deleteChannel": false
+  }
+}
+
+docs {
+  Supprimer — `DELETE /api/stats/counters/:id`
+
+  Permission requise : `stats.manage`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+
+  Corps JSON :
+  - `confirm` (boolean)
+  - `deleteChannel` (boolean)
+}

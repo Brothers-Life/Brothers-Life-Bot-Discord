@@ -1,0 +1,17 @@
+meta {
+  name: GET /permissions
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/permissions
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/permissions`
+
+  Permission requise : `permsync.view`
+}

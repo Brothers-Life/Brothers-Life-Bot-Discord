@@ -1,0 +1,21 @@
+meta {
+  name: POST /tickets/:id/reopen
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/tickets/:id/reopen
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Créer / agir — `POST /api/tickets/:id/reopen`
+
+  Permission requise : `tickets.handle`
+}

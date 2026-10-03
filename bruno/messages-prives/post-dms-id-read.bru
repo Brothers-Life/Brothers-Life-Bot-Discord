@@ -1,0 +1,21 @@
+meta {
+  name: POST /dms/:id/read
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/dms/:id/read
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Créer / agir — `POST /api/dms/:id/read`
+
+  Permission requise : `dm.view`
+}

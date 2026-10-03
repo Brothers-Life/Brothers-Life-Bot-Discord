@@ -1,0 +1,26 @@
+meta {
+  name: POST /versions/ignore
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/versions/ignore
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "version": null
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/versions/ignore`
+
+  Permission requise : `versions.install`
+
+  Corps JSON :
+  - `version` (string | null) — obligatoire
+}

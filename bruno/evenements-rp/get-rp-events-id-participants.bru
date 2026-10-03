@@ -1,0 +1,21 @@
+meta {
+  name: GET /rp-events/:id/participants
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/rp-events/:id/participants
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Consulter — `GET /api/rp-events/:id/participants`
+
+  Permission requise : `rpevents.view`
+}

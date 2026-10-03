@@ -1,0 +1,21 @@
+meta {
+  name: POST /streams/:id/test
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/streams/:id/test
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Créer / agir — `POST /api/streams/:id/test`
+
+  Permission requise : `notifications.manage`
+}

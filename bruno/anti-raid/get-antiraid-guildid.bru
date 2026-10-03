@@ -1,0 +1,21 @@
+meta {
+  name: GET /antiraid/:guildId
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/antiraid/:guildId
+  body: none
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+docs {
+  Consulter — `GET /api/antiraid/:guildId`
+
+  Permission requise : `antiraid.view`
+}

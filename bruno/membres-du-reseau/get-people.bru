@@ -1,0 +1,34 @@
+meta {
+  name: GET /people
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/people
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~q: 
+  ~guildId: 
+  ~bots: 
+  ~filter: 
+  ~offset: 
+  ~limit: 
+}
+
+docs {
+  Consulter — `GET /api/people`
+
+  Permission requise : `members.view`
+
+  Paramètres de requête :
+  - `q` (string)
+  - `guildId` (string)
+  - `bots` (boolean)
+  - `filter` ("boosters" | "voice" | "new" | "timedout")
+  - `offset` (integer)
+  - `limit` (integer)
+}

@@ -1,0 +1,34 @@
+meta {
+  name: POST /feedback/items/:id/status
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/api/feedback/items/:id/status
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "status": "status",
+    "reason": "reason",
+    "duplicateOf": null
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/feedback/items/:id/status`
+
+  Permission requise : aucune (clé valide)
+
+  Corps JSON :
+  - `status` (string) — obligatoire
+  - `reason` (string)
+  - `duplicateOf` (integer | null)
+}

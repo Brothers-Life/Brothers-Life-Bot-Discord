@@ -1,0 +1,34 @@
+meta {
+  name: POST /music/:guildId/control
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/music/:guildId/control
+  body: json
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+body:json {
+  {
+    "action": "pause",
+    "value": null,
+    "to": 1
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/music/:guildId/control`
+
+  Permission requise : `music.use`
+
+  Corps JSON :
+  - `action` ("pause" | "resume" | "skip" | "previous" | "stop" | "seek" | "volume" | "speed" | "filters" | "loop" | "shuffle" | "remove" | "move" | "jump" | "clear") — obligatoire
+  - `value` (any)
+  - `to` (integer)
+}

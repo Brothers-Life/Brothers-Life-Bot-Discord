@@ -1,0 +1,17 @@
+meta {
+  name: GET /backups/job
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/api/backups/job
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/backups/job`
+
+  Permission requise : `backups.view`
+}

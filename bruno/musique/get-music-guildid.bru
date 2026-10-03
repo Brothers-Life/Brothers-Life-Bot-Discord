@@ -1,0 +1,21 @@
+meta {
+  name: GET /music/:guildId
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/music/:guildId
+  body: none
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+docs {
+  Consulter — `GET /api/music/:guildId`
+
+  Permission requise : `music.use`
+}

@@ -1,0 +1,17 @@
+meta {
+  name: GET /network/invite
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/network/invite
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/network/invite`
+
+  Permission requise : `network.manage`
+}

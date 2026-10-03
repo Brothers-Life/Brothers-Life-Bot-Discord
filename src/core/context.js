@@ -5,6 +5,7 @@ import { createNetwork } from './network.js';
 import { createRankService } from './ranks.js';
 import { createLogRouting } from './logRouting.js';
 import { createSessions } from './sessions.js';
+import { createApiKeys } from './apiKeys.js';
 import { createSanctions } from './sanctions.js';
 import { createSanctionTemplates } from './sanctionTemplates.js';
 import { createMusic } from './music/index.js';
@@ -73,6 +74,8 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	});
 	const logs = createLogRouting({ db, executor, network, audit, logger });
 	const sessions = createSessions({ db });
+	const apiKeys = createApiKeys({ db, audit, ranks });
+	logs.registerCategory('api', 'API (clés créées, révoquées)');
 	const restrictions = createRestrictions({ db, network, audit, executor, logger });
 	const sanctions = createSanctions({ db, audit, network, ranks, executor, restrictions, logger });
 	const sanctionTemplates = createSanctionTemplates({ db, audit, restrictions });
@@ -176,5 +179,5 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 		sanctions.syncGuild(guild.id).catch(error => logger.error(`Ban sync failed on ${guild.name}:`, error));
 	});
 
-	return { db, config, executor, variables, settings, audit, network, ranks, logs, sessions, sanctions, sanctionTemplates, music, memberInsights, channelFeatures, verification, embedBuilder, appeals, channelSchedules, archives, meetings, fivemData, fivemRoles, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents };
+	return { db, config, executor, variables, settings, audit, network, ranks, logs, sessions, apiKeys, sanctions, sanctionTemplates, music, memberInsights, channelFeatures, verification, embedBuilder, appeals, channelSchedules, archives, meetings, fivemData, fivemRoles, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents };
 }

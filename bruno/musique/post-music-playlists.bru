@@ -1,0 +1,30 @@
+meta {
+  name: POST /music/playlists
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/music/playlists
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "name",
+    "shared": false,
+    "fromGuildId": "000000000000000000"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/music/playlists`
+
+  Permission requise : `music.use`
+
+  Corps JSON :
+  - `name` (string) — obligatoire
+  - `shared` (boolean)
+  - `fromGuildId` (string)
+}

@@ -1,0 +1,26 @@
+meta {
+  name: PUT /events/settings
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{baseUrl}}/api/events/settings
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "retentionDays": 1
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/events/settings`
+
+  Permission requise : `logs.manage`
+
+  Corps JSON :
+  - `retentionDays` (integer) — obligatoire
+}

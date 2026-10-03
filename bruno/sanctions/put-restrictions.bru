@@ -1,0 +1,23 @@
+meta {
+  name: PUT /restrictions
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{baseUrl}}/api/restrictions
+  body: json
+  auth: inherit
+}
+
+body:json {
+  [
+    {}
+  ]
+}
+
+docs {
+  Remplacer — `PUT /api/restrictions`
+
+  Permission requise : `restrictions.manage`
+}

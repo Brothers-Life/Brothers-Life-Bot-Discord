@@ -1,0 +1,30 @@
+meta {
+  name: POST /absences/:id/review
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/absences/:id/review
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "approved": false
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/absences/:id/review`
+
+  Permission requise : `absences.manage`
+
+  Corps JSON :
+  - `approved` (boolean) — obligatoire
+}

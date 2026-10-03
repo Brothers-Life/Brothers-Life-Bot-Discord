@@ -1,0 +1,36 @@
+meta {
+  name: PUT /fivem-data/settings
+  type: http
+  seq: 14
+}
+
+put {
+  url: {{baseUrl}}/api/fivem-data/settings
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "enabled": false,
+    "host": "host",
+    "port": 1,
+    "database": "database",
+    "user": "user",
+    "password": "password"
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/fivem-data/settings`
+
+  Permission requise : `fivemdata.manage`
+
+  Corps JSON :
+  - `enabled` (boolean)
+  - `host` (string)
+  - `port` (integer)
+  - `database` (string)
+  - `user` (string)
+  - `password` (string)
+}

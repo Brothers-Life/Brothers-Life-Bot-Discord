@@ -1,0 +1,21 @@
+meta {
+  name: POST /announcements/:id/unschedule
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/announcements/:id/unschedule
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Créer / agir — `POST /api/announcements/:id/unschedule`
+
+  Permission requise : `announcements.manage`
+}

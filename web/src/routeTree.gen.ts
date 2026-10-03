@@ -25,6 +25,7 @@ import { Route as AuthenticatedChannelSchedulesRouteImport } from './routes/_aut
 import { Route as AuthenticatedCommandsRouteImport } from './routes/_authenticated/commands'
 import { Route as AuthenticatedConsoleRouteImport } from './routes/_authenticated/console'
 import { Route as AuthenticatedCustomCommandsRouteImport } from './routes/_authenticated/custom-commands'
+import { Route as AuthenticatedDeveloperRouteImport } from './routes/_authenticated/developer'
 import { Route as AuthenticatedDmsRouteImport } from './routes/_authenticated/dms'
 import { Route as AuthenticatedEmbedsRouteImport } from './routes/_authenticated/embeds'
 import { Route as AuthenticatedEventsRouteImport } from './routes/_authenticated/events'
@@ -142,6 +143,11 @@ const AuthenticatedCustomCommandsRoute =
     path: '/custom-commands',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedDeveloperRoute = AuthenticatedDeveloperRouteImport.update({
+  id: '/developer',
+  path: '/developer',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedDmsRoute = AuthenticatedDmsRouteImport.update({
   id: '/dms',
   path: '/dms',
@@ -336,6 +342,7 @@ export interface FileRoutesByFullPath {
   '/commands': typeof AuthenticatedCommandsRoute
   '/console': typeof AuthenticatedConsoleRoute
   '/custom-commands': typeof AuthenticatedCustomCommandsRoute
+  '/developer': typeof AuthenticatedDeveloperRoute
   '/dms': typeof AuthenticatedDmsRoute
   '/embeds': typeof AuthenticatedEmbedsRoute
   '/events': typeof AuthenticatedEventsRoute
@@ -386,6 +393,7 @@ export interface FileRoutesByTo {
   '/commands': typeof AuthenticatedCommandsRoute
   '/console': typeof AuthenticatedConsoleRoute
   '/custom-commands': typeof AuthenticatedCustomCommandsRoute
+  '/developer': typeof AuthenticatedDeveloperRoute
   '/dms': typeof AuthenticatedDmsRoute
   '/embeds': typeof AuthenticatedEmbedsRoute
   '/events': typeof AuthenticatedEventsRoute
@@ -439,6 +447,7 @@ export interface FileRoutesById {
   '/_authenticated/commands': typeof AuthenticatedCommandsRoute
   '/_authenticated/console': typeof AuthenticatedConsoleRoute
   '/_authenticated/custom-commands': typeof AuthenticatedCustomCommandsRoute
+  '/_authenticated/developer': typeof AuthenticatedDeveloperRoute
   '/_authenticated/dms': typeof AuthenticatedDmsRoute
   '/_authenticated/embeds': typeof AuthenticatedEmbedsRoute
   '/_authenticated/events': typeof AuthenticatedEventsRoute
@@ -493,6 +502,7 @@ export interface FileRouteTypes {
     | '/commands'
     | '/console'
     | '/custom-commands'
+    | '/developer'
     | '/dms'
     | '/embeds'
     | '/events'
@@ -543,6 +553,7 @@ export interface FileRouteTypes {
     | '/commands'
     | '/console'
     | '/custom-commands'
+    | '/developer'
     | '/dms'
     | '/embeds'
     | '/events'
@@ -595,6 +606,7 @@ export interface FileRouteTypes {
     | '/_authenticated/commands'
     | '/_authenticated/console'
     | '/_authenticated/custom-commands'
+    | '/_authenticated/developer'
     | '/_authenticated/dms'
     | '/_authenticated/embeds'
     | '/_authenticated/events'
@@ -749,6 +761,13 @@ declare module '@tanstack/react-router' {
       path: '/custom-commands'
       fullPath: '/custom-commands'
       preLoaderRoute: typeof AuthenticatedCustomCommandsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/developer': {
+      id: '/_authenticated/developer'
+      path: '/developer'
+      fullPath: '/developer'
+      preLoaderRoute: typeof AuthenticatedDeveloperRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/dms': {
@@ -1006,6 +1025,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCommandsRoute: typeof AuthenticatedCommandsRoute
   AuthenticatedConsoleRoute: typeof AuthenticatedConsoleRoute
   AuthenticatedCustomCommandsRoute: typeof AuthenticatedCustomCommandsRoute
+  AuthenticatedDeveloperRoute: typeof AuthenticatedDeveloperRoute
   AuthenticatedDmsRoute: typeof AuthenticatedDmsRoute
   AuthenticatedEmbedsRoute: typeof AuthenticatedEmbedsRoute
   AuthenticatedEventsRoute: typeof AuthenticatedEventsRoute
@@ -1057,6 +1077,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCommandsRoute: AuthenticatedCommandsRoute,
   AuthenticatedConsoleRoute: AuthenticatedConsoleRoute,
   AuthenticatedCustomCommandsRoute: AuthenticatedCustomCommandsRoute,
+  AuthenticatedDeveloperRoute: AuthenticatedDeveloperRoute,
   AuthenticatedDmsRoute: AuthenticatedDmsRoute,
   AuthenticatedEmbedsRoute: AuthenticatedEmbedsRoute,
   AuthenticatedEventsRoute: AuthenticatedEventsRoute,

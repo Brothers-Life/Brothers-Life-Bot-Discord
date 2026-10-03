@@ -1,0 +1,17 @@
+meta {
+  name: GET /channel-features
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/channel-features
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/channel-features`
+
+  Permission requise : `channelfeatures.view`
+}

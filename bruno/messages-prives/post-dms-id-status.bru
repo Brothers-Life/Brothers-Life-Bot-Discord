@@ -1,0 +1,30 @@
+meta {
+  name: POST /dms/:id/status
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/dms/:id/status
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "status": "open"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/dms/:id/status`
+
+  Permission requise : `dm.send`
+
+  Corps JSON :
+  - `status` ("open" | "closed") — obligatoire
+}

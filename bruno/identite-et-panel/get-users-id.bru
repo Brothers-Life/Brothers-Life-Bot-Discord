@@ -1,0 +1,21 @@
+meta {
+  name: GET /users/:id
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/api/users/:id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Consulter — `GET /api/users/:id`
+
+  Permission requise : `ranks.view`
+}

@@ -1,0 +1,30 @@
+meta {
+  name: DELETE /tickets/config/:guildId/categories/:id
+  type: http
+  seq: 13
+}
+
+delete {
+  url: {{baseUrl}}/api/tickets/config/:guildId/categories/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+  id: 
+}
+
+body:json {
+  {
+    "confirm": true
+  }
+}
+
+docs {
+  Supprimer — `DELETE /api/tickets/config/:guildId/categories/:id`
+
+  Permission requise : `tickets.manage`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+}

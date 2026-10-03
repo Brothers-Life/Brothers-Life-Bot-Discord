@@ -41,6 +41,7 @@ import { registerChannelRoutes } from './routes/channels.js';
 import { registerModerationToolRoutes } from './routes/moderationTools.js';
 import { registerMeetingRoutes } from './routes/meetings.js';
 import { registerFivemDataRoutes } from './routes/fivemData.js';
+import { registerApiRoutes } from './routes/api.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_STATIC_DIR = path.resolve(__dirname, '..', '..', 'web', 'dist');
@@ -65,7 +66,7 @@ const SECURITY_HEADERS = {
 	].join('; '),
 };
 
-export async function createWebServer({ config, core, runtime, consoleLog, versions, logger, fetchImpl = fetch, staticDir = DEFAULT_STATIC_DIR, tls }) {
+export async function createWebServer({ config, core, runtime, consoleLog, versions, logger, fetchImpl = fetch, staticDir = DEFAULT_STATIC_DIR, tls, onRoutes }) {
 	const https = tls === undefined ? await getTlsOptions(config, logger) : tls;
 	const app = Fastify({
 		https: https ?? undefined,
@@ -83,7 +84,7 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	await app.register(cookie);
 	await app.register(rateLimit, { global: false });
 	await app.register(websocket, { options: { maxPayload: 4096 } });
-	registerGuard(app, core);
+	const routes = registerGuard(app, core);
 
 	registerAuthRoutes(app, { config, core, fetchImpl });
 	registerPanelRoutes(app, { core, runtime });
@@ -118,6 +119,8 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	registerModerationToolRoutes(app, { core });
 	registerMeetingRoutes(app, { core });
 	registerFivemDataRoutes(app, { core });
+	registerApiRoutes(app, { core, runtime, routes });
+	onRoutes?.(routes);
 
 	const hasPanel = fs.existsSync(path.join(staticDir, 'index.html'));
 	const sendPanel = (reply) => {

@@ -1,0 +1,21 @@
+meta {
+  name: PUT /music/config
+  type: http
+  seq: 6
+}
+
+put {
+  url: {{baseUrl}}/api/music/config
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {}
+}
+
+docs {
+  Remplacer — `PUT /api/music/config`
+
+  Permission requise : `music.manage`
+}

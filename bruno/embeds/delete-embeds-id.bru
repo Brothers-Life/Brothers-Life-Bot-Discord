@@ -1,0 +1,28 @@
+meta {
+  name: DELETE /embeds/:id
+  type: http
+  seq: 3
+}
+
+delete {
+  url: {{baseUrl}}/api/embeds/:id
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~keepMessage: 
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Supprimer — `DELETE /api/embeds/:id`
+
+  Permission requise : `embeds.manage`
+
+  Paramètres de requête :
+  - `keepMessage` (boolean)
+}

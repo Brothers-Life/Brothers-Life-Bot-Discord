@@ -1,0 +1,41 @@
+meta {
+  name: POST /messages
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/messages
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "name",
+    "payload": {},
+    "refreshMinutes": 1,
+    "variables": {},
+    "repost": false,
+    "targets": [
+      {
+        "guildId": "000000000000000000",
+        "channelId": "000000000000000000"
+      }
+    ]
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/messages`
+
+  Permission requise : `messages.manage`
+
+  Corps JSON :
+  - `name` (string) — obligatoire
+  - `payload` (object) — obligatoire
+  - `refreshMinutes` (integer)
+  - `variables` (object)
+  - `repost` (boolean)
+  - `targets` (array)
+}

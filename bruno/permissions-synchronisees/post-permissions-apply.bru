@@ -1,0 +1,30 @@
+meta {
+  name: POST /permissions/apply
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/permissions/apply
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "rankId": 1,
+    "confirm": true
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/permissions/apply`
+
+  Permission requise : `permsync.manage`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+
+  Corps JSON :
+  - `rankId` (integer)
+  - `confirm` (boolean)
+}

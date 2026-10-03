@@ -1,0 +1,29 @@
+meta {
+  name: DELETE /announcements/templates/:id
+  type: http
+  seq: 14
+}
+
+delete {
+  url: {{baseUrl}}/api/announcements/templates/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "confirm": true
+  }
+}
+
+docs {
+  Supprimer — `DELETE /api/announcements/templates/:id`
+
+  Permission requise : `announcements.manage`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+}

@@ -1,0 +1,21 @@
+meta {
+  name: DELETE /dms/blocklist/:userId
+  type: http
+  seq: 10
+}
+
+delete {
+  url: {{baseUrl}}/api/dms/blocklist/:userId
+  body: none
+  auth: inherit
+}
+
+params:path {
+  userId: 
+}
+
+docs {
+  Supprimer — `DELETE /api/dms/blocklist/:userId`
+
+  Permission requise : `dm.manage`
+}

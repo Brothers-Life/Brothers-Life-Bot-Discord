@@ -1,0 +1,21 @@
+meta {
+  name: DELETE /music/playlists/:id
+  type: http
+  seq: 11
+}
+
+delete {
+  url: {{baseUrl}}/api/music/playlists/:id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Supprimer — `DELETE /api/music/playlists/:id`
+
+  Permission requise : `music.use`
+}

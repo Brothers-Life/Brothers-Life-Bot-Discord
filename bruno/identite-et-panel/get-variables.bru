@@ -1,0 +1,24 @@
+meta {
+  name: GET /variables
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/api/variables
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~scope: 
+}
+
+docs {
+  Consulter — `GET /api/variables`
+
+  Permission requise : aucune (clé valide)
+
+  Paramètres de requête :
+  - `scope` ("member" | "server")
+}

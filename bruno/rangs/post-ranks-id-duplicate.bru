@@ -1,0 +1,32 @@
+meta {
+  name: POST /ranks/:id/duplicate
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/ranks/:id/duplicate
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "name": "name",
+    "level": 0
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/ranks/:id/duplicate`
+
+  Permission requise : `ranks.manage`
+
+  Corps JSON :
+  - `name` (string)
+  - `level` (integer)
+}

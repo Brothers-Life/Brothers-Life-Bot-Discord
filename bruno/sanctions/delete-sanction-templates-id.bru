@@ -1,0 +1,21 @@
+meta {
+  name: DELETE /sanction-templates/:id
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{baseUrl}}/api/sanction-templates/:id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Supprimer — `DELETE /api/sanction-templates/:id`
+
+  Permission requise : `sanctions.templates`
+}

@@ -1,0 +1,42 @@
+meta {
+  name: PUT /streams/:id
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/streams/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "platform": "twitch",
+    "channel": "channel",
+    "displayName": "displayName",
+    "targets": [],
+    "payloads": {},
+    "config": {},
+    "enabled": false
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/streams/:id`
+
+  Permission requise : `notifications.manage`
+
+  Corps JSON :
+  - `platform` ("twitch" | "youtube" | "kick")
+  - `channel` (string)
+  - `displayName` (string)
+  - `targets` (array)
+  - `payloads` (object)
+  - `config` (object)
+  - `enabled` (boolean)
+}

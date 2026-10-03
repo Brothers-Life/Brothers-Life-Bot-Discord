@@ -1,0 +1,17 @@
+meta {
+  name: DELETE /music/cookies
+  type: http
+  seq: 7
+}
+
+delete {
+  url: {{baseUrl}}/api/music/cookies
+  body: none
+  auth: inherit
+}
+
+docs {
+  Supprimer — `DELETE /api/music/cookies`
+
+  Permission requise : `music.manage`
+}

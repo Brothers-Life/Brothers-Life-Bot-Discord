@@ -1,0 +1,32 @@
+meta {
+  name: PUT /ranks/:id/roles
+  type: http
+  seq: 10
+}
+
+put {
+  url: {{baseUrl}}/api/ranks/:id/roles
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "roleIds": [
+      "000000000000000000"
+    ]
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/ranks/:id/roles`
+
+  Permission requise : `ranks.manage`
+
+  Corps JSON :
+  - `roleIds` (array) — obligatoire
+}

@@ -1,0 +1,26 @@
+meta {
+  name: PUT /channel-schedules
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{baseUrl}}/api/channel-schedules
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "guildId": "000000000000000000"
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/channel-schedules`
+
+  Permission requise : `schedules.manage`
+
+  Corps JSON :
+  - `guildId` (string) — obligatoire
+}

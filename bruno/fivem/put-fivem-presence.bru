@@ -1,0 +1,32 @@
+meta {
+  name: PUT /fivem/presence
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{baseUrl}}/api/fivem/presence
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "enabled": false,
+    "serverIds": [],
+    "text": "text",
+    "offlineText": "offlineText"
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/fivem/presence`
+
+  Permission requise : `fivem.manage`
+
+  Corps JSON :
+  - `enabled` (boolean)
+  - `serverIds` (array)
+  - `text` (string)
+  - `offlineText` (string)
+}

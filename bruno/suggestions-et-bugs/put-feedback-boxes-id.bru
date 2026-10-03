@@ -1,0 +1,25 @@
+meta {
+  name: PUT /feedback/boxes/:id
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/feedback/boxes/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {}
+}
+
+docs {
+  Remplacer — `PUT /api/feedback/boxes/:id`
+
+  Permission requise : `feedback.manage`
+}

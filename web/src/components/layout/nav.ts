@@ -52,6 +52,7 @@ import {
   CalendarClock,
   Archive,
   Presentation,
+  Plug,
 } from 'lucide-react'
 
 export type NavEntry = {
@@ -165,6 +166,7 @@ export const navSections: NavSection[] = [
     items: [
       { title: 'Console', url: '/console', icon: SquareTerminal, permission: 'console.view' },
       { title: 'Versions', url: '/versions', icon: PackageCheck, permission: 'versions.view', keywords: 'mise à jour' },
+      { title: 'API', url: '/developer', icon: Plug, permission: 'api.use', keywords: 'clé token bruno développeur intégration openapi' },
     ],
   },
 ]

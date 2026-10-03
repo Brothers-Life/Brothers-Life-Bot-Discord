@@ -1,0 +1,17 @@
+meta {
+  name: GET /polls
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/polls
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/polls`
+
+  Permission requise : `polls.view`
+}

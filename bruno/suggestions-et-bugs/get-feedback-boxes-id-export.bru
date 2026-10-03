@@ -1,0 +1,21 @@
+meta {
+  name: GET /feedback/boxes/:id/export
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/feedback/boxes/:id/export
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Consulter — `GET /api/feedback/boxes/:id/export`
+
+  Permission requise : aucune (clé valide)
+}

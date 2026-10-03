@@ -1,0 +1,38 @@
+meta {
+  name: POST /ranks
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/ranks
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "name",
+    "level": 0,
+    "color": null,
+    "permissions": [
+      "permissions"
+    ],
+    "inherit": false,
+    "syncRoles": false
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/ranks`
+
+  Permission requise : `ranks.manage`
+
+  Corps JSON :
+  - `name` (string) — obligatoire
+  - `level` (integer) — obligatoire
+  - `color` (string | null)
+  - `permissions` (array)
+  - `inherit` (boolean)
+  - `syncRoles` (boolean)
+}

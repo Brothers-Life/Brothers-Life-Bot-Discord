@@ -1,0 +1,34 @@
+meta {
+  name: POST /antiraid/:guildId/raid
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/antiraid/:guildId/raid
+  body: json
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+body:json {
+  {
+    "on": false,
+    "confirm": true
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/antiraid/:guildId/raid`
+
+  Permission requise : `antiraid.manage`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+
+  Corps JSON :
+  - `on` (boolean) — obligatoire
+  - `confirm` (boolean)
+}

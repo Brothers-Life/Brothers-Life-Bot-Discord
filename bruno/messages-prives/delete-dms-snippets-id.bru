@@ -1,0 +1,21 @@
+meta {
+  name: DELETE /dms/snippets/:id
+  type: http
+  seq: 13
+}
+
+delete {
+  url: {{baseUrl}}/api/dms/snippets/:id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Supprimer — `DELETE /api/dms/snippets/:id`
+
+  Permission requise : `dm.manage`
+}

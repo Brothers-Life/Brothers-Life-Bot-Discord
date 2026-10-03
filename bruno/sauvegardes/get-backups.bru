@@ -1,0 +1,17 @@
+meta {
+  name: GET /backups
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/backups
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/backups`
+
+  Permission requise : `backups.view`
+}

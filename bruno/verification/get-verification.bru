@@ -1,0 +1,17 @@
+meta {
+  name: GET /verification
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/verification
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/verification`
+
+  Permission requise : `verification.view`
+}

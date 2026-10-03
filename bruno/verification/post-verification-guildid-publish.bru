@@ -1,0 +1,21 @@
+meta {
+  name: POST /verification/:guildId/publish
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/verification/:guildId/publish
+  body: none
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+docs {
+  Créer / agir — `POST /api/verification/:guildId/publish`
+
+  Permission requise : `verification.manage`
+}

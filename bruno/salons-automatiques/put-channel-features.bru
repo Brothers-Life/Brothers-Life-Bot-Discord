@@ -1,0 +1,32 @@
+meta {
+  name: PUT /channel-features
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{baseUrl}}/api/channel-features
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "guildId": "000000000000000000",
+    "channelId": "000000000000000000",
+    "kind": "kind",
+    "config": {}
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/channel-features`
+
+  Permission requise : `channelfeatures.manage`
+
+  Corps JSON :
+  - `guildId` (string) — obligatoire
+  - `channelId` (string) — obligatoire
+  - `kind` (string) — obligatoire
+  - `config` (object)
+}

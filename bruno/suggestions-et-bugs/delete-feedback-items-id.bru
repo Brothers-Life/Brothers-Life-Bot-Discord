@@ -1,0 +1,29 @@
+meta {
+  name: DELETE /feedback/items/:id
+  type: http
+  seq: 8
+}
+
+delete {
+  url: {{baseUrl}}/api/feedback/items/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "confirm": true
+  }
+}
+
+docs {
+  Supprimer — `DELETE /api/feedback/items/:id`
+
+  Permission requise : `feedback.manage`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+}

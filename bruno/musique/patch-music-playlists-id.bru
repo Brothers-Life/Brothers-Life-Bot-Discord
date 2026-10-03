@@ -1,0 +1,32 @@
+meta {
+  name: PATCH /music/playlists/:id
+  type: http
+  seq: 13
+}
+
+patch {
+  url: {{baseUrl}}/api/music/playlists/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "name": "name",
+    "shared": false
+  }
+}
+
+docs {
+  Modifier — `PATCH /api/music/playlists/:id`
+
+  Permission requise : `music.use`
+
+  Corps JSON :
+  - `name` (string)
+  - `shared` (boolean)
+}

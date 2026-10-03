@@ -1,0 +1,21 @@
+meta {
+  name: POST /polls/:id/duplicate
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/polls/:id/duplicate
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Créer / agir — `POST /api/polls/:id/duplicate`
+
+  Permission requise : `polls.manage`
+}

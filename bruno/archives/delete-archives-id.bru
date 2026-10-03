@@ -1,0 +1,21 @@
+meta {
+  name: DELETE /archives/:id
+  type: http
+  seq: 3
+}
+
+delete {
+  url: {{baseUrl}}/api/archives/:id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Supprimer — `DELETE /api/archives/:id`
+
+  Permission requise : `archives.manage`
+}

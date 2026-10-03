@@ -1,0 +1,17 @@
+meta {
+  name: GET /network
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/network
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/network`
+
+  Permission requise : `network.view`
+}

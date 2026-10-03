@@ -1,0 +1,21 @@
+meta {
+  name: POST /meetings/:id/start
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/meetings/:id/start
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Créer / agir — `POST /api/meetings/:id/start`
+
+  Permission requise : `meetings.manage`
+}

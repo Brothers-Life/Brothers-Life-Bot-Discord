@@ -1,0 +1,26 @@
+meta {
+  name: PUT /music/cookies
+  type: http
+  seq: 8
+}
+
+put {
+  url: {{baseUrl}}/api/music/cookies
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "content": "content"
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/music/cookies`
+
+  Permission requise : `music.manage`
+
+  Corps JSON :
+  - `content` (string) — obligatoire
+}

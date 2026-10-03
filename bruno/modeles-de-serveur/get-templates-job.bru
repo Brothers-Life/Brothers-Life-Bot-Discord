@@ -1,0 +1,17 @@
+meta {
+  name: GET /templates/job
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/api/templates/job
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/templates/job`
+
+  Permission requise : `templates.view`
+}

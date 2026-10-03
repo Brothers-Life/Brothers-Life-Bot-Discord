@@ -1,0 +1,28 @@
+meta {
+  name: POST /dms
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/dms
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "userId": "000000000000000000",
+    "userName": null
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/dms`
+
+  Permission requise : `dm.send`
+
+  Corps JSON :
+  - `userId` (string) — obligatoire
+  - `userName` (string | null)
+}

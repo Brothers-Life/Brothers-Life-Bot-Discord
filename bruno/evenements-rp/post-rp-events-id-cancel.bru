@@ -1,0 +1,34 @@
+meta {
+  name: POST /rp-events/:id/cancel
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/rp-events/:id/cancel
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "reason": "reason",
+    "confirm": true
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/rp-events/:id/cancel`
+
+  Permission requise : `rpevents.manage`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+
+  Corps JSON :
+  - `reason` (string)
+  - `confirm` (boolean)
+}

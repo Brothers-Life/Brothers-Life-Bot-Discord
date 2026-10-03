@@ -1,0 +1,17 @@
+meta {
+  name: POST /staff-roles/link-by-name
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/staff-roles/link-by-name
+  body: none
+  auth: inherit
+}
+
+docs {
+  Créer / agir — `POST /api/staff-roles/link-by-name`
+
+  Permission requise : `ranks.manage`
+}

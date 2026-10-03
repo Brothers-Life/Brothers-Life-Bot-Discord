@@ -1,0 +1,17 @@
+meta {
+  name: GET /meetings
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/meetings
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/meetings`
+
+  Permission requise : `meetings.view`
+}

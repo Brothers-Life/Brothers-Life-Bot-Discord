@@ -1,0 +1,32 @@
+meta {
+  name: POST /announcements
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/announcements
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "name",
+    "payload": {},
+    "targets": [],
+    "options": {}
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/announcements`
+
+  Permission requise : `announcements.manage`
+
+  Corps JSON :
+  - `name` (string) — obligatoire
+  - `payload` (object) — obligatoire
+  - `targets` (array)
+  - `options` (object)
+}

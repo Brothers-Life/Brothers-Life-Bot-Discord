@@ -1,0 +1,23 @@
+meta {
+  name: PUT /fivem-data/roles/links
+  type: http
+  seq: 10
+}
+
+put {
+  url: {{baseUrl}}/api/fivem-data/roles/links
+  body: json
+  auth: inherit
+}
+
+body:json {
+  [
+    {}
+  ]
+}
+
+docs {
+  Remplacer — `PUT /api/fivem-data/roles/links`
+
+  Permission requise : `fivemdata.manage`
+}

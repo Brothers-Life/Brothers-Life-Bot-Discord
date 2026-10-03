@@ -1,0 +1,30 @@
+meta {
+  name: POST /restrictions/repair
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/restrictions/repair
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "guildId": null,
+    "confirm": true
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/restrictions/repair`
+
+  Permission requise : `restrictions.manage`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+
+  Corps JSON :
+  - `guildId` (string | null)
+  - `confirm` (boolean)
+}

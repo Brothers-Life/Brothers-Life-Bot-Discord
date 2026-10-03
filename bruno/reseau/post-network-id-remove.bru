@@ -1,0 +1,32 @@
+meta {
+  name: POST /network/:id/remove
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/network/:id/remove
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "confirm": true
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/network/:id/remove`
+
+  Permission requise : `network.manage`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+
+  Corps JSON :
+  - `confirm` (boolean)
+}

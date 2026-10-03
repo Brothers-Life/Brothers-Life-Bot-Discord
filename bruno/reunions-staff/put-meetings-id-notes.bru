@@ -1,0 +1,32 @@
+meta {
+  name: PUT /meetings/:id/notes
+  type: http
+  seq: 9
+}
+
+put {
+  url: {{baseUrl}}/api/meetings/:id/notes
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "notes": "notes",
+    "agenda": []
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/meetings/:id/notes`
+
+  Permission requise : `meetings.manage`
+
+  Corps JSON :
+  - `notes` (string)
+  - `agenda` (array)
+}

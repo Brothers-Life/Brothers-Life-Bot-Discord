@@ -1,0 +1,21 @@
+meta {
+  name: GET /network/:id/channels
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/network/:id/channels
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Consulter — `GET /api/network/:id/channels`
+
+  Permission requise : `logs.manage`
+}

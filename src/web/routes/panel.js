@@ -25,13 +25,15 @@ export function registerPanelRoutes(app, { core, runtime }) {
 	// --- Identity & overview ---------------------------------------------------------------
 	app.get('/api/me', { config: { permission: null } }, async (request) => {
 		const { actor, session } = request;
+		const user = session ? { username: session.username, avatar: session.avatar } : await executor.getUser(actor.id).catch(() => null);
 		return {
-			user: { id: actor.id, username: session.username, avatar: session.avatar },
+			user: { id: actor.id, username: user?.username ?? user?.globalName ?? null, avatar: user?.avatar ?? null },
 			isOwner: actor.isOwner,
 			level: Number.isFinite(actor.level) ? actor.level : null,
 			permissions: actor.permissions,
 			ranks: actor.ranks,
-			sessionExpiresAt: session.expiresAt,
+			sessionExpiresAt: session?.expiresAt ?? null,
+			apiKey: actor.apiKey ?? null,
 		};
 	});
 
@@ -248,12 +250,12 @@ export function registerPanelRoutes(app, { core, runtime }) {
 	});
 
 	// --- Sessions ----------------------------------------------------------------------------
-	app.get('/api/sessions', { config: { permission: null }, schema: { querystring: { type: 'object', properties: { all: { type: 'boolean' } } } } }, async (request) => {
+	app.get('/api/sessions', { config: { permission: null, apiKey: false }, schema: { querystring: { type: 'object', properties: { all: { type: 'boolean' } } } } }, async (request) => {
 		const all = request.query.all && request.actor.can('sessions.manage');
 		return sessions.list(all ? undefined : request.actor.id).map(s => ({ ...s, id: undefined, key: sessionKey(s.id), current: s.id === request.session.id }));
 	});
 
-	app.delete('/api/sessions/:key', { config: { permission: null } }, async (request) => {
+	app.delete('/api/sessions/:key', { config: { permission: null, apiKey: false } }, async (request) => {
 		const target = sessions.list().find(s => sessionKey(s.id) === request.params.key);
 		if (!target) throw new NotFoundError('Session introuvable.');
 		if (target.discordId !== request.actor.id) {

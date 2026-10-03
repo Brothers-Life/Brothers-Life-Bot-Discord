@@ -1,0 +1,32 @@
+meta {
+  name: POST /embeds/:id/post
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/embeds/:id/post
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "guildId": "000000000000000000",
+    "channelId": "000000000000000000"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/embeds/:id/post`
+
+  Permission requise : `embeds.manage`
+
+  Corps JSON :
+  - `guildId` (string) — obligatoire
+  - `channelId` (string) — obligatoire
+}

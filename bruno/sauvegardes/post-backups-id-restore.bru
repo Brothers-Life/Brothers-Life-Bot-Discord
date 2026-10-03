@@ -1,0 +1,40 @@
+meta {
+  name: POST /backups/:id/restore
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/backups/:id/restore
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "mode": "repair",
+    "panel": false,
+    "memberRoles": false,
+    "confirm": true,
+    "confirmName": "confirmName"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/backups/:id/restore`
+
+  Permission requise : `backups.restore`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+
+  Corps JSON :
+  - `mode` ("repair" | "restore")
+  - `panel` (boolean)
+  - `memberRoles` (boolean)
+  - `confirm` (boolean)
+  - `confirmName` (string)
+}

@@ -1,0 +1,32 @@
+meta {
+  name: PUT /templates/:id
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{baseUrl}}/api/templates/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "name": "name",
+    "description": null
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/templates/:id`
+
+  Permission requise : `templates.manage`
+
+  Corps JSON :
+  - `name` (string) — obligatoire
+  - `description` (string | null)
+}

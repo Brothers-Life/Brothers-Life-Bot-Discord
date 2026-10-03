@@ -1,0 +1,21 @@
+meta {
+  name: GET /announcements/:id
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/announcements/:id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Consulter — `GET /api/announcements/:id`
+
+  Permission requise : `announcements.view`
+}

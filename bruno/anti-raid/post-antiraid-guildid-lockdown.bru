@@ -1,0 +1,34 @@
+meta {
+  name: POST /antiraid/:guildId/lockdown
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/antiraid/:guildId/lockdown
+  body: json
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+body:json {
+  {
+    "on": false,
+    "confirm": true
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/antiraid/:guildId/lockdown`
+
+  Permission requise : `commands.lockdown`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+
+  Corps JSON :
+  - `on` (boolean) — obligatoire
+  - `confirm` (boolean)
+}

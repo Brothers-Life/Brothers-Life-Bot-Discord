@@ -1,0 +1,26 @@
+meta {
+  name: GET /temp-roles
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{baseUrl}}/api/temp-roles
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~userId: 
+  ~guildId: 
+}
+
+docs {
+  Consulter — `GET /api/temp-roles`
+
+  Permission requise : `members.view`
+
+  Paramètres de requête :
+  - `userId` (string)
+  - `guildId` (string)
+}

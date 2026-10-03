@@ -88,6 +88,7 @@ async function main() {
 	cleanups.push(() => core.logs.flush());
 	// Statistics still in memory are written before stopping
 	cleanups.push(() => core.stats.flush());
+	cleanups.push(() => core.apiKeys.flushAll());
 	cleanups.push(() => core.fivemData.close());
 
 	await bot.login(config.TOKEN);

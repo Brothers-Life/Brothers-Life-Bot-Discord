@@ -1,0 +1,30 @@
+meta {
+  name: POST /tickets/:id/members
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/tickets/:id/members
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "userId": "000000000000000000"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/tickets/:id/members`
+
+  Permission requise : `tickets.handle`
+
+  Corps JSON :
+  - `userId` (string) — obligatoire
+}

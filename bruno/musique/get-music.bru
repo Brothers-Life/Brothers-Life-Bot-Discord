@@ -1,0 +1,17 @@
+meta {
+  name: GET /music
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/music
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/music`
+
+  Permission requise : `music.use`
+}

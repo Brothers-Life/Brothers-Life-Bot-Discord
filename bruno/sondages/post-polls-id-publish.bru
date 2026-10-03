@@ -1,0 +1,21 @@
+meta {
+  name: POST /polls/:id/publish
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/polls/:id/publish
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Créer / agir — `POST /api/polls/:id/publish`
+
+  Permission requise : `polls.manage`
+}

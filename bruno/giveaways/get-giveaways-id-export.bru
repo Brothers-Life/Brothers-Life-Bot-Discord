@@ -1,0 +1,21 @@
+meta {
+  name: GET /giveaways/:id/export
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/api/giveaways/:id/export
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Consulter — `GET /api/giveaways/:id/export`
+
+  Permission requise : `giveaways.view`
+}

@@ -1,0 +1,36 @@
+meta {
+  name: GET /audit
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/audit
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~actorId: 
+  ~action: 
+  ~guildId: 
+  ~from: 
+  ~to: 
+  ~before: 
+  ~limit: 
+}
+
+docs {
+  Consulter — `GET /api/audit`
+
+  Permission requise : `audit.view`
+
+  Paramètres de requête :
+  - `actorId` (string)
+  - `action` (string)
+  - `guildId` (string)
+  - `from` (integer)
+  - `to` (integer)
+  - `before` (integer)
+  - `limit` (integer)
+}

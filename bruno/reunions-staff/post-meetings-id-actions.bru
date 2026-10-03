@@ -1,0 +1,34 @@
+meta {
+  name: POST /meetings/:id/actions
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/meetings/:id/actions
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "text": "text",
+    "assigneeId": null,
+    "dueAt": null
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/meetings/:id/actions`
+
+  Permission requise : `meetings.manage`
+
+  Corps JSON :
+  - `text` (string) — obligatoire
+  - `assigneeId` (string | null)
+  - `dueAt` (integer | null)
+}

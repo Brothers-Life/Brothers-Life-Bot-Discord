@@ -1,0 +1,30 @@
+meta {
+  name: POST /embeds
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/embeds
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "id": 1,
+    "name": "name",
+    "payload": {}
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/embeds`
+
+  Permission requise : `embeds.manage`
+
+  Corps JSON :
+  - `id` (integer)
+  - `name` (string)
+  - `payload` (object) — obligatoire
+}

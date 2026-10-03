@@ -1,0 +1,21 @@
+meta {
+  name: POST /feedback/boxes/:id/panel
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/feedback/boxes/:id/panel
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Créer / agir — `POST /api/feedback/boxes/:id/panel`
+
+  Permission requise : `feedback.manage`
+}

@@ -1,0 +1,32 @@
+meta {
+  name: POST /announcements/:id/schedule
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/announcements/:id/schedule
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "at": null,
+    "recurrence": null
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/announcements/:id/schedule`
+
+  Permission requise : `announcements.manage`
+
+  Corps JSON :
+  - `at` (integer | null)
+  - `recurrence` (object | null)
+}

@@ -1,0 +1,25 @@
+meta {
+  name: PUT /messages/:id/variables
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{baseUrl}}/api/messages/:id/variables
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {}
+}
+
+docs {
+  Remplacer — `PUT /api/messages/:id/variables`
+
+  Permission requise : `messages.manage`
+}

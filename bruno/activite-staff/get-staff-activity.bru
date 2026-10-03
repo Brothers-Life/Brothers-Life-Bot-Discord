@@ -1,0 +1,26 @@
+meta {
+  name: GET /staff-activity
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/staff-activity
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~from: 
+  ~to: 
+}
+
+docs {
+  Consulter — `GET /api/staff-activity`
+
+  Permission requise : `staffactivity.view`
+
+  Paramètres de requête :
+  - `from` (integer)
+  - `to` (integer)
+}

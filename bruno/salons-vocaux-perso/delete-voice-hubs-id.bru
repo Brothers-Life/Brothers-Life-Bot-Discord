@@ -1,0 +1,34 @@
+meta {
+  name: DELETE /voice/hubs/:id
+  type: http
+  seq: 3
+}
+
+delete {
+  url: {{baseUrl}}/api/voice/hubs/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "confirm": true,
+    "deleteChannel": false
+  }
+}
+
+docs {
+  Supprimer — `DELETE /api/voice/hubs/:id`
+
+  Permission requise : `voice.manage`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+
+  Corps JSON :
+  - `confirm` (boolean)
+  - `deleteChannel` (boolean)
+}

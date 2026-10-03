@@ -1,0 +1,21 @@
+meta {
+  name: POST /ranks/:id/copy-role
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/ranks/:id/copy-role
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Créer / agir — `POST /api/ranks/:id/copy-role`
+
+  Permission requise : `ranks.manage`
+}

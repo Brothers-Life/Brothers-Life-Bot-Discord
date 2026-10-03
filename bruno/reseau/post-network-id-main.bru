@@ -1,0 +1,32 @@
+meta {
+  name: POST /network/:id/main
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/network/:id/main
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "confirm": true
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/network/:id/main`
+
+  Permission requise : `network.manage`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+
+  Corps JSON :
+  - `confirm` (boolean)
+}

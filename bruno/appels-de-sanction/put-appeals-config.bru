@@ -1,0 +1,21 @@
+meta {
+  name: PUT /appeals/config
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{baseUrl}}/api/appeals/config
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {}
+}
+
+docs {
+  Remplacer — `PUT /api/appeals/config`
+
+  Permission requise : `appeals.manage`
+}

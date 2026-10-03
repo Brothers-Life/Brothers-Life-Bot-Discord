@@ -1,0 +1,22 @@
+meta {
+  name: POST /tickets/config/:guildId/panels/:id/publish
+  type: http
+  seq: 17
+}
+
+post {
+  url: {{baseUrl}}/api/tickets/config/:guildId/panels/:id/publish
+  body: none
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+  id: 
+}
+
+docs {
+  Créer / agir — `POST /api/tickets/config/:guildId/panels/:id/publish`
+
+  Permission requise : `tickets.manage`
+}

@@ -1,0 +1,21 @@
+meta {
+  name: POST /changelog/:id/publish
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/changelog/:id/publish
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Créer / agir — `POST /api/changelog/:id/publish`
+
+  Permission requise : `changelog.manage`
+}

@@ -1,0 +1,32 @@
+meta {
+  name: POST /tickets/:id/reply
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/tickets/:id/reply
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "content": "content",
+    "internal": false
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/tickets/:id/reply`
+
+  Permission requise : `tickets.handle`
+
+  Corps JSON :
+  - `content` (string) — obligatoire
+  - `internal` (boolean)
+}

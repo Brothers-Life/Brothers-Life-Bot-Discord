@@ -1,0 +1,21 @@
+meta {
+  name: GET /people/:userId/insights
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/people/:userId/insights
+  body: none
+  auth: inherit
+}
+
+params:path {
+  userId: 
+}
+
+docs {
+  Consulter — `GET /api/people/:userId/insights`
+
+  Permission requise : `members.view`
+}

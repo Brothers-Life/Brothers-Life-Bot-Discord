@@ -1,0 +1,26 @@
+meta {
+  name: POST /uploads
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/uploads
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "data": "data"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/uploads`
+
+  Permission requise : aucune (clé valide)
+
+  Corps JSON :
+  - `data` (string) — obligatoire
+}

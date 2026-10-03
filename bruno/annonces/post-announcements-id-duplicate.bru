@@ -1,0 +1,21 @@
+meta {
+  name: POST /announcements/:id/duplicate
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/announcements/:id/duplicate
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Créer / agir — `POST /api/announcements/:id/duplicate`
+
+  Permission requise : `announcements.manage`
+}

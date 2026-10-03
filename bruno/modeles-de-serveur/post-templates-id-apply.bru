@@ -1,0 +1,38 @@
+meta {
+  name: POST /templates/:id/apply
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/templates/:id/apply
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "guildId": "000000000000000000",
+    "mode": "reset",
+    "confirm": true,
+    "confirmName": "confirmName"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/templates/:id/apply`
+
+  Permission requise : `templates.apply`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+
+  Corps JSON :
+  - `guildId` (string) — obligatoire
+  - `mode` ("reset" | "repair") — obligatoire
+  - `confirm` (boolean)
+  - `confirmName` (string)
+}

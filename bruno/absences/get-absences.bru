@@ -1,0 +1,26 @@
+meta {
+  name: GET /absences
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/absences
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~from: 
+  ~to: 
+}
+
+docs {
+  Consulter — `GET /api/absences`
+
+  Permission requise : aucune (clé valide)
+
+  Paramètres de requête :
+  - `from` (integer)
+  - `to` (integer)
+}

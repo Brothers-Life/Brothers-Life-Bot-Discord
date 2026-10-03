@@ -1,0 +1,17 @@
+meta {
+  name: GET /messages/targets
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/api/messages/targets
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/messages/targets`
+
+  Permission requise : `messages.view`
+}

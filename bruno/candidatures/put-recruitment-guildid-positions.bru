@@ -1,0 +1,25 @@
+meta {
+  name: PUT /recruitment/:guildId/positions
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/recruitment/:guildId/positions
+  body: json
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+body:json {
+  {}
+}
+
+docs {
+  Remplacer — `PUT /api/recruitment/:guildId/positions`
+
+  Permission requise : `recruitment.manage`
+}

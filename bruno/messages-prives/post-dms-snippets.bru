@@ -1,0 +1,30 @@
+meta {
+  name: POST /dms/snippets
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/api/dms/snippets
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "id": null,
+    "name": "name",
+    "content": "content"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/dms/snippets`
+
+  Permission requise : `dm.manage`
+
+  Corps JSON :
+  - `id` (integer | null)
+  - `name` (string) — obligatoire
+  - `content` (string) — obligatoire
+}

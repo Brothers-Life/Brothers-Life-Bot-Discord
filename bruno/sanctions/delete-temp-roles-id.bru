@@ -1,0 +1,29 @@
+meta {
+  name: DELETE /temp-roles/:id
+  type: http
+  seq: 15
+}
+
+delete {
+  url: {{baseUrl}}/api/temp-roles/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "confirm": true
+  }
+}
+
+docs {
+  Supprimer — `DELETE /api/temp-roles/:id`
+
+  Permission requise : `commands.roles`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+}

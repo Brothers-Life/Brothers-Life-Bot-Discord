@@ -1,0 +1,25 @@
+meta {
+  name: PUT /verification/:guildId
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{baseUrl}}/api/verification/:guildId
+  body: json
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+body:json {
+  {}
+}
+
+docs {
+  Remplacer — `PUT /api/verification/:guildId`
+
+  Permission requise : `verification.manage`
+}

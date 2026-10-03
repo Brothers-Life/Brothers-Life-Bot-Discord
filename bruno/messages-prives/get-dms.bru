@@ -1,0 +1,26 @@
+meta {
+  name: GET /dms
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/dms
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~status: 
+  ~mine: 
+}
+
+docs {
+  Consulter — `GET /api/dms`
+
+  Permission requise : `dm.view`
+
+  Paramètres de requête :
+  - `status` ("open" | "closed")
+  - `mine` (boolean)
+}

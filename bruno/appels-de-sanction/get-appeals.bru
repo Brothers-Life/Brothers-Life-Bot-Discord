@@ -1,0 +1,17 @@
+meta {
+  name: GET /appeals
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/appeals
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/appeals`
+
+  Permission requise : `appeals.view`
+}

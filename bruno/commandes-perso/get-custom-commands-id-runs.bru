@@ -1,0 +1,21 @@
+meta {
+  name: GET /custom-commands/:id/runs
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/custom-commands/:id/runs
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Consulter — `GET /api/custom-commands/:id/runs`
+
+  Permission requise : `customcommands.view`
+}

@@ -1,0 +1,28 @@
+meta {
+  name: POST /system/restart
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/system/restart
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "confirm": true
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/system/restart`
+
+  Permission requise : `console.control`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+
+  Corps JSON :
+  - `confirm` (boolean)
+}

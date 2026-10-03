@@ -1,0 +1,34 @@
+meta {
+  name: POST /tickets/:id/close
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/tickets/:id/close
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "reason": "reason",
+    "confirm": true
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/tickets/:id/close`
+
+  Permission requise : `tickets.handle`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+
+  Corps JSON :
+  - `reason` (string)
+  - `confirm` (boolean)
+}

@@ -1,0 +1,21 @@
+meta {
+  name: GET /tickets/config/:guildId
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/api/tickets/config/:guildId
+  body: none
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+docs {
+  Consulter — `GET /api/tickets/config/:guildId`
+
+  Permission requise : `tickets.view`
+}

@@ -1,0 +1,21 @@
+meta {
+  name: DELETE /channel-schedules/:id
+  type: http
+  seq: 3
+}
+
+delete {
+  url: {{baseUrl}}/api/channel-schedules/:id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Supprimer — `DELETE /api/channel-schedules/:id`
+
+  Permission requise : `schedules.manage`
+}

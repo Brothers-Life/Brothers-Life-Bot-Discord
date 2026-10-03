@@ -1,0 +1,32 @@
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{apiKey}}
+}
+
+docs {
+  # Brothers Life — API du bot
+
+  Toute l'administration du bot (ce que fait le panel) est accessible ici avec une **clé d'API**.
+
+  ## Démarrer
+
+  1. Sur le panel, page **API** : crée une clé (elle n'est affichée qu'une fois).
+  2. Dans Bruno, environnement **Production** : renseigne `baseUrl` (ex. `https://IP:PORT`) et `apiKey` (variable secrète).
+  3. Le panel est en HTTPS auto-signé : dans Bruno, *Preferences → General*, décoche **SSL/TLS Certificate Verification**.
+
+  ## Règles
+
+  - Authentification : `Authorization: Bearer brl_…` (déjà réglé au niveau de la collection).
+  - Une clé agit **au nom de son créateur**, limitée aux permissions choisies à sa création. Si le créateur perd un droit, la clé le perd aussi.
+  - Les actions sensibles demandent `"confirm": true` dans le corps.
+  - Limite : 240 requêtes par minute et par clé (réponse 429 + `Retry-After`).
+  - Erreurs : `{ "error": { "code": "…", "message": "…" } }`, messages en français.
+  - Toute action passe dans le journal d'audit du panel, avec la source `api`.
+  - Les identifiants Discord (serveurs, salons, membres, rôles) sont des chaînes de 17 à 20 chiffres.
+
+  Version du bot : v1.7.0
+
+}

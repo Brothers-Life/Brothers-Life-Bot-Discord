@@ -1,0 +1,30 @@
+meta {
+  name: POST /tickets/:id/status
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/tickets/:id/status
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "key": "key"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/tickets/:id/status`
+
+  Permission requise : `tickets.handle`
+
+  Corps JSON :
+  - `key` (string) — obligatoire
+}

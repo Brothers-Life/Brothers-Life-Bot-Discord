@@ -1,0 +1,21 @@
+meta {
+  name: GET /fivem-data/by-discord/:discordId
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/fivem-data/by-discord/:discordId
+  body: none
+  auth: inherit
+}
+
+params:path {
+  discordId: 
+}
+
+docs {
+  Consulter — `GET /api/fivem-data/by-discord/:discordId`
+
+  Permission requise : `fivemdata.view`
+}

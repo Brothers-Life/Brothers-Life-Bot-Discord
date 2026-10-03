@@ -1,0 +1,17 @@
+meta {
+  name: GET /custom-commands
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/custom-commands
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/custom-commands`
+
+  Permission requise : `customcommands.view`
+}

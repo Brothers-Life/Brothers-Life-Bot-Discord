@@ -1,0 +1,38 @@
+meta {
+  name: POST /polls
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/polls
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "question": "question",
+    "description": "description",
+    "options": [],
+    "settings": {},
+    "targets": [],
+    "startsAt": null,
+    "endsAt": null
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/polls`
+
+  Permission requise : `polls.manage`
+
+  Corps JSON :
+  - `question` (string) — obligatoire
+  - `description` (string)
+  - `options` (array) — obligatoire
+  - `settings` (object)
+  - `targets` (array)
+  - `startsAt` (integer | null)
+  - `endsAt` (integer | null)
+}

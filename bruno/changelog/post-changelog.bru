@@ -1,0 +1,43 @@
+meta {
+  name: POST /changelog
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/changelog
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "version": null,
+    "title": "title",
+    "intro": "intro",
+    "items": [],
+    "image": null,
+    "color": "color",
+    "targets": [
+      {
+        "guildId": "000000000000000000",
+        "channelId": "000000000000000000"
+      }
+    ]
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/changelog`
+
+  Permission requise : `changelog.manage`
+
+  Corps JSON :
+  - `version` (string | null)
+  - `title` (string) — obligatoire
+  - `intro` (string)
+  - `items` (array)
+  - `image` (string | null)
+  - `color` (string)
+  - `targets` (array)
+}

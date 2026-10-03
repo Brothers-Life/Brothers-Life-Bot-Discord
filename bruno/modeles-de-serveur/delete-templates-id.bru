@@ -1,0 +1,29 @@
+meta {
+  name: DELETE /templates/:id
+  type: http
+  seq: 3
+}
+
+delete {
+  url: {{baseUrl}}/api/templates/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "confirm": true
+  }
+}
+
+docs {
+  Supprimer — `DELETE /api/templates/:id`
+
+  Permission requise : `templates.manage`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+}

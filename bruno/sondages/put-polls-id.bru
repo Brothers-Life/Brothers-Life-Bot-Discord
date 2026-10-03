@@ -1,0 +1,42 @@
+meta {
+  name: PUT /polls/:id
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{baseUrl}}/api/polls/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "question": "question",
+    "description": "description",
+    "options": [],
+    "settings": {},
+    "targets": [],
+    "startsAt": null,
+    "endsAt": null
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/polls/:id`
+
+  Permission requise : `polls.manage`
+
+  Corps JSON :
+  - `question` (string) — obligatoire
+  - `description` (string)
+  - `options` (array) — obligatoire
+  - `settings` (object)
+  - `targets` (array)
+  - `startsAt` (integer | null)
+  - `endsAt` (integer | null)
+}

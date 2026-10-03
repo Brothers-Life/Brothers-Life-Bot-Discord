@@ -1,0 +1,21 @@
+meta {
+  name: POST /tickets/:id/claim
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/tickets/:id/claim
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Créer / agir — `POST /api/tickets/:id/claim`
+
+  Permission requise : `tickets.handle`
+}

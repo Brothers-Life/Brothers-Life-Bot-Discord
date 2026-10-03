@@ -1,0 +1,25 @@
+meta {
+  name: PUT /rp-events/:id
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/rp-events/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {}
+}
+
+docs {
+  Remplacer — `PUT /api/rp-events/:id`
+
+  Permission requise : `rpevents.manage`
+}

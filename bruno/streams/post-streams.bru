@@ -1,0 +1,38 @@
+meta {
+  name: POST /streams
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/streams
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "platform": "twitch",
+    "channel": "channel",
+    "displayName": "displayName",
+    "targets": [],
+    "payloads": {},
+    "config": {},
+    "enabled": false
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/streams`
+
+  Permission requise : `notifications.manage`
+
+  Corps JSON :
+  - `platform` ("twitch" | "youtube" | "kick") — obligatoire
+  - `channel` (string) — obligatoire
+  - `displayName` (string)
+  - `targets` (array)
+  - `payloads` (object)
+  - `config` (object)
+  - `enabled` (boolean)
+}

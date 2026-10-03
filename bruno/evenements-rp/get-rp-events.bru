@@ -1,0 +1,17 @@
+meta {
+  name: GET /rp-events
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/rp-events
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/rp-events`
+
+  Permission requise : `rpevents.view`
+}

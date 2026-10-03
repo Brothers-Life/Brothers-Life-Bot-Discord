@@ -1,0 +1,30 @@
+meta {
+  name: POST /onboarding/:guildId/card/preview
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/onboarding/:guildId/card/preview
+  body: json
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+body:json {
+  {
+    "design": {}
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/onboarding/:guildId/card/preview`
+
+  Permission requise : `onboarding.view`
+
+  Corps JSON :
+  - `design` (object) — obligatoire
+}

@@ -1,0 +1,17 @@
+meta {
+  name: GET /automod
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/automod
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/automod`
+
+  Permission requise : `automod.view`
+}

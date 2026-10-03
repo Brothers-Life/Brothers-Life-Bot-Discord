@@ -1,0 +1,21 @@
+meta {
+  name: POST /giveaways/:id/publish
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/api/giveaways/:id/publish
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Créer / agir — `POST /api/giveaways/:id/publish`
+
+  Permission requise : `giveaways.manage`
+}

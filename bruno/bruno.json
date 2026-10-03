@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "Brothers Life — API",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}

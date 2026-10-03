@@ -1,0 +1,17 @@
+meta {
+  name: GET /channel-schedules
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/channel-schedules
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/channel-schedules`
+
+  Permission requise : `schedules.view`
+}

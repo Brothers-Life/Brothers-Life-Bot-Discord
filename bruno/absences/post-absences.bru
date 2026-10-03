@@ -1,0 +1,32 @@
+meta {
+  name: POST /absences
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/absences
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "userId": "000000000000000000",
+    "startAt": null,
+    "endAt": 1,
+    "reason": "reason"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/absences`
+
+  Permission requise : aucune (clé valide)
+
+  Corps JSON :
+  - `userId` (string)
+  - `startAt` (integer | null)
+  - `endAt` (integer) — obligatoire
+  - `reason` (string)
+}

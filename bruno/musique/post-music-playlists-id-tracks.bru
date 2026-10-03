@@ -1,0 +1,30 @@
+meta {
+  name: POST /music/playlists/:id/tracks
+  type: http
+  seq: 15
+}
+
+post {
+  url: {{baseUrl}}/api/music/playlists/:id/tracks
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "query": "query"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/music/playlists/:id/tracks`
+
+  Permission requise : `music.use`
+
+  Corps JSON :
+  - `query` (string) — obligatoire
+}

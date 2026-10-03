@@ -1,0 +1,34 @@
+meta {
+  name: POST /archives
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/archives
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "guildId": "000000000000000000",
+    "channelId": "000000000000000000",
+    "limit": 1,
+    "from": null,
+    "to": null
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/archives`
+
+  Permission requise : `archives.manage`
+
+  Corps JSON :
+  - `guildId` (string) — obligatoire
+  - `channelId` (string) — obligatoire
+  - `limit` (integer)
+  - `from` (integer | null)
+  - `to` (integer | null)
+}

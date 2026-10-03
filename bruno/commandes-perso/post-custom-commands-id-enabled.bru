@@ -1,0 +1,30 @@
+meta {
+  name: POST /custom-commands/:id/enabled
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/custom-commands/:id/enabled
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "enabled": false
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/custom-commands/:id/enabled`
+
+  Permission requise : `customcommands.manage`
+
+  Corps JSON :
+  - `enabled` (boolean) — obligatoire
+}

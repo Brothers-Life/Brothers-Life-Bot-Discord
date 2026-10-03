@@ -1,0 +1,17 @@
+meta {
+  name: POST /staff-roles/sync
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/staff-roles/sync
+  body: none
+  auth: inherit
+}
+
+docs {
+  Créer / agir — `POST /api/staff-roles/sync`
+
+  Permission requise : `ranks.manage`
+}

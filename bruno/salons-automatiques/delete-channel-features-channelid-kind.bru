@@ -1,0 +1,22 @@
+meta {
+  name: DELETE /channel-features/:channelId/:kind
+  type: http
+  seq: 3
+}
+
+delete {
+  url: {{baseUrl}}/api/channel-features/:channelId/:kind
+  body: none
+  auth: inherit
+}
+
+params:path {
+  channelId: 
+  kind: 
+}
+
+docs {
+  Supprimer — `DELETE /api/channel-features/:channelId/:kind`
+
+  Permission requise : `channelfeatures.manage`
+}

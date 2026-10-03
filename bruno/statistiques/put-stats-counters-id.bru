@@ -1,0 +1,30 @@
+meta {
+  name: PUT /stats/counters/:id
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{baseUrl}}/api/stats/counters/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "template": "template"
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/stats/counters/:id`
+
+  Permission requise : `stats.manage`
+
+  Corps JSON :
+  - `template` (string) — obligatoire
+}

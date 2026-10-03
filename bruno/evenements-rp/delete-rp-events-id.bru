@@ -1,0 +1,29 @@
+meta {
+  name: DELETE /rp-events/:id
+  type: http
+  seq: 3
+}
+
+delete {
+  url: {{baseUrl}}/api/rp-events/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "confirm": true
+  }
+}
+
+docs {
+  Supprimer — `DELETE /api/rp-events/:id`
+
+  Permission requise : `rpevents.manage`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+}

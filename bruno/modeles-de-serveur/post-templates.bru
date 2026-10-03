@@ -1,0 +1,30 @@
+meta {
+  name: POST /templates
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/templates
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "name",
+    "description": "description",
+    "sourceGuildId": "000000000000000000"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/templates`
+
+  Permission requise : `templates.manage`
+
+  Corps JSON :
+  - `name` (string) — obligatoire
+  - `description` (string)
+  - `sourceGuildId` (string) — obligatoire
+}

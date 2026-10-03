@@ -1,0 +1,21 @@
+meta {
+  name: GET /automod/:guildId/options
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/automod/:guildId/options
+  body: none
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+docs {
+  Consulter — `GET /api/automod/:guildId/options`
+
+  Permission requise : `automod.view`
+}

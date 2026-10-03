@@ -1,0 +1,25 @@
+meta {
+  name: PUT /automod/:guildId
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{baseUrl}}/api/automod/:guildId
+  body: json
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+body:json {
+  {}
+}
+
+docs {
+  Remplacer — `PUT /api/automod/:guildId`
+
+  Permission requise : `automod.manage`
+}

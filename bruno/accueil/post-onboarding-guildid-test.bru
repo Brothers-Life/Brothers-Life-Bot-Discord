@@ -1,0 +1,30 @@
+meta {
+  name: POST /onboarding/:guildId/test
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/onboarding/:guildId/test
+  body: json
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+body:json {
+  {
+    "kind": "welcome"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/onboarding/:guildId/test`
+
+  Permission requise : `onboarding.manage`
+
+  Corps JSON :
+  - `kind` ("welcome" | "leave" | "boost") — obligatoire
+}

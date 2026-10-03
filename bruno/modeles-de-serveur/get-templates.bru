@@ -1,0 +1,17 @@
+meta {
+  name: GET /templates
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/templates
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/templates`
+
+  Permission requise : `templates.view`
+}

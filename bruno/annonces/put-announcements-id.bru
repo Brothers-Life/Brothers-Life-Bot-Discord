@@ -1,0 +1,36 @@
+meta {
+  name: PUT /announcements/:id
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{baseUrl}}/api/announcements/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "name": "name",
+    "payload": {},
+    "targets": [],
+    "options": {}
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/announcements/:id`
+
+  Permission requise : `announcements.manage`
+
+  Corps JSON :
+  - `name` (string)
+  - `payload` (object)
+  - `targets` (array)
+  - `options` (object)
+}

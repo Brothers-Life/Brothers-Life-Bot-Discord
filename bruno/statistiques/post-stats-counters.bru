@@ -1,0 +1,32 @@
+meta {
+  name: POST /stats/counters
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/stats/counters
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "guildId": "000000000000000000",
+    "template": "template",
+    "channelId": null,
+    "categoryId": null
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/stats/counters`
+
+  Permission requise : `stats.manage`
+
+  Corps JSON :
+  - `guildId` (string) — obligatoire
+  - `template` (string) — obligatoire
+  - `channelId` (string | null)
+  - `categoryId` (string | null)
+}

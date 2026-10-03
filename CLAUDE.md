@@ -15,13 +15,14 @@ npm run build:web      # npm ci + tsc -b + vite build du panel (web/dist servi p
 cd web && npx tsc -b && npx eslint src   # vérif du panel
 npm run deploy:dev     # enregistre les commandes slash sur le serveur de dev
 npm run egg            # régénère l'egg Pterodactyl
+npm run bruno          # régénère la collection Bruno de l'API (bruno/)
 ```
 
 Avant tout commit : `npm run lint`, `npm test`, et pour le panel `npx tsc -b` + `npx vite build` dans `web/`. La CI (`.github/workflows/ci.yml`) refait lint + tests + build du panel.
 
 ## Architecture
 
-- **Node ESM**, discord.js 14, **better-sqlite3** (migrations numérotées `src/db/migrations/NNN_*.sql`, dernière : `035_ticket_vars.sql`), **Fastify** pour l'API du panel.
+- **Node ESM**, discord.js 14, **better-sqlite3** (migrations numérotées `src/db/migrations/NNN_*.sql`, dernière : `036_api_keys.sql`), **Fastify** pour l'API du panel.
 - **Panel** (`web/`) : React 19, Vite, TanStack Router (routes fichiers dans `web/src/routes/_authenticated/`, `routeTree.gen.ts` généré par Vite) + TanStack Query, shadcn/ui, Tailwind v4, recharts. Composants maison dans `web/src/components/app/ui.tsx` (`Page`, `Section`, `StatCards`, `Pill`, `EmptyState`, `Notice`, `UserAvatar`…) et `pickers.tsx`.
 - `src/core/` : toute la logique, **sans discord.js**. Chaque service est créé dans `src/core/context.js` (`createCore`) et reçoit `executor` (accès Discord), `audit`, `settings`, `logs`, `network`, `ranks`…
 - `src/bot/executor.js` : la seule couche qui parle à Discord (envoyer, rôles, membres, vocal, messages de log…). Dans les tests, `test/helpers.js` fournit un **faux exécuteur** (`createTestCore`, `withNetwork`).
@@ -46,7 +47,7 @@ Avant tout commit : `npm run lint`, `npm test`, et pour le panel `npx tsc -b` + 
 
 ## Fonctionnalités (ce qui existe)
 
-Réseau de serveurs, rangs et permissions synchronisés, staff sync, sanctions (modèles, appels de sanction, restrictions, rôles temporaires), automod, anti-raid, tickets v2 (formulaires, statuts, variables, transcripts HTML style Discord : `src/core/transcript.js`, copie staff avec notes internes dans `data/transcripts/`, copie membre en MP), logs par catégorie/type avec packs et miroir réseau, annonces, embeds (créateur), messages privés, onboarding/bienvenue, vérification (bouton/captcha), salons automatiques (compteur, un mot, sticky, auto-publication, médias seuls), horaires d'ouverture de salons, archives HTML de salons, sondages, giveaways, suggestions/bugs, candidatures, absences (embed Valider/Refuser), événements RP, activité staff, réunions staff (convocation, présence vocale, compte rendu), salons vocaux perso, stats Discord (messages/vocal, carte de chaleur), fiches membres réseau, commandes perso, sauvegardes, modèles de serveur, streams, musique, FiveM (statut + données).
+Réseau de serveurs, rangs et permissions synchronisés, staff sync, sanctions (modèles, appels de sanction, restrictions, rôles temporaires), automod, anti-raid, tickets v2 (formulaires, statuts, variables, transcripts HTML style Discord : `src/core/transcript.js`, copie staff avec notes internes dans `data/transcripts/`, copie membre en MP), logs par catégorie/type avec packs et miroir réseau, annonces, embeds (créateur), messages privés, onboarding/bienvenue, vérification (bouton/captcha), salons automatiques (compteur, un mot, sticky, auto-publication, médias seuls), horaires d'ouverture de salons, archives HTML de salons, sondages, giveaways, suggestions/bugs, candidatures, absences (embed Valider/Refuser), événements RP, activité staff, réunions staff (convocation, présence vocale, compte rendu), salons vocaux perso, stats Discord (messages/vocal, carte de chaleur), fiches membres réseau, commandes perso, sauvegardes, modèles de serveur, streams, musique, FiveM (statut + données), API publique à clés (+ collection Bruno).
 
 ### Musique (`src/core/music/`, `src/bot/music/`)
 - yt-dlp (zip **onedir** sous Linux, décompressé par `src/bot/music/unzip.js`, car le `/tmp` du conteneur est trop petit) et ffmpeg **téléchargés dans `data/bin`** au démarrage (`.npmrc` a `ignore-scripts=true`, donc pas de binaire ffmpeg-static).
@@ -62,6 +63,13 @@ Réseau de serveurs, rangs et permissions synchronisés, staff sync, sanctions (
 - Le rôle staff en jeu = dernier rôle vu en session du menu admin (pas de table d'attribution, c'est dans l'ACE du serveur).
 - Bot : `/joueur` (fiche éphémère + boutons `fd:`).
 - Permissions : `fivemdata.view`, `.economy`, `.inventory`, `.logs`, `.roles`, `.manage`.
+
+### API publique (`src/core/apiKeys.js`, `src/web/apiDocs.js`, `src/web/routes/api.js`)
+- Toutes les routes `/api/*` du panel acceptent `Authorization: Bearer brl_…` (clé stockée en SHA-256, affichée une fois). La clé agit **au nom de son créateur**, limitée à ses permissions choisies (`null` = toutes, suit le rang) ; `panel.access` + `api.use` exigés. Pas de contrôle CSRF pour le Bearer, 240 req/min par clé.
+- `config: { apiKey: false }` réserve une route au panel (clés, sessions) ; les websockets le sont d'office.
+- Audit : la source reste `panel` (CHECK SQL sur `source` dans audit/sanctions) ; `requestContext` (AsyncLocalStorage) ajoute le champ « Clé d’API » aux détails.
+- Doc générée depuis le registre des routes du guard (`registerGuard` le renvoie) : `/api/api-docs`, `/api/openapi.json`, `/api/bruno.zip` ; page panel `/developer` (« API »). Le nom de route `/api*` est réservé côté serveur (404 JSON), d'où `/developer`.
+- Piège Ajv : dans un `anyOf`, mettre `{ type: 'null' }` **en premier**, sinon la coercition change `null` en `0`.
 
 ## Sécurité — à ne jamais faire
 

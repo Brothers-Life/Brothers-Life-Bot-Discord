@@ -1,0 +1,17 @@
+meta {
+  name: GET /streams
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/streams
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/streams`
+
+  Permission requise : `notifications.view`
+}

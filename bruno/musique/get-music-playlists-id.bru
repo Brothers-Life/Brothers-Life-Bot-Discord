@@ -1,0 +1,21 @@
+meta {
+  name: GET /music/playlists/:id
+  type: http
+  seq: 12
+}
+
+get {
+  url: {{baseUrl}}/api/music/playlists/:id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Consulter — `GET /api/music/playlists/:id`
+
+  Permission requise : `music.use`
+}

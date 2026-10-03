@@ -1,0 +1,34 @@
+meta {
+  name: POST /music/:guildId/play
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/music/:guildId/play
+  body: json
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+body:json {
+  {
+    "query": "query",
+    "channelId": "000000000000000000",
+    "when": "end"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/music/:guildId/play`
+
+  Permission requise : `music.use`
+
+  Corps JSON :
+  - `query` (string) — obligatoire
+  - `channelId` (string)
+  - `when` ("end" | "next" | "now")
+}

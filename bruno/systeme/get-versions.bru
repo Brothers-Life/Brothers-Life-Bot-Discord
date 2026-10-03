@@ -1,0 +1,24 @@
+meta {
+  name: GET /versions
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/versions
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~refresh: 
+}
+
+docs {
+  Consulter — `GET /api/versions`
+
+  Permission requise : `versions.view`
+
+  Paramètres de requête :
+  - `refresh` (boolean)
+}

@@ -1,0 +1,24 @@
+meta {
+  name: GET /fivem-data/players
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/fivem-data/players
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~q: 
+}
+
+docs {
+  Consulter — `GET /api/fivem-data/players`
+
+  Permission requise : `fivemdata.view`
+
+  Paramètres de requête :
+  - `q` (string)
+}

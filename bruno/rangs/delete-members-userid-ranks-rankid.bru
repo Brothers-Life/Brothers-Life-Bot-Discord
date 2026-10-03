@@ -1,0 +1,22 @@
+meta {
+  name: DELETE /members/:userId/ranks/:rankId
+  type: http
+  seq: 3
+}
+
+delete {
+  url: {{baseUrl}}/api/members/:userId/ranks/:rankId
+  body: none
+  auth: inherit
+}
+
+params:path {
+  userId: 
+  rankId: 
+}
+
+docs {
+  Supprimer — `DELETE /api/members/:userId/ranks/:rankId`
+
+  Permission requise : `members.assign`
+}

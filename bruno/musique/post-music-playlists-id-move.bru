@@ -1,0 +1,32 @@
+meta {
+  name: POST /music/playlists/:id/move
+  type: http
+  seq: 14
+}
+
+post {
+  url: {{baseUrl}}/api/music/playlists/:id/move
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "from": 1,
+    "to": 1
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/music/playlists/:id/move`
+
+  Permission requise : `music.use`
+
+  Corps JSON :
+  - `from` (integer) — obligatoire
+  - `to` (integer) — obligatoire
+}

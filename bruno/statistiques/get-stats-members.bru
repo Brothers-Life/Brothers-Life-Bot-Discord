@@ -1,0 +1,42 @@
+meta {
+  name: GET /stats/members
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/api/stats/members
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~guildId: 
+  ~from: 
+  ~to: 
+  ~days: 
+  ~channelId: 
+  ~userId: 
+  ~staffOnly: 
+  ~metric: 
+  ~limit: 
+  ~kind: 
+}
+
+docs {
+  Consulter — `GET /api/stats/members`
+
+  Permission requise : `stats.view`
+
+  Paramètres de requête :
+  - `guildId` (string)
+  - `from` (integer)
+  - `to` (integer)
+  - `days` (integer)
+  - `channelId` (string)
+  - `userId` (string)
+  - `staffOnly` (boolean)
+  - `metric` ("messages" | "voice")
+  - `limit` (integer)
+  - `kind` ("days" | "members" | "channels" | "staff")
+}

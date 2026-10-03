@@ -1,0 +1,29 @@
+meta {
+  name: DELETE /custom-commands/:id
+  type: http
+  seq: 3
+}
+
+delete {
+  url: {{baseUrl}}/api/custom-commands/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "confirm": true
+  }
+}
+
+docs {
+  Supprimer — `DELETE /api/custom-commands/:id`
+
+  Permission requise : `customcommands.manage`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+}

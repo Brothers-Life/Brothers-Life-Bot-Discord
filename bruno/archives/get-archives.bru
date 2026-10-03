@@ -1,0 +1,17 @@
+meta {
+  name: GET /archives
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/archives
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/archives`
+
+  Permission requise : `archives.view`
+}

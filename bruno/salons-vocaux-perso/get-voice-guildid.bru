@@ -1,0 +1,21 @@
+meta {
+  name: GET /voice/:guildId
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/voice/:guildId
+  body: none
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+docs {
+  Consulter — `GET /api/voice/:guildId`
+
+  Permission requise : `voice.view`
+}

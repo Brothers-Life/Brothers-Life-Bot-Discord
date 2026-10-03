@@ -1,0 +1,28 @@
+meta {
+  name: POST /fivem-data/roles/fix
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/fivem-data/roles/fix
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "keys": [
+      "keys"
+    ]
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/fivem-data/roles/fix`
+
+  Permission requise : `fivemdata.roles`
+
+  Corps JSON :
+  - `keys` (array) — obligatoire
+}

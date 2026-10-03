@@ -1,0 +1,25 @@
+meta {
+  name: PUT /voice/hubs/:id
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/voice/hubs/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {}
+}
+
+docs {
+  Remplacer — `PUT /api/voice/hubs/:id`
+
+  Permission requise : `voice.manage`
+}

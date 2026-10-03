@@ -1,0 +1,26 @@
+meta {
+  name: POST /meetings
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/meetings
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "guildId": "000000000000000000"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/meetings`
+
+  Permission requise : `meetings.manage`
+
+  Corps JSON :
+  - `guildId` (string) — obligatoire
+}

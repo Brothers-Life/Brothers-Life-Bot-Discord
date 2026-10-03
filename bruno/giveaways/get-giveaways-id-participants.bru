@@ -1,0 +1,21 @@
+meta {
+  name: GET /giveaways/:id/participants
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/api/giveaways/:id/participants
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Consulter — `GET /api/giveaways/:id/participants`
+
+  Permission requise : `giveaways.view`
+}

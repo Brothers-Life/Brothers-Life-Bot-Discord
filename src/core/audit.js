@@ -1,3 +1,5 @@
+import { requestContext } from './requestContext.js';
+
 const SOURCES = new Set(['bot', 'panel', 'native', 'system']);
 
 export function createAudit({ db, now = Date.now }) {
@@ -27,6 +29,9 @@ export function createAudit({ db, now = Date.now }) {
 			// Automod actions are system actions whose author is "automod"
 			if (source === 'automod') source = 'system';
 			if (!SOURCES.has(source)) throw new Error(`Unknown audit source: ${source}`);
+			// Actions done with an API key keep the "panel" source and name the key
+			const apiKey = requestContext.get()?.apiKey;
+			if (apiKey && source === 'panel') details = { ...details, 'Clé d’API': apiKey.name };
 			const entry = { at: now(), actorId: String(actorId), source, action, guildId, target, details, results };
 			const { lastInsertRowid } = insert.run({
 				...entry,

@@ -1,0 +1,30 @@
+meta {
+  name: POST /meetings/:id/cancel
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/meetings/:id/cancel
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "reason": "reason"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/meetings/:id/cancel`
+
+  Permission requise : `meetings.manage`
+
+  Corps JSON :
+  - `reason` (string)
+}

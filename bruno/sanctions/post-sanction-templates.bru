@@ -1,0 +1,40 @@
+meta {
+  name: POST /sanction-templates
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/sanction-templates
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "id": 1,
+    "name": "name",
+    "type": "ban",
+    "reason": "reason",
+    "duration": null,
+    "scope": "network",
+    "profile": null,
+    "deleteMessageSeconds": 1
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/sanction-templates`
+
+  Permission requise : `sanctions.templates`
+
+  Corps JSON :
+  - `id` (integer)
+  - `name` (string) — obligatoire
+  - `type` ("ban" | "kick" | "timeout" | "warn" | "restrict") — obligatoire
+  - `reason` (string)
+  - `duration` (string | null)
+  - `scope` ("network" | "local")
+  - `profile` (string | null)
+  - `deleteMessageSeconds` (integer)
+}

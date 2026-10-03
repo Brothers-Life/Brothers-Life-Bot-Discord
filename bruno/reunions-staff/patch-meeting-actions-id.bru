@@ -1,0 +1,30 @@
+meta {
+  name: PATCH /meeting-actions/:id
+  type: http
+  seq: 2
+}
+
+patch {
+  url: {{baseUrl}}/api/meeting-actions/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "done": false
+  }
+}
+
+docs {
+  Modifier — `PATCH /api/meeting-actions/:id`
+
+  Permission requise : aucune (clé valide)
+
+  Corps JSON :
+  - `done` (boolean) — obligatoire
+}

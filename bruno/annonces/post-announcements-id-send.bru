@@ -1,0 +1,32 @@
+meta {
+  name: POST /announcements/:id/send
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/announcements/:id/send
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "confirm": true
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/announcements/:id/send`
+
+  Permission requise : `announcements.manage`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+
+  Corps JSON :
+  - `confirm` (boolean)
+}

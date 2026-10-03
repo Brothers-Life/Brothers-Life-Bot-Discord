@@ -1,0 +1,17 @@
+meta {
+  name: GET /messages
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/messages
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/messages`
+
+  Permission requise : `messages.view`
+}

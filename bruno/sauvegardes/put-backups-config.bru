@@ -1,0 +1,32 @@
+meta {
+  name: PUT /backups/config
+  type: http
+  seq: 6
+}
+
+put {
+  url: {{baseUrl}}/api/backups/config
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "enabled": false,
+    "guildIds": [],
+    "hour": 1,
+    "keep": 1
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/backups/config`
+
+  Permission requise : `backups.manage`
+
+  Corps JSON :
+  - `enabled` (boolean)
+  - `guildIds` (array)
+  - `hour` (integer)
+  - `keep` (integer)
+}

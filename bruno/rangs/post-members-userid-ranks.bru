@@ -1,0 +1,30 @@
+meta {
+  name: POST /members/:userId/ranks
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/members/:userId/ranks
+  body: json
+  auth: inherit
+}
+
+params:path {
+  userId: 
+}
+
+body:json {
+  {
+    "rankId": 1
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/members/:userId/ranks`
+
+  Permission requise : `members.assign`
+
+  Corps JSON :
+  - `rankId` (integer) — obligatoire
+}

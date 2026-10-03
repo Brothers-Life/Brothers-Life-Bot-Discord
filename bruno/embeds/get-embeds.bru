@@ -1,0 +1,17 @@
+meta {
+  name: GET /embeds
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/embeds
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/embeds`
+
+  Permission requise : `embeds.view`
+}

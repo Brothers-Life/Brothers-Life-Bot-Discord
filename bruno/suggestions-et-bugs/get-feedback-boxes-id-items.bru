@@ -1,0 +1,30 @@
+meta {
+  name: GET /feedback/boxes/:id/items
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/feedback/boxes/:id/items
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~status: 
+  ~sort: 
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Consulter — `GET /api/feedback/boxes/:id/items`
+
+  Permission requise : aucune (clé valide)
+
+  Paramètres de requête :
+  - `status` (string)
+  - `sort` ("recent" | "score" | "urgency")
+}

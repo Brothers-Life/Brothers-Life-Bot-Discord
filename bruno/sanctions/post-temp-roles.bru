@@ -1,0 +1,34 @@
+meta {
+  name: POST /temp-roles
+  type: http
+  seq: 14
+}
+
+post {
+  url: {{baseUrl}}/api/temp-roles
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "guildId": "000000000000000000",
+    "userId": "000000000000000000",
+    "roleId": "000000000000000000",
+    "duration": "duration",
+    "reason": "reason"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/temp-roles`
+
+  Permission requise : `commands.roles`
+
+  Corps JSON :
+  - `guildId` (string) — obligatoire
+  - `userId` (string) — obligatoire
+  - `roleId` (string) — obligatoire
+  - `duration` (string) — obligatoire
+  - `reason` (string)
+}

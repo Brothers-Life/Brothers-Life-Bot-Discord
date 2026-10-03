@@ -1,0 +1,21 @@
+meta {
+  name: GET /backups/:id/download
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/backups/:id/download
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Consulter — `GET /api/backups/:id/download`
+
+  Permission requise : `backups.manage`
+}

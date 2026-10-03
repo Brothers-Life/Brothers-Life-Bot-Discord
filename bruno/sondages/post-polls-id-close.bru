@@ -1,0 +1,29 @@
+meta {
+  name: POST /polls/:id/close
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/polls/:id/close
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "confirm": true
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/polls/:id/close`
+
+  Permission requise : `polls.manage`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+}

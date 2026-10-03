@@ -1,0 +1,21 @@
+meta {
+  name: POST /absences/:id/end
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/absences/:id/end
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Créer / agir — `POST /api/absences/:id/end`
+
+  Permission requise : aucune (clé valide)
+}

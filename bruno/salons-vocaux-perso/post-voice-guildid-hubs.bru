@@ -1,0 +1,36 @@
+meta {
+  name: POST /voice/:guildId/hubs
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/voice/:guildId/hubs
+  body: json
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+body:json {
+  {
+    "channelId": null,
+    "categoryId": null,
+    "name": "name",
+    "config": {}
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/voice/:guildId/hubs`
+
+  Permission requise : `voice.manage`
+
+  Corps JSON :
+  - `channelId` (string | null)
+  - `categoryId` (string | null)
+  - `name` (string)
+  - `config` (object)
+}

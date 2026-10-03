@@ -1,0 +1,30 @@
+meta {
+  name: POST /channel-features/:channelId/count
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/channel-features/:channelId/count
+  body: json
+  auth: inherit
+}
+
+params:path {
+  channelId: 
+}
+
+body:json {
+  {
+    "count": 0
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/channel-features/:channelId/count`
+
+  Permission requise : `channelfeatures.manage`
+
+  Corps JSON :
+  - `count` (integer) — obligatoire
+}

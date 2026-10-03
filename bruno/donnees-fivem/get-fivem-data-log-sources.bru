@@ -1,0 +1,17 @@
+meta {
+  name: GET /fivem-data/log-sources
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/fivem-data/log-sources
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/fivem-data/log-sources`
+
+  Permission requise : `fivemdata.logs`
+}

@@ -1,0 +1,38 @@
+meta {
+  name: POST /giveaways
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/giveaways
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "prize": "prize",
+    "description": "description",
+    "winnersCount": 1,
+    "settings": {},
+    "targets": [],
+    "startsAt": null,
+    "endsAt": 1
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/giveaways`
+
+  Permission requise : `giveaways.manage`
+
+  Corps JSON :
+  - `prize` (string) — obligatoire
+  - `description` (string)
+  - `winnersCount` (integer)
+  - `settings` (object)
+  - `targets` (array)
+  - `startsAt` (integer | null)
+  - `endsAt` (integer) — obligatoire
+}

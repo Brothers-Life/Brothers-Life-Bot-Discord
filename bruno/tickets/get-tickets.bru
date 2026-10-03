@@ -1,0 +1,40 @@
+meta {
+  name: GET /tickets
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/tickets
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~guildId: 
+  ~status: 
+  ~statusKey: 
+  ~categoryId: 
+  ~priority: 
+  ~claimedBy: 
+  ~openerId: 
+  ~before: 
+  ~limit: 
+}
+
+docs {
+  Consulter — `GET /api/tickets`
+
+  Permission requise : `tickets.view`
+
+  Paramètres de requête :
+  - `guildId` (string)
+  - `status` ("open" | "closed")
+  - `statusKey` (string)
+  - `categoryId` (integer)
+  - `priority` ("low" | "normal" | "high" | "urgent")
+  - `claimedBy` (string)
+  - `openerId` (string)
+  - `before` (integer)
+  - `limit` (integer)
+}

@@ -1,0 +1,36 @@
+meta {
+  name: POST /giveaways/:id/reroll
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/api/giveaways/:id/reroll
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "userId": null,
+    "count": 1,
+    "confirm": true
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/giveaways/:id/reroll`
+
+  Permission requise : `giveaways.manage`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+
+  Corps JSON :
+  - `userId` (string | null)
+  - `count` (integer)
+  - `confirm` (boolean)
+}

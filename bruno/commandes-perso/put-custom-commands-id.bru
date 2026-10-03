@@ -1,0 +1,25 @@
+meta {
+  name: PUT /custom-commands/:id
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/custom-commands/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {}
+}
+
+docs {
+  Remplacer — `PUT /api/custom-commands/:id`
+
+  Permission requise : `customcommands.manage`
+}

@@ -1,0 +1,34 @@
+meta {
+  name: GET /sanctions
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/api/sanctions
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~userId: 
+  ~type: 
+  ~active: 
+  ~guildId: 
+  ~before: 
+  ~limit: 
+}
+
+docs {
+  Consulter — `GET /api/sanctions`
+
+  Permission requise : `sanctions.view`
+
+  Paramètres de requête :
+  - `userId` (string)
+  - `type` ("ban" | "kick" | "timeout" | "warn" | "restrict")
+  - `active` (boolean)
+  - `guildId` (string)
+  - `before` (integer)
+  - `limit` (integer)
+}

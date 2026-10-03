@@ -1,0 +1,28 @@
+meta {
+  name: POST /ranks/import
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/api/ranks/import
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "roleIds": [
+      "000000000000000000"
+    ]
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/ranks/import`
+
+  Permission requise : `ranks.manage`
+
+  Corps JSON :
+  - `roleIds` (array) — obligatoire
+}

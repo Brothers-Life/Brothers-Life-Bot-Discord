@@ -1,0 +1,39 @@
+meta {
+  name: PUT /tickets/config/:guildId/categories
+  type: http
+  seq: 12
+}
+
+put {
+  url: {{baseUrl}}/api/tickets/config/:guildId/categories
+  body: json
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+body:json {
+  {
+    "name": "name"
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/tickets/config/:guildId/categories`
+
+  Permission requise : `tickets.manage`
+
+  Corps JSON :
+  - `id` (integer)
+  - `name` (string) — obligatoire
+  - `emoji` (string | null)
+  - `description` (string | null)
+  - `parentChannelId` (string | null)
+  - `transcriptChannelId` (string | null)
+  - `rankIds` (array)
+  - `roleIds` (array)
+  - `position` (integer)
+  - `config` (object)
+}

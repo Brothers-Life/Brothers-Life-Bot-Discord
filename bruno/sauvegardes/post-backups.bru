@@ -1,0 +1,28 @@
+meta {
+  name: POST /backups
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/backups
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "guildId": "000000000000000000",
+    "name": "name"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/backups`
+
+  Permission requise : `backups.manage`
+
+  Corps JSON :
+  - `guildId` (string) — obligatoire
+  - `name` (string)
+}

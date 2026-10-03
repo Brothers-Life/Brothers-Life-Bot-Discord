@@ -1,0 +1,29 @@
+meta {
+  name: DELETE /polls/:id
+  type: http
+  seq: 3
+}
+
+delete {
+  url: {{baseUrl}}/api/polls/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "confirm": true
+  }
+}
+
+docs {
+  Supprimer — `DELETE /api/polls/:id`
+
+  Permission requise : `polls.manage`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+}

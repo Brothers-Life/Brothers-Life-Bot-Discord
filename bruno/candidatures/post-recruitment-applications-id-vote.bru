@@ -1,0 +1,32 @@
+meta {
+  name: POST /recruitment/applications/:id/vote
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/recruitment/applications/:id/vote
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "vote": -1,
+    "comment": null
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/recruitment/applications/:id/vote`
+
+  Permission requise : `recruitment.vote`
+
+  Corps JSON :
+  - `vote` (-1 | 0 | 1) — obligatoire
+  - `comment` (string | null)
+}

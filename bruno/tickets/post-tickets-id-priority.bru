@@ -1,0 +1,30 @@
+meta {
+  name: POST /tickets/:id/priority
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/tickets/:id/priority
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "priority": "low"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/tickets/:id/priority`
+
+  Permission requise : `tickets.handle`
+
+  Corps JSON :
+  - `priority` ("low" | "normal" | "high" | "urgent") — obligatoire
+}

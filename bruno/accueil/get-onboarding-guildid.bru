@@ -1,0 +1,21 @@
+meta {
+  name: GET /onboarding/:guildId
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/onboarding/:guildId
+  body: none
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+docs {
+  Consulter — `GET /api/onboarding/:guildId`
+
+  Permission requise : `onboarding.view`
+}

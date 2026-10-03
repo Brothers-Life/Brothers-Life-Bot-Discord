@@ -1,0 +1,21 @@
+meta {
+  name: POST /onboarding/:guildId/rules/publish
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/onboarding/:guildId/rules/publish
+  body: none
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+docs {
+  Créer / agir — `POST /api/onboarding/:guildId/rules/publish`
+
+  Permission requise : `onboarding.manage`
+}

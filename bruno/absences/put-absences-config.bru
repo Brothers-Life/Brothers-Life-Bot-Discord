@@ -1,0 +1,21 @@
+meta {
+  name: PUT /absences/config
+  type: http
+  seq: 6
+}
+
+put {
+  url: {{baseUrl}}/api/absences/config
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {}
+}
+
+docs {
+  Remplacer — `PUT /api/absences/config`
+
+  Permission requise : `absences.manage`
+}

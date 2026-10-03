@@ -1,0 +1,21 @@
+meta {
+  name: GET /uploads/:id
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/uploads/:id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Consulter — `GET /api/uploads/:id`
+
+  Permission requise : aucune (clé valide)
+}

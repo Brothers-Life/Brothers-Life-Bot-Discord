@@ -1,0 +1,30 @@
+meta {
+  name: POST /feedback/items/:id/review
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/feedback/items/:id/review
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "approved": false
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/feedback/items/:id/review`
+
+  Permission requise : aucune (clé valide)
+
+  Corps JSON :
+  - `approved` (boolean) — obligatoire
+}

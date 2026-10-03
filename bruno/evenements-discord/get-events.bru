@@ -1,0 +1,38 @@
+meta {
+  name: GET /events
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/events
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~guildId: 
+  ~category: 
+  ~userId: 
+  ~q: 
+  ~from: 
+  ~to: 
+  ~before: 
+  ~limit: 
+}
+
+docs {
+  Consulter — `GET /api/events`
+
+  Permission requise : `events.view`
+
+  Paramètres de requête :
+  - `guildId` (string)
+  - `category` (string)
+  - `userId` (string)
+  - `q` (string)
+  - `from` (integer)
+  - `to` (integer)
+  - `before` (integer)
+  - `limit` (integer)
+}

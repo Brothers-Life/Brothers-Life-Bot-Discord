@@ -1,0 +1,36 @@
+meta {
+  name: PUT /fivem/:id
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/fivem/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "name": "name",
+    "address": "address",
+    "joinCode": null,
+    "config": {}
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/fivem/:id`
+
+  Permission requise : `fivem.manage`
+
+  Corps JSON :
+  - `name` (string)
+  - `address` (string)
+  - `joinCode` (string | null)
+  - `config` (object)
+}

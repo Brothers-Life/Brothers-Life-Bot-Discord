@@ -1,0 +1,47 @@
+meta {
+  name: PUT /changelog/:id
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/changelog/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "version": null,
+    "title": "title",
+    "intro": "intro",
+    "items": [],
+    "image": null,
+    "color": "color",
+    "targets": [
+      {
+        "guildId": "000000000000000000",
+        "channelId": "000000000000000000"
+      }
+    ]
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/changelog/:id`
+
+  Permission requise : `changelog.manage`
+
+  Corps JSON :
+  - `version` (string | null)
+  - `title` (string) — obligatoire
+  - `intro` (string)
+  - `items` (array)
+  - `image` (string | null)
+  - `color` (string)
+  - `targets` (array)
+}

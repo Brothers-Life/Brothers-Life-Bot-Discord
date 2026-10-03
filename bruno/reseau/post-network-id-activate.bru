@@ -1,0 +1,21 @@
+meta {
+  name: POST /network/:id/activate
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/network/:id/activate
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Créer / agir — `POST /api/network/:id/activate`
+
+  Permission requise : `network.manage`
+}

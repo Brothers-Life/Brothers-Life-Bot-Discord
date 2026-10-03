@@ -1,0 +1,28 @@
+meta {
+  name: GET /tickets/:id/transcript
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/api/tickets/:id/transcript
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~download: 
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Consulter — `GET /api/tickets/:id/transcript`
+
+  Permission requise : `tickets.view`
+
+  Paramètres de requête :
+  - `download` (boolean)
+}

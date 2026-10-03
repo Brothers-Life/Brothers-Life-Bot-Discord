@@ -1,0 +1,30 @@
+meta {
+  name: POST /absences/:id/extend
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/absences/:id/extend
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "endAt": 1
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/absences/:id/extend`
+
+  Permission requise : aucune (clé valide)
+
+  Corps JSON :
+  - `endAt` (integer) — obligatoire
+}

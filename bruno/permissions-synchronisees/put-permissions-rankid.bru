@@ -1,0 +1,30 @@
+meta {
+  name: PUT /permissions/:rankId
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{baseUrl}}/api/permissions/:rankId
+  body: json
+  auth: inherit
+}
+
+params:path {
+  rankId: 
+}
+
+body:json {
+  {
+    "permissions": null
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/permissions/:rankId`
+
+  Permission requise : `permsync.manage`
+
+  Corps JSON :
+  - `permissions` (array | null) — obligatoire
+}

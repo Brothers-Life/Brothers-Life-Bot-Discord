@@ -1,0 +1,30 @@
+meta {
+  name: POST /feedback/items/:id/assign
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/feedback/items/:id/assign
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "userId": null
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/feedback/items/:id/assign`
+
+  Permission requise : aucune (clé valide)
+
+  Corps JSON :
+  - `userId` (string | null)
+}

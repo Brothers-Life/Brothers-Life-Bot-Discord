@@ -1,0 +1,24 @@
+meta {
+  name: GET /people/search
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/people/search
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~q: 
+}
+
+docs {
+  Consulter — `GET /api/people/search`
+
+  Permission requise : aucune (clé valide)
+
+  Paramètres de requête :
+  - `q` (string) — obligatoire
+}

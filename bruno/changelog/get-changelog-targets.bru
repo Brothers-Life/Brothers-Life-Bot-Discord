@@ -1,0 +1,17 @@
+meta {
+  name: GET /changelog/targets
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/changelog/targets
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/changelog/targets`
+
+  Permission requise : `changelog.view`
+}

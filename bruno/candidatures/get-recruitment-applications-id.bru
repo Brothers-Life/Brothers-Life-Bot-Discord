@@ -1,0 +1,21 @@
+meta {
+  name: GET /recruitment/applications/:id
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/recruitment/applications/:id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Consulter — `GET /api/recruitment/applications/:id`
+
+  Permission requise : `recruitment.view`
+}

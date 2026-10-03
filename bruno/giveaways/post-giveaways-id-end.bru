@@ -1,0 +1,29 @@
+meta {
+  name: POST /giveaways/:id/end
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/giveaways/:id/end
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "confirm": true
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/giveaways/:id/end`
+
+  Permission requise : `giveaways.manage`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+}

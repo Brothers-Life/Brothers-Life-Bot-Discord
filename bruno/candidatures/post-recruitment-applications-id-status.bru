@@ -1,0 +1,32 @@
+meta {
+  name: POST /recruitment/applications/:id/status
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/recruitment/applications/:id/status
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "status": "status",
+    "reason": "reason"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/recruitment/applications/:id/status`
+
+  Permission requise : `recruitment.manage`
+
+  Corps JSON :
+  - `status` (string) — obligatoire
+  - `reason` (string)
+}

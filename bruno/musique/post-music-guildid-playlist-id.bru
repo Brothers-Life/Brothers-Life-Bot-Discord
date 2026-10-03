@@ -1,0 +1,35 @@
+meta {
+  name: POST /music/:guildId/playlist/:id
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/music/:guildId/playlist/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+  id: 
+}
+
+body:json {
+  {
+    "channelId": "000000000000000000",
+    "when": "end",
+    "shuffle": false
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/music/:guildId/playlist/:id`
+
+  Permission requise : `music.use`
+
+  Corps JSON :
+  - `channelId` (string)
+  - `when` ("end" | "next" | "now")
+  - `shuffle` (boolean)
+}

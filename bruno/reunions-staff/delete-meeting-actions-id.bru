@@ -1,0 +1,21 @@
+meta {
+  name: DELETE /meeting-actions/:id
+  type: http
+  seq: 1
+}
+
+delete {
+  url: {{baseUrl}}/api/meeting-actions/:id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Supprimer — `DELETE /api/meeting-actions/:id`
+
+  Permission requise : `meetings.manage`
+}

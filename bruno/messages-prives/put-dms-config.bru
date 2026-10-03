@@ -1,0 +1,21 @@
+meta {
+  name: PUT /dms/config
+  type: http
+  seq: 11
+}
+
+put {
+  url: {{baseUrl}}/api/dms/config
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {}
+}
+
+docs {
+  Remplacer — `PUT /api/dms/config`
+
+  Permission requise : `dm.manage`
+}

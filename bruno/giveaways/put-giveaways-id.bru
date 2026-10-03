@@ -1,0 +1,42 @@
+meta {
+  name: PUT /giveaways/:id
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{baseUrl}}/api/giveaways/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "prize": "prize",
+    "description": "description",
+    "winnersCount": 1,
+    "settings": {},
+    "targets": [],
+    "startsAt": null,
+    "endsAt": 1
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/giveaways/:id`
+
+  Permission requise : `giveaways.manage`
+
+  Corps JSON :
+  - `prize` (string) — obligatoire
+  - `description` (string)
+  - `winnersCount` (integer)
+  - `settings` (object)
+  - `targets` (array)
+  - `startsAt` (integer | null)
+  - `endsAt` (integer) — obligatoire
+}

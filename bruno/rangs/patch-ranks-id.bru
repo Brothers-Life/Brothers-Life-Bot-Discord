@@ -1,0 +1,42 @@
+meta {
+  name: PATCH /ranks/:id
+  type: http
+  seq: 7
+}
+
+patch {
+  url: {{baseUrl}}/api/ranks/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "name": "name",
+    "level": 0,
+    "color": null,
+    "permissions": [
+      "permissions"
+    ],
+    "inherit": false,
+    "syncRoles": false
+  }
+}
+
+docs {
+  Modifier — `PATCH /api/ranks/:id`
+
+  Permission requise : `ranks.manage`
+
+  Corps JSON :
+  - `name` (string)
+  - `level` (integer)
+  - `color` (string | null)
+  - `permissions` (array)
+  - `inherit` (boolean)
+  - `syncRoles` (boolean)
+}

@@ -1,0 +1,33 @@
+meta {
+  name: POST /people/:userId/guilds/:guildId/roles
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/people/:userId/guilds/:guildId/roles
+  body: json
+  auth: inherit
+}
+
+params:path {
+  userId: 
+  guildId: 
+}
+
+body:json {
+  {
+    "roleId": "000000000000000000",
+    "add": false
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/people/:userId/guilds/:guildId/roles`
+
+  Permission requise : `members.manage`
+
+  Corps JSON :
+  - `roleId` (string) — obligatoire
+  - `add` (boolean) — obligatoire
+}

@@ -1,0 +1,21 @@
+meta {
+  name: POST /rp-events
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/rp-events
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {}
+}
+
+docs {
+  Créer / agir — `POST /api/rp-events`
+
+  Permission requise : `rpevents.manage`
+}

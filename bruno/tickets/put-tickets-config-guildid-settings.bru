@@ -1,0 +1,32 @@
+meta {
+  name: PUT /tickets/config/:guildId/settings
+  type: http
+  seq: 18
+}
+
+put {
+  url: {{baseUrl}}/api/tickets/config/:guildId/settings
+  body: json
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+body:json {
+  {
+    "maxOpen": 1,
+    "statusPrefix": false
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/tickets/config/:guildId/settings`
+
+  Permission requise : `tickets.manage`
+
+  Corps JSON :
+  - `maxOpen` (integer)
+  - `statusPrefix` (boolean)
+}

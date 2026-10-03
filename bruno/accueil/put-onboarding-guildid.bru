@@ -1,0 +1,25 @@
+meta {
+  name: PUT /onboarding/:guildId
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{baseUrl}}/api/onboarding/:guildId
+  body: json
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+body:json {
+  {}
+}
+
+docs {
+  Remplacer — `PUT /api/onboarding/:guildId`
+
+  Permission requise : `onboarding.manage`
+}

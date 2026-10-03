@@ -1,0 +1,30 @@
+meta {
+  name: POST /tickets/config/:guildId/copy
+  type: http
+  seq: 14
+}
+
+post {
+  url: {{baseUrl}}/api/tickets/config/:guildId/copy
+  body: json
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+body:json {
+  {
+    "toGuildId": "000000000000000000"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/tickets/config/:guildId/copy`
+
+  Permission requise : `tickets.manage`
+
+  Corps JSON :
+  - `toGuildId` (string) — obligatoire
+}

@@ -1,0 +1,17 @@
+meta {
+  name: GET /events/settings
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/events/settings
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/events/settings`
+
+  Permission requise : `events.view`
+}

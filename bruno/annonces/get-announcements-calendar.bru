@@ -1,0 +1,26 @@
+meta {
+  name: GET /announcements/calendar
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/api/announcements/calendar
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~from: 
+  ~to: 
+}
+
+docs {
+  Consulter — `GET /api/announcements/calendar`
+
+  Permission requise : `announcements.view`
+
+  Paramètres de requête :
+  - `from` (integer) — obligatoire
+  - `to` (integer) — obligatoire
+}

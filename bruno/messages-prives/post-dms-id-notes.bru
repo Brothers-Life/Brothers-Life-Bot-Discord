@@ -1,0 +1,30 @@
+meta {
+  name: POST /dms/:id/notes
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/dms/:id/notes
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "text": "text"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/dms/:id/notes`
+
+  Permission requise : `dm.view`
+
+  Corps JSON :
+  - `text` (string) — obligatoire
+}

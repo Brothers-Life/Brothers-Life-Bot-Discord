@@ -1,0 +1,30 @@
+meta {
+  name: PUT /staff-activity/config
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{baseUrl}}/api/staff-activity/config
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "enabled": false,
+    "guildId": null,
+    "channelId": null
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/staff-activity/config`
+
+  Permission requise : `staffactivity.manage`
+
+  Corps JSON :
+  - `enabled` (boolean)
+  - `guildId` (string | null)
+  - `channelId` (string | null)
+}

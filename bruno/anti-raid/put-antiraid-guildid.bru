@@ -1,0 +1,25 @@
+meta {
+  name: PUT /antiraid/:guildId
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{baseUrl}}/api/antiraid/:guildId
+  body: json
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+body:json {
+  {}
+}
+
+docs {
+  Remplacer — `PUT /api/antiraid/:guildId`
+
+  Permission requise : `antiraid.manage`
+}

@@ -1,0 +1,32 @@
+meta {
+  name: POST /fivem
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/fivem
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "name",
+    "address": "address",
+    "joinCode": null,
+    "config": {}
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/fivem`
+
+  Permission requise : `fivem.manage`
+
+  Corps JSON :
+  - `name` (string) — obligatoire
+  - `address` (string) — obligatoire
+  - `joinCode` (string | null)
+  - `config` (object)
+}

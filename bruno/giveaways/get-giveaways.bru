@@ -1,0 +1,17 @@
+meta {
+  name: GET /giveaways
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/giveaways
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/giveaways`
+
+  Permission requise : `giveaways.view`
+}

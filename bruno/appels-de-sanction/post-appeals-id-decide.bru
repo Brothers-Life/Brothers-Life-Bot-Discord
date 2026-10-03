@@ -1,0 +1,32 @@
+meta {
+  name: POST /appeals/:id/decide
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/appeals/:id/decide
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "accepted": false,
+    "reason": "reason"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/appeals/:id/decide`
+
+  Permission requise : `sanctions.revoke`
+
+  Corps JSON :
+  - `accepted` (boolean) — obligatoire
+  - `reason` (string)
+}

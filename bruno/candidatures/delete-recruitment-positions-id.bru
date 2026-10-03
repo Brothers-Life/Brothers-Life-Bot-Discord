@@ -1,0 +1,29 @@
+meta {
+  name: DELETE /recruitment/positions/:id
+  type: http
+  seq: 9
+}
+
+delete {
+  url: {{baseUrl}}/api/recruitment/positions/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "confirm": true
+  }
+}
+
+docs {
+  Supprimer — `DELETE /api/recruitment/positions/:id`
+
+  Permission requise : `recruitment.manage`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+}

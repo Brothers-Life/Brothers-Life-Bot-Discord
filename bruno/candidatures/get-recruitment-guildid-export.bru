@@ -1,0 +1,21 @@
+meta {
+  name: GET /recruitment/:guildId/export
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/recruitment/:guildId/export
+  body: none
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+docs {
+  Consulter — `GET /api/recruitment/:guildId/export`
+
+  Permission requise : `recruitment.view`
+}

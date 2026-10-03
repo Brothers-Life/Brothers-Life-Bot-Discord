@@ -1,0 +1,21 @@
+meta {
+  name: POST /custom-commands
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/custom-commands
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {}
+}
+
+docs {
+  Créer / agir — `POST /api/custom-commands`
+
+  Permission requise : `customcommands.manage`
+}

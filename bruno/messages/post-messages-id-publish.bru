@@ -1,0 +1,21 @@
+meta {
+  name: POST /messages/:id/publish
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/messages/:id/publish
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Créer / agir — `POST /api/messages/:id/publish`
+
+  Permission requise : `messages.manage`
+}

@@ -1,0 +1,40 @@
+meta {
+  name: POST /sanctions
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/sanctions
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "type": "ban",
+    "userId": "000000000000000000",
+    "reason": "reason",
+    "duration": null,
+    "scope": "network",
+    "originGuildId": null,
+    "profile": null,
+    "deleteMessageSeconds": 0
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/sanctions`
+
+  Permission requise : aucune (clé valide)
+
+  Corps JSON :
+  - `type` ("ban" | "kick" | "timeout" | "warn" | "restrict") — obligatoire
+  - `userId` (string) — obligatoire
+  - `reason` (string)
+  - `duration` (string | null)
+  - `scope` ("network" | "local")
+  - `originGuildId` (string | null)
+  - `profile` (string | null)
+  - `deleteMessageSeconds` (0 | 3600 | 86400 | 604800)
+}

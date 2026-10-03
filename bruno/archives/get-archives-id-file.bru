@@ -1,0 +1,28 @@
+meta {
+  name: GET /archives/:id/file
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/archives/:id/file
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~download: 
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Consulter — `GET /api/archives/:id/file`
+
+  Permission requise : `archives.view`
+
+  Paramètres de requête :
+  - `download` (boolean)
+}

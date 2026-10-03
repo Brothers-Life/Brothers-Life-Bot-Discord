@@ -1,0 +1,21 @@
+meta {
+  name: DELETE /automod/:guildId
+  type: http
+  seq: 2
+}
+
+delete {
+  url: {{baseUrl}}/api/automod/:guildId
+  body: none
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+docs {
+  Supprimer — `DELETE /api/automod/:guildId`
+
+  Permission requise : `automod.manage`
+}

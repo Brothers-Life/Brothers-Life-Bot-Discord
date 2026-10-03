@@ -1,0 +1,45 @@
+meta {
+  name: PUT /messages/:id
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{baseUrl}}/api/messages/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "name": "name",
+    "payload": {},
+    "refreshMinutes": 1,
+    "variables": {},
+    "repost": false,
+    "targets": [
+      {
+        "guildId": "000000000000000000",
+        "channelId": "000000000000000000"
+      }
+    ]
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/messages/:id`
+
+  Permission requise : `messages.manage`
+
+  Corps JSON :
+  - `name` (string) — obligatoire
+  - `payload` (object) — obligatoire
+  - `refreshMinutes` (integer)
+  - `variables` (object)
+  - `repost` (boolean)
+  - `targets` (array)
+}

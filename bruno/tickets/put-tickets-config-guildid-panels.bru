@@ -1,0 +1,44 @@
+meta {
+  name: PUT /tickets/config/:guildId/panels
+  type: http
+  seq: 15
+}
+
+put {
+  url: {{baseUrl}}/api/tickets/config/:guildId/panels
+  body: json
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+body:json {
+  {
+    "id": 1,
+    "name": "name",
+    "channelId": null,
+    "payload": {},
+    "style": "buttons",
+    "placeholder": null,
+    "categoryIds": [
+      1
+    ]
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/tickets/config/:guildId/panels`
+
+  Permission requise : `tickets.manage`
+
+  Corps JSON :
+  - `id` (integer)
+  - `name` (string) — obligatoire
+  - `channelId` (string | null)
+  - `payload` (object)
+  - `style` ("buttons" | "select")
+  - `placeholder` (string | null)
+  - `categoryIds` (array)
+}
