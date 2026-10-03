@@ -43,7 +43,7 @@ export function customPayload(msg, components = [], commandId = null) {
 	const rows = [];
 	const buttons = components.filter(c => c.kind === 'button').map((c) => {
 		const b = new ButtonBuilder().setCustomId(`cc:${commandId}:${c.id}`).setLabel(c.label).setStyle(BUTTON_STYLES[c.style]);
-		if (c.emoji) b.setEmoji(emojiOf(c.emoji));
+		if (emojiOf(c.emoji)) b.setEmoji(emojiOf(c.emoji));
 		return b;
 	});
 	if (buttons.length) rows.push(new ActionRowBuilder().addComponents(buttons.slice(0, 5)));

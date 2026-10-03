@@ -1,4 +1,5 @@
 import { ValidationError } from './errors.js';
+import { isValidEmoji } from './emoji.js';
 
 // Forms shown as Discord modals: tickets, suggestions, bug reports, staff applications.
 // A form is up to 5 steps (one modal each), a step is 1 to 5 fields.
@@ -13,11 +14,14 @@ function normalizeOptions(input, where) {
 	const options = (Array.isArray(input) ? input : []).slice(0, 25).map((o, i) => {
 		const label = text(o?.label, 100).trim();
 		if (!label) throw new ValidationError(`${where} : le choix ${i + 1} n’a pas de libellé.`);
+		// Also runs when reading a saved config: an invalid emoji (text, ":name:") is dropped, not refused,
+		// otherwise Discord rejects the whole modal
+		const emoji = text(o?.emoji, 64).trim();
 		return {
 			label,
 			value: text(o?.value, 100).trim() || label.slice(0, 100),
 			description: text(o?.description, 100).trim(),
-			emoji: text(o?.emoji, 64).trim(),
+			emoji: isValidEmoji(emoji) ? emoji : '',
 		};
 	});
 	if (!options.length) throw new ValidationError(`${where} : ajoute au moins un choix.`);

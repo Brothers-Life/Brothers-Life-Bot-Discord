@@ -75,7 +75,7 @@ export function builtPayload(payload) {
 		rows.push(new ActionRowBuilder().addComponents(payload.buttons.slice(i, i + 5).map((b) => {
 			const button = new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(b.url);
 			if (b.label) button.setLabel(b.label);
-			if (b.emoji) button.setEmoji(emojiOf(b.emoji));
+			if (emojiOf(b.emoji)) button.setEmoji(emojiOf(b.emoji));
 			return button;
 		})));
 	}

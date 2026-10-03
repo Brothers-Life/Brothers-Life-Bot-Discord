@@ -313,7 +313,7 @@ export function createExecutor(client) {
 			const content = [ping, payload.content].filter(Boolean).join('\n');
 			const buttons = (options.buttons ?? []).map((b) => {
 				const button = new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(b.label).setURL(b.url);
-				if (b.emoji) button.setEmoji(emojiOf(b.emoji));
+				if (emojiOf(b.emoji)) button.setEmoji(emojiOf(b.emoji));
 				return button;
 			});
 			const files = (options.files ?? []).map(f => new AttachmentBuilder(f.attachment, { name: f.name }));

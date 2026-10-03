@@ -1,4 +1,5 @@
 import { EmbedBuilder } from 'discord.js';
+import { parseEmoji } from '../core/emoji.js';
 
 // Embeds of a message edited in the panel ({ content, embed } of src/core/announcements.js normalizePayload)
 export function buildEmbeds(payload) {
@@ -19,7 +20,8 @@ export function buildEmbeds(payload) {
 
 // "🎫", "<:name:id>" or "<a:name:id>" -> what discord.js expects for buttons and menus
 export function emojiOf(value) {
-	if (!value) return undefined;
-	const custom = /^<a?:\w+:(\d+)>$/.exec(value);
-	return custom ? { id: custom[1] } : value;
+	const emoji = parseEmoji(value);
+	// An invalid emoji is dropped: Discord would refuse the whole message (or modal) for it
+	if (!emoji) return undefined;
+	return emoji.id ? { id: emoji.id, animated: emoji.animated ?? false } : emoji.name;
 }
