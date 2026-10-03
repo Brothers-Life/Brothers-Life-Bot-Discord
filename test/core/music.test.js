@@ -203,3 +203,21 @@ test('search platform: prefix, then the chosen one, then the default one', async
 	assert.equal(music.config().searchPlatform, 'youtube');
 	await assert.rejects(music.search('sc: a'), ValidationError);
 });
+
+test('Spotify search needs the keys of a Spotify app, never sent back', async () => {
+	const { music, executor, owner, member } = await setup();
+	await assert.rejects(music.search('daft punk', 5, 'spotify'), /pas configurée/);
+	await assert.rejects(music.play(member(ALICE), MAIN, 'sp: daft punk'), /pas configurée/);
+	assert.throws(() => music.setSpotify(owner, { clientId: 'nope', clientSecret: 'x' }), ValidationError);
+	assert.throws(() => music.setSpotify({ id: ALICE, can: () => false }, { clientId: 'a'.repeat(32), clientSecret: 'b'.repeat(32) }), ForbiddenError);
+
+	assert.deepEqual(music.setSpotify(owner, { clientId: 'a'.repeat(32), clientSecret: 'b'.repeat(32) }), { clientId: 'a'.repeat(32), hasSecret: true });
+	// An empty secret keeps the saved one
+	music.setSpotify(owner, { clientId: 'c'.repeat(32), clientSecret: '' });
+	await music.search('daft punk', 5, 'spotify');
+	assert.deepEqual(executor.musicResolver.calls.at(-1).options, { spotify: { clientId: 'c'.repeat(32), clientSecret: 'b'.repeat(32) } });
+	assert.ok(!JSON.stringify(music.spotify()).includes('b'.repeat(32)));
+
+	music.setSpotify(owner, null);
+	assert.deepEqual(music.spotify(), { clientId: '', hasSecret: false });
+});

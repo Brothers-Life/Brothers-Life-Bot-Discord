@@ -1,0 +1,17 @@
+meta {
+  name: DELETE /music/spotify
+  type: http
+  seq: 18
+}
+
+delete {
+  url: {{baseUrl}}/api/music/spotify
+  body: none
+  auth: inherit
+}
+
+docs {
+  Supprimer — `DELETE /api/music/spotify`
+
+  Permission requise : `music.manage`
+}

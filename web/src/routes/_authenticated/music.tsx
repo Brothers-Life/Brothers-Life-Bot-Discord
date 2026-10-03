@@ -38,7 +38,7 @@ type State = {
 }
 type Config = { djRoles: Record<string, string[]>; defaultVolume: number; maxQueue: number; maxTrackMinutes: number; idleMinutes: number; announce: boolean; searchPlatform: string }
 type GuildInfo = { id: string; name: string; icon: string | null; voiceChannels: { id: string; name: string; parent: string | null; members: number }[]; roles: Role[]; state: State }
-type Payload = { guilds: GuildInfo[]; config: Config; filters: Record<string, string>; speeds: number[]; cookies: boolean; platforms: Record<string, string> }
+type Payload = { guilds: GuildInfo[]; config: Config; filters: Record<string, string>; speeds: number[]; cookies: boolean; platforms: Record<string, string>; spotify: { clientId: string; hasSecret: boolean } }
 type SearchResult = { title: string; author: string | null; url: string; durationMs: number | null; thumbnail: string | null }
 
 const SOURCE: Record<string, string> = { youtube: 'YouTube', spotify: 'Spotify', soundcloud: 'SoundCloud' }
@@ -499,7 +499,7 @@ function Settings({ data }: { data: Payload }) {
             <SelectTrigger id='music-platform'><SelectValue /></SelectTrigger>
             <SelectContent>{Object.entries(data.platforms).map(([key, label]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}</SelectContent>
           </Select>
-          <p className='text-xs text-muted-foreground'>Pour /musique jouer, le bouton Ajouter du lecteur et ce panel. Sur Discord, on peut aussi préfixer : <code>yt:</code>, <code>ytm:</code>, <code>sc:</code>.</p>
+          <p className='text-xs text-muted-foreground'>Pour /musique jouer, le bouton Ajouter du lecteur et ce panel. Sur Discord, on peut aussi préfixer : <code>yt:</code>, <code>ytm:</code>, <code>sc:</code>, <code>sp:</code>.</p>
         </div>
         <label className='flex items-center gap-2 text-sm'><Switch checked={c.announce} onCheckedChange={(announce) => setC({ ...c, announce })} /> Message « en cours » avec boutons dans le chat du salon vocal du bot</label>
         <div className='grid gap-2'>
@@ -514,6 +514,7 @@ function Settings({ data }: { data: Payload }) {
             ))}
           </div>
         </div>
+        <SpotifyKeys spotify={data.spotify} onSaved={refresh} />
         <div className='grid gap-2 rounded-lg border p-3'>
           <div className='flex flex-wrap items-center gap-2'>
             <Label>Cookies YouTube</Label>
@@ -528,5 +529,46 @@ function Settings({ data }: { data: Payload }) {
         </div>
       </div>
     </Section>
+  )
+}
+
+// Keys of a Spotify app: needed to search Spotify (the songs are then played from YouTube)
+function SpotifyKeys({ spotify, onSaved }: { spotify: Payload['spotify']; onSaved: () => void }) {
+  const [clientId, setClientId] = useState(spotify.clientId)
+  const [secret, setSecret] = useState('')
+  const configured = Boolean(spotify.clientId && spotify.hasSecret)
+  const save = useMutation({
+    mutationFn: () => api('/music/spotify', { method: 'PUT', body: { clientId: clientId.trim(), clientSecret: secret.trim() } }),
+    onSuccess: () => { toast.success('Clés Spotify enregistrées'); setSecret(''); onSaved() },
+  })
+  const remove = useMutation({
+    mutationFn: () => api('/music/spotify', { method: 'DELETE' }),
+    onSuccess: () => { toast.success('Clés Spotify retirées'); setClientId(''); setSecret(''); onSaved() },
+  })
+  return (
+    <div className='grid gap-3 rounded-lg border p-3'>
+      <div className='flex flex-wrap items-center gap-2'>
+        <Label>Recherche Spotify</Label>
+        {configured ? <Pill tone='success'>Configurée</Pill> : <Pill tone='neutral'>Non configurée</Pill>}
+        {configured && <Button size='sm' variant='danger-ghost' onClick={() => remove.mutate()} disabled={remove.isPending}><Trash2 /> Retirer</Button>}
+      </div>
+      <p className='text-xs text-muted-foreground'>
+        Crée une appli sur <a className='text-brand underline-offset-4 hover:underline' href='https://developer.spotify.com/dashboard' target='_blank' rel='noreferrer'>developer.spotify.com</a> (Web API, une URL de redirection quelconque comme <code>http://127.0.0.1</code>), puis colle son Client ID et son Client Secret. Spotify ne fournit pas le son : les titres trouvés sont joués depuis YouTube.
+      </p>
+      <form
+        className='grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end'
+        onSubmit={(e) => { e.preventDefault(); save.mutate() }}
+      >
+        <div className='grid gap-1.5'>
+          <Label htmlFor='spotify-id'>Client ID</Label>
+          <Input id='spotify-id' value={clientId} onChange={(e) => setClientId(e.target.value)} autoComplete='off' spellCheck={false} className='font-mono' />
+        </div>
+        <div className='grid gap-1.5'>
+          <Label htmlFor='spotify-secret'>Client Secret</Label>
+          <Input id='spotify-secret' type='password' value={secret} onChange={(e) => setSecret(e.target.value)} autoComplete='new-password' placeholder={spotify.hasSecret ? '•••••••• (inchangé)' : ''} className='font-mono' />
+        </div>
+        <Button type='submit' loading={save.isPending} disabled={!clientId.trim() || (!secret.trim() && !spotify.hasSecret)}><Save /> Enregistrer</Button>
+      </form>
+    </div>
   )
 }

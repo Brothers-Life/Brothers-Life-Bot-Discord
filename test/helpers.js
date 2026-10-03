@@ -454,16 +454,16 @@ export function createFakeExecutor() {
 		},
 		musicResolver: {
 			calls: [],
-			async resolve(text, platform) {
-				this.calls.push({ resolve: text, platform });
+			async resolve(text, platform, options) {
+				this.calls.push({ resolve: text, platform, options });
 				const list = text.startsWith('playlist:') ? text.slice(9).split(',') : [text];
 				return {
 					playlist: text.startsWith('playlist:') ? { title: 'Ma playlist' } : null,
 					tracks: list.map(title => ({ title, author: 'Artiste', url: `https://youtu.be/${title}`, durationMs: 180_000, thumbnail: null, source: 'youtube', live: title.includes('live') })),
 				};
 			},
-			async search(text, limit, platform) {
-				this.calls.push({ search: text, platform });
+			async search(text, limit, platform, options) {
+				this.calls.push({ search: text, platform, options });
 				return [{ title: text, url: `https://youtu.be/${text}`, durationMs: 180_000 }];
 			},
 			async stream(track) {

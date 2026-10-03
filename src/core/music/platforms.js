@@ -3,10 +3,12 @@ export const SEARCH_PLATFORMS = {
 	youtube: 'YouTube',
 	ytmusic: 'YouTube Music',
 	soundcloud: 'SoundCloud',
+	// Through the Spotify Web API (keys set in the music settings); played from the same song on YouTube
+	spotify: 'Spotify',
 };
 
 // Short prefixes typed before a search, on Discord or in the panel: "sc: daft punk"
-const PREFIXES = { yt: 'youtube', youtube: 'youtube', ytm: 'ytmusic', ytmusic: 'ytmusic', sc: 'soundcloud', soundcloud: 'soundcloud' };
+const PREFIXES = { yt: 'youtube', youtube: 'youtube', ytm: 'ytmusic', ytmusic: 'ytmusic', sc: 'soundcloud', soundcloud: 'soundcloud', sp: 'spotify', spotify: 'spotify' };
 
 export const isPlatform = value => Object.hasOwn(SEARCH_PLATFORMS, value);
 

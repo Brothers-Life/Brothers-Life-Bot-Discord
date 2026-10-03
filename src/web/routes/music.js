@@ -31,6 +31,7 @@ export function registerMusicRoutes(app, { core }) {
 			}))),
 			config: music.config(),
 			platforms: SEARCH_PLATFORMS,
+			spotify: manage ? music.spotify() : { clientId: '', hasSecret: music.spotify().hasSecret },
 			filters: FILTERS,
 			speeds: SPEEDS,
 			cookies: fs.existsSync(cookiesFile),
@@ -112,6 +113,14 @@ export function registerMusicRoutes(app, { core }) {
 		audit.record({ actorId: request.actor.id, source: 'panel', action: 'music.config', details: { cookies: 'ajoutés' } });
 		return { ok: true };
 	});
+
+	// Keys of a Spotify app, to search Spotify (the secret is never sent back)
+	app.put('/api/music/spotify', {
+		config: { permission: 'music.manage' },
+		schema: { body: { type: 'object', required: ['clientId'], properties: { clientId: { type: 'string', maxLength: 64 }, clientSecret: { type: 'string', maxLength: 64 } } } },
+	}, async (request) => music.setSpotify(request.actor, request.body));
+
+	app.delete('/api/music/spotify', { config: { permission: 'music.manage' } }, async (request) => music.setSpotify(request.actor, null));
 
 	app.delete('/api/music/cookies', { config: { permission: 'music.manage' } }, async (request) => {
 		fs.rmSync(cookiesFile, { force: true });

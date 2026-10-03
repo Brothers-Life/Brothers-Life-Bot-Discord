@@ -56,6 +56,20 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 		return normalizeMusicConfig(settings.get('music.config', {}));
 	}
 
+	// Keys of a Spotify app (client credentials), only used to search Spotify
+	function spotifyKeys() {
+		const keys = settings.get('music.spotify', {});
+		return keys.clientId && keys.clientSecret ? { clientId: keys.clientId, clientSecret: keys.clientSecret } : null;
+	}
+
+	// Search options handed to the resolver for a platform
+	function searchOptions(platform) {
+		if (platform !== 'spotify') return {};
+		const spotify = spotifyKeys();
+		if (!spotify) throw new ValidationError('La recherche Spotify n’est pas configurée : ajoute les clés de l’appli Spotify dans les réglages musique du panel.');
+		return { spotify };
+	}
+
 	function emit(guildId) {
 		const snapshot = players.has(guildId) ? view(players.get(guildId)) : { guildId, connected: false };
 		for (const listener of listeners) {
@@ -264,6 +278,30 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 			return cfg;
 		},
 
+		// The secret never leaves the server: only whether it is set
+		spotify() {
+			const keys = settings.get('music.spotify', {});
+			return { clientId: keys.clientId ?? '', hasSecret: Boolean(keys.clientSecret) };
+		},
+
+		// Empty secret = keep the saved one; null = remove the keys
+		setSpotify(actor, input) {
+			if (!actor.can('music.manage')) throw new ForbiddenError('Permission manquante : music.manage');
+			if (input === null) {
+				settings.set('music.spotify', {});
+			}
+			else {
+				const saved = settings.get('music.spotify', {});
+				const clientId = String(input?.clientId ?? '').trim();
+				const clientSecret = String(input?.clientSecret ?? '').trim() || saved.clientSecret || '';
+				if (!/^[a-f0-9]{32}$/i.test(clientId)) throw new ValidationError('Client ID Spotify invalide (32 caractères hexadécimaux).');
+				if (!/^[a-f0-9]{32}$/i.test(clientSecret)) throw new ValidationError('Client Secret Spotify invalide (32 caractères hexadécimaux).');
+				settings.set('music.spotify', { clientId, clientSecret });
+			}
+			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'music.config', details: { spotify: input === null ? 'clés retirées' : 'clés enregistrées' } });
+			return service.spotify();
+		},
+
 		onChange(listener) {
 			listeners.add(listener);
 			return () => listeners.delete(listener);
@@ -279,7 +317,7 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 		async search(text, limit = 5, platform = null) {
 			const parsed = parseSearch(text, { platform, fallback: config().searchPlatform });
 			if (parsed.text.length < 2) throw new ValidationError('Tape au moins 2 caractères.');
-			return resolver.search(parsed.text, limit, parsed.platform).catch((error) => { throw new ValidationError(error.message); });
+			return resolver.search(parsed.text, limit, parsed.platform, searchOptions(parsed.platform)).catch((error) => { throw new ValidationError(error.message); });
 		},
 
 		// ctx: { actorId, source: 'bot'|'panel', guildId, voiceChannelId, textChannelId, roleIds, can }
@@ -288,7 +326,7 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 			if (!text) throw new ValidationError('Donne un lien ou une recherche.');
 			checkBefore(ctx, guildId, options);
 			const parsed = parseSearch(text, { platform: options.platform, fallback: config().searchPlatform });
-			const found = await resolver.resolve(parsed.text, parsed.platform).catch((error) => { throw error instanceof ValidationError ? error : new ValidationError(error.message); });
+			const found = await resolver.resolve(parsed.text, parsed.platform, searchOptions(parsed.platform)).catch((error) => { throw error instanceof ValidationError ? error : new ValidationError(error.message); });
 			if (!found.tracks.length) throw new ValidationError('Rien trouvé pour cette recherche.');
 			return enqueue(ctx, guildId, found.tracks, { ...options, label: found.playlist?.title, playlist: found.playlist ?? null });
 		},
@@ -338,7 +376,7 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 			const text = String(query ?? '').trim();
 			if (!text) throw new ValidationError('Donne un lien ou une recherche.');
 			const parsed = parseSearch(text, { platform, fallback: config().searchPlatform });
-			const found = await resolver.resolve(parsed.text, parsed.platform).catch((error) => { throw error instanceof ValidationError ? error : new ValidationError(error.message); });
+			const found = await resolver.resolve(parsed.text, parsed.platform, searchOptions(parsed.platform)).catch((error) => { throw error instanceof ValidationError ? error : new ValidationError(error.message); });
 			if (!found.tracks.length) throw new ValidationError('Rien trouvé.');
 			return playlists.addTracks(ctx, id, found.tracks);
 		},

@@ -1,0 +1,28 @@
+meta {
+  name: PUT /music/spotify
+  type: http
+  seq: 19
+}
+
+put {
+  url: {{baseUrl}}/api/music/spotify
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "clientId": "clientId",
+    "clientSecret": "clientSecret"
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/music/spotify`
+
+  Permission requise : `music.manage`
+
+  Corps JSON :
+  - `clientId` (string) — obligatoire
+  - `clientSecret` (string)
+}

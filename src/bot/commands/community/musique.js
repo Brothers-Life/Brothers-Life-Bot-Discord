@@ -15,7 +15,7 @@ export const data = new SlashCommandBuilder()
 			{ name: 'Juste après le titre en cours', value: 'next' },
 			{ name: 'Maintenant', value: 'now' },
 		))
-		.addStringOption(o => o.setName('plateforme').setDescription('Où chercher (sinon celle par défaut ; aussi en préfixe : yt:, ytm:, sc:)').addChoices(...platformChoices())))
+		.addStringOption(o => o.setName('plateforme').setDescription('Où chercher (sinon celle par défaut ; aussi en préfixe : yt:, ytm:, sc:, sp:)').addChoices(...platformChoices())))
 	.addSubcommand(s => s.setName('pause').setDescription('Mettre en pause ou reprendre'))
 	.addSubcommand(s => s.setName('passer').setDescription('Passer au titre suivant')
 		.addIntegerOption(o => o.setName('nombre').setDescription('Combien de titres passer').setMinValue(1).setMaxValue(100)))

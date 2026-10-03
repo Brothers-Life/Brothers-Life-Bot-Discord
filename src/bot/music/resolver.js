@@ -28,6 +28,48 @@ function fromInfo(info, source = 'youtube') {
 
 export function createMusicResolver({ ytdlp, fetchImpl = fetch }) {
 	const searches = new Map();
+	// Spotify app tokens (client credentials, about 1 h), per client id
+	const spotifyTokens = new Map();
+
+	async function spotifyToken({ clientId, clientSecret }) {
+		const cached = spotifyTokens.get(clientId);
+		if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
+		const response = await fetchImpl('https://accounts.spotify.com/api/token', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/x-www-form-urlencoded', Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}` },
+			body: 'grant_type=client_credentials',
+		});
+		if (!response.ok) throw new Error(response.status === 400 || response.status === 401 ? 'Clés Spotify refusées : vérifie le Client ID et le Client Secret dans les réglages musique.' : `Spotify ne répond pas (${response.status}).`);
+		const { access_token: token, expires_in: expiresIn = 3600 } = await response.json();
+		spotifyTokens.set(clientId, { token, expiresAt: Date.now() + expiresIn * 1000 });
+		return token;
+	}
+
+	// Spotify Web API search: tracks keep their Spotify link, the sound comes from YouTube (see stream)
+	async function spotifySearch(text, limit, keys) {
+		const url = `https://api.spotify.com/v1/search?${new URLSearchParams({ q: text, type: 'track', limit: String(Math.min(Math.max(limit, 1), 10)), market: 'FR' })}`;
+		let response = await fetchImpl(url, { headers: { Authorization: `Bearer ${await spotifyToken(keys)}` } });
+		if (response.status === 401) {
+			spotifyTokens.delete(keys.clientId);
+			response = await fetchImpl(url, { headers: { Authorization: `Bearer ${await spotifyToken(keys)}` } });
+		}
+		if (response.status === 429) throw new Error('Spotify limite les recherches : réessaie dans un instant.');
+		if (!response.ok) throw new Error(`Recherche Spotify impossible (${response.status}).`);
+		const data = await response.json();
+		return (data.tracks?.items ?? []).filter(Boolean).map((t) => {
+			const artists = (t.artists ?? []).map(a => a.name).join(', ');
+			return {
+				title: t.name,
+				author: artists || null,
+				url: t.external_urls?.spotify ?? `https://open.spotify.com/track/${t.id}`,
+				durationMs: t.duration_ms ?? null,
+				thumbnail: t.album?.images?.[0]?.url ?? null,
+				source: 'spotify',
+				query: `${artists ? `${artists} - ` : ''}${t.name}`,
+				live: false,
+			};
+		});
+	}
 
 	async function spotify(type, id) {
 		const response = await fetchImpl(`https://open.spotify.com/embed/${type.toLowerCase()}/${id}`, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'fr' } });
@@ -53,7 +95,7 @@ export function createMusicResolver({ ytdlp, fetchImpl = fetch }) {
 	}
 
 	const service = {
-		async resolve(text, platform = 'youtube') {
+		async resolve(text, platform = 'youtube', options = {}) {
 			const query = text.trim();
 			const sp = SPOTIFY.exec(query);
 			if (sp) return spotify(sp[1], sp[2]);
@@ -67,15 +109,21 @@ export function createMusicResolver({ ytdlp, fetchImpl = fetch }) {
 				}
 				return { playlist: null, tracks: [fromInfo(info)] };
 			}
-			const [first] = await service.search(query, 1, platform);
+			const [first] = await service.search(query, 1, platform, options);
 			return { playlist: null, tracks: first ? [first] : [] };
 		},
 
 		// Search on a platform (autocomplete of /musique jouer, panel search box, player button)
-		async search(text, limit = 5, platform = 'youtube') {
+		async search(text, limit = 5, platform = 'youtube', options = {}) {
 			const key = `${platform}:${limit}:${text.toLowerCase()}`;
 			const cached = searches.get(key);
 			if (cached && Date.now() - cached.at < SEARCH_TTL) return cached.results;
+			if (platform === 'spotify') {
+				if (!options.spotify) throw new Error('La recherche Spotify n’est pas configurée.');
+				const results = await spotifySearch(text, limit, options.spotify);
+				searches.set(key, { at: Date.now(), results });
+				return results;
+			}
 			const target = {
 				soundcloud: [`scsearch${limit}:${text}`],
 				// Its "songs" tab: official audio rather than clips (flat results only give the title)
