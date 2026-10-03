@@ -36,9 +36,9 @@ type State = {
   guildId: string; connected: boolean; channelId?: string; current?: Track | null; position?: number; paused?: boolean; volume?: number; speed?: number; rate?: number
   loop?: 'off' | 'track' | 'queue'; filters?: string[]; index?: number; queue?: Track[]; upcoming?: Track[]; history?: Track[]; loading?: boolean
 }
-type Config = { djRoles: Record<string, string[]>; defaultVolume: number; maxQueue: number; maxTrackMinutes: number; idleMinutes: number; announce: boolean }
+type Config = { djRoles: Record<string, string[]>; defaultVolume: number; maxQueue: number; maxTrackMinutes: number; idleMinutes: number; announce: boolean; searchPlatform: string }
 type GuildInfo = { id: string; name: string; icon: string | null; voiceChannels: { id: string; name: string; parent: string | null; members: number }[]; roles: Role[]; state: State }
-type Payload = { guilds: GuildInfo[]; config: Config; filters: Record<string, string>; speeds: number[]; cookies: boolean }
+type Payload = { guilds: GuildInfo[]; config: Config; filters: Record<string, string>; speeds: number[]; cookies: boolean; platforms: Record<string, string> }
 type SearchResult = { title: string; author: string | null; url: string; durationMs: number | null; thumbnail: string | null }
 
 const SOURCE: Record<string, string> = { youtube: 'YouTube', spotify: 'Spotify', soundcloud: 'SoundCloud' }
@@ -223,7 +223,7 @@ function Player({ guild, data }: { guild: GuildInfo; data: Payload }) {
       </div>
 
       <div className='grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-6'>
-        <AddMusic guild={guild} connected={state.connected} channelId={channelId} setChannelId={setChannelId} onAdded={refreshState} />
+        <AddMusic guild={guild} connected={state.connected} channelId={channelId} setChannelId={setChannelId} onAdded={refreshState} platforms={data.platforms} defaultPlatform={data.config.searchPlatform} />
         {state.connected && <Queue state={state} act={act} busy={control.isPending} />}
         <Playlists guildId={guild.id} connected={state.connected} channelId={channelId} onPlayed={refreshState} />
       </div>
@@ -307,17 +307,18 @@ function Clip({ videoId, position, trackId }: { videoId: string; position: numbe
 }
 
 // A link is played directly; a search lists its results, and one picks what to play
-function AddMusic({ guild, connected, channelId, setChannelId, onAdded }: { guild: GuildInfo; connected: boolean; channelId: string; setChannelId: (id: string) => void; onAdded: () => void }) {
+function AddMusic({ guild, connected, channelId, setChannelId, onAdded, platforms, defaultPlatform }: { guild: GuildInfo; connected: boolean; channelId: string; setChannelId: (id: string) => void; onAdded: () => void; platforms: Record<string, string>; defaultPlatform: string }) {
   const { me, can } = useMe()
   const qc = useQueryClient()
   const [query, setQuery] = useState('')
   const [search, setSearch] = useState('')
+  const [platform, setPlatform] = useState(defaultPlatform)
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const isUrl = /^https?:\/\//i.test(query.trim())
   const playlists = (usePlaylists().data ?? []).filter((p) => p.ownerId === me?.user.id || can('music.manage'))
   const results = useQuery({
-    queryKey: ['music-search', search],
-    queryFn: () => api<SearchResult[]>(`/music/search?q=${encodeURIComponent(search)}`),
+    queryKey: ['music-search', platform, search],
+    queryFn: () => api<SearchResult[]>(`/music/search?q=${encodeURIComponent(search)}&platform=${platform}`),
     enabled: search.length >= 2,
     staleTime: 10 * 60_000,
   })
@@ -343,7 +344,7 @@ function AddMusic({ guild, connected, channelId, setChannelId, onAdded }: { guil
   const send = (q: string, when = 'end') => q.trim() && play.mutate({ q: q.trim(), when })
 
   return (
-    <Section title='Ajouter de la musique' description='Colle un lien (YouTube, Spotify, SoundCloud…) ou cherche un titre puis choisis-le dans la liste.'>
+    <Section title='Ajouter de la musique' description='Colle un lien (YouTube, Spotify, SoundCloud…) ou cherche un titre sur la plateforme choisie, puis choisis-le dans la liste.'>
       <form
         className='grid gap-3 p-4'
         onSubmit={(e) => {
@@ -367,8 +368,14 @@ function AddMusic({ guild, connected, channelId, setChannelId, onAdded }: { guil
             <p className='text-xs text-muted-foreground'>Le message de contrôle avec les boutons est posté dans le chat de ce salon vocal.</p>
           </div>
         )}
-        <div className='flex gap-2'>
-          <div className='relative flex-1'>
+        <div className='flex flex-wrap gap-2'>
+          {!isUrl && (
+            <Select value={platform} onValueChange={setPlatform}>
+              <SelectTrigger className='w-full sm:w-44' aria-label='Chercher sur'><SelectValue /></SelectTrigger>
+              <SelectContent>{Object.entries(platforms).map(([key, label]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}</SelectContent>
+            </Select>
+          )}
+          <div className='relative min-w-48 flex-1'>
             <Search className='pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground' />
             <Input value={query} onChange={(e) => type(e.target.value)} placeholder='https://… ou « daft punk one more time »' aria-label='Lien ou recherche' className='ps-8' />
           </div>
@@ -387,7 +394,7 @@ function AddMusic({ guild, connected, channelId, setChannelId, onAdded }: { guil
         {!isUrl && search && (
           <ul className='grid gap-1' aria-label='Résultats de la recherche'>
             {results.isLoading && Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className='h-14 w-full' />)}
-            {results.data && !results.data.length && <li className='p-2 text-sm text-muted-foreground'>Rien trouvé pour « {search} ».</li>}
+            {results.data && !results.data.length && <li className='p-2 text-sm text-muted-foreground'>Rien trouvé sur {platforms[platform] ?? platform} pour « {search} ».</li>}
             {results.data?.map((r) => (
               <li key={r.url} className='flex flex-wrap items-center gap-3 rounded-md p-1.5 hover:bg-accent/40'>
                 {r.thumbnail ? <img src={r.thumbnail} alt='' className='h-11 w-[4.5rem] shrink-0 rounded object-cover' /> : <span className='h-11 w-[4.5rem] shrink-0 rounded bg-muted' />}
@@ -485,6 +492,14 @@ function Settings({ data }: { data: Payload }) {
           {number('maxQueue', 'Titres max dans la file', 10, 1000)}
           {number('maxTrackMinutes', 'Durée max d’un titre (min)', 0, 1440, '0 = pas de limite')}
           {number('idleMinutes', 'Départ du vocal après (min)', 1, 60, 'Seul dans le salon ou file terminée')}
+        </div>
+        <div className='grid max-w-sm gap-1.5'>
+          <Label htmlFor='music-platform'>Plateforme de recherche par défaut</Label>
+          <Select value={c.searchPlatform} onValueChange={(searchPlatform) => setC({ ...c, searchPlatform })}>
+            <SelectTrigger id='music-platform'><SelectValue /></SelectTrigger>
+            <SelectContent>{Object.entries(data.platforms).map(([key, label]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}</SelectContent>
+          </Select>
+          <p className='text-xs text-muted-foreground'>Pour /musique jouer, le bouton Ajouter du lecteur et ce panel. Sur Discord, on peut aussi préfixer : <code>yt:</code>, <code>ytm:</code>, <code>sc:</code>.</p>
         </div>
         <label className='flex items-center gap-2 text-sm'><Switch checked={c.announce} onCheckedChange={(announce) => setC({ ...c, announce })} /> Message « en cours » avec boutons dans le chat du salon vocal du bot</label>
         <div className='grid gap-2'>

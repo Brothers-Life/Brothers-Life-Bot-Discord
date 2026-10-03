@@ -1,6 +1,9 @@
 import { definePermission } from '../permissions.js';
+import { isPlatform, parseSearch } from './platforms.js';
 import { ForbiddenError, ValidationError } from '../errors.js';
 import { createPlaylists } from './playlists.js';
+
+export { SEARCH_PLATFORMS } from './platforms.js';
 
 definePermission('music.use', { label: 'Piloter la musique depuis le panel (et partout sur Discord, même sans rôle DJ)', category: 'Musique' });
 definePermission('music.manage', { label: 'Régler la musique (rôles DJ, limites, départ automatique)', category: 'Musique' });
@@ -36,6 +39,8 @@ export function normalizeMusicConfig(input = {}) {
 		maxTrackMinutes: clamp(input.maxTrackMinutes, 0, 24 * 60, 0),
 		idleMinutes: clamp(input.idleMinutes, 1, 60, 5),
 		announce: input.announce !== false,
+		// Where a typed search goes when nothing else is chosen
+		searchPlatform: isPlatform(input.searchPlatform) ? input.searchPlatform : 'youtube',
 	};
 }
 
@@ -270,14 +275,20 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 
 		list: () => [...players.values()].map(view),
 
-		search: (text, limit = 5) => resolver.search(text, limit).catch((error) => { throw new ValidationError(error.message); }),
+		// Typed search: a prefix ("sc: …") wins over the chosen platform, which wins over the default one
+		async search(text, limit = 5, platform = null) {
+			const parsed = parseSearch(text, { platform, fallback: config().searchPlatform });
+			if (parsed.text.length < 2) throw new ValidationError('Tape au moins 2 caractères.');
+			return resolver.search(parsed.text, limit, parsed.platform).catch((error) => { throw new ValidationError(error.message); });
+		},
 
 		// ctx: { actorId, source: 'bot'|'panel', guildId, voiceChannelId, textChannelId, roleIds, can }
 		async play(ctx, guildId, query, options = {}) {
 			const text = String(query ?? '').trim();
 			if (!text) throw new ValidationError('Donne un lien ou une recherche.');
 			checkBefore(ctx, guildId, options);
-			const found = await resolver.resolve(text).catch((error) => { throw error instanceof ValidationError ? error : new ValidationError(error.message); });
+			const parsed = parseSearch(text, { platform: options.platform, fallback: config().searchPlatform });
+			const found = await resolver.resolve(parsed.text, parsed.platform).catch((error) => { throw error instanceof ValidationError ? error : new ValidationError(error.message); });
 			if (!found.tracks.length) throw new ValidationError('Rien trouvé pour cette recherche.');
 			return enqueue(ctx, guildId, found.tracks, { ...options, label: found.playlist?.title, playlist: found.playlist ?? null });
 		},
@@ -323,10 +334,11 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 		},
 
 		// A link (track, YouTube or Spotify playlist...) added to a saved playlist
-		async addToPlaylist(ctx, id, query) {
+		async addToPlaylist(ctx, id, query, { platform = null } = {}) {
 			const text = String(query ?? '').trim();
 			if (!text) throw new ValidationError('Donne un lien ou une recherche.');
-			const found = await resolver.resolve(text).catch((error) => { throw error instanceof ValidationError ? error : new ValidationError(error.message); });
+			const parsed = parseSearch(text, { platform, fallback: config().searchPlatform });
+			const found = await resolver.resolve(parsed.text, parsed.platform).catch((error) => { throw error instanceof ValidationError ? error : new ValidationError(error.message); });
 			if (!found.tracks.length) throw new ValidationError('Rien trouvé.');
 			return playlists.addTracks(ctx, id, found.tracks);
 		},

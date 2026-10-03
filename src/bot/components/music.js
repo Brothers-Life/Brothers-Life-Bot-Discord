@@ -1,5 +1,6 @@
 import { MessageFlags } from 'discord.js';
 import { AppError } from '../../core/errors.js';
+import { parseSearch } from '../../core/music/platforms.js';
 import { addModal, pickPayload, queuePayload, saveModal } from '../musicUi.js';
 
 // customId: mu:<action>[:<extra>] (now-playing message, search results, forms)
@@ -23,14 +24,15 @@ export async function musicContext(interaction) {
 }
 
 // A link is played at once; a search shows its results to pick from
-export async function playOrPick(interaction, ctx, text, when = 'end') {
+export async function playOrPick(interaction, ctx, text, when = 'end', platform = null) {
 	const { music } = interaction.client.core;
 	if (URL_LIKE.test(text)) {
 		const result = await music.play(ctx, interaction.guildId, text, { next: when === 'next', now: when === 'now' });
 		const first = result.tracks[0];
 		return { content: result.playlist ? `📃 **${result.playlist.title}** : ${result.tracks.length} titre(s) ajouté(s).` : result.startedNow ? `🎶 Lecture de **${first.title}**.` : `➕ **${first.title}** ajouté à la file.`, components: [] };
 	}
-	return pickPayload(await music.search(text, 10), text, when);
+	const { platform: where, text: query } = parseSearch(text, { platform, fallback: music.config().searchPlatform });
+	return pickPayload(await music.search(query, 10, where), query, when, where);
 }
 
 export async function execute(interaction) {
@@ -43,11 +45,12 @@ export async function execute(interaction) {
 		const state = music.state(guildId);
 		switch (action) {
 		case 'queue': return await privately({ embeds: [queuePayload(state)] });
-		case 'add': return await interaction.showModal(addModal());
+		case 'add': return await interaction.showModal(addModal(music.config().searchPlatform));
 		case 'save': return await interaction.showModal(saveModal());
 		case 'addform': {
 			await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-			return await interaction.editReply(await playOrPick(interaction, ctx, interaction.fields.getTextInputValue('query').trim()));
+			const [platform] = interaction.fields.getStringSelectValues('platform') ?? [];
+			return await interaction.editReply(await playOrPick(interaction, ctx, interaction.fields.getTextInputValue('query').trim(), 'end', platform ?? null));
 		}
 		case 'pick': {
 			await interaction.deferUpdate();

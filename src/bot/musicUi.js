@@ -1,8 +1,9 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
-import { FILTERS, SPEEDS } from '../core/music/index.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, LabelBuilder, ModalBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
+import { FILTERS, SEARCH_PLATFORMS, SPEEDS } from '../core/music/index.js';
 
 const LOOP_LABEL = { off: 'Boucle : non', track: 'Boucle : titre', queue: 'Boucle : file' };
 const SOURCE_ICON = { youtube: '▶️', spotify: '🟢', soundcloud: '☁️' };
+const PLATFORM_NAME = SEARCH_PLATFORMS;
 
 export function clock(ms) {
 	if (!Number.isFinite(ms) || ms < 0) return '0:00';
@@ -102,9 +103,18 @@ export function musicPayload(view) {
 }
 
 // "Ajouter" and "Enregistrer en playlist" forms
-export function addModal() {
-	return new ModalBuilder().setCustomId('mu:addform').setTitle('Ajouter de la musique').addComponents(
-		new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('query').setLabel('Lien ou recherche').setPlaceholder('https://… ou « daft punk one more time »').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(300)),
+// Choices of the platform menus (/musique jouer, "Ajouter" form)
+export const platformChoices = () => Object.entries(SEARCH_PLATFORMS).map(([value, name]) => ({ name, value }));
+
+export function addModal(defaultPlatform = 'youtube') {
+	return new ModalBuilder().setCustomId('mu:addform').setTitle('Ajouter de la musique').addLabelComponents(
+		new LabelBuilder().setLabel('Lien ou recherche').setTextInputComponent(
+			new TextInputBuilder().setCustomId('query').setPlaceholder('https://… ou « daft punk one more time »').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(300),
+		),
+		new LabelBuilder().setLabel('Chercher sur').setDescription('Pour une recherche (un lien est joué tel quel)').setStringSelectMenuComponent(
+			new StringSelectMenuBuilder().setCustomId('platform').setRequired(false).setMinValues(0).setMaxValues(1)
+				.addOptions(platformChoices().map(c => ({ label: c.name, value: c.value, default: c.value === defaultPlatform }))),
+		),
 	);
 }
 
@@ -115,10 +125,11 @@ export function saveModal() {
 }
 
 // Search results to pick from (customId mu:pick:<when>)
-export function pickPayload(results, text, when = 'end') {
-	if (!results.length) return { content: `Rien trouvé pour « ${text} ».`, components: [] };
+export function pickPayload(results, text, when = 'end', platform = null) {
+	const where = PLATFORM_NAME[platform] ? ` sur ${PLATFORM_NAME[platform]}` : '';
+	if (!results.length) return { content: `Rien trouvé${where} pour « ${text} ».`, components: [] };
 	return {
-		content: `Résultats pour « ${text.slice(0, 100)} » : choisis le bon titre.`,
+		content: `Résultats${where} pour « ${text.slice(0, 100)} » : choisis le bon titre.`,
 		components: [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
 			.setCustomId(`mu:pick:${when}`)
 			.setPlaceholder('Choisir un titre')

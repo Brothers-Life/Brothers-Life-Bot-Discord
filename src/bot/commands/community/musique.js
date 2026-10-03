@@ -2,7 +2,7 @@ import { InteractionContextType, MessageFlags, SlashCommandBuilder } from 'disco
 import { AppError, ValidationError } from '../../../core/errors.js';
 import { FILTERS, SPEEDS } from '../../../core/music/index.js';
 import { musicContext, playOrPick } from '../../components/music.js';
-import { clock, queuePayload, musicPayload } from '../../musicUi.js';
+import { clock, platformChoices, queuePayload, musicPayload } from '../../musicUi.js';
 
 export const data = new SlashCommandBuilder()
 	.setName('musique')
@@ -14,7 +14,8 @@ export const data = new SlashCommandBuilder()
 			{ name: 'À la fin de la file', value: 'end' },
 			{ name: 'Juste après le titre en cours', value: 'next' },
 			{ name: 'Maintenant', value: 'now' },
-		)))
+		))
+		.addStringOption(o => o.setName('plateforme').setDescription('Où chercher (sinon celle par défaut ; aussi en préfixe : yt:, ytm:, sc:)').addChoices(...platformChoices())))
 	.addSubcommand(s => s.setName('pause').setDescription('Mettre en pause ou reprendre'))
 	.addSubcommand(s => s.setName('passer').setDescription('Passer au titre suivant')
 		.addIntegerOption(o => o.setName('nombre').setDescription('Combien de titres passer').setMinValue(1).setMaxValue(100)))
@@ -77,7 +78,8 @@ export async function autocomplete(interaction) {
 	if (!typed || URL_LIKE.test(typed) || typed.length < 3) return interaction.respond(typed ? [{ name: typed.slice(0, 100), value: typed.slice(0, 100) }] : []);
 	// Discord gives 3 s to answer: past that, the typed text is searched when the command is sent
 	const timeout = new Promise(resolve => setTimeout(() => resolve(null), 2500));
-	const results = await Promise.race([interaction.client.core.music.search(typed, 5).catch(() => null), timeout]);
+	const platform = interaction.options.getString('plateforme');
+	const results = await Promise.race([interaction.client.core.music.search(typed, 5, platform).catch(() => null), timeout]);
 	const choices = [{ name: `🔎 ${typed}`.slice(0, 100), value: typed.slice(0, 100) }];
 	for (const r of results ?? []) {
 		if (r.url && r.url.length <= 100) choices.push({ name: `${r.title}${r.durationMs ? ` · ${clock(r.durationMs)}` : ''}`.slice(0, 100), value: r.url });
@@ -121,7 +123,7 @@ export async function execute(interaction) {
 		switch (sub) {
 		case 'jouer':
 			if (!query) return await interaction.editReply(await openPlayer(interaction, ctx));
-			return await interaction.editReply(await playOrPick(interaction, ctx, query, interaction.options.getString('quand') ?? 'end'));
+			return await interaction.editReply(await playOrPick(interaction, ctx, query, interaction.options.getString('quand') ?? 'end', interaction.options.getString('plateforme')));
 		case 'pause': reply = (await music.pause(ctx, guildId)).paused ? '⏸️ En pause.' : '▶️ Reprise.'; break;
 		case 'passer':
 			await music.skip(ctx, guildId, interaction.options.getInteger('nombre') ?? 1);

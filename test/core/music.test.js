@@ -183,3 +183,23 @@ test('join without music: the bot comes with its player, the first search starts
 	await music.tick();
 	assert.equal(music.state(MAIN).connected, false, 'left after the idle delay with nothing to play');
 });
+
+test('search platform: prefix, then the chosen one, then the default one', async () => {
+	const { music, member, executor, owner } = await setup();
+	const calls = executor.musicResolver.calls;
+	await music.search('daft punk', 5);
+	await music.search('daft punk', 5, 'soundcloud');
+	await music.search('ytm: daft punk', 5, 'soundcloud');
+	assert.deepEqual(calls.splice(0).map(c => [c.search, c.platform]), [['daft punk', 'youtube'], ['daft punk', 'soundcloud'], ['daft punk', 'ytmusic']]);
+
+	music.setConfig(owner, { ...music.config(), searchPlatform: 'ytmusic' });
+	assert.equal(music.config().searchPlatform, 'ytmusic');
+	await music.play(member(ALICE), MAIN, 'Titre A');
+	await music.play(member(ALICE), MAIN, 'sc:Titre B');
+	await music.play(member(ALICE), MAIN, 'https://youtu.be/x', { platform: 'soundcloud' });
+	assert.deepEqual(calls.map(c => [c.resolve, c.platform]), [['Titre A', 'ytmusic'], ['Titre B', 'soundcloud'], ['https://youtu.be/x', 'soundcloud']]);
+
+	music.setConfig(owner, { ...music.config(), searchPlatform: 'deezer' });
+	assert.equal(music.config().searchPlatform, 'youtube');
+	await assert.rejects(music.search('sc: a'), ValidationError);
+});

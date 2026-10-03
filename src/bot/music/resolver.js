@@ -1,4 +1,5 @@
 // Links and searches -> tracks. YouTube (and anything yt-dlp reads: SoundCloud, Twitch, Vimeo...) directly;
+// searches on YouTube, YouTube Music or SoundCloud;
 // Spotify through its public embed page (title, artists), then the same song is looked up on YouTube to be played.
 
 const SPOTIFY = /open\.spotify\.com\/(?:intl-[a-z-]+\/)?(track|album|playlist|artist)\/([A-Za-z0-9]{10,40})/i;
@@ -52,7 +53,7 @@ export function createMusicResolver({ ytdlp, fetchImpl = fetch }) {
 	}
 
 	const service = {
-		async resolve(text) {
+		async resolve(text, platform = 'youtube') {
 			const query = text.trim();
 			const sp = SPOTIFY.exec(query);
 			if (sp) return spotify(sp[1], sp[2]);
@@ -66,17 +67,22 @@ export function createMusicResolver({ ytdlp, fetchImpl = fetch }) {
 				}
 				return { playlist: null, tracks: [fromInfo(info)] };
 			}
-			const [first] = await service.search(query, 1);
+			const [first] = await service.search(query, 1, platform);
 			return { playlist: null, tracks: first ? [first] : [] };
 		},
 
-		// YouTube search (autocomplete of /musique jouer, panel search box)
-		async search(text, limit = 5) {
-			const key = `${limit}:${text.toLowerCase()}`;
+		// Search on a platform (autocomplete of /musique jouer, panel search box, player button)
+		async search(text, limit = 5, platform = 'youtube') {
+			const key = `${platform}:${limit}:${text.toLowerCase()}`;
 			const cached = searches.get(key);
 			if (cached && Date.now() - cached.at < SEARCH_TTL) return cached.results;
-			const info = await ytdlp.json(['--flat-playlist', `ytsearch${limit}:${text}`], { timeout: 20_000 });
-			const results = (info.entries ?? []).filter(Boolean).map(e => fromInfo(e));
+			const target = {
+				soundcloud: [`scsearch${limit}:${text}`],
+				// Its "songs" tab: official audio rather than clips (flat results only give the title)
+				ytmusic: ['--playlist-end', String(limit), `https://music.youtube.com/search?q=${encodeURIComponent(text)}#songs`],
+			}[platform] ?? [`ytsearch${limit}:${text}`];
+			const info = await ytdlp.json(['--flat-playlist', ...target], { timeout: 20_000 });
+			const results = (info.entries ?? []).filter(Boolean).slice(0, limit).map(e => fromInfo(e));
 			searches.set(key, { at: Date.now(), results });
 			if (searches.size > 300) searches.delete(searches.keys().next().value);
 			return results;

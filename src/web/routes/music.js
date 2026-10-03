@@ -1,10 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ValidationError } from '../../core/errors.js';
-import { FILTERS, LOOPS, SPEEDS } from '../../core/music/index.js';
+import { FILTERS, LOOPS, SEARCH_PLATFORMS, SPEEDS } from '../../core/music/index.js';
 import { resolveNames, snowflake } from './helpers.js';
 
 const guildParam = { type: 'object', properties: { guildId: snowflake }, required: ['guildId'] };
+// Where a typed search goes (YouTube, YouTube Music, SoundCloud)
+const platformSchema = { type: 'string', enum: Object.keys(SEARCH_PLATFORMS) };
 
 export function registerMusicRoutes(app, { core }) {
 	const { music, network, executor, audit } = core;
@@ -28,6 +30,7 @@ export function registerMusicRoutes(app, { core }) {
 				state: await withNames(music.state(g.id)),
 			}))),
 			config: music.config(),
+			platforms: SEARCH_PLATFORMS,
 			filters: FILTERS,
 			speeds: SPEEDS,
 			cookies: fs.existsSync(cookiesFile),
@@ -38,18 +41,18 @@ export function registerMusicRoutes(app, { core }) {
 
 	app.get('/api/music/search', {
 		config: { permission: 'music.use' },
-		schema: { querystring: { type: 'object', required: ['q'], properties: { q: { type: 'string', minLength: 2, maxLength: 200 } } } },
-	}, async (request) => music.search(request.query.q, 8));
+		schema: { querystring: { type: 'object', required: ['q'], properties: { q: { type: 'string', minLength: 2, maxLength: 200 }, platform: platformSchema } } },
+	}, async (request) => music.search(request.query.q, 8, request.query.platform ?? null));
 
 	app.post('/api/music/:guildId/play', {
 		config: { permission: 'music.use' },
 		schema: {
 			params: guildParam,
-			body: { type: 'object', required: ['query'], properties: { query: { type: 'string', maxLength: 500 }, channelId: snowflake, when: { type: 'string', enum: ['end', 'next', 'now'] } } },
+			body: { type: 'object', required: ['query'], properties: { query: { type: 'string', maxLength: 500 }, channelId: snowflake, when: { type: 'string', enum: ['end', 'next', 'now'] }, platform: platformSchema } },
 		},
 	}, async (request) => {
-		const { query, channelId, when = 'end' } = request.body;
-		const result = await music.play(ctxOf(request), request.params.guildId, query, { channelId, next: when === 'next', now: when === 'now' });
+		const { query, channelId, when = 'end', platform = null } = request.body;
+		const result = await music.play(ctxOf(request), request.params.guildId, query, { channelId, next: when === 'next', now: when === 'now', platform });
 		return { added: result.tracks.length, playlist: result.playlist, truncated: result.truncated, first: result.tracks[0]?.title ?? null };
 	});
 
@@ -154,8 +157,8 @@ export function registerPlaylistRoutes(app, { core }) {
 
 	app.post('/api/music/playlists/:id/tracks', {
 		config: { permission: 'music.use' },
-		schema: { params: idParam, body: { type: 'object', required: ['query'], properties: { query: { type: 'string', maxLength: 500 } } } },
-	}, async (request) => music.addToPlaylist(ctxOf(request), request.params.id, request.body.query));
+		schema: { params: idParam, body: { type: 'object', required: ['query'], properties: { query: { type: 'string', maxLength: 500 }, platform: platformSchema } } },
+	}, async (request) => music.addToPlaylist(ctxOf(request), request.params.id, request.body.query, { platform: request.body.platform ?? null }));
 
 	app.delete('/api/music/playlists/:id/tracks/:index', {
 		config: { permission: 'music.use' },

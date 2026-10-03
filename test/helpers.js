@@ -453,14 +453,19 @@ export function createFakeExecutor() {
 			async listeners(guildId) { return this.listenerCount.get(guildId) ?? 1; },
 		},
 		musicResolver: {
-			async resolve(text) {
+			calls: [],
+			async resolve(text, platform) {
+				this.calls.push({ resolve: text, platform });
 				const list = text.startsWith('playlist:') ? text.slice(9).split(',') : [text];
 				return {
 					playlist: text.startsWith('playlist:') ? { title: 'Ma playlist' } : null,
 					tracks: list.map(title => ({ title, author: 'Artiste', url: `https://youtu.be/${title}`, durationMs: 180_000, thumbnail: null, source: 'youtube', live: title.includes('live') })),
 				};
 			},
-			async search(text) { return [{ title: text, url: `https://youtu.be/${text}`, durationMs: 180_000 }]; },
+			async search(text, limit, platform) {
+				this.calls.push({ search: text, platform });
+				return [{ title: text, url: `https://youtu.be/${text}`, durationMs: 180_000 }];
+			},
 			async stream(track) {
 				if (track.title.includes('broken')) throw new Error('Vidéo indisponible');
 				return { target: `https://audio.example/${track.title}`, track: {} };
