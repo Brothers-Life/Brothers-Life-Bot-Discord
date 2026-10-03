@@ -2,7 +2,7 @@
 
 Bot Discord multi-serveurs pour la communauté RP **Brothers Life** (serveur FiveM Qbox) : il gère plusieurs serveurs Discord comme un seul réseau et s'administre depuis un panel web React en français. Tout le texte visible (Discord, panel, commits) est en **français** ; le code et ses commentaires en anglais.
 
-État au 2026-10-03 : **v1.8.1 publiée**, tout est poussé, 324 tests verts.
+État au 2026-10-03 : **v1.8.2 publiée**, tout est poussé, 325 tests verts.
 
 ## Commandes
 
@@ -105,6 +105,7 @@ Réseau de serveurs, rangs et permissions synchronisés, staff sync, sanctions (
 - **v1.7.0** : molette dans les popovers des fenêtres, sélecteur de couleur libre + styles de bouton Discord, dupliquer partout, copie du système de tickets vers un autre serveur, `{fivem.*}` réservé à `fivemdata.view` (audit).
 - **v1.8.0** : API publique à clés (Bearer `brl_…`, permissions limitées, 240 req/min), page « API » du panel, OpenAPI + collection Bruno (`bruno/`).
 - **v1.8.1** : émojis validés (`src/core/emoji.js`) : un émoji invalide est ignoré au lieu de faire refuser la modale/le message par Discord.
+- **v1.8.2** : sélecteur d'émojis limité à Unicode ≤ 15.1 (`DISCORD_EMOJI_VERSION`, Discord refuse les plus récents) ; `showFormModal` réaffiche une modale sans émojis si Discord en refuse un.
 
 ## Pistes proposées, pas encore faites
 
