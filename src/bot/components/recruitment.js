@@ -1,6 +1,6 @@
 import { MessageFlags } from 'discord.js';
 import { AppError } from '../../core/errors.js';
-import { formModal, readModal } from '../forms.js';
+import { showFormModal, readModal } from '../forms.js';
 import { nextStepPayload } from '../ticketsUi.js';
 import { actorOf } from '../moderation.js';
 
@@ -15,7 +15,7 @@ function title(position, step) {
 export async function startApplication(interaction, positionId) {
 	const { recruitment } = interaction.client.core;
 	const { position, step } = await recruitment.startApplication(positionId, interaction.user.id, interaction.guildId);
-	return interaction.showModal(formModal(`rc:form:${positionId}:${step}`, title(position, step), position.config.form.steps[step]));
+	return showFormModal(interaction, `rc:form:${positionId}:${step}`, title(position, step), position.config.form.steps[step]);
 }
 
 export async function execute(interaction) {
@@ -34,7 +34,7 @@ export async function execute(interaction) {
 		case 'next': {
 			const position = recruitment.getPosition(id);
 			const step = Number(extra);
-			return await interaction.showModal(formModal(`rc:form:${id}:${step}`, title(position, step), position.config.form.steps[step]));
+			return await showFormModal(interaction, `rc:form:${id}:${step}`, title(position, step), position.config.form.steps[step]);
 		}
 		case 'form': {
 			const position = recruitment.getPosition(id);

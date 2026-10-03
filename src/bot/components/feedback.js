@@ -1,6 +1,6 @@
 import { MessageFlags } from 'discord.js';
 import { AppError } from '../../core/errors.js';
-import { formModal, readModal } from '../forms.js';
+import { showFormModal, readModal } from '../forms.js';
 import { nextStepPayload } from '../ticketsUi.js';
 
 // customId: fb:<action>:<id>[:<step>]
@@ -14,7 +14,7 @@ function title(box, step) {
 export async function startForm(interaction, boxId, anonymous = false) {
 	const { feedback } = interaction.client.core;
 	const { box, step } = await feedback.startSubmit(boxId, interaction.user.id, interaction.guildId, { anonymous });
-	return interaction.showModal(formModal(`fb:form:${boxId}:${step}`, title(box, step), box.config.form.steps[step]));
+	return showFormModal(interaction, `fb:form:${boxId}:${step}`, title(box, step), box.config.form.steps[step]);
 }
 
 export async function execute(interaction) {
@@ -35,7 +35,7 @@ export async function execute(interaction) {
 		case 'next': {
 			const box = feedback.getBox(id);
 			const step = Number(extra);
-			return await interaction.showModal(formModal(`fb:form:${id}:${step}`, title(box, step), box.config.form.steps[step]));
+			return await showFormModal(interaction, `fb:form:${id}:${step}`, title(box, step), box.config.form.steps[step]);
 		}
 		case 'form': {
 			const box = feedback.getBox(id);

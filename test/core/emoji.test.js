@@ -35,3 +35,22 @@ test('a form keeps valid option emojis and drops the others', () => {
 	] }] }] });
 	assert.deepEqual(form.steps[0].questions[0].options.map(o => o.emoji), ['🎫', '', '', '<:x:123456789012345678>']);
 });
+
+test('a modal refused for an emoji is shown again without emojis', async () => {
+	const { showFormModal } = await import('../../src/bot/forms.js');
+	const step = normalizeForm({ steps: [{ questions: [{ id: 'q', type: 'select', label: 'Choix', options: [{ label: 'A', emoji: '🎫' }, { label: 'B', emoji: '🫩' }] }] }] }).steps[0];
+	const shown = [];
+	const interaction = {
+		async showModal(modal) {
+			const json = JSON.stringify(modal.toJSON());
+			shown.push(json);
+			if (json.includes('emoji')) throw Object.assign(new Error('Invalid Form Body\ndata.components[0].component.options[1].emoji.name[COMPONENT_INVALID_EMOJI]: Invalid emoji'), { code: 50035 });
+		},
+	};
+	await showFormModal(interaction, 'ticket:form:1:0', 'Ticket', step);
+	assert.equal(shown.length, 2);
+	assert.ok(!shown[1].includes('emoji'));
+
+	const other = { showModal: async () => { throw Object.assign(new Error('Unknown interaction'), { code: 10062 }); } };
+	await assert.rejects(showFormModal(other, 'x', 'T', step), { code: 10062 });
+});

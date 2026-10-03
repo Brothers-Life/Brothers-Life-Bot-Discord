@@ -3,9 +3,10 @@ import {
 	TextInputBuilder, TextInputStyle, UserSelectMenuBuilder,
 } from 'discord.js';
 import { emojiOf } from './messages.js';
+import logger from '../utils/logger.js';
 
 // Modal of one step of a form (src/core/forms.js)
-export function formModal(customId, title, step) {
+export function formModal(customId, title, step, { emojis = true } = {}) {
 	const modal = new ModalBuilder().setCustomId(customId).setTitle(title.slice(0, 45));
 	modal.addLabelComponents(step.questions.map((q) => {
 		const label = new LabelBuilder().setLabel(q.label);
@@ -16,7 +17,7 @@ export function formModal(customId, title, step) {
 				.addOptions(q.options.map((o) => {
 					const option = { label: o.label, value: o.value };
 					if (o.description) option.description = o.description;
-					const emoji = emojiOf(o.emoji);
+					const emoji = emojis ? emojiOf(o.emoji) : undefined;
 					if (emoji) option.emoji = emoji;
 					return option;
 				}));
@@ -71,4 +72,20 @@ export function readModal(interaction, step) {
 		}
 	}
 	return values;
+}
+
+const isEmojiError = error => error?.code === 50035 && /INVALID_EMOJI/.test(error.message ?? '');
+
+// Shows the modal of a form step. Discord refuses the whole modal for one emoji it does not know
+// (a too recent unicode one, a deleted custom one): it is then shown again without the emojis.
+export async function showFormModal(interaction, customId, title, step) {
+	try {
+		return await interaction.showModal(formModal(customId, title, step));
+	}
+	catch (error) {
+		if (!isEmojiError(error)) throw error;
+		const emojis = step.questions.flatMap(q => (q.options ?? []).filter(o => o.emoji).map(o => `${o.label} → ${o.emoji}`));
+		logger.warn(`Form ${customId}: Discord refused an emoji, modal shown without emojis. Choices with an emoji: ${emojis.join(' · ')}`);
+		return interaction.showModal(formModal(customId, title, step, { emojis: false }));
+	}
 }

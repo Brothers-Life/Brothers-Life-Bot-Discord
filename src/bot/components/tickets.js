@@ -1,6 +1,6 @@
 import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { AppError } from '../../core/errors.js';
-import { formModal, readModal } from '../forms.js';
+import { showFormModal, readModal } from '../forms.js';
 import { addMemberMenu, closeModal, nextStepPayload, ratingCommentModal } from '../ticketsUi.js';
 
 // customId: ticket:<action>:<id>[:<extra>]
@@ -26,7 +26,7 @@ async function openTicket(interaction, categoryId, answers = []) {
 async function start(interaction, categoryId) {
 	const { tickets } = interaction.client.core;
 	const { category, step } = await tickets.startOpening({ guildId: interaction.guildId, userId: interaction.user.id, categoryId });
-	if (step >= 0) return interaction.showModal(formModal(`ticket:form:${categoryId}:${step}`, stepTitle(category, step), category.config.form.steps[step]));
+	if (step >= 0) return showFormModal(interaction, `ticket:form:${categoryId}:${step}`, stepTitle(category, step), category.config.form.steps[step]);
 	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 	return interaction.editReply(await openTicket(interaction, categoryId));
 }
@@ -49,7 +49,7 @@ export async function execute(interaction) {
 		case 'next': {
 			const step = Number(extra);
 			const category = tickets.getCategory(interaction.guildId, id);
-			return await interaction.showModal(formModal(`ticket:form:${id}:${step}`, stepTitle(category, step), category.config.form.steps[step]));
+			return await showFormModal(interaction, `ticket:form:${id}:${step}`, stepTitle(category, step), category.config.form.steps[step]);
 		}
 		case 'form': {
 			const step = Number(extra);

@@ -1,7 +1,10 @@
 // Unicode emoji catalogue (French labels + GitHub-style shortcodes), loaded on first use only
 export type UnicodeEmoji = { unicode: string; label: string; group: number; order: number; name: string; search: string; shortcode: string | null; skins?: string[] }
 
-type CompactEmoji = { unicode: string; label: string; group?: number; order?: number; tags?: string[]; hexcode: string; skins?: { unicode: string }[] }
+type FullEmoji = { emoji: string; label: string; group?: number; order?: number; tags?: string[]; hexcode: string; version: number; skins?: { emoji: string; version: number }[] }
+
+// Newest Emoji version Discord displays and accepts: newer emojis make it refuse the whole message
+const DISCORD_EMOJI_VERSION = 15.1
 
 export const normalize = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/œ/g, 'oe').replace(/æ/g, 'ae')
 // Words separated by single spaces, with a leading space so ' word' finds word starts
@@ -11,25 +14,25 @@ let cache: Promise<UnicodeEmoji[]> | null = null
 
 export function loadEmojis(): Promise<UnicodeEmoji[]> {
   cache ??= Promise.all([
-    import('emojibase-data/fr/compact.json'),
+    import('emojibase-data/fr/data.json'),
     import('emojibase-data/en/shortcodes/github.json'),
   ]).then(([data, codes]) => {
     const shortcodes = codes.default as Record<string, string | string[]>
-    return (data.default as CompactEmoji[])
+    return (data.default as FullEmoji[])
       // Group 2 = skin tones and hair components, not emojis on their own
-      .filter((e) => e.group !== undefined && e.group !== 2)
+      .filter((e) => e.group !== undefined && e.group !== 2 && e.version <= DISCORD_EMOJI_VERSION)
       .map((e) => {
         const raw = shortcodes[e.hexcode]
         const all = raw ? (Array.isArray(raw) ? raw : [raw]) : []
         return {
-          unicode: e.unicode,
+          unicode: e.emoji,
           label: e.label,
           group: e.group!,
           order: e.order ?? 0,
           shortcode: all[0] ?? null,
           name: words(e.label),
           search: words([e.label, ...(e.tags ?? []), ...all].join(' ')),
-          skins: e.skins?.map((s) => s.unicode),
+          skins: e.skins?.filter((s) => s.version <= DISCORD_EMOJI_VERSION).map((s) => s.emoji),
         }
       })
       .sort((a, b) => a.order - b.order)
