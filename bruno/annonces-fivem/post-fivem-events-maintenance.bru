@@ -1,0 +1,28 @@
+meta {
+  name: POST /fivem-events/maintenance
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/fivem-events/maintenance
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "active": false,
+    "reason": null
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/fivem-events/maintenance`
+
+  Permission requise : `fivemevents.maintenance`
+
+  Corps JSON :
+  - `active` (boolean) — obligatoire
+  - `reason` (null | string)
+}

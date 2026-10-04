@@ -102,7 +102,7 @@ export const LOG_PACKS = {
 		channels: [
 			{ name: 'logs-messages', categories: ['messages'] },
 			{ name: 'logs-membres', categories: ['members', 'member_roles', 'invites'] },
-			{ name: 'logs-moderation', categories: ['sanctions', 'discord_moderation', 'automod', 'antiraid', 'moderation', 'temproles'] },
+			{ name: 'logs-moderation', categories: ['sanctions', 'discord_moderation', 'automod', 'antiraid', 'moderation', 'temproles', 'fivemevents'] },
 			{ name: 'logs-vocal', categories: ['voice'] },
 			{ name: 'logs-serveur', categories: ['roles', 'channels', 'threads', 'server', 'integrations', 'permissions'] },
 			{ name: 'logs-staff', categories: ['ranks', 'staff_sync', 'tickets', 'recruitment', 'absences', 'dm', 'staffactivity'] },
@@ -114,7 +114,7 @@ export const LOG_PACKS = {
 		label: 'Compact',
 		hint: 'Modération, serveur, bot : 3 salons',
 		channels: [
-			{ name: 'logs-moderation', categories: ['messages', 'sanctions', 'discord_moderation', 'automod', 'antiraid', 'moderation', 'temproles'] },
+			{ name: 'logs-moderation', categories: ['messages', 'sanctions', 'discord_moderation', 'automod', 'antiraid', 'moderation', 'temproles', 'fivemevents'] },
 			{ name: 'logs-serveur', categories: ['members', 'member_roles', 'invites', 'voice', 'roles', 'channels', 'threads', 'server', 'integrations', 'permissions'] },
 			{ name: 'logs-bot', categories: [], rest: true },
 		],

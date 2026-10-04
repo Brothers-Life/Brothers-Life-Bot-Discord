@@ -1,0 +1,36 @@
+meta {
+  name: PUT /fivem-events/config
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{baseUrl}}/api/fivem-events/config
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "events": {},
+    "maintenance": {
+      "targets": [
+        {}
+      ],
+      "start": {},
+      "end": {},
+      "statusMessages": false,
+      "mutePublic": false
+    }
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/fivem-events/config`
+
+  Permission requise : `fivemevents.manage`
+
+  Corps JSON :
+  - `events` (object) — obligatoire
+  - `maintenance` (object) — obligatoire
+}

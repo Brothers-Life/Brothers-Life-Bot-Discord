@@ -54,6 +54,7 @@ import {
   Archive,
   Presentation,
   Plug,
+  Wrench,
 } from 'lucide-react'
 
 export type NavEntry = {
@@ -76,6 +77,7 @@ export const navSections: NavSection[] = [
     items: [
       { title: 'Serveurs', url: '/network', icon: Network, permission: 'network.view' },
       { title: 'FiveM', url: '/fivem', icon: Gamepad2, permission: 'fivem.view', keywords: 'jeu serveur statut' },
+      { title: 'Annonces FiveM', url: '/fivem-events', icon: Wrench, permission: 'fivemevents.view', keywords: 'txadmin maintenance redémarrage restart reboot annonce pont bridge' },
       { title: 'Données FiveM', url: '/fivem-players', icon: Contact, permission: 'fivemdata.view', keywords: 'joueur personnage citizen véhicule plaque inventaire argent bdd base métier gang logs staff prison mdt économie activité' },
       { title: 'Modèles de serveur', url: '/templates', icon: LayoutTemplate, permission: 'templates.view' },
       { title: 'Sauvegardes', url: '/backups', icon: DatabaseBackup, permission: 'backups.view', keywords: 'backup restaurer' },

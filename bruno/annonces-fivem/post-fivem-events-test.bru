@@ -1,0 +1,26 @@
+meta {
+  name: POST /fivem-events/test
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/fivem-events/test
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "type": "serverStarted"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/fivem-events/test`
+
+  Permission requise : `fivemevents.manage`
+
+  Corps JSON :
+  - `type` ("serverStarted" | "scheduledRestart" | "scheduledRestartSkipped" | "serverShuttingDown" | "announcement" | "playerKicked" | "playerBanned" | "playerWarned" | "playerDirectMessage" | "playerHealed" | "actionRevoked") — obligatoire
+}
