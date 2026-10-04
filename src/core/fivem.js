@@ -26,6 +26,8 @@ export function createFivem({ db, network, audit, executor, settings, logs, fetc
 	logs.registerCategory('fivem', 'Serveurs FiveM (réglages)');
 	const cache = new Map();
 	let rotation = 0;
+	// Maintenance of the FiveM server (set by fivemEvents): shown in the status messages
+	let maintenance = null;
 
 	const q = {
 		all: db.prepare('SELECT * FROM fivem_servers ORDER BY name COLLATE NOCASE'),
@@ -48,6 +50,7 @@ export function createFivem({ db, network, audit, executor, settings, logs, fetc
 			id: row.id, name: row.name, address: row.address, joinCode: row.join_code,
 			config: { showPlayers: config.showPlayers !== false, color: /^#[0-9a-f]{6}$/i.test(config.color ?? '') ? config.color : '#d6a249' },
 			status: cache.get(row.id) ?? null,
+			maintenance,
 			messages: q.messagesOf.all(row.id).map(m => ({ id: m.id, guildId: m.guild_id, channelId: m.channel_id, messageId: m.message_id })),
 		};
 	}
@@ -200,6 +203,19 @@ export function createFivem({ db, network, audit, executor, settings, logs, fetc
 			const text = fillVars(status?.online ? p.text : p.offlineText, { players: status?.players ?? 0, max: status?.max ?? 0, name: server.name });
 			await executor.setBotStatus(text).catch(error => logger.warn('Bot status failed:', error.message));
 			return text;
+		},
+
+		setMaintenance(state) {
+			maintenance = state?.active ? { reason: state.reason ?? null, since: state.since ?? null } : null;
+		},
+
+		// Status messages redrawn from the last poll (maintenance switched on or off)
+		async republish() {
+			const servers = q.all.all().map(toServer);
+			for (const row of q.messages.all()) {
+				const server = servers.find(s => s.id === row.server_id);
+				if (server) await publishOne(server, row);
+			}
 		},
 
 		// Counter channel variables: {fivem} players and {fivemMax} slots, all servers together

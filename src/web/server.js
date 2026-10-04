@@ -30,6 +30,7 @@ import { registerFeedbackRoutes } from './routes/feedback.js';
 import { registerStaffRoutes } from './routes/staff.js';
 import { registerStreamRoutes } from './routes/streams.js';
 import { registerFivemRoutes } from './routes/fivem.js';
+import { registerFivemEventRoutes } from './routes/fivemEvents.js';
 import { registerDmRoutes } from './routes/dms.js';
 import { registerTemplateRoutes } from './routes/templates.js';
 import { registerCustomCommandRoutes } from './routes/customCommands.js';
@@ -107,6 +108,7 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	registerStaffRoutes(app, { core });
 	registerStreamRoutes(app, { core });
 	registerFivemRoutes(app, { core });
+	registerFivemEventRoutes(app, { core });
 	registerDmRoutes(app, { core });
 	registerTemplateRoutes(app, { core });
 	registerCustomCommandRoutes(app, { core });

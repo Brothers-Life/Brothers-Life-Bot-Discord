@@ -37,7 +37,7 @@ export const COMMANDS = [
 	{ name: 'proposer', category: 'Communauté', description: 'Suggestion, report de bug ou bug interne du staff', permissions: [] },
 	{ name: 'candidature', category: 'Staff', description: 'Postuler dans le staff', permissions: [] },
 	{ name: 'absence', category: 'Staff', description: 'Déclarer une absence, signaler son retour, voir le staff absent', permissions: ['absences.declare'] },
-	{ name: 'fivem', category: 'Communauté', description: 'Statut d’un serveur FiveM et joueurs connectés', permissions: [] },
+	{ name: 'fivem', category: 'Communauté', description: 'Statut d’un serveur FiveM et joueurs connectés ; lancer ou terminer la maintenance', permissions: ['fivemevents.maintenance'] },
 	{ name: 'dm', category: 'Messages privés', description: 'Bloquer ou débloquer un membre des MP du bot', permissions: ['dm.manage'] },
 	{ name: 'evenements', category: 'Communauté', description: 'Les prochains événements RP', permissions: [] },
 	{ name: 'ping', category: 'Divers', description: 'Latence du bot', permissions: [] },

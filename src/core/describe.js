@@ -218,6 +218,9 @@ const TITLES = {
 	'fivem.message': 'Message de statut FiveM ajouté',
 	'fivem.message_delete': 'Message de statut FiveM retiré',
 	'fivem.presence': 'Statut du bot modifié',
+	'fivemevents.config': 'Annonces FiveM (txAdmin) modifiées',
+	'fivemevents.maintenance_on': 'Maintenance FiveM lancée',
+	'fivemevents.maintenance_off': 'Maintenance FiveM terminée',
 	'stream.create': 'Notification de stream ajoutée',
 	'stream.update': 'Notification de stream modifiée',
 	'stream.delete': 'Notification de stream supprimée',
@@ -248,6 +251,8 @@ const COLORS = {
 	'sanctions.unwarn': 'success',
 	'automod.trigger': 'danger',
 	'permissions.drift': 'warning',
+	'fivemevents.maintenance_on': 'warning',
+	'fivemevents.maintenance_off': 'success',
 };
 
 const PERSON_ACTIONS = /^(sanctions|moderation|members|fivemroles|absences|recruitment|dms|verification|appeals|temp_roles|restrictions)\.|^ranks\.(assign|unassign)/;
