@@ -13,6 +13,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedAbsencesRouteImport } from './routes/_authenticated/absences'
+import { Route as AuthenticatedAntinukeRouteImport } from './routes/_authenticated/antinuke'
 import { Route as AuthenticatedAntiraidRouteImport } from './routes/_authenticated/antiraid'
 import { Route as AuthenticatedAppealsRouteImport } from './routes/_authenticated/appeals'
 import { Route as AuthenticatedArchivesRouteImport } from './routes/_authenticated/archives'
@@ -78,6 +79,11 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
 const AuthenticatedAbsencesRoute = AuthenticatedAbsencesRouteImport.update({
   id: '/absences',
   path: '/absences',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAntinukeRoute = AuthenticatedAntinukeRouteImport.update({
+  id: '/antinuke',
+  path: '/antinuke',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedAntiraidRoute = AuthenticatedAntiraidRouteImport.update({
@@ -330,6 +336,7 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/login': typeof LoginRoute
   '/absences': typeof AuthenticatedAbsencesRoute
+  '/antinuke': typeof AuthenticatedAntinukeRoute
   '/antiraid': typeof AuthenticatedAntiraidRoute
   '/appeals': typeof AuthenticatedAppealsRoute
   '/archives': typeof AuthenticatedArchivesRoute
@@ -381,6 +388,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/absences': typeof AuthenticatedAbsencesRoute
+  '/antinuke': typeof AuthenticatedAntinukeRoute
   '/antiraid': typeof AuthenticatedAntiraidRoute
   '/appeals': typeof AuthenticatedAppealsRoute
   '/archives': typeof AuthenticatedArchivesRoute
@@ -435,6 +443,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/login': typeof LoginRoute
   '/_authenticated/absences': typeof AuthenticatedAbsencesRoute
+  '/_authenticated/antinuke': typeof AuthenticatedAntinukeRoute
   '/_authenticated/antiraid': typeof AuthenticatedAntiraidRoute
   '/_authenticated/appeals': typeof AuthenticatedAppealsRoute
   '/_authenticated/archives': typeof AuthenticatedArchivesRoute
@@ -490,6 +499,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/absences'
+    | '/antinuke'
     | '/antiraid'
     | '/appeals'
     | '/archives'
@@ -541,6 +551,7 @@ export interface FileRouteTypes {
   to:
     | '/login'
     | '/absences'
+    | '/antinuke'
     | '/antiraid'
     | '/appeals'
     | '/archives'
@@ -594,6 +605,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/login'
     | '/_authenticated/absences'
+    | '/_authenticated/antinuke'
     | '/_authenticated/antiraid'
     | '/_authenticated/appeals'
     | '/_authenticated/archives'
@@ -677,6 +689,13 @@ declare module '@tanstack/react-router' {
       path: '/absences'
       fullPath: '/absences'
       preLoaderRoute: typeof AuthenticatedAbsencesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/antinuke': {
+      id: '/_authenticated/antinuke'
+      path: '/antinuke'
+      fullPath: '/antinuke'
+      preLoaderRoute: typeof AuthenticatedAntinukeRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/antiraid': {
@@ -1013,6 +1032,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAbsencesRoute: typeof AuthenticatedAbsencesRoute
+  AuthenticatedAntinukeRoute: typeof AuthenticatedAntinukeRoute
   AuthenticatedAntiraidRoute: typeof AuthenticatedAntiraidRoute
   AuthenticatedAppealsRoute: typeof AuthenticatedAppealsRoute
   AuthenticatedArchivesRoute: typeof AuthenticatedArchivesRoute
@@ -1065,6 +1085,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAbsencesRoute: AuthenticatedAbsencesRoute,
+  AuthenticatedAntinukeRoute: AuthenticatedAntinukeRoute,
   AuthenticatedAntiraidRoute: AuthenticatedAntiraidRoute,
   AuthenticatedAppealsRoute: AuthenticatedAppealsRoute,
   AuthenticatedArchivesRoute: AuthenticatedArchivesRoute,
