@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, ExternalLink, FileText, Lock, NotebookPen, RotateCcw, Send, UserPlus } from 'lucide-react'
+import { ArrowLeft, ExternalLink, FileText, HelpCircle, Lock, MessageSquareText, NotebookPen, RotateCcw, Send, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import type { TicketDetail, TicketMessage, TicketPriority } from '@/lib/types'
-import { ago, dateTime } from '@/lib/format'
+import type { TicketDetail, TicketMessage, TicketPriority, TicketReply } from '@/lib/types'
+import { ago, dateTime, duration } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useMe } from '@/hooks/use-me'
 import { Page, Section, Pill, UserAvatar } from '@/components/app/ui'
@@ -16,6 +16,7 @@ import { useTicketLive } from '@/features/tickets/use-ticket-live'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
@@ -46,6 +47,10 @@ function TicketPage() {
   const [reason, setReason] = useState('')
   const [adding, setAdding] = useState(false)
   const [transcript, setTranscript] = useState(false)
+  // Saved reply picked for the text: the server fills its variables when sending
+  const [replyId, setReplyId] = useState<number | null>(null)
+  const [asking, setAsking] = useState(false)
+  const [askReason, setAskReason] = useState('')
   const bottom = useRef<HTMLDivElement>(null)
 
   const live = useTicketLive((event) => {
@@ -63,18 +68,21 @@ function TicketPage() {
   }, [count])
 
   const send = useMutation({
-    mutationFn: () => api<TicketMessage>(`/tickets/${id}/reply`, { method: 'POST', body: { content: reply, internal } }),
+    mutationFn: () => api<TicketMessage>(`/tickets/${id}/reply`, { method: 'POST', body: { content: reply, internal, ...(replyId ? { replyId } : {}) } }),
     onSuccess: (message) => {
       setReply('')
+      setReplyId(null)
       qc.setQueryData<TicketDetail>(key, (old) => (old ? { ...old, messages: upsert(old.messages, message) } : old))
     },
   })
   const action = useMutation({
     mutationFn: ({ path, body }: { path: string; body?: unknown }) => api(`/tickets/${id}/${path}`, { method: 'POST', body }),
     onSuccess: (_, { path }) => {
-      const labels: Record<string, string> = { claim: 'Ticket pris en charge', status: 'Statut changé', priority: 'Priorité changée', reopen: 'Ticket rouvert', close: 'Ticket fermé', members: 'Membre ajouté' }
+      const labels: Record<string, string> = { claim: 'Ticket pris en charge', status: 'Statut changé', priority: 'Priorité changée', reopen: 'Ticket rouvert', close: 'Ticket fermé', members: 'Membre ajouté', 'close-request': 'Demande envoyée au membre' }
       toast.success(labels[path] ?? 'Fait')
       setClosing(false)
+      setAsking(false)
+      setAskReason('')
       setAdding(false)
       qc.invalidateQueries({ queryKey: key })
       qc.invalidateQueries({ queryKey: ['tickets'] })
@@ -113,7 +121,7 @@ function TicketPage() {
             >
               <Textarea
                 value={reply}
-                onChange={(e) => setReply(e.target.value)}
+                onChange={(e) => { setReply(e.target.value); if (!e.target.value.trim()) setReplyId(null) }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && reply.trim()) send.mutate()
                 }}
@@ -127,6 +135,8 @@ function TicketPage() {
                   <Switch checked={internal} onCheckedChange={setInternal} />
                   <NotebookPen className='size-4' /> Note interne
                 </label>
+                <ReplyPicker ticketId={ticket.id} onPick={(r) => { setReply(r.content); setReplyId(r.id) }} />
+                {replyId && <Pill tone='accent'>Variables remplies à l’envoi</Pill>}
                 <span className='text-xs text-muted-foreground'>{reply.length}/2000</span>
                 <Button loading={send.isPending} type='submit' className='ms-auto' variant={internal ? 'outline' : 'default'} disabled={!reply.trim() || send.isPending}>
                   <Send /> {internal ? 'Ajouter la note' : 'Envoyer'}
@@ -155,6 +165,21 @@ function TicketPage() {
                 <dt className='text-muted-foreground'>Ouvert</dt><dd>{dateTime(ticket.createdAt)}</dd>
                 <dt className='text-muted-foreground'>Pris par</dt><dd>{ticket.claimer?.name ?? '—'}</dd>
                 {ticket.lastActivityAt && open && <><dt className='text-muted-foreground'>Activité</dt><dd>{ago(ticket.lastActivityAt)}</dd></>}
+                <dt className='text-muted-foreground'>1re réponse</dt>
+                <dd className='flex flex-wrap items-center gap-1.5'>
+                  {ticket.firstResponseAt ? `après ${duration(ticket.firstResponseAt - ticket.createdAt)}` : 'pas encore'}
+                  {(ticket.slaBreachedAt ?? 0) > 0 && <Pill tone='danger'>Délai dépassé</Pill>}
+                  {!ticket.slaBreachedAt && ticket.slaMinutes ? <span className='text-muted-foreground'>(objectif {duration(ticket.slaMinutes * 60_000)})</span> : null}
+                </dd>
+                {ticket.closeRequest && open && (
+                  <>
+                    <dt className='text-muted-foreground'>Fermeture</dt>
+                    <dd>
+                      demandée {ago(ticket.closeRequest.at)}
+                      {ticket.closeRequestHours ? ` · fermé seul le ${dateTime(ticket.closeRequest.at + ticket.closeRequestHours * 3_600_000)} sans réponse` : ''}
+                    </dd>
+                  </>
+                )}
                 {ticket.closedAt && <><dt className='text-muted-foreground'>Fermé</dt><dd>{dateTime(ticket.closedAt)}{ticket.closeReason ? ` · ${ticket.closeReason}` : ''}</dd></>}
                 {ticket.rating && <><dt className='text-muted-foreground'>Note</dt><dd>{'★'.repeat(ticket.rating)}{'☆'.repeat(5 - ticket.rating)}{ticket.ratingComment ? ` · ${ticket.ratingComment}` : ''}</dd></>}
               </dl>
@@ -180,6 +205,7 @@ function TicketPage() {
                   <div className='flex flex-wrap gap-2'>
                     {!ticket.claimedBy && <Button size='sm' onClick={() => action.mutate({ path: 'claim' })}>Prendre en charge</Button>}
                     <Button size='sm' variant='outline' onClick={() => setAdding(true)}><UserPlus /> Ajouter</Button>
+                    <Button size='sm' variant='outline' onClick={() => setAsking(true)}><HelpCircle /> Demander la fermeture</Button>
                     <Button size='sm' variant='danger-outline' onClick={() => setClosing(true)}><Lock /> Fermer</Button>
                   </div>
                 </div>
@@ -232,6 +258,17 @@ function TicketPage() {
       >
         <Textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder='Raison' maxLength={200} rows={2} />
       </ConfirmDialog>
+      <ConfirmDialog
+        open={asking}
+        onOpenChange={setAsking}
+        title='Demander au membre si le ticket peut être fermé ?'
+        desc={`Un message avec « Fermer le ticket » et « J’ai encore besoin d’aide » part dans le ticket.${ticket.closeRequestHours ? ` Sans réponse, il est fermé au bout de ${ticket.closeRequestHours} h.` : ''}`}
+        confirmText='Envoyer la demande'
+        isLoading={action.isPending}
+        handleConfirm={() => action.mutate({ path: 'close-request', body: { reason: askReason } })}
+      >
+        <Textarea value={askReason} onChange={(e) => setAskReason(e.target.value)} placeholder='Raison affichée au membre (facultatif)' maxLength={200} rows={2} />
+      </ConfirmDialog>
       <Dialog open={adding} onOpenChange={setAdding}>
         <DialogContent className='sm:max-w-md'>
           <DialogHeader><DialogTitle>Ajouter quelqu’un au ticket</DialogTitle></DialogHeader>
@@ -247,6 +284,39 @@ function TicketPage() {
         </Dialog>
       )}
     </Page>
+  )
+}
+
+// Saved replies of this ticket's type: a click puts the text in the reply box, still editable
+function ReplyPicker({ ticketId, onPick }: { ticketId: number; onPick: (reply: TicketReply) => void }) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const replies = useQuery({ queryKey: ['ticket-replies', ticketId], queryFn: () => api<TicketReply[]>(`/tickets/${ticketId}/replies`), enabled: open })
+  const q = query.trim().toLowerCase()
+  const shown = (replies.data ?? []).filter((r) => !q || `${r.name} ${r.content}`.toLowerCase().includes(q))
+  return (
+    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setQuery('') }}>
+      <PopoverTrigger asChild>
+        <Button type='button' size='sm' variant='outline'><MessageSquareText /> Réponses</Button>
+      </PopoverTrigger>
+      <PopoverContent align='start' className='w-[min(26rem,calc(100vw-1rem))] p-0'>
+        <div className='border-b p-2'>
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder='Chercher une réponse' aria-label='Chercher une réponse enregistrée'
+            className='h-8 w-full rounded-md bg-muted px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50' />
+        </div>
+        <div className='max-h-80 overflow-y-auto p-1'>
+          {replies.isLoading && <p className='p-3 text-center text-sm text-muted-foreground'>Chargement…</p>}
+          {shown.map((r) => (
+            <button key={r.id} type='button' onClick={() => { onPick(r); setOpen(false) }}
+              className='grid w-full gap-0.5 rounded px-2 py-1.5 text-start hover:bg-accent focus-visible:bg-accent focus-visible:outline-none'>
+              <span className='text-sm font-medium'>{r.name}</span>
+              <span className='line-clamp-2 text-xs break-words text-muted-foreground'>{r.content}</span>
+            </button>
+          ))}
+          {!replies.isLoading && !shown.length && <p className='p-3 text-center text-sm text-muted-foreground'>Aucune réponse enregistrée. Elles se créent dans Tickets → Configuration.</p>}
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }
 

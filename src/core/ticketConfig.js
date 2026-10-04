@@ -100,6 +100,10 @@ export function normalizeCategoryConfig(input = {}) {
 			reminderHours: int(inactivity.reminderHours, 0, 720, 0),
 			closeHours,
 		},
+		// Close request of the staff: closed alone after this many hours without an answer (0 = never)
+		closeRequest: { autoCloseHours: int(input.closeRequest?.autoCloseHours, 0, 720, 24) },
+		// Alert in the "tickets" logs when nobody of the staff answered within this delay (0 = no SLA)
+		sla: { firstResponseMinutes: int(input.sla?.firstResponseMinutes, 0, 10080, 0) },
 		rating: { enabled: bool(input.rating?.enabled, false) },
 		transcriptDm: bool(input.transcriptDm, true),
 		statusParents,

@@ -22,10 +22,20 @@ export const data = new SlashCommandBuilder()
 	.addSubcommand(s => s.setName('prendre').setDescription('Prendre le ticket en charge'))
 	.addSubcommand(s => s.setName('fermer').setDescription('Fermer le ticket')
 		.addStringOption(o => o.setName('raison').setDescription('Raison').setMaxLength(200)))
-	.addSubcommand(s => s.setName('rouvrir').setDescription('Rouvrir un ticket archivé'));
+	.addSubcommand(s => s.setName('rouvrir').setDescription('Rouvrir un ticket archivé'))
+	.addSubcommand(s => s.setName('demande-fermeture').setDescription('Demander au membre si son ticket peut être fermé')
+		.addStringOption(o => o.setName('raison').setDescription('Raison affichée au membre').setMaxLength(200)))
+	.addSubcommand(s => s.setName('reponse').setDescription('Envoyer une réponse enregistrée dans le ticket')
+		.addStringOption(o => o.setName('nom').setDescription('Réponse enregistrée').setRequired(true).setAutocomplete(true)));
 
 export async function autocomplete(interaction) {
-	const typed = interaction.options.getFocused().toLowerCase();
+	const focused = interaction.options.getFocused(true);
+	const typed = String(focused.value ?? '').toLowerCase();
+	if (focused.name === 'nom') {
+		const ticket = interaction.client.core.tickets.findByChannel(interaction.channelId);
+		const replies = ticket ? interaction.client.core.tickets.ticketReplies(ticket.id) : [];
+		return interaction.respond(replies.filter(r => r.name.toLowerCase().includes(typed)).slice(0, 25).map(r => ({ name: r.name.slice(0, 100), value: String(r.id) })));
+	}
 	const statuses = interaction.client.core.tickets.statuses(interaction.guildId).filter(s => s.key !== 'closed');
 	await interaction.respond(statuses.filter(s => s.label.toLowerCase().includes(typed)).slice(0, 25).map(s => ({ name: `${s.emoji ?? ''} ${s.label}`.trim(), value: s.key })));
 }
@@ -69,6 +79,18 @@ export async function execute(interaction) {
 			await interaction.deferReply();
 			await tickets.close(me, ticket.id, interaction.options.getString('raison') ?? '');
 			return await interaction.editReply('Ticket fermé.');
+		}
+		case 'demande-fermeture': {
+			await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+			await tickets.requestClose(me, ticket.id, interaction.options.getString('raison') ?? '');
+			return await interaction.editReply('Demande envoyée au membre.');
+		}
+		case 'reponse': {
+			await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+			const replyId = Number(interaction.options.getString('nom'));
+			if (!Number.isInteger(replyId)) throw new ValidationError('Choisis une réponse dans la liste.');
+			await tickets.sendSavedReply(me, ticket.id, replyId);
+			return await interaction.editReply('Réponse envoyée.');
 		}
 		case 'rouvrir': {
 			if (ticket.status !== 'closed') throw new ValidationError('Ce ticket est déjà ouvert.');

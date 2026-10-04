@@ -272,6 +272,10 @@ export type Ticket = {
   closeReason: string | null
   rating: number | null
   ratingComment: string | null
+  firstResponseAt?: number | null
+  firstResponderId?: string | null
+  slaBreachedAt?: number | null
+  closeRequest?: { at: number; by: string; reason: string | null } | null
   hasTranscript?: boolean
   htmlTranscript?: boolean
   transcript?: string | null
@@ -300,6 +304,8 @@ export type TicketDetail = Ticket & {
   messages: TicketMessage[]
   statuses: TicketStatus[]
   priorities: { key: TicketPriority; label: string }[]
+  slaMinutes?: number
+  closeRequestHours?: number
 }
 
 export type FormFieldType = 'short' | 'paragraph' | 'select' | 'user' | 'role' | 'channel' | 'file'
@@ -346,6 +352,8 @@ export type TicketCategoryConfig = {
   rating: { enabled: boolean }
   transcriptDm: boolean
   statusParents: Record<string, string>
+  closeRequest?: { autoCloseHours: number }
+  sla?: { firstResponseMinutes: number }
 }
 
 export type TicketCategory = {
@@ -388,6 +396,20 @@ export type TicketConfig = {
   roles: Role[]
   ranks: RankSummary[]
   variables: { title: string; hint?: string; items: { key: string; label: string }[] }[]
+  replies?: TicketReply[]
+  replyVariables?: { title: string; hint?: string; items: { key: string; label: string }[] }[]
+}
+
+export type TicketReply = {
+  id: number
+  guildId: string
+  categoryId: number | null
+  name: string
+  content: string
+  uses: number
+  createdBy: string | null
+  createdAt: number
+  updatedAt: number
 }
 
 export type DiscordPermission = { key: string; label: string; group: string; ownerOnly: boolean }

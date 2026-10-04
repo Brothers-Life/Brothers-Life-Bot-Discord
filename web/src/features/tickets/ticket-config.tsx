@@ -27,6 +27,7 @@ import { VariablePicker, type VariableGroup } from '@/components/app/variable-pi
 import { insertAtCursor, copyOf } from '@/lib/utils'
 import { ButtonStylePicker, ColorPicker } from '@/components/app/color-picker'
 import { DuplicateButton } from '@/components/app/duplicate-button'
+import { SavedReplies } from './saved-replies'
 
 // Variables of the ticket texts: the shared ones (member, server, FiveM), the ticket's, the form answers of this type
 function variableGroups(config: TicketConfig, cfg: TicketCategoryConfig): VariableGroup[] {
@@ -206,6 +207,8 @@ export function TicketConfigPanel({ guildId }: { guildId: string }) {
       </Section>
 
       <StatusesEditor key={JSON.stringify(data.statuses)} guildId={guildId} config={data} disabled={!manage} />
+
+      <SavedReplies guildId={guildId} config={data} />
 
       {editing && <CategoryDialog guildId={guildId} config={data} initial={editing} onClose={() => setEditing(null)} />}
       {editingPanel && <PanelDialog guildId={guildId} config={data} initial={editingPanel} onClose={() => setEditingPanel(null)} />}
@@ -569,6 +572,21 @@ function CategoryDialog({ guildId, config, initial, onClose }: { guildId: string
                   <NumberField id='inact-rem' label='Rappel au membre après' value={cfg.inactivity.reminderHours} max={720} suffix='heures sans message' onChange={(n) => patch('inactivity', { reminderHours: n })} hint='0 = pas de rappel' />
                   <NumberField id='inact-close' label='Fermeture automatique après' value={cfg.inactivity.closeHours} max={2160} suffix='heures sans message' onChange={(n) => patch('inactivity', { closeHours: n })} hint='0 = jamais' />
                 </div>
+              </fieldset>
+              <fieldset className='grid gap-3 rounded-lg border p-3'>
+                <legend className='px-1 text-sm font-semibold'>Demande de fermeture</legend>
+                <p className='text-xs text-muted-foreground'>
+                  Le staff demande au membre si son ticket peut être fermé (<code>/ticket demande-fermeture</code> ou le panel). Le membre répond avec deux boutons.
+                </p>
+                <NumberField id='creq-hours' label='Fermeture automatique sans réponse après' value={cfg.closeRequest?.autoCloseHours ?? 24} max={720} suffix='heures' onChange={(n) => patch('closeRequest', { autoCloseHours: n })} hint='0 = jamais' />
+              </fieldset>
+              <fieldset className='grid gap-3 rounded-lg border p-3'>
+                <legend className='px-1 text-sm font-semibold'>Délai de première réponse (SLA)</legend>
+                <NumberField
+                  id='sla-minutes' label='Le staff doit répondre en moins de' value={cfg.sla?.firstResponseMinutes ?? 0} max={10080} suffix='minutes'
+                  onChange={(n) => patch('sla', { firstResponseMinutes: n })}
+                  hint='0 = pas de délai. Dépassé, une alerte part une fois dans les logs « Tickets » (type « sla_breach »).'
+                />
               </fieldset>
             </TabsContent>
 

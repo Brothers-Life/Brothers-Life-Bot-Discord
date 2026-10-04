@@ -28,6 +28,8 @@ export const DEFAULT_CATEGORY_CONFIG: TicketCategoryConfig = {
   rating: { enabled: false },
   transcriptDm: true,
   statusParents: {},
+  closeRequest: { autoCloseHours: 24 },
+  sla: { firstResponseMinutes: 0 },
 }
 
 export const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
