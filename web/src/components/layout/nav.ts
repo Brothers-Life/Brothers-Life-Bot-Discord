@@ -107,7 +107,7 @@ export const navSections: NavSection[] = [
       { title: 'Annonces', url: '/announcements', icon: Megaphone, permission: 'announcements.view', keywords: 'programmer' },
       { title: 'Créateur d’embeds', url: '/embeds', icon: Braces, permission: 'embeds.view', keywords: 'embed message boutons' },
       { title: 'Messages dynamiques', url: '/messages', icon: MessagesSquare, permission: 'messages.view' },
-      { title: 'Streams et vidéos', url: '/streams', icon: Radio, permission: 'notifications.view', keywords: 'twitch youtube kick' },
+      { title: 'Streams et vidéos', url: '/streams', icon: Radio, permission: 'notifications.view', keywords: 'twitch youtube kick tiktok rss flux shorts' },
       { title: 'Changelog', url: '/changelog', icon: ChangelogIcon, permission: 'changelog.view' },
     ],
   },

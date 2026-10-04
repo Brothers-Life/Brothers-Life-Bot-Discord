@@ -123,6 +123,8 @@ async function main() {
 		setInterval(() => core.fivem.presenceTick().catch(error => logger.error('Bot status failed:', error)), 30_000),
 		// Streams and videos to announce
 		setInterval(() => core.streams.tick().catch(error => logger.error('Streams failed:', error)), 60_000),
+		// RSS / Atom feeds and TikTok (each feed has its own interval)
+		setInterval(() => core.feeds.tick().catch(error => logger.error('Feeds failed:', error)), 60_000),
 		// Music: leaves when alone or with nothing to play, refreshes the now-playing message
 		setInterval(() => core.music.tick().catch(error => logger.error('Music tick failed:', error)), 30_000),
 		// Staff meetings: reminders, start, end

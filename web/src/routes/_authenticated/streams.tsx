@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, BellRing, FlaskConical, KeyRound, Pencil, Plus, Radio, Save, Trash2, Tv } from 'lucide-react'
+import { AlertTriangle, BellRing, FlaskConical, KeyRound, Pencil, Plus, Radio, Rss, Save, Trash2, Tv } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { AnnouncementEmbed, AnnouncementTarget, AnnouncementTargetsPayload } from '@/lib/types'
@@ -24,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { DuplicateButton } from '@/components/app/duplicate-button'
 import { copyOf } from '@/lib/utils'
+import { FeedsSection } from '@/features/feeds/feeds-section'
 
 export const Route = createFileRoute('/_authenticated/streams')({
   component: StreamsPage,
@@ -78,72 +79,83 @@ function StreamsPage() {
   return (
     <Page
       title='Streams et vidéos'
-      description='Le bot annonce les lives Twitch, Kick et YouTube, ainsi que les nouvelles vidéos YouTube, dans les salons que tu choisis. Un live n’est annoncé qu’une fois, et le message est mis à jour à la fin.'
+      description='Le bot annonce les lives Twitch, Kick et YouTube, les nouvelles vidéos et Shorts YouTube, les vidéos TikTok et les nouveautés de n’importe quel flux RSS dans les salons que tu choisis. Un live n’est annoncé qu’une fois, et le message est mis à jour à la fin.'
       actions={manage && <Button onClick={() => setEditing({})}><Plus /> Ajouter une chaîne</Button>}
     >
       {!data ? <Skeleton className='h-96 w-full' /> : (
-        <div className='grid gap-6'>
-          <StatCards items={[
-            { label: 'Chaînes suivies', value: data.subscriptions.length, icon: Tv, tone: 'accent' },
-            { label: 'En live maintenant', value: data.subscriptions.filter((s) => s.state.live).length, icon: Radio, tone: 'danger' },
-            { label: 'Notifications (24 h)', value: data.history.filter((h) => h.kind !== 'end' && h.kind !== 'test' && dataUpdatedAt - h.at < 86_400_000).length, icon: BellRing, tone: 'info' },
-            { label: 'Chaînes en erreur', value: data.subscriptions.filter((s) => s.state.error).length, icon: AlertTriangle, tone: data.subscriptions.some((s) => s.state.error) ? 'warning' : 'neutral' },
-          ]} />
-          <Section title={`${data.subscriptions.length} chaîne${data.subscriptions.length > 1 ? 's' : ''} suivie${data.subscriptions.length > 1 ? 's' : ''}`}>
-            {!data.subscriptions.length ? <EmptyState title='Aucune chaîne suivie'>Ajoute une chaîne Twitch, YouTube ou Kick à annoncer.</EmptyState> : (
-              <ul className='divide-y'>
-                {data.subscriptions.map((s) => (
-                  <li key={s.id} className='flex flex-wrap items-center gap-3 px-4 py-3'>
-                    <span className='relative grid size-10 shrink-0 place-items-center rounded-full bg-muted'>
-                      <Radio className='size-5' style={{ color: PLATFORM[s.platform].color }} />
-                      {s.state.live && <span className='absolute -end-0.5 -top-0.5 size-3 animate-pulse rounded-full bg-destructive ring-2 ring-card' aria-label='En live' />}
-                    </span>
-                    <div className='min-w-52 flex-1'>
-                      <div className='flex flex-wrap items-center gap-2 font-medium'>
-                        {s.displayName} <PlatformBadge platform={s.platform} />
-                        {s.state.live ? <Pill tone='danger'>En live{s.state.peakViewers ? ` · ${s.state.peakViewers} max` : ''}</Pill> : <Pill>Hors ligne</Pill>}
-                        {!s.enabled && <Pill tone='warning'>En pause</Pill>}
-                      </div>
-                      <div className='truncate text-xs text-muted-foreground'>
-                        {s.state.live && s.state.title ? `${s.state.title}${s.state.game ? ` · ${s.state.game}` : ''} · depuis ${ago(s.state.startedAt)}` : `${s.targets.length} salon(s)`}
-                        {s.state.lastVideoAt ? ` · dernière vidéo ${ago(s.state.lastVideoAt)}` : ''}
-                        {s.state.checkedAt ? ` · vérifié ${ago(s.state.checkedAt)}` : ' · pas encore vérifié'}
-                      </div>
-                      {s.state.error && <div className='text-xs text-destructive'>{s.state.error}</div>}
-                    </div>
-                    {manage && (
-                      <div className='flex items-center gap-2'>
-                        <Switch checked={s.enabled} onCheckedChange={() => toggle.mutate(s)} aria-label={`Activer ${s.displayName}`} />
-                        <Button size='sm' variant='outline' onClick={() => test.mutate(s)} disabled={test.isPending}><FlaskConical /> Tester</Button>
-                        <Button size='icon' variant='ghost' aria-label={`Modifier ${s.displayName}`} onClick={() => setEditing(s)}><Pencil /></Button>
-                        <DuplicateButton name={s.displayName} onClick={() => setEditing(copyOf(s))} />
-                        <Button size='icon' variant='danger-ghost' aria-label={`Supprimer ${s.displayName}`} onClick={() => setDeleting(s)}><Trash2 /></Button>
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Section>
+        <Tabs defaultValue='channels'>
+          <TabsList className='h-auto flex-wrap [&>button]:h-8 [&>button]:flex-none'>
+            <TabsTrigger value='channels'><Tv /> Chaînes (Twitch, Kick, YouTube)</TabsTrigger>
+            <TabsTrigger value='feeds'><Rss /> Flux RSS et TikTok</TabsTrigger>
+          </TabsList>
+          <TabsContent value='feeds' className='mt-4'>
+            <FeedsSection guilds={data.guilds} manage={manage} />
+          </TabsContent>
+          <TabsContent value='channels' className='mt-4'>
+            <div className='grid grid-cols-[minmax(0,1fr)] gap-6'>
+              <StatCards items={[
+                { label: 'Chaînes suivies', value: data.subscriptions.length, icon: Tv, tone: 'accent' },
+                { label: 'En live maintenant', value: data.subscriptions.filter((s) => s.state.live).length, icon: Radio, tone: 'danger' },
+                { label: 'Notifications (24 h)', value: data.history.filter((h) => h.kind !== 'end' && h.kind !== 'test' && dataUpdatedAt - h.at < 86_400_000).length, icon: BellRing, tone: 'info' },
+                { label: 'Chaînes en erreur', value: data.subscriptions.filter((s) => s.state.error).length, icon: AlertTriangle, tone: data.subscriptions.some((s) => s.state.error) ? 'warning' : 'neutral' },
+              ]} />
+              <Section title={`${data.subscriptions.length} chaîne${data.subscriptions.length > 1 ? 's' : ''} suivie${data.subscriptions.length > 1 ? 's' : ''}`}>
+                {!data.subscriptions.length ? <EmptyState title='Aucune chaîne suivie'>Ajoute une chaîne Twitch, YouTube ou Kick à annoncer.</EmptyState> : (
+                  <ul className='divide-y'>
+                    {data.subscriptions.map((s) => (
+                      <li key={s.id} className='flex flex-wrap items-center gap-3 px-4 py-3'>
+                        <span className='relative grid size-10 shrink-0 place-items-center rounded-full bg-muted'>
+                          <Radio className='size-5' style={{ color: PLATFORM[s.platform].color }} />
+                          {s.state.live && <span className='absolute -end-0.5 -top-0.5 size-3 animate-pulse rounded-full bg-destructive ring-2 ring-card' aria-label='En live' />}
+                        </span>
+                        <div className='min-w-52 flex-1'>
+                          <div className='flex flex-wrap items-center gap-2 font-medium'>
+                            {s.displayName} <PlatformBadge platform={s.platform} />
+                            {s.state.live ? <Pill tone='danger'>En live{s.state.peakViewers ? ` · ${s.state.peakViewers} max` : ''}</Pill> : <Pill>Hors ligne</Pill>}
+                            {!s.enabled && <Pill tone='warning'>En pause</Pill>}
+                          </div>
+                          <div className='truncate text-xs text-muted-foreground'>
+                            {s.state.live && s.state.title ? `${s.state.title}${s.state.game ? ` · ${s.state.game}` : ''} · depuis ${ago(s.state.startedAt)}` : `${s.targets.length} salon(s)`}
+                            {s.state.lastVideoAt ? ` · dernière vidéo ${ago(s.state.lastVideoAt)}` : ''}
+                            {s.state.checkedAt ? ` · vérifié ${ago(s.state.checkedAt)}` : ' · pas encore vérifié'}
+                          </div>
+                          {s.state.error && <div className='text-xs text-destructive'>{s.state.error}</div>}
+                        </div>
+                        {manage && (
+                          <div className='flex items-center gap-2'>
+                            <Switch checked={s.enabled} onCheckedChange={() => toggle.mutate(s)} aria-label={`Activer ${s.displayName}`} />
+                            <Button size='sm' variant='outline' onClick={() => test.mutate(s)} disabled={test.isPending}><FlaskConical /> Tester</Button>
+                            <Button size='icon' variant='ghost' aria-label={`Modifier ${s.displayName}`} onClick={() => setEditing(s)}><Pencil /></Button>
+                            <DuplicateButton name={s.displayName} onClick={() => setEditing(copyOf(s))} />
+                            <Button size='icon' variant='danger-ghost' aria-label={`Supprimer ${s.displayName}`} onClick={() => setDeleting(s)}><Trash2 /></Button>
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Section>
 
-          {manage && <CredentialsSection key={JSON.stringify(data.credentials)} credentials={data.credentials} />}
+              {manage && <CredentialsSection key={JSON.stringify(data.credentials)} credentials={data.credentials} />}
 
-          <Section title='Historique'>
-            {!data.history.length ? <EmptyState title='Rien d’envoyé pour l’instant' /> : (
-              <ul className='divide-y text-sm'>
-                {data.history.map((h) => (
-                  <li key={h.id} className='flex flex-wrap items-center gap-2 px-4 py-2'>
-                    <span className='w-28 shrink-0'>{KIND[h.kind]}</span>
-                    <PlatformBadge platform={h.platform} />
-                    <span className='font-medium'>{h.displayName}</span>
-                    <span className='min-w-0 flex-1 truncate text-muted-foreground'>{h.url ? <a href={h.url} target='_blank' rel='noreferrer' className='hover:underline'>{h.title}</a> : h.title}</span>
-                    <span className='text-xs text-muted-foreground'>{h.channels} salon(s) · {dateTime(h.at)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Section>
-        </div>
+              <Section title='Historique'>
+                {!data.history.length ? <EmptyState title='Rien d’envoyé pour l’instant' /> : (
+                  <ul className='divide-y text-sm'>
+                    {data.history.map((h) => (
+                      <li key={h.id} className='flex flex-wrap items-center gap-2 px-4 py-2'>
+                        <span className='w-28 shrink-0'>{KIND[h.kind]}</span>
+                        <PlatformBadge platform={h.platform} />
+                        <span className='font-medium'>{h.displayName}</span>
+                        <span className='min-w-0 flex-1 truncate text-muted-foreground'>{h.url ? <a href={h.url} target='_blank' rel='noreferrer' className='hover:underline'>{h.title}</a> : h.title}</span>
+                        <span className='text-xs text-muted-foreground'>{h.channels} salon(s) · {dateTime(h.at)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Section>
+            </div>
+          </TabsContent>
+        </Tabs>
       )}
       {editing && data && <SubscriptionDialog initial={editing} guilds={data.guilds} onClose={() => { setEditing(null); refresh() }} />}
       <ConfirmDialog open={Boolean(deleting)} onOpenChange={(o) => !o && setDeleting(null)} title={`Ne plus suivre ${deleting?.displayName} ?`} desc='Les messages déjà envoyés restent sur Discord.' confirmText='Supprimer' destructive isLoading={remove.isPending} handleConfirm={() => deleting && remove.mutate(deleting)} />
@@ -196,7 +208,7 @@ function PayloadEditor({ value, onChange, idPrefix, guilds, target }: { value: P
         <div className='grid gap-1.5'>
           <Label htmlFor={`${idPrefix}-content`}>Texte</Label>
           <Textarea id={`${idPrefix}-content`} rows={2} maxLength={2000} value={value.content} onChange={(e) => onChange({ ...value, content: e.target.value })} />
-          <span className='text-xs text-muted-foreground'>Variables : {'{streamer} {title} {game} {viewers} {url} {thumbnail}'} (les deux dernières marchent aussi dans les champs d’image et de lien).</span>
+          <span className='text-xs text-muted-foreground'>Variables : {'{streamer} {title} {game} {viewers} {url} {thumbnail}'} (les deux dernières marchent aussi dans les champs d’image et de lien), aussi en français : {'{chaine.nom} {video.titre} {video.lien} {video.image}'}, et celles du serveur : {'{server} {date} {time}'}.</span>
         </div>
         <EmbedFields embed={value.embed} onChange={(patch) => onChange({ ...value, embed: { ...value.embed, ...patch } })} idPrefix={idPrefix} />
       </div>
