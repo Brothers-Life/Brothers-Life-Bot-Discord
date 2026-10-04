@@ -1,0 +1,21 @@
+meta {
+  name: POST /tebex/payments/:id/reapply
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/tebex/payments/:id/reapply
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Créer / agir — `POST /api/tebex/payments/:id/reapply`
+
+  Permission requise : `tebex.manage`
+}

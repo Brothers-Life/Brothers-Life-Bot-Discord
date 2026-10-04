@@ -53,6 +53,7 @@ import {
   Archive,
   Presentation,
   Plug,
+  ShoppingCart,
 } from 'lucide-react'
 
 export type NavEntry = {
@@ -76,6 +77,7 @@ export const navSections: NavSection[] = [
       { title: 'Serveurs', url: '/network', icon: Network, permission: 'network.view' },
       { title: 'FiveM', url: '/fivem', icon: Gamepad2, permission: 'fivem.view', keywords: 'jeu serveur statut' },
       { title: 'Données FiveM', url: '/fivem-players', icon: Contact, permission: 'fivemdata.view', keywords: 'joueur personnage citizen véhicule plaque inventaire argent bdd base métier gang logs staff prison mdt économie activité' },
+      { title: 'Boutique', url: '/tebex', icon: ShoppingCart, permission: 'tebex.view', keywords: 'tebex achat paiement vip remboursement' },
       { title: 'Modèles de serveur', url: '/templates', icon: LayoutTemplate, permission: 'templates.view' },
       { title: 'Sauvegardes', url: '/backups', icon: DatabaseBackup, permission: 'backups.view', keywords: 'backup restaurer' },
     ],

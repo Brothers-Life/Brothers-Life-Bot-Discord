@@ -41,6 +41,7 @@ import { registerChannelRoutes } from './routes/channels.js';
 import { registerModerationToolRoutes } from './routes/moderationTools.js';
 import { registerMeetingRoutes } from './routes/meetings.js';
 import { registerFivemDataRoutes } from './routes/fivemData.js';
+import { registerTebexRoutes } from './routes/tebex.js';
 import { registerApiRoutes } from './routes/api.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -126,6 +127,7 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	registerModerationToolRoutes(app, { core });
 	registerMeetingRoutes(app, { core });
 	registerFivemDataRoutes(app, { core });
+	registerTebexRoutes(app, { core });
 	registerApiRoutes(app, { core, runtime, routes });
 	onRoutes?.(routes);
 

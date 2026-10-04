@@ -330,6 +330,28 @@ export function createFivemData({ audit, settings, logger = console, now = Date.
 			return row?.userid ?? null;
 		},
 
+		// The account of a Tebex buyer: FiveM (CFX.re) id first, Rockstar license next, else a unique exact name.
+		// null when the database is off or nothing matches. Returns { userId, username, discordId, method }.
+		async findByTebexPlayer({ uuid = '', name = '' } = {}) {
+			if (!config().enabled) return null;
+			const id = String(uuid ?? '').trim().replace(/^(fivem|license):/i, '');
+			const found = (row, method) => row && { userId: row.userid, username: row.username, discordId: row.discord?.replace(/^discord:/, '') || null, method };
+			if (/^\d{1,12}$/.test(id)) {
+				const [row] = await query('SELECT userid, username, discord FROM users WHERE fivem = ? LIMIT 1', [`fivem:${id}`]);
+				if (row) return found(row, 'fivem');
+			}
+			if (/^[a-f0-9]{40}$/i.test(id)) {
+				const [row] = await query('SELECT userid, username, discord FROM users WHERE license = ? OR license2 = ? LIMIT 1', [`license:${id}`, `license2:${id}`]);
+				if (row) return found(row, 'license');
+			}
+			const player = String(name ?? '').trim();
+			if (player) {
+				const rows = await query('SELECT userid, username, discord FROM users WHERE username = ? LIMIT 2', [player.slice(0, 80)]);
+				if (rows.length === 1) return found(rows[0], 'name');
+			}
+			return null;
+		},
+
 		// Variables {fivem.*} of a Discord member for message templates (tickets…). No IP, token or money.
 		// null when the database is off; every key set to "inconnu" when the account is not linked.
 		async discordVars(discordId) {
