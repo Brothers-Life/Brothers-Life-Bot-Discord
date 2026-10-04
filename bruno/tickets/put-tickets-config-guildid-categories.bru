@@ -1,7 +1,7 @@
 meta {
   name: PUT /tickets/config/:guildId/categories
   type: http
-  seq: 12
+  seq: 14
 }
 
 put {
@@ -30,8 +30,8 @@ docs {
   - `name` (string) — obligatoire
   - `emoji` (string | null)
   - `description` (string | null)
-  - `parentChannelId` (string | null)
-  - `transcriptChannelId` (string | null)
+  - `parentChannelId` (null | string)
+  - `transcriptChannelId` (null | string)
   - `rankIds` (array)
   - `roleIds` (array)
   - `position` (integer)

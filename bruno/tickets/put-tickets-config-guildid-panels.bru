@@ -1,7 +1,7 @@
 meta {
   name: PUT /tickets/config/:guildId/panels
   type: http
-  seq: 15
+  seq: 17
 }
 
 put {
@@ -36,7 +36,7 @@ docs {
   Corps JSON :
   - `id` (integer)
   - `name` (string) — obligatoire
-  - `channelId` (string | null)
+  - `channelId` (null | string)
   - `payload` (object)
   - `style` ("buttons" | "select")
   - `placeholder` (string | null)

@@ -1,0 +1,21 @@
+meta {
+  name: POST /feeds/:id/test
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/feeds/:id/test
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Créer / agir — `POST /api/feeds/:id/test`
+
+  Permission requise : `notifications.manage`
+}

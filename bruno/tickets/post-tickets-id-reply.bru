@@ -1,7 +1,7 @@
 meta {
   name: POST /tickets/:id/reply
   type: http
-  seq: 8
+  seq: 10
 }
 
 post {
@@ -17,7 +17,8 @@ params:path {
 body:json {
   {
     "content": "content",
-    "internal": false
+    "internal": false,
+    "replyId": 1
   }
 }
 
@@ -29,4 +30,5 @@ docs {
   Corps JSON :
   - `content` (string) — obligatoire
   - `internal` (boolean)
+  - `replyId` (integer)
 }

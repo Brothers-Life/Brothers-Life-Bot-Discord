@@ -99,7 +99,7 @@ export function normalizeConfig(input = {}, network = null) {
 // Tebex store of the FiveM server, read by polling (the panel is not reachable from the internet, so no webhook).
 // New payments: buyer linked to a Discord member (FiveM database or a manual link), roles of the articles given,
 // a log and an optional thank-you message. Refunds and chargebacks take the roles back.
-export function createTebex({ db, network, audit, executor, settings, logs, variables, fivemData = null, fetchImpl = fetch, logger = console, now = Date.now }) {
+export function createTebex({ db, network, audit, executor, settings, logs, variables, fivemData = null, notify = null, fetchImpl = fetch, logger = console, now = Date.now }) {
 	logs.registerCategory('tebex', 'Boutique');
 	let running = false;
 
@@ -288,6 +288,15 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 			thumbnailUserId: row.discord_id ?? undefined,
 			footer: `Paiement Tebex #${row.id}`,
 		}, 'purchase');
+		// Panel notification: someone has to link the buyer by hand to give the roles
+		if (!row.discord_id) {
+			try {
+				notify?.({ type: 'tebex_unlinked', permission: 'tebex.view', title: 'Achat boutique à relier', body: `${buyerName(row)} · ${packagesOf(row).map(p => p.name).join(', ')}`.slice(0, 200), url: '/tebex' });
+			}
+			catch (error) {
+				logger.warn('Tebex notification failed:', error.message);
+			}
+		}
 	}
 
 	function logRefund(row, removed) {

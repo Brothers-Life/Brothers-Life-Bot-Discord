@@ -17,6 +17,9 @@ const BUILTIN_TYPES = [
 	['appeal_new', { label: 'Appels de sanction', permission: 'appeals.view' }],
 	['absence_request', { label: 'Absences à valider', permission: 'absences.manage' }],
 	['antiraid', { label: 'Anti-raid déclenché', permission: 'antiraid.view' }],
+	['antinuke', { label: 'Anti-nuke : compte mis en quarantaine', permission: 'antinuke.view' }],
+	['ticket_sla', { label: 'Tickets en retard (SLA dépassé)', permission: 'tickets.view' }],
+	['tebex_unlinked', { label: 'Achats boutique à relier', permission: 'tebex.view' }],
 	['other', { label: 'Autres', permission: null }],
 ];
 

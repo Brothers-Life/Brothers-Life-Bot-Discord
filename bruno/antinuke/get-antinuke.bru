@@ -1,0 +1,17 @@
+meta {
+  name: GET /antinuke
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/antinuke
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/antinuke`
+
+  Permission requise : `antinuke.view`
+}

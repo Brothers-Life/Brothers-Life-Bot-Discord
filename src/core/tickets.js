@@ -1135,7 +1135,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 				throw new ValidationError('Impossible d’envoyer la demande dans le salon du ticket.');
 			}
 			record(userId, source, 'tickets.close_request', ticket, { reason: clean || null, 'Fermeture automatique': hours ? `après ${hours} h sans réponse` : 'jamais' });
-			return getTicket(ticketId);
+			return publicTicket(ticketId);
 		},
 
 		// The opener answers: yes closes the ticket, no cancels the request and tells the staff
@@ -1150,7 +1150,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			await executor.sendTicketNotice(ticket.channelId, { kind: 'close_refused', ticket, by: ticket.closeRequest.by })
 				.catch(error => logger.warn(`Refusal of ticket #${ticket.number} not sent:`, error.message));
 			record(userId, 'bot', 'tickets.close_refused', ticket, { 'Demandée par': `<@${ticket.closeRequest.by}>` });
-			return getTicket(ticketId);
+			return publicTicket(ticketId);
 		},
 
 		// --- Saved replies ---------------------------------------------------------------

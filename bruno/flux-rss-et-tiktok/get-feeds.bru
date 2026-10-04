@@ -1,0 +1,17 @@
+meta {
+  name: GET /feeds
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/feeds
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/feeds`
+
+  Permission requise : `notifications.view`
+}

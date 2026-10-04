@@ -1,0 +1,21 @@
+meta {
+  name: PUT /antinuke
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{baseUrl}}/api/antinuke
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {}
+}
+
+docs {
+  Remplacer — `PUT /api/antinuke`
+
+  Permission requise : `antinuke.manage`
+}

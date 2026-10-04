@@ -1,0 +1,26 @@
+meta {
+  name: POST /feeds/preview
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/feeds/preview
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "url": "url"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/feeds/preview`
+
+  Permission requise : `notifications.manage`
+
+  Corps JSON :
+  - `url` (string) — obligatoire
+}

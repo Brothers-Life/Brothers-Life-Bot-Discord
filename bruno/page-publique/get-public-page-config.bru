@@ -1,0 +1,17 @@
+meta {
+  name: GET /public-page/config
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/public-page/config
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/public-page/config`
+
+  Permission requise : `public.manage`
+}

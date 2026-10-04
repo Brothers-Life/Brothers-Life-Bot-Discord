@@ -1,0 +1,36 @@
+meta {
+  name: PUT /tickets/config/:guildId/replies
+  type: http
+  seq: 20
+}
+
+put {
+  url: {{baseUrl}}/api/tickets/config/:guildId/replies
+  body: json
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+body:json {
+  {
+    "id": 1,
+    "name": "name",
+    "content": "content",
+    "categoryId": null
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/tickets/config/:guildId/replies`
+
+  Permission requise : `tickets.replies`
+
+  Corps JSON :
+  - `id` (integer)
+  - `name` (string) — obligatoire
+  - `content` (string) — obligatoire
+  - `categoryId` (null | integer)
+}

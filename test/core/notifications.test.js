@@ -94,6 +94,16 @@ test('sources: audited actions become notifications (pending absence, raid, tick
 	assert.deepEqual(core.notifications.list(bob).items.map(x => x.type).sort(), ['absence_request', 'antiraid'], 'one pending absence only');
 });
 
+test('sources: a ticket past its first response delay (SLA) is notified', async () => {
+	const { core, alice } = await setup();
+	core.audit.record({ actorId: 'system', source: 'system', action: 'tickets.sla_breach', guildId: MAIN, target: '7', details: { number: 7, opener: 'Carol', Type: 'Support' } });
+	await flush();
+	await flush();
+	const sla = core.notifications.list(alice).items.find(x => x.type === 'ticket_sla');
+	assert.equal(sla.url, '/ticket/7');
+	assert.match(sla.title, /#7/);
+});
+
 test('sources: a member reply in a claimed ticket tells its handler, once per few minutes', async () => {
 	const { core, alice } = await setup();
 	let clock = 1_000_000;

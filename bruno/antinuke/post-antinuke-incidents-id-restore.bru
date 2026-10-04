@@ -1,0 +1,32 @@
+meta {
+  name: POST /antinuke/incidents/:id/restore
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/antinuke/incidents/:id/restore
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "confirm": true
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/antinuke/incidents/:id/restore`
+
+  Permission requise : `antinuke.manage`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+
+  Corps JSON :
+  - `confirm` (boolean)
+}

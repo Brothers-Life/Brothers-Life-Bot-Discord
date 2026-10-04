@@ -1,0 +1,21 @@
+meta {
+  name: POST /antinuke/incidents/:id/dismiss
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/antinuke/incidents/:id/dismiss
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Créer / agir — `POST /api/antinuke/incidents/:id/dismiss`
+
+  Permission requise : `antinuke.manage`
+}

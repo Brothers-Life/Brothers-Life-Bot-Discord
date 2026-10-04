@@ -1,0 +1,21 @@
+meta {
+  name: GET /tickets/:id/replies
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/api/tickets/:id/replies
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Consulter — `GET /api/tickets/:id/replies`
+
+  Permission requise : `tickets.handle`
+}

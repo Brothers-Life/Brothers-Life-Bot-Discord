@@ -67,6 +67,18 @@ export function attachNotificationSources({ notifications, audit, tickets, netwo
 			body: join(guildName(e.guildId), e.details?.trigger && `déclenchement ${e.details.trigger}`),
 			url: '/antiraid',
 		}),
+		'antinuke.quarantine': async e => ({
+			type: 'antinuke',
+			title: 'Anti-nuke : compte mis en quarantaine',
+			body: join(await nameOf(e.target), guildName(e.guildId)),
+			url: '/antinuke',
+		}),
+		'tickets.sla_breach': async e => ({
+			type: 'ticket_sla',
+			title: `Ticket #${e.details?.number ?? e.target} sans réponse à temps`,
+			body: join(e.details?.opener, e.details?.Type, guildName(e.guildId)),
+			url: `/ticket/${e.target}`,
+		}),
 	};
 
 	const unsubscribe = [];

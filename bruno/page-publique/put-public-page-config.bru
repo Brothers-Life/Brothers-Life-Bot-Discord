@@ -1,0 +1,21 @@
+meta {
+  name: PUT /public-page/config
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{baseUrl}}/api/public-page/config
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {}
+}
+
+docs {
+  Remplacer — `PUT /api/public-page/config`
+
+  Permission requise : `public.manage`
+}

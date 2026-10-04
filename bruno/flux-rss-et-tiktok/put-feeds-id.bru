@@ -1,0 +1,42 @@
+meta {
+  name: PUT /feeds/:id
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/feeds/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "kind": "rss",
+    "url": "url",
+    "displayName": "displayName",
+    "targets": [],
+    "payload": {},
+    "config": {},
+    "enabled": false
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/feeds/:id`
+
+  Permission requise : `notifications.manage`
+
+  Corps JSON :
+  - `kind` ("rss" | "tiktok")
+  - `url` (string)
+  - `displayName` (string)
+  - `targets` (array)
+  - `payload` (object)
+  - `config` (object)
+  - `enabled` (boolean)
+}

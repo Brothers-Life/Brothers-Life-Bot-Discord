@@ -142,7 +142,8 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 		},
 	} });
 	const fivemRoles = createFivemRoles({ fivemData, settings, executor, network, audit, logs, logger });
-	const tebex = createTebex({ db, network, audit, executor, settings, logs, variables, fivemData, fetchImpl, logger });
+	// Notifications are created later in this function: looked up when a purchase comes in
+	const tebex = createTebex({ db, network, audit, executor, settings, logs, variables, fivemData, notify: n => core.notifications?.push(n), fetchImpl, logger });
 	const dms = createDms({ db, audit, executor, settings, logs, uploads, logger });
 	const templates = createTemplates({ db, network, audit, executor, events, automod, tickets, logs, settings, logger });
 	const rpEvents = createRpEvents({ db, network, audit, executor, uploads, logger });

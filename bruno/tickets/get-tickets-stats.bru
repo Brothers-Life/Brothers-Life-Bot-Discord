@@ -1,0 +1,30 @@
+meta {
+  name: GET /tickets/stats
+  type: http
+  seq: 24
+}
+
+get {
+  url: {{baseUrl}}/api/tickets/stats
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~guildId: 
+  ~categoryId: 
+  ~from: 
+  ~to: 
+}
+
+docs {
+  Consulter — `GET /api/tickets/stats`
+
+  Permission requise : `tickets.view`
+
+  Paramètres de requête :
+  - `guildId` (string)
+  - `categoryId` (integer)
+  - `from` (integer)
+  - `to` (integer)
+}

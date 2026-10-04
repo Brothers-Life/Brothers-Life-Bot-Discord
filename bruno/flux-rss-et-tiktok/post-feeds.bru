@@ -1,0 +1,38 @@
+meta {
+  name: POST /feeds
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/feeds
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "kind": "rss",
+    "url": "url",
+    "displayName": "displayName",
+    "targets": [],
+    "payload": {},
+    "config": {},
+    "enabled": false
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/feeds`
+
+  Permission requise : `notifications.manage`
+
+  Corps JSON :
+  - `kind` ("rss" | "tiktok") — obligatoire
+  - `url` (string) — obligatoire
+  - `displayName` (string)
+  - `targets` (array)
+  - `payload` (object)
+  - `config` (object)
+  - `enabled` (boolean)
+}
