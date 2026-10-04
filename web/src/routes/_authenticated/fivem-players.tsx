@@ -124,7 +124,7 @@ function Players({ onOpen, top }: { onOpen: (userId: number) => void; top: Overv
   const q = useDeferredValue(text.trim())
   const players = useQuery({ queryKey: ['fivem-players', q], queryFn: () => api<Summary[]>(`/fivem-data/players?q=${encodeURIComponent(q)}`), retry: false, placeholderData: (prev) => prev })
   return (
-    <div className='grid gap-6 xl:grid-cols-[minmax(0,1fr)_18rem]'>
+    <div className='grid grid-cols-[minmax(0,1fr)] gap-6 xl:grid-cols-[minmax(0,1fr)_18rem]'>
       <Section
         title={players.data ? `${players.data.length} joueur${players.data.length > 1 ? 's' : ''}` : 'Joueurs'}
         actions={
@@ -221,7 +221,7 @@ function PlayerSheet({ userId }: { userId: number }) {
         {hasPoliceTab(p) && <TabsContent value='police' className='mt-4'><PlayerPolice p={p} /></TabsContent>}
         {hasStaffTab(p) && <TabsContent value='staff' className='mt-4'><PlayerStaff p={p} /></TabsContent>}
 
-        <TabsContent value='characters' className='mt-4 grid gap-4 lg:grid-cols-2'>
+        <TabsContent value='characters' className='mt-4 grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2'>
           {p.characters.map((c) => <CharacterCard key={c.citizenId} c={c} />)}
         </TabsContent>
 
@@ -252,7 +252,7 @@ function PlayerSheet({ userId }: { userId: number }) {
         </TabsContent>
 
         {p.permissions.inventory && (
-          <TabsContent value='inventory' className='mt-4 grid gap-4 lg:grid-cols-2'>
+          <TabsContent value='inventory' className='mt-4 grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2'>
             {p.characters.map((c) => (
               <Section key={c.citizenId} title={`Inventaire de ${c.name}`} description={`${c.inventory?.length ?? 0} objet${(c.inventory?.length ?? 0) > 1 ? 's' : ''}`}>
                 <Items items={c.inventory ?? []} />
@@ -278,7 +278,7 @@ function PlayerSheet({ userId }: { userId: number }) {
               { label: 'Points premium', value: p.economy.premium.points, icon: Wallet, tone: 'accent' },
               { label: 'Fidélité', value: p.economy.premium.loyalty, icon: Wallet, tone: 'info' },
             ]} />
-            <div className='grid gap-6 lg:grid-cols-2'>
+            <div className='grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2'>
               <Section title='Derniers virements'>
                 {!p.economy.flows.length ? <EmptyState title='Aucun virement suivi' /> : (
                   <ul className='divide-y'>{p.economy.flows.map((f, i) => <li key={i} className='flex flex-wrap items-center gap-2 px-4 py-2 text-sm'><span className='text-xs text-muted-foreground tabular-nums'>{dateTime(f.at)}</span><span className='flex-1 truncate'>{f.from ?? '?'} → {f.to ?? '?'}{f.note ? ` · ${f.note}` : ''}</span><span className='font-medium tabular-nums'>{money(f.amount)}</span></li>)}</ul>
@@ -311,7 +311,7 @@ function PlayerSheet({ userId }: { userId: number }) {
           </Section>
         </TabsContent>
 
-        <TabsContent value='sanctions' className='mt-4 grid gap-6 lg:grid-cols-2'>
+        <TabsContent value='sanctions' className='mt-4 grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2'>
           <Section title='Sanctions en jeu'>
             {!p.sanctions.length && !p.bans.length ? <EmptyState title='Aucune sanction en jeu' icon={Gavel} /> : (
               <ul className='divide-y'>
@@ -361,7 +361,7 @@ function CharacterCard({ c }: { c: Character }) {
         {c.status.handcuffed && <Pill tone='warning'>Menotté</Pill>}
         {c.vip && <Pill tone='accent'>VIP {c.vip}</Pill>}
       </div>
-      <div className='grid gap-2 sm:grid-cols-2'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-2'>
         <div className='rounded-lg border p-2.5 text-sm'>
           <div className='text-xs text-muted-foreground'>Métier</div>
           {c.job ? <div className='font-medium'>{c.job.label}{c.job.gradeLabel ? ` · ${c.job.gradeLabel}` : ''}{c.job.isBoss ? ' 👑' : ''}</div> : <div>—</div>}
@@ -435,11 +435,11 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
         {!f ? <Skeleton className='h-48' /> : (
           <div className='grid gap-4'>
             <label className='flex items-center gap-2 text-sm'><Switch checked={f.enabled} onCheckedChange={(enabled) => set({ enabled })} /> Activée</label>
-            <div className='grid gap-4 sm:grid-cols-[minmax(0,1fr)_6rem]'>
+            <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-[minmax(0,1fr)_6rem]'>
               <div className='grid gap-1.5'><Label htmlFor='db-host'>Hôte</Label><Input id='db-host' value={f.host} onChange={(e) => set({ host: e.target.value })} placeholder='127.0.0.1' /></div>
               <div className='grid gap-1.5'><Label htmlFor='db-port'>Port</Label><Input id='db-port' type='number' value={f.port} onChange={(e) => set({ port: Number(e.target.value) })} /></div>
             </div>
-            <div className='grid gap-4 sm:grid-cols-2'>
+            <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
               <div className='grid gap-1.5'><Label htmlFor='db-name'>Base</Label><Input id='db-name' value={f.database} onChange={(e) => set({ database: e.target.value })} placeholder='s10_qbox' /></div>
               <div className='grid gap-1.5'><Label htmlFor='db-user'>Utilisateur</Label><Input id='db-user' value={f.user} onChange={(e) => set({ user: e.target.value })} autoComplete='off' /></div>
             </div>

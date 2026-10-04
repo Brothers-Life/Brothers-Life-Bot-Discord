@@ -83,6 +83,8 @@ export function createPolls({ db, network, audit, executor, logger = console, no
 	};
 	// pollId -> pending refresh timer (vote bursts are grouped)
 	const refreshes = new Map();
+	// Polls being posted: the tick and the panel (or two ticks) must not post them twice
+	const opening = new Set();
 
 	function toPoll(row) {
 		if (!row) return null;
@@ -163,6 +165,19 @@ export function createPolls({ db, network, audit, executor, logger = console, no
 	}
 
 	async function openPoll(poll) {
+		if (opening.has(poll.id)) throw new ValidationError('Ce sondage est déjà en cours de publication.');
+		// Opened meanwhile
+		if (!['draft', 'scheduled'].includes(getOrThrow(poll.id).status)) return getOrThrow(poll.id);
+		opening.add(poll.id);
+		try {
+			return await postPoll(poll);
+		}
+		finally {
+			opening.delete(poll.id);
+		}
+	}
+
+	async function postPoll(poll) {
 		const messages = [];
 		for (const target of poll.targets) {
 			try {
@@ -275,6 +290,8 @@ export function createPolls({ db, network, audit, executor, logger = console, no
 					throw new ValidationError(`Il faut être sur le serveur depuis au moins ${settings.minMemberDays} jour(s) pour voter.`);
 				}
 			}
+			// Closed while the member was being checked
+			if (toPoll(q.get.get(pollId))?.status !== 'open') throw new ValidationError('Ce sondage est fermé.');
 			const previous = q.votesOf.all(pollId, userId).map(r => r.choice);
 			let next;
 			if (!settings.multiple) {
@@ -319,9 +336,10 @@ export function createPolls({ db, network, audit, executor, logger = console, no
 		// Every 30 s: scheduled polls to open, open polls to close
 		async tick() {
 			for (const row of q.dueStart.all(now())) {
+				if (opening.has(row.id)) continue;
 				await openPoll(toPoll(row)).catch(error => logger.warn(`Scheduled poll #${row.id} failed:`, error.message));
 			}
-			for (const row of q.dueEnd.all(now())) await closePoll(toPoll(row), 'system');
+			for (const row of q.dueEnd.all(now())) await closePoll(toPoll(row), 'system').catch(error => logger.warn(`Poll #${row.id} failed to close:`, error.message));
 		},
 	};
 	return service;

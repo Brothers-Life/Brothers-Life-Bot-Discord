@@ -55,7 +55,8 @@ export function registerGuard(app, core) {
 
 	app.addHook('preHandler', async (request, reply) => {
 		const config = request.routeOptions.config ?? {};
-		if (!request.url.startsWith('/api') || config.public) return;
+		// The matched route, never the raw URL: the router decodes "/%61pi/…" into "/api/…"
+		if (!isApiRoute(request) || config.public) return;
 
 		const bearer = BEARER.exec(request.headers.authorization ?? '')?.[1];
 		let actor;
@@ -78,6 +79,11 @@ export function registerGuard(app, core) {
 			if (MUTATING.has(request.method) && request.headers['x-requested-with'] !== 'panel') {
 				return sendError(reply, 403, 'CSRF', 'En-tête X-Requested-With manquant.');
 			}
+			// A WebSocket handshake carries the cookie but escapes CORS: any page of the same site (another
+			// port of the same IP, as on a shared Pterodactyl node) could open the console otherwise
+			if (request.ws && !sameOrigin(request, core.config)) {
+				return sendError(reply, 403, 'CSRF', 'Origine de la connexion refusée.');
+			}
 			actor = await authenticate(request, core);
 			if (!actor) return sendError(reply, 401, 'UNAUTHENTICATED', 'Connecte-toi.');
 		}
@@ -93,6 +99,40 @@ export function registerGuard(app, core) {
 	});
 
 	return routes;
+}
+
+// Browsers always send Origin on a WebSocket handshake; it must be the panel itself
+function sameOrigin(request, config) {
+	const origin = request.headers.origin;
+	if (!origin) return true;
+	let host;
+	try {
+		host = new URL(origin).host;
+	}
+	catch {
+		return false;
+	}
+	if (host === request.headers.host) return true;
+	try {
+		return Boolean(config?.WEB_PUBLIC_URL) && host === new URL(config.WEB_PUBLIC_URL).host;
+	}
+	catch {
+		return false;
+	}
+}
+
+// Whether the request reached an /api route (or an unknown path under /api)
+export function isApiRoute(request) {
+	const route = request.routeOptions?.url;
+	if (route) return route.startsWith('/api');
+	let pathname = request.url.split('?')[0];
+	try {
+		pathname = decodeURIComponent(pathname);
+	}
+	catch {
+		// Malformed escape: keep it as typed
+	}
+	return pathname.startsWith('/api');
 }
 
 // Reads the session cookie; sets request.session and request.actor

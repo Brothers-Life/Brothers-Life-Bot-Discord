@@ -90,12 +90,12 @@ function MessageFields({ value, onChange, id }: { value: Message; onChange: (m: 
       </label>
       {e && (
         <div className='grid gap-3 rounded-md border-s-2 bg-muted/40 p-3' style={{ borderColor: e.color }}>
-          <div className='grid gap-3 sm:grid-cols-[1fr_7rem]'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-[1fr_7rem]'>
             <Input value={e.title} maxLength={256} placeholder='Titre' aria-label='Titre de l’embed' onChange={(ev) => onChange({ embed: { ...e, title: ev.target.value } })} />
             <ColorPicker value={e.color} onChange={(hex) => onChange({ embed: { ...e, color: hex } })} label='Couleur' />
           </div>
           <Textarea rows={3} maxLength={4000} value={e.description} placeholder='Description' aria-label='Description de l’embed' onChange={(ev) => onChange({ embed: { ...e, description: ev.target.value } })} />
-          <div className='grid gap-3 sm:grid-cols-2'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2'>
             <Input value={e.imageUrl ?? ''} placeholder='Image : https://…' aria-label='Image' onChange={(ev) => onChange({ embed: { ...e, imageUrl: ev.target.value || null } })} />
             <Input value={e.footer} maxLength={200} placeholder='Pied de page' aria-label='Pied de page' onChange={(ev) => onChange({ embed: { ...e, footer: ev.target.value } })} />
           </div>
@@ -267,7 +267,7 @@ function BlockBody({ block: b, onChange, ctx, depth, id }: { block: Block; onCha
       )
     case 'role':
       return (
-        <div className='grid gap-3 sm:grid-cols-2'>
+        <div className='grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2'>
           <div className='grid gap-1.5'>
             <Label>Action</Label>
             <Select value={b.mode} onValueChange={(mode) => set({ mode: mode as typeof b.mode })}>
@@ -287,14 +287,14 @@ function BlockBody({ block: b, onChange, ctx, depth, id }: { block: Block; onCha
       )
     case 'nickname':
       return (
-        <div className='grid gap-3 sm:grid-cols-2'>
+        <div className='grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2'>
           <div className='grid gap-1.5'><Label>À qui</Label><TargetSelect value={b.target} onChange={(target) => set({ target })} ctx={ctx} label='Cible' /></div>
           <div className='grid gap-1.5'><Label htmlFor={`${id}-nick`}>Nouveau pseudo</Label><Input id={`${id}-nick`} maxLength={32} value={b.value} onChange={(e) => set({ value: e.target.value })} placeholder='[RP] {user.name}' /></div>
         </div>
       )
     case 'sanction':
       return (
-        <div className='grid gap-3 sm:grid-cols-2'>
+        <div className='grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2'>
           <div className='grid gap-1.5'>
             <Label>Sanction</Label>
             <Select value={b.kind} onValueChange={(kind) => set({ kind: kind as 'warn' | 'timeout', durationMinutes: kind === 'timeout' ? 10 : null })}>

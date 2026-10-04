@@ -120,3 +120,25 @@ test('restriction profiles are validated; the reason of a sanction can be edited
 	assert.throws(() => core.sanctions.setReason(alice, warn.id, 'Spam'), ForbiddenError);
 	assert.equal(core.sanctions.setReason(owner, warn.id, 'Spam').reason, 'Spam');
 });
+
+test('temporary roles: overlapping ticks remove a due role only once', async () => {
+	let clock = Date.now();
+	const ctx = await setup();
+	const { core, executor, alice } = ctx;
+	const moderation = createModeration({ db: core.db, network: core.network, ranks: core.ranks, audit: core.audit, executor, settings: core.settings, members: core.members, logs: core.logs, logger: { warn: () => undefined }, now: () => clock });
+	await moderation.giveRole(alice, { guildId: MAIN, userId: MEMBER, roleId: ROLE, durationMs: 3600_000 });
+	clock += 2 * 3600_000;
+	executor.calls.length = 0;
+	const counts = await Promise.all([moderation.expireTempRoles(), moderation.expireTempRoles()]);
+	assert.equal(counts[0] + counts[1], 1);
+	assert.equal(executor.calls.filter(c => c[0] === 'removeRole').length, 1);
+	assert.equal(core.audit.query({ action: 'temproles.expire' }).length, 1);
+});
+
+test('lockdown: two simultaneous requests lock once (the second must not erase the list to reopen)', async () => {
+	const { core, executor, alice } = await setup();
+	const results = await Promise.allSettled([core.moderation.lockdown(alice, MAIN, true), core.moderation.lockdown(alice, MAIN, true)]);
+	assert.deepEqual(results.map(r => r.status).sort(), ['fulfilled', 'rejected']);
+	assert.equal(executor.calls.filter(c => c[0] === 'lockGuild').length, 1);
+	assert.equal(await core.moderation.lockdown(alice, MAIN, false), 2);
+});

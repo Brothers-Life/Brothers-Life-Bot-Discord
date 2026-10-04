@@ -94,3 +94,12 @@ test('disabled options and role restrictions of the hub', async () => {
 	const room = await join(MEMBER, hub.channelId);
 	await assert.rejects(rooms.setHidden(MEMBER.id, room.channelId, true), /désactivée/);
 });
+
+test('joining the hub twice very fast creates one room only', async () => {
+	const { rooms, hub } = await setup();
+	await Promise.all([
+		rooms.voiceMoved(MAIN, MEMBER, { from: null, to: hub.channelId }),
+		rooms.voiceMoved(MAIN, MEMBER, { from: null, to: hub.channelId }),
+	]);
+	assert.equal(rooms.rooms(MAIN).length, 1);
+});

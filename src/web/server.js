@@ -8,7 +8,7 @@ import websocket from '@fastify/websocket';
 import fastifyStatic from '@fastify/static';
 import { getTlsOptions, ensureSelfSigned } from './tls.js';
 import { errorHandler, sendError } from './errors.js';
-import { registerGuard } from './guard.js';
+import { registerGuard, isApiRoute } from './guard.js';
 import { registerAuthRoutes } from './auth.js';
 import { registerPanelRoutes } from './routes/panel.js';
 import { registerSystemRoutes } from './routes/system.js';
@@ -78,7 +78,14 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	app.setErrorHandler(errorHandler(logger));
 	app.addHook('onSend', async (request, reply) => {
 		reply.headers(SECURITY_HEADERS);
-		if (request.url.startsWith('/api')) reply.header('Cache-Control', 'no-store');
+		if (isApiRoute(request)) {
+			reply.header('Cache-Control', 'no-store');
+			// HTML documents of the API (ticket transcripts, channel archives) hold text written by members:
+			// sandboxed (opaque origin) so that nothing in them could ever act with the panel session
+			if (String(reply.getHeader('content-type') ?? '').startsWith('text/html')) {
+				reply.header('Content-Security-Policy', `${SECURITY_HEADERS['Content-Security-Policy']}; sandbox allow-popups allow-popups-to-escape-sandbox`);
+			}
+		}
 	});
 
 	await app.register(cookie);
@@ -135,7 +142,7 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 
 	// Unknown /api routes answer JSON, missing build files a real 404; everything else is the React app
 	app.setNotFoundHandler((request, reply) => {
-		if (request.url.startsWith('/api')) return sendError(reply, 404, 'NOT_FOUND', 'Route d’API inconnue.');
+		if (isApiRoute(request)) return sendError(reply, 404, 'NOT_FOUND', 'Route d’API inconnue.');
 		if (request.url.startsWith('/assets/')) return reply.code(404).type('text/plain').send('Not found');
 		return sendPanel(reply);
 	});

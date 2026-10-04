@@ -29,7 +29,7 @@ export function registerVoiceRoutes(app, { core }) {
 			params: guildParam,
 			body: {
 				type: 'object',
-				properties: { channelId: { anyOf: [snowflake, { type: 'null' }] }, categoryId: { anyOf: [snowflake, { type: 'null' }] }, name: { type: 'string', maxLength: 100 }, config: { type: 'object' } },
+				properties: { channelId: { anyOf: [{ type: 'null' }, snowflake] }, categoryId: { anyOf: [{ type: 'null' }, snowflake] }, name: { type: 'string', maxLength: 100 }, config: { type: 'object' } },
 				additionalProperties: false,
 			},
 		},

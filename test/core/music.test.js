@@ -242,3 +242,52 @@ test('Spotify search needs the keys of a Spotify app, never sent back', async ()
 	music.setSpotify(owner, null);
 	assert.deepEqual(music.spotify(), { clientId: '', hasSecret: false });
 });
+
+test('two quick track changes: the last one asked wins, even if the first is slower to load', async () => {
+	const { music, member, backend, executor } = await setup();
+	const stream = executor.musicResolver.stream;
+	executor.musicResolver.stream = async (track) => {
+		if (track.title === 'B') await new Promise(r => setTimeout(r, 30));
+		return stream.call(executor.musicResolver, track);
+	};
+	await music.play(member(ALICE), MAIN, 'playlist:A,B,C');
+	const slow = music.skip(member(ALICE), MAIN);
+	await music.jump(member(ALICE), MAIN, 2);
+	await slow;
+	assert.equal(music.state(MAIN).current.title, 'C');
+	assert.equal(backend.played.at(-1).target, 'https://audio.example/C', 'the stale load of B does not replace C');
+});
+
+test('two first requests at once join the voice channel once', async () => {
+	const { music, member, backend } = await setup();
+	let joins = 0;
+	const join = backend.join;
+	backend.join = async (...args) => {
+		joins++;
+		await new Promise(r => setTimeout(r, 10));
+		return join.apply(backend, args);
+	};
+	await Promise.all([music.play(member(ALICE), MAIN, 'A'), music.play(member(BOB), MAIN, 'B')]);
+	assert.equal(joins, 1);
+	assert.deepEqual(music.state(MAIN).queue.map(t => t.title).sort(), ['A', 'B']);
+});
+
+test('tracks failing while playing (looped queue) stop after a few errors instead of looping forever', async () => {
+	const { music, member, backend } = await setup();
+	await music.play(member(ALICE), MAIN, 'playlist:A,B');
+	music.setLoop(member(ALICE), MAIN, 'queue');
+	for (let i = 0; i < 8; i++) await music.trackEnded(MAIN, { error: 'YouTube demande une connexion' });
+	assert.equal(backend.played.at(-1).stopped, true);
+	const plays = backend.played.filter(p => p.target).length;
+	assert.ok(plays <= 6, `stopped retrying (${plays} plays)`);
+});
+
+test('after stopping on errors, the next request plays at once', async () => {
+	const { music, member, backend } = await setup();
+	await music.play(member(ALICE), MAIN, 'playlist:A,B');
+	for (let i = 0; i < 5; i++) await music.trackEnded(MAIN, { error: 'x' });
+	assert.equal(music.state(MAIN).current, null);
+	const result = await music.play(member(ALICE), MAIN, 'Neuf');
+	assert.equal(result.startedNow, true);
+	assert.equal(backend.played.at(-1).target, 'https://audio.example/Neuf');
+});

@@ -1,4 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
+import { fitFields } from './ticketsUi.js';
 
 const TYPE = { ban: 'Bannissement', timeout: 'Timeout', warn: 'Avertissement', restrict: 'Restriction', kick: 'Expulsion' };
 const STATUS = { pending: ['⏳ En attente', 0xf5a524], accepted: ['✅ Accepté', 0x3ba55d], rejected: ['❌ Refusé', 0xed4245] };
@@ -7,19 +8,23 @@ const STATUS = { pending: ['⏳ En attente', 0xf5a524], accepted: ['✅ Accepté
 export function appealPayload(view) {
 	const s = view.sanction;
 	const [label, color] = STATUS[view.status] ?? STATUS.pending;
+	const title = `Appel · sanction #${s.id}`;
+	const description = `<@${view.userId}> (${s.userName ?? view.userId})`;
+	const footer = `Appel #${view.id}`;
+	const before = [
+		{ name: 'Sanction', value: `${TYPE[s.type] ?? s.type}${s.expiresAt ? ` jusqu’au <t:${Math.round(s.expiresAt / 1000)}:f>` : ''}`, inline: true },
+		{ name: 'Par', value: /^\d+$/.test(s.moderatorId) ? `<@${s.moderatorId}>` : s.moderatorId, inline: true },
+		{ name: 'Le', value: `<t:${Math.round(s.createdAt / 1000)}:f>`, inline: true },
+		...(s.reason ? [{ name: 'Raison de la sanction', value: s.reason.slice(0, 1024) }] : []),
+	];
+	const after = [{ name: 'Statut', value: (view.decidedBy ? `${label} par <@${view.decidedBy}>${view.decisionReason ? ` · ${view.decisionReason}` : ''}` : label).slice(0, 1024) }];
+	const answers = view.answers.map(a => ({ name: a.question.slice(0, 256), value: (a.answer || '—').slice(0, 1024) }));
 	const embed = new EmbedBuilder()
 		.setColor(color)
-		.setTitle(`Appel · sanction #${s.id}`)
-		.setDescription(`<@${view.userId}> (${s.userName ?? view.userId})`)
-		.addFields(
-			{ name: 'Sanction', value: `${TYPE[s.type] ?? s.type}${s.expiresAt ? ` jusqu’au <t:${Math.round(s.expiresAt / 1000)}:f>` : ''}`, inline: true },
-			{ name: 'Par', value: /^\d+$/.test(s.moderatorId) ? `<@${s.moderatorId}>` : s.moderatorId, inline: true },
-			{ name: 'Le', value: `<t:${Math.round(s.createdAt / 1000)}:f>`, inline: true },
-			...(s.reason ? [{ name: 'Raison de la sanction', value: s.reason.slice(0, 1024) }] : []),
-			...view.answers.map(a => ({ name: a.question.slice(0, 256), value: (a.answer || '—').slice(0, 1024) })),
-			{ name: 'Statut', value: view.decidedBy ? `${label} par <@${view.decidedBy}>${view.decisionReason ? ` · ${view.decisionReason}` : ''}` : label },
-		)
-		.setFooter({ text: `Appel #${view.id}` })
+		.setTitle(title)
+		.setDescription(description)
+		.addFields(...before, ...fitFields(answers, title, description, footer, ...[...before, ...after].flatMap(f => [f.name, f.value])), ...after)
+		.setFooter({ text: footer })
 		.setTimestamp(new Date(view.createdAt));
 	const components = view.status === 'pending' ? [new ActionRowBuilder().addComponents(
 		new ButtonBuilder().setCustomId(`appeal:accept:${view.id}`).setLabel('Accepter (lever la sanction)').setEmoji('✅').setStyle(ButtonStyle.Success),

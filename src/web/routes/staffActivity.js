@@ -1,11 +1,6 @@
-import { snowflake } from './helpers.js';
+import { csvCell, snowflake } from './helpers.js';
 
 const range = { type: 'object', properties: { from: { type: 'integer' }, to: { type: 'integer' } } };
-
-function csvCell(value) {
-	const text = value === null || value === undefined ? '' : String(value);
-	return /[";\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
 
 // Staff activity report: per member, over a period
 export function registerStaffActivityRoutes(app, { core }) {
@@ -33,6 +28,6 @@ export function registerStaffActivityRoutes(app, { core }) {
 	});
 	app.put('/api/staff-activity/config', {
 		config: { permission: 'staffactivity.manage' },
-		schema: { body: { type: 'object', properties: { enabled: { type: 'boolean' }, guildId: { anyOf: [snowflake, { type: 'null' }] }, channelId: { anyOf: [snowflake, { type: 'null' }] } } } },
+		schema: { body: { type: 'object', properties: { enabled: { type: 'boolean' }, guildId: { anyOf: [{ type: 'null' }, snowflake] }, channelId: { anyOf: [{ type: 'null' }, snowflake] } } } },
 	}, async (request) => staffActivity.setConfig(request.actor, request.body));
 }

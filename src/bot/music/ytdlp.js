@@ -94,7 +94,10 @@ export function createYtDlp({ dataDir, logger = console }) {
 		// The audio of a link, written on stdout as it downloads (piped into ffmpeg)
 		async spawnAudio(target) {
 			const bin = await binary();
-			return spawn(bin, [...baseArgs(), '-f', 'bestaudio[acodec=opus]/bestaudio/best', '--no-playlist', '--no-part', '-q', '-o', '-', target], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+			const child = spawn(bin, [...baseArgs(), '-f', 'bestaudio[acodec=opus]/bestaudio/best', '--no-playlist', '--no-part', '-q', '-o', '-', target], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+			// Listened at once: a failed spawn emits "error" on the next tick, before the caller can listen (crash otherwise)
+			child.on('error', error => logger.warn('yt-dlp failed to start:', error.message));
+			return child;
 		},
 
 		// Runs yt-dlp and returns its parsed JSON output

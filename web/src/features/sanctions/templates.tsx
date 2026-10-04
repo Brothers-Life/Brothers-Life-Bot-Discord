@@ -128,7 +128,7 @@ function TemplateDialog({ template, onClose, onSaved }: { template: Partial<Sanc
           <DialogDescription>Une base : au moment de sanctionner, tout reste modifiable.</DialogDescription>
         </DialogHeader>
         <form id='template-form' className='grid gap-4' onSubmit={(e) => { e.preventDefault(); if (valid) save.mutate() }}>
-          <div className='grid gap-4 sm:grid-cols-2'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
             <div className='grid gap-1.5'>
               <Label htmlFor='tpl-name'>Nom</Label>
               <Input id='tpl-name' value={t.name ?? ''} maxLength={60} onChange={(e) => set({ name: e.target.value })} placeholder='Insultes' autoFocus />
@@ -154,7 +154,7 @@ function TemplateDialog({ template, onClose, onSaved }: { template: Partial<Sanc
             <Label htmlFor='tpl-reason'>Raison {t.type !== 'warn' && <span className='text-muted-foreground'>(conseillée)</span>}</Label>
             <Textarea id='tpl-reason' rows={2} maxLength={500} value={t.reason ?? ''} onChange={(e) => set({ reason: e.target.value })} placeholder='Insultes envers un membre' />
           </div>
-          <div className='grid gap-4 sm:grid-cols-2'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
             {hasDuration && (
               <div className='grid gap-1.5'>
                 <Label htmlFor='tpl-duration'>Durée {t.type !== 'timeout' && <span className='text-muted-foreground'>(vide = définitif)</span>}</Label>

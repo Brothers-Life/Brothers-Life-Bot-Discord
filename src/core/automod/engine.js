@@ -41,8 +41,18 @@ export function normalizeConfig(input = {}) {
 // Pure logic: no Discord, no database.
 export function createAutomodEngine({ now = Date.now, historySeconds = 120 } = {}) {
 	const history = new Map();
+	let evaluations = 0;
+
+	// Members who stopped writing would otherwise stay in memory for good
+	function sweep() {
+		const at = now();
+		for (const [key, entries] of history) {
+			if (!entries.length || at - entries.at(-1).at >= historySeconds * 1000) history.delete(key);
+		}
+	}
 
 	function recent(key) {
+		if (++evaluations % 1000 === 0) sweep();
 		const at = now();
 		const entries = (history.get(key) ?? []).filter(e => at - e.at < historySeconds * 1000);
 		history.set(key, entries);

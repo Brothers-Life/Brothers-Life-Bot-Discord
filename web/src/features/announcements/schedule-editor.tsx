@@ -67,7 +67,7 @@ export function ScheduleEditor({ value: s, onChange }: { value: ScheduleDraft; o
   const set = (patch: Partial<ScheduleDraft>) => onChange({ ...s, ...patch })
   return (
     <div className='grid gap-4'>
-      <div className='grid gap-4 sm:grid-cols-2'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
         <div className='grid gap-1.5'>
           <Label>Fréquence</Label>
           <Select value={s.mode} onValueChange={(v) => set({ mode: v as ScheduleDraft['mode'] })}>
@@ -88,7 +88,7 @@ export function ScheduleEditor({ value: s, onChange }: { value: ScheduleDraft; o
       </div>
 
       {['daily', 'weekly', 'monthly'].includes(s.mode) && (
-        <div className='grid gap-4 sm:grid-cols-2'>
+        <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
           <div className='grid gap-1.5'>
             <Label htmlFor='sch-time'>Heure (heure de Paris)</Label>
             <Input id='sch-time' type='time' value={s.time} onChange={(e) => set({ time: e.target.value })} />
@@ -123,7 +123,7 @@ export function ScheduleEditor({ value: s, onChange }: { value: ScheduleDraft; o
         </div>
       )}
       {s.mode !== 'once' && (
-        <div className='grid gap-4 sm:grid-cols-2'>
+        <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
           <div className='grid gap-1.5'>
             <Label htmlFor='sch-end'>Arrêter après le (facultatif)</Label>
             <Input id='sch-end' type='datetime-local' value={s.endAt} onChange={(e) => set({ endAt: e.target.value })} />

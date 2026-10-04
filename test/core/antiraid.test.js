@@ -67,3 +67,30 @@ test('recent accounts: quarantine role, and the manual raid mode needs its permi
 	assert.equal(ended.actioned, 0);
 	assert.throws(() => antiraid.save(owner, MAIN, { newAccount: { enabled: true, action: 'role' } }), /quarantaine/);
 });
+
+test('simultaneous joins start a single raid (the restore state is the one from before the raid)', async () => {
+	const { antiraid, executor, join } = await setup({ actionOnJoin: 'none' });
+	await join(1);
+	await join(2);
+	await Promise.all([join(3), join(4), join(5)]);
+	assert.equal(executor.raidLocks.filter(l => l[0] === 'lock').length, 1);
+	assert.ok(antiraid.state(MAIN).raid);
+});
+
+test('a raid survives a restart: its locks are still restored at the end', async () => {
+	let clock = Date.now();
+	const ctx = await withNetwork();
+	const { core, executor, owner } = ctx;
+	const make = () => createAntiraid({ db: core.db, network: core.network, audit: core.audit, executor, sanctions: core.sanctions, logs: core.logs, logger: { warn: () => undefined }, now: () => clock });
+	const first = make();
+	first.save(owner, MAIN, { enabled: true, raidMinutes: 5 });
+	await first.setRaid(owner, MAIN, true);
+
+	const second = make();
+	assert.ok(second.state(MAIN).raid, 'raid known after the restart');
+	clock += 6 * 60_000;
+	await second.tick();
+	assert.deepEqual(executor.raidLocks.at(-1), ['restore', MAIN, { verificationLevel: 1, invitesDisabled: false }]);
+	assert.equal(second.state(MAIN).raid, null);
+	assert.equal(make().state(MAIN).raid, null);
+});

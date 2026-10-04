@@ -170,7 +170,7 @@ function EventDialog({ initial, data, onClose }: { initial: Partial<RpEvent>; da
         <Tabs defaultValue='infos'>
           <TabsList><TabsTrigger value='infos'>Infos</TabsTrigger><TabsTrigger value='where'>Salons ({e.targets.length})</TabsTrigger><TabsTrigger value='options'>Inscriptions</TabsTrigger></TabsList>
           <TabsContent value='infos' className='mt-4 grid gap-4'>
-            <div className='grid gap-4 sm:grid-cols-2'>
+            <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
               <div className='grid gap-1.5'><Label htmlFor='ev-title'>Titre</Label><Input id='ev-title' value={e.title} maxLength={100} onChange={(x) => set({ title: x.target.value })} placeholder='Course de rue au port' /></div>
               <div className='grid gap-1.5'><Label htmlFor='ev-loc'>Lieu (en jeu)</Label><Input id='ev-loc' value={e.location} maxLength={200} onChange={(x) => set({ location: x.target.value })} placeholder='Port de Los Santos' /></div>
               <div className='grid gap-1.5'><Label htmlFor='ev-start'>Début</Label><Input id='ev-start' type='datetime-local' value={e.startsAt} onChange={(x) => set({ startsAt: x.target.value })} /></div>
@@ -183,7 +183,7 @@ function EventDialog({ initial, data, onClose }: { initial: Partial<RpEvent>; da
             <TargetsEditor guilds={data.guilds} targets={e.targets} onChange={(targets) => set({ targets })} disabled={false} />
           </TabsContent>
           <TabsContent value='options' className='mt-4 grid gap-4'>
-            <div className='grid gap-4 sm:grid-cols-2'>
+            <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
               <div className='grid gap-1.5'><Label htmlFor='ev-cap'>Places (vide = illimité)</Label><Input id='ev-cap' type='number' min={1} value={e.capacity} onChange={(x) => set({ capacity: x.target.value })} /></div>
               <label className='flex items-end gap-2 pb-2 text-sm'><Switch checked={e.allowMaybe} onCheckedChange={(allowMaybe) => set({ allowMaybe })} /> Proposer « Peut-être »</label>
             </div>
@@ -198,7 +198,7 @@ function EventDialog({ initial, data, onClose }: { initial: Partial<RpEvent>; da
             </div>
             <div className='grid gap-2'>
               <Label>Rôle donné aux participants pendant l’événement</Label>
-              <div className='grid gap-3 sm:grid-cols-2'>
+              <div className='grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2'>
                 {data.guilds.filter((g) => e.targets.some((t) => t.guildId === g.id)).map((g) => (
                   <div key={g.id} className='grid min-w-0 gap-1'>
                     <span className='truncate text-xs text-muted-foreground'>{g.name}</span>

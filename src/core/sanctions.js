@@ -88,6 +88,15 @@ export function createSanctions({ db, audit, network, ranks, executor, restricti
 		}
 	}
 
+	function needRevoke(actor) {
+		if (!actor.can('sanctions.revoke')) throw new ForbiddenError('Permission manquante : sanctions.revoke');
+	}
+
+	// Lifting one's own sanction would make every sanction of a staff member pointless
+	function notSelf(actor, userId) {
+		if (userId === actor.id && !actor.isOwner) throw new ForbiddenError('Tu ne peux pas lever une sanction qui te concerne.');
+	}
+
 	// Runs `action` on each server; never throws, returns { guildId: { ok, error?, skipped? } }
 	async function applyEach(guildIds, action) {
 		const results = {};
@@ -152,6 +161,9 @@ export function createSanctions({ db, audit, network, ranks, executor, restricti
 		if (reason && reason.length > 500) throw new ValidationError('La raison est limitée à 500 caractères.');
 		if (!['network', 'local'].includes(scope)) throw new ValidationError('La portée doit être network ou local.');
 		if (scope === 'local' && !originGuildId) throw new ValidationError('Une sanction locale doit indiquer un serveur.');
+		if (durationMs !== null && durationMs !== undefined && durationMs !== 0 && (!Number.isSafeInteger(durationMs) || durationMs <= 0)) {
+			throw new ValidationError('Durée invalide.');
+		}
 		if (type === 'timeout' && (!durationMs || durationMs > MAX_TIMEOUT_MS)) throw new ValidationError('Un timeout demande une durée de 28 jours maximum.');
 		if (durationMs && !DURABLE.has(type)) throw new ValidationError('Seuls les bans, les timeouts et les restrictions peuvent avoir une durée.');
 		if (type === 'restrict') restrictions.getProfile(profile ?? '');
@@ -208,6 +220,7 @@ export function createSanctions({ db, audit, network, ranks, executor, restricti
 		setReason(actor, id, reason) {
 			if (!actor.can('sanctions.edit')) throw new ForbiddenError('Permission manquante : sanctions.edit');
 			const sanction = getOrThrow(id);
+			notSelf(actor, sanction.userId);
 			const text = String(reason ?? '').trim();
 			if (text.length > 500) throw new ValidationError('La raison est limitée à 500 caractères.');
 			q.setReason.run(text || null, id);
@@ -247,8 +260,9 @@ export function createSanctions({ db, audit, network, ranks, executor, restricti
 
 		// Lifts a ban / timeout, or cancels a warn
 		async revoke(actor, id, reason = '') {
-			if (!actor.can('sanctions.revoke')) throw new ForbiddenError('Permission manquante : sanctions.revoke');
+			needRevoke(actor);
 			const sanction = getOrThrow(id);
+			notSelf(actor, sanction.userId);
 			if (sanction.revokedAt) throw new ValidationError('Cette sanction est déjà levée.');
 			if (sanction.type === 'kick') throw new ValidationError('Une expulsion ne peut pas être annulée.');
 			return revokeSanction(actor, sanction, reason);
@@ -256,8 +270,9 @@ export function createSanctions({ db, audit, network, ranks, executor, restricti
 
 		// Unban a user everywhere (also lifts bans done outside the bot)
 		async unbanUser(actor, userId, reason = '', { scope = 'network', originGuildId = null } = {}) {
-			if (!actor.can('sanctions.revoke')) throw new ForbiddenError('Permission manquante : sanctions.revoke');
+			needRevoke(actor);
 			userId = String(userId);
+			notSelf(actor, userId);
 			const bans = q.activeBansOf.all(userId, now()).map(toSanction);
 			if (bans.length) {
 				let last;
@@ -270,8 +285,9 @@ export function createSanctions({ db, audit, network, ranks, executor, restricti
 		},
 
 		async untimeoutUser(actor, userId, reason = '', { scope = 'network', originGuildId = null } = {}) {
-			if (!actor.can('sanctions.revoke')) throw new ForbiddenError('Permission manquante : sanctions.revoke');
+			needRevoke(actor);
 			userId = String(userId);
+			notSelf(actor, userId);
 			const timeouts = q.activeTimeoutsOf.all(userId, now()).map(toSanction);
 			if (timeouts.length) {
 				let last;
@@ -285,7 +301,8 @@ export function createSanctions({ db, audit, network, ranks, executor, restricti
 
 		// Lifts the active restrictions of someone (all of them, or one profile)
 		async unrestrictUser(actor, userId, { profile = null, reason = '' } = {}) {
-			if (!actor.can('sanctions.revoke')) throw new ForbiddenError('Permission manquante : sanctions.revoke');
+			needRevoke(actor);
+			notSelf(actor, String(userId));
 			const active = q.activeRestrictsOf.all(String(userId), now()).map(toSanction).filter(s => !profile || s.profile === profile);
 			if (!active.length) throw new ValidationError('Aucune restriction en cours pour cette personne.');
 			const lifted = [];
@@ -299,7 +316,12 @@ export function createSanctions({ db, audit, network, ranks, executor, restricti
 			const principal = await ranks.resolve(executorId);
 			const actor = { ...principal, source: 'native', can: principal.can };
 			const perm = { ban: 'sanctions.ban', kick: 'sanctions.kick', timeout: 'sanctions.timeout', unban: 'sanctions.revoke', untimeout: 'sanctions.revoke' }[kind];
-			const propagate = actor.can(perm);
+			let propagate = actor.can(perm);
+			// Discord's role hierarchy is not the network's: a protected person (owner, staff of equal or
+			// higher level) sanctioned by hand on one server is never sanctioned on the others
+			if (propagate && kind !== 'unban' && kind !== 'untimeout') {
+				propagate = String(userId) !== actor.id && await checkTarget(actor, String(userId)).then(() => true, () => false);
+			}
 
 			if (kind === 'unban' || kind === 'untimeout') {
 				const active = (kind === 'unban' ? q.activeBansOf : q.activeTimeoutsOf).all(String(userId), now()).map(toSanction);

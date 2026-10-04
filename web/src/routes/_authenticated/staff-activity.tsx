@@ -86,7 +86,7 @@ function StaffActivityPage() {
           ]} />
 
           {members.length >= 3 && sort === 'score' && (
-            <div className='stagger grid gap-3 sm:grid-cols-3'>
+            <div className='stagger grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-3'>
               {[1, 0, 2].map((i) => {
                 const m = members[i]
                 return (
@@ -170,7 +170,7 @@ function MonthlySettings({ data }: { data: Data }) {
   const save = useMutation({ mutationFn: () => api('/staff-activity/config', { method: 'PUT', body: { ...c, guildId } }), onSuccess: () => { toast.success('Réglages enregistrés'); qc.invalidateQueries({ queryKey: ['staff-activity'] }) } })
   return (
     <Section title='Rapport mensuel' description='Le 1er de chaque mois, le classement du mois écoulé est publié dans un salon du staff.' actions={<Button size='sm' loading={save.isPending} onClick={() => save.mutate()}><Save /> Enregistrer</Button>}>
-      <div className='grid gap-4 p-4 sm:grid-cols-3 sm:items-end'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-4 p-4 sm:grid-cols-3 sm:items-end'>
         <label className='flex items-center gap-2 text-sm'><Switch checked={c.enabled} onCheckedChange={(enabled) => setC({ ...c, enabled })} /> Publier chaque mois</label>
         <div className='grid gap-1.5'>
           <Label>Serveur</Label>

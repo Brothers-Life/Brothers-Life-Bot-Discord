@@ -133,6 +133,9 @@ export function createAutomod({ db, network, sanctions, ranks, audit, executor, 
 			// One sanction per member every 10 s: a burst of messages must not become a burst of sanctions
 			const key = `${facts.guildId}:${facts.userId}`;
 			if (now() - (lastAction.get(key) ?? 0) < COOLDOWN_MS) return { ...verdict, sanction: null, throttled: true };
+			if (lastAction.size > 1000) {
+				for (const [k, at] of lastAction) if (now() - at >= COOLDOWN_MS) lastAction.delete(k);
+			}
 			lastAction.set(key, now());
 			engine.reset(facts.guildId, facts.userId);
 

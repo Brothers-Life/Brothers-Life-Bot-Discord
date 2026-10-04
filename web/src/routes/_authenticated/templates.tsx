@@ -70,7 +70,7 @@ function TemplatesPage() {
           {!data.templates.length
             ? <Section title='Modèles'><EmptyState title='Aucun modèle'>Crée un Discord modèle, invite le bot dessus, puis ajoute-le ici.</EmptyState></Section>
             : (
-              <div className='stagger grid gap-4 md:grid-cols-2 xl:grid-cols-3'>
+              <div className='stagger grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2 xl:grid-cols-3'>
                 {data.templates.map((t) => (
                   <article key={t.id} className='lift grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-3 rounded-xl border bg-card p-5'>
                     <div className='flex items-start gap-3'>

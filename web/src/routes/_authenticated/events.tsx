@@ -42,7 +42,7 @@ function Details({ event }: { event: NetworkEvent }) {
   const d = event.details ?? {}
   if (event.type === 'message_edit') {
     return (
-      <div className='grid gap-2 sm:grid-cols-2'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-2'>
         <div><div className='mb-1 text-muted-foreground'>Avant</div><p className='whitespace-pre-wrap'>{(d.before as string) ?? 'contenu inconnu'}</p></div>
         <div><div className='mb-1 text-muted-foreground'>Après</div><p className='whitespace-pre-wrap'>{d.after as string}</p></div>
       </div>

@@ -92,6 +92,7 @@ export function createRestrictions({ db, network, audit, executor, logger = cons
 		// Recreates missing roles and resets every overwrite, on one server or on the whole network
 		async repair(actor, guildId = null) {
 			if (!actor.can('restrictions.manage')) throw new ForbiddenError('Permission manquante : restrictions.manage');
+			if (guildId && network.find(guildId)?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
 			const guilds = guildId ? [guildId] : network.activeIds();
 			const results = {};
 			for (const id of guilds) {

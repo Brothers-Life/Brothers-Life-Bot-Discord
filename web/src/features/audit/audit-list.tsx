@@ -125,7 +125,7 @@ export function AuditList({ entries, compact = false }: { entries: AuditEntry[];
               </time>
             </button>
             {expanded && (
-              <dl className='grid gap-x-4 gap-y-1 bg-muted/40 px-11 py-3 text-xs sm:grid-cols-[max-content_1fr]'>
+              <dl className='grid grid-cols-[minmax(0,1fr)] gap-x-4 gap-y-1 bg-muted/40 px-11 py-3 text-xs sm:grid-cols-[max-content_1fr]'>
                 <dt className='text-muted-foreground'>Date</dt><dd>{dateTime(entry.at)}</dd>
                 <dt className='text-muted-foreground'>Auteur</dt><dd>{actor(entry)} ({SOURCE_LABELS[entry.source]}){entry.actorName ? ` · ${entry.actorId}` : ''}</dd>
                 {entry.guildId && <><dt className='text-muted-foreground'>Serveur</dt><dd>{entry.guildId}</dd></>}

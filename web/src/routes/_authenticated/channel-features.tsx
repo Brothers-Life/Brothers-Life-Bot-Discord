@@ -62,7 +62,7 @@ function ChannelFeaturesPage() {
           )}
 
           {manage && (
-            <div className='stagger grid gap-3 sm:grid-cols-2 xl:grid-cols-5'>
+            <div className='stagger grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 xl:grid-cols-5'>
               {ORDER.map((kind) => {
                 const Icon = KIND_INFO[kind].icon
                 return (
@@ -165,7 +165,7 @@ function FeatureDialog({ guild, kind, label, feature, onClose }: { guild: GuildD
             {kind === 'autopublish' && !channels.length && <p className='text-xs text-warning'>Aucun salon d’annonces sur ce serveur (Paramètres du serveur, Communauté).</p>}
           </div>
           {kind === 'counting' && <>{toggle('resetOnFail', 'Une erreur remet le compteur à zéro (sinon le mauvais nombre est juste supprimé)')}{toggle('allowTwice', 'Autoriser la même personne deux fois de suite')}{toggle('deleteOthers', 'Supprimer les messages qui ne sont pas des nombres')}</>}
-          {kind === 'oneword' && <div className='grid gap-4 sm:grid-cols-2'>{number('minWords', 'Mots minimum par phrase', 1, 50)}{number('maxLength', 'Longueur max d’un mot', 5, 50)}<div className='sm:col-span-2'>{toggle('allowTwice', 'Autoriser la même personne deux fois de suite')}</div></div>}
+          {kind === 'oneword' && <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>{number('minWords', 'Mots minimum par phrase', 1, 50)}{number('maxLength', 'Longueur max d’un mot', 5, 50)}<div className='sm:col-span-2'>{toggle('allowTwice', 'Autoriser la même personne deux fois de suite')}</div></div>}
           {kind === 'autopublish' && toggle('onlyBots', 'Seulement les messages des bots (flux, alertes)')}
           {kind === 'mediaonly' && <>{toggle('allowLinks', 'Autoriser aussi les liens (YouTube, Imgur…)')}{toggle('notice', 'Prévenir la personne quand son message est supprimé')}</>}
           {kind === 'sticky' && c.payload && (

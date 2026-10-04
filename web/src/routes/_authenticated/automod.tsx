@@ -190,7 +190,7 @@ function AutomodForm({ target, initial, inherited, editable }: { target: string;
           <Checkbox checked={config.scam.blockEveryoneLinks} onCheckedChange={(v) => patch('scam', { blockEveryoneLinks: v === true })} disabled={disabled} />
           Traiter comme une arnaque un @everyone accompagné d’un lien
         </label>
-        <div className='grid gap-4 sm:grid-cols-2'>
+        <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
           <div className='grid gap-1.5'>
             <Label htmlFor='scam-domains'>Domaines interdits en plus (un par ligne)</Label>
             <Textarea id='scam-domains' rows={4} value={lines(config.scam.customDomains)} onChange={(e) => patch('scam', { customDomains: toList(e.target.value) })} disabled={disabled} placeholder='exemple-arnaque.com' />
@@ -236,7 +236,7 @@ function AutomodForm({ target, initial, inherited, editable }: { target: string;
 
       {target !== NETWORK && options.data && (
         <Section title='Exemptions de ce serveur' description='Les salons et rôles cochés ne sont jamais contrôlés.'>
-          <div className='grid gap-6 p-4 md:grid-cols-2'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-6 p-4 md:grid-cols-2'>
             <fieldset>
               <legend className='mb-2 text-sm font-medium'>Salons</legend>
               <div className='grid max-h-64 gap-1 overflow-y-auto rounded-md border p-2'>

@@ -303,14 +303,14 @@ function PositionDialog({ initial, data, guildId, onClose }: { initial: Omit<Pos
       <DialogContent className='max-h-[92svh] overflow-y-auto sm:max-w-3xl'>
         <DialogHeader><DialogTitle>{p.id ? `Modifier ${initial.name}` : 'Nouveau poste'}</DialogTitle></DialogHeader>
         <Tabs defaultValue='general'>
-          <TabsList><TabsTrigger value='general'>Général</TabsTrigger><TabsTrigger value='form'>Formulaire</TabsTrigger><TabsTrigger value='rules'>Conditions</TabsTrigger><TabsTrigger value='messages'>Messages</TabsTrigger></TabsList>
+          <TabsList className='h-auto flex-wrap [&>button]:h-8 [&>button]:flex-none'><TabsTrigger value='general'>Général</TabsTrigger><TabsTrigger value='form'>Formulaire</TabsTrigger><TabsTrigger value='rules'>Conditions</TabsTrigger><TabsTrigger value='messages'>Messages</TabsTrigger></TabsList>
           <TabsContent value='general' className='mt-4 grid gap-4'>
-            <div className='grid gap-4 sm:grid-cols-[1fr_auto]'>
+            <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-[1fr_auto]'>
               <div className='grid gap-1.5'><Label htmlFor='pos-name'>Nom</Label><Input id='pos-name' value={p.name} maxLength={60} onChange={(e) => setP({ ...p, name: e.target.value })} /></div>
               <label className='flex items-end gap-2 pb-2 text-sm'><Switch checked={c.open} onCheckedChange={(v) => set({ open: v })} /> Candidatures ouvertes</label>
             </div>
             <div className='grid gap-1.5'><Label htmlFor='pos-desc'>Description (affichée sur le panneau)</Label><Textarea id='pos-desc' rows={2} maxLength={1000} value={p.description} onChange={(e) => setP({ ...p, description: e.target.value })} /></div>
-            <div className='grid gap-4 sm:grid-cols-2'>
+            <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
               <div className='grid gap-1.5'><Label>Salon du panneau</Label><ChannelSelect channels={data.channels} value={p.panelChannelId} onChange={(v) => setP({ ...p, panelChannelId: v })} label='Salon du panneau' /></div>
               <div className='grid gap-1.5'><Label>Salon des candidatures (staff)</Label><ChannelSelect channels={data.channels} value={c.reviewChannelId} onChange={(v) => set({ reviewChannelId: v })} label='Salon des candidatures' /></div>
               <div className='grid gap-1.5'><Label>Rôles mentionnés à chaque candidature</Label><RolesPicker roles={data.roles} value={c.pingRoleIds} onChange={(ids) => set({ pingRoleIds: ids })} label='Rôles mentionnés' /></div>
@@ -328,7 +328,7 @@ function PositionDialog({ initial, data, guildId, onClose }: { initial: Omit<Pos
             </div>
           </TabsContent>
           <TabsContent value='form' className='mt-4'><FormBuilder value={c.form} allowEmpty={false} onChange={(form) => set({ form })} /></TabsContent>
-          <TabsContent value='rules' className='mt-4 grid gap-4 sm:grid-cols-2'>
+          <TabsContent value='rules' className='mt-4 grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
             {num('Âge du compte (jours)', c.requirements.minAccountAgeDays, (n) => setReq({ minAccountAgeDays: n }))}
             {num('Ancienneté sur le serveur (jours)', c.requirements.minMemberDays, (n) => setReq({ minMemberDays: n }))}
             {num('Aucune sanction depuis (jours)', c.requirements.noSanctionDays, (n) => setReq({ noSanctionDays: n }))}

@@ -157,7 +157,7 @@ function StatsPage() {
         <TabsContent value='overview' className='mt-4 grid gap-4'>
           {!totals ? <Skeleton className='h-96 w-full' /> : (
             <>
-              <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-5'>
+              <div className='grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 xl:grid-cols-5'>
                 <StatCard icon={MessageSquare} label='Messages' value={n(totals.messages)} tone='bg-primary/15 text-primary' />
                 <StatCard icon={Mic} label='Heures de vocal' value={n(totals.voiceHours)} tone='bg-sky-500/15 text-sky-500' />
                 <StatCard icon={Activity} label='Membres actifs' value={n(totals.active)} tone='bg-success/15 text-success' />
@@ -168,7 +168,7 @@ function StatsPage() {
                   tone='bg-violet-500/15 text-violet-500'
                 />
               </div>
-              <div className='grid gap-4 lg:grid-cols-2'>
+              <div className='grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2'>
                 <ActivityChart days={overview.data!.days} />
                 <VoiceChart days={overview.data!.days} />
                 <MembersChart days={overview.data!.days} />

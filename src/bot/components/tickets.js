@@ -42,9 +42,13 @@ export async function execute(interaction) {
 			return await start(interaction, id);
 		case 'pick': {
 			const categoryId = Number(interaction.values[0]);
-			// Resets the menu so the same entry can be picked again
-			await interaction.message.edit({ components: interaction.message.components }).catch(() => null);
-			return await start(interaction, categoryId);
+			try {
+				return await start(interaction, categoryId);
+			}
+			finally {
+				// Resets the menu so the same entry can be picked again; after the answer, the modal must come within 3 s
+				interaction.message.edit({ components: interaction.message.components }).catch(() => null);
+			}
 		}
 		case 'next': {
 			const step = Number(extra);
@@ -70,38 +74,44 @@ export async function execute(interaction) {
 			return await interaction.editReply(await openTicket(interaction, id, result.answers));
 		}
 		case 'claim': {
+			// "Only the claimer writes" edits the channel permissions role by role: can be over 3 s
+			await interaction.deferReply();
 			await tickets.claim(interaction.user.id, id);
-			return await interaction.reply({ content: `Ticket pris en charge par <@${interaction.user.id}>.`, allowedMentions: { parse: [] } });
+			return await interaction.editReply({ content: `Ticket pris en charge par <@${interaction.user.id}>.`, allowedMentions: { parse: [] } });
 		}
 		case 'add':
 			return await interaction.reply({ content: 'Qui ajouter au ticket ?', components: [addMemberMenu(id)], flags: MessageFlags.Ephemeral });
 		case 'addselect': {
+			// Up to 5 permission edits: acknowledged first (the menu is an ephemeral message, replaced below)
+			await interaction.deferUpdate();
 			for (const userId of interaction.values) await tickets.addMember(interaction.user.id, id, userId);
-			return await interaction.update({ content: `Ajouté : ${interaction.values.map(u => `<@${u}>`).join(', ')}`, components: [] });
+			return await interaction.editReply({ content: `Ajouté : ${interaction.values.map(u => `<@${u}>`).join(', ')}`, components: [] });
 		}
 		case 'status': {
 			const ticket = await tickets.setStatus(interaction.user.id, id, interaction.values[0]);
 			const status = tickets.statuses(ticket.guildId).find(s => s.key === ticket.statusKey);
-			await interaction.message.edit({ components: interaction.message.components }).catch(() => null);
-			return await interaction.reply({ content: `Statut : ${status?.emoji ?? ''} **${status?.label ?? ticket.statusKey}** (par <@${interaction.user.id}>)`, allowedMentions: { parse: [] } });
+			await interaction.reply({ content: `Statut : ${status?.emoji ?? ''} **${status?.label ?? ticket.statusKey}** (par <@${interaction.user.id}>)`, allowedMentions: { parse: [] } });
+			// Resets the menu once answered (the 3 s of the interaction are for the answer)
+			return void interaction.message.edit({ components: interaction.message.components }).catch(() => null);
 		}
 		case 'priority': {
 			const ticket = await tickets.setPriority(interaction.user.id, id, interaction.values[0]);
 			const label = tickets.priorities().find(p => p.key === ticket.priority)?.label;
-			await interaction.message.edit({ components: interaction.message.components }).catch(() => null);
-			return await interaction.reply({ content: `Priorité : **${label}** (par <@${interaction.user.id}>)`, allowedMentions: { parse: [] } });
+			await interaction.reply({ content: `Priorité : **${label}** (par <@${interaction.user.id}>)`, allowedMentions: { parse: [] } });
+			return void interaction.message.edit({ components: interaction.message.components }).catch(() => null);
 		}
 		case 'close': {
 			const { requireReason, confirm } = await tickets.closeRequirements(interaction.user.id, id);
 			if (requireReason || confirm) return await interaction.showModal(closeModal(id, { requireReason }));
 			await interaction.deferReply();
 			await tickets.close(interaction.user.id, id, '');
-			return await interaction.editReply('Ticket fermé.');
+			// The channel may already be deleted (no delay set)
+			return await interaction.editReply('Ticket fermé.').catch(() => null);
 		}
 		case 'closeform': {
 			await interaction.deferReply();
 			await tickets.close(interaction.user.id, id, interaction.fields.getTextInputValue('reason') ?? '');
-			return await interaction.editReply('Ticket fermé.');
+			return await interaction.editReply('Ticket fermé.').catch(() => null);
 		}
 		case 'reopen': {
 			await interaction.deferReply();

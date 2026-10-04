@@ -49,7 +49,7 @@ function ArchivesPage() {
         <div className='grid grid-cols-[minmax(0,1fr)] gap-6'>
           {can('archives.manage') && (
             <Section title='Archiver un salon' description='Les 1 000 derniers messages par défaut (10 000 max). Une période limite aux messages entre ces deux dates.'>
-              <form className='grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_8rem_1fr_1fr_auto] lg:items-end' onSubmit={(e) => { e.preventDefault(); if (channelId) create.mutate() }}>
+              <form className='grid grid-cols-[minmax(0,1fr)] gap-4 p-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_8rem_1fr_1fr_auto] lg:items-end' onSubmit={(e) => { e.preventDefault(); if (channelId) create.mutate() }}>
                 <div className='grid gap-1.5'>
                   <Label>Serveur</Label>
                   <Select value={currentGuild} onValueChange={(v) => { setGuildId(v); setChannelId(null) }}>

@@ -20,6 +20,7 @@ export function registerSystemRoutes(app, { core, runtime, consoleLog, versions 
 			const actor = await authenticate(request, core).catch(() => null);
 			if (!actor?.can('panel.access') || !actor.can('console.view')) socket.close(4003, 'Forbidden');
 		}, PERMISSION_RECHECK_MS);
+		recheck.unref?.();
 
 		socket.on('close', () => {
 			clearInterval(recheck);

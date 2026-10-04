@@ -164,7 +164,7 @@ function Editor({ initial, data, onClose }: { initial: CustomCommand; data: Data
           </TabsList>
 
           <TabsContent value='general' className='mt-4 grid gap-4'>
-            <div className='grid gap-2 sm:grid-cols-4' role='radiogroup' aria-label='Déclencheur'>
+            <div className='grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-4' role='radiogroup' aria-label='Déclencheur'>
               {(Object.keys(TRIGGERS) as (keyof typeof TRIGGERS)[]).map((k) => {
                 const Icon = TRIGGER_ICONS[k]
                 return (
@@ -177,7 +177,7 @@ function Editor({ initial, data, onClose }: { initial: CustomCommand; data: Data
                 )
               })}
             </div>
-            <div className='grid gap-4 sm:grid-cols-2'>
+            <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
               <div className='grid gap-1.5'>
                 <Label htmlFor='cc-name'>{t === 'slash' ? 'Nom (après le /)' : t === 'keyword' ? 'Nom interne' : 'Nom affiché dans le menu'}</Label>
                 <Input id='cc-name' value={c.name} maxLength={32} onChange={(e) => set({ name: t === 'slash' ? e.target.value.toLowerCase().replace(/\s+/g, '-') : e.target.value })} placeholder={t === 'slash' ? 'regles' : 'Profil RP'} />
@@ -186,7 +186,7 @@ function Editor({ initial, data, onClose }: { initial: CustomCommand; data: Data
             </div>
             {t === 'keyword' && (
               <div className='grid gap-4 rounded-lg border p-4'>
-                <div className='grid gap-4 sm:grid-cols-2'>
+                <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
                   <div className='grid gap-1.5'>
                     <Label>Le message…</Label>
                     <Select value={kw.mode} onValueChange={(mode) => set({ trigger: { type: 'keyword', keyword: { ...kw, mode: mode as typeof kw.mode } } })}>
@@ -199,13 +199,13 @@ function Editor({ initial, data, onClose }: { initial: CustomCommand; data: Data
                     <Input id='cc-kw' value={kw.patterns.join(', ')} onChange={(e) => set({ trigger: { type: 'keyword', keyword: { ...kw, patterns: e.target.value.split(',').map((p) => p.trimStart()) } } })} placeholder='!regles, !règles' />
                   </div>
                 </div>
-                <div className='grid gap-4 sm:grid-cols-2'>
+                <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
                   <label className='flex items-center gap-2 text-sm'><Checkbox checked={kw.caseSensitive} onCheckedChange={(v) => set({ trigger: { type: 'keyword', keyword: { ...kw, caseSensitive: v === true } } })} /> Respecter les majuscules</label>
                   <div className='grid gap-1.5'><Label>Seulement dans ces salons</Label><MultiPicker items={channelItems(ctx)} value={kw.channelIds} onChange={(channelIds) => set({ trigger: { type: 'keyword', keyword: { ...kw, channelIds } } })} label='Salons' placeholder='Partout' /></div>
                 </div>
               </div>
             )}
-            <div className='grid gap-4 sm:grid-cols-2'>
+            <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
               <div className='grid gap-1.5'>
                 <Label>Serveurs</Label>
                 <Select value={c.scope.mode} onValueChange={(mode) => set({ scope: { mode: mode as 'network' | 'guilds', guildIds: c.scope.guildIds } })}>
@@ -227,7 +227,7 @@ function Editor({ initial, data, onClose }: { initial: CustomCommand; data: Data
             </TabsContent>
           )}
 
-          <TabsContent value='access' className='mt-4 grid gap-4 sm:grid-cols-2'>
+          <TabsContent value='access' className='mt-4 grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
             <div className='grid gap-1.5'><Label>Rangs du panel autorisés</Label><MultiPicker items={data.ranks.map((r) => ({ id: String(r.id), label: r.name }))} value={c.access.rankIds.map(String)} onChange={(ids) => set({ access: { ...c.access, rankIds: ids.map(Number) } })} label='Rangs' placeholder='Tout le monde' /></div>
             <div className='grid gap-1.5'><Label>…ou rôles Discord autorisés</Label><MultiPicker items={roleItems(ctx)} value={c.access.roleIds} onChange={(roleIds) => set({ access: { ...c.access, roleIds } })} label='Rôles autorisés' placeholder='Tout le monde' /></div>
             <div className='grid gap-1.5'><Label>Rôles refusés</Label><MultiPicker items={roleItems(ctx)} value={c.access.denyRoleIds} onChange={(denyRoleIds) => set({ access: { ...c.access, denyRoleIds } })} label='Rôles refusés' placeholder='Aucun' /></div>
@@ -290,7 +290,7 @@ function OptionRow({ value: o, onChange, onRemove }: { value: Option; onChange: 
   const hasChoices = ['string', 'integer', 'number'].includes(o.type)
   return (
     <div className='grid gap-3 rounded-lg border bg-card p-3'>
-      <div className='grid gap-2 sm:grid-cols-[1fr_1.5fr_10rem_auto_auto] sm:items-center'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-[1fr_1.5fr_10rem_auto_auto] sm:items-center'>
         <Input value={o.name} maxLength={32} aria-label='Nom de l’option' onChange={(e) => set({ name: e.target.value.toLowerCase().replace(/\s+/g, '-') })} />
         <Input value={o.description} maxLength={100} aria-label='Description' placeholder='Description' onChange={(e) => set({ description: e.target.value })} />
         <Select value={o.type} onValueChange={(type) => set({ type: type as Option['type'], choices: [] })}>

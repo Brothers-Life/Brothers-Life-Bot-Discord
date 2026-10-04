@@ -223,10 +223,11 @@ export function createRpEvents({ db, network, audit, executor, uploads = null, l
 			for (const e of q.upcoming.all().map(toEvent)) {
 				const due = e.reminders.filter(m => !e.reminded.includes(m) && now() >= e.startsAt - m * MINUTE && now() < e.startsAt);
 				if (due.length) {
+					// Marked first: sending many DMs is slow, a run at the same time must not send them again
+					q.setReminded.run(JSON.stringify([...e.reminded, ...due]), e.id);
 					for (const r of e.rsvps.filter(x => x.status === 'going' || x.status === 'maybe')) {
 						await executor.sendDM(r.userId, `⏰ Rappel : « ${e.title} » commence <t:${Math.floor(e.startsAt / 1000)}:R>${e.location ? ` · 📍 ${e.location}` : ''}.`).catch(() => null);
 					}
-					q.setReminded.run(JSON.stringify([...e.reminded, ...due]), e.id);
 				}
 				if (e.status === 'scheduled' && now() >= e.startsAt && now() < e.endsAt) {
 					q.setStatus.run('live', now(), e.id);

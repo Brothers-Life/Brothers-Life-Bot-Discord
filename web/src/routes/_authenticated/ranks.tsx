@@ -253,7 +253,7 @@ function RankDialog({ draft, payload, maxLevel, canGrant, saving, onClose, onSav
             if (valid) onSave(d)
           }}
         >
-          <div className='grid gap-4 sm:grid-cols-[1fr_7rem_7rem]'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-[1fr_7rem_7rem]'>
             <div className='grid gap-1.5'>
               <Label htmlFor='rank-name'>Nom</Label>
               <Input id='rank-name' value={d.name} maxLength={50} required onChange={(e) => setD({ ...d, name: e.target.value })} placeholder='Modérateur' />
@@ -317,7 +317,7 @@ function RankDialog({ draft, payload, maxLevel, canGrant, saving, onClose, onSav
                       </button>
                     </div>
                     {open && (
-                      <div className='grid gap-1 border-t px-3 py-2 sm:grid-cols-2'>
+                      <div className='grid grid-cols-[minmax(0,1fr)] gap-1 border-t px-3 py-2 sm:grid-cols-2'>
                         {list.map((p) => {
                           const allowed = canGrant(p.key)
                           const from = inherited.get(p.key)
@@ -352,7 +352,7 @@ function RankDialog({ draft, payload, maxLevel, canGrant, saving, onClose, onSav
               <p className='text-sm text-muted-foreground'>Choisis d’abord le serveur principal dans « Serveurs ».</p>
             ) : (
               <>
-                <div className='grid max-h-56 gap-1.5 overflow-y-auto rounded-md border p-2 sm:grid-cols-2'>
+                <div className='grid grid-cols-[minmax(0,1fr)] max-h-56 gap-1.5 overflow-y-auto rounded-md border p-2 sm:grid-cols-2'>
                   {payload.roles.map((role) => (
                     <label key={role.id} className='flex items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-accent/50'>
                       <Checkbox checked={d.roleIds.includes(role.id)} onCheckedChange={() => toggleRole(role.id)} />

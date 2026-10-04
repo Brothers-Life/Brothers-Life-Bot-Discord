@@ -133,7 +133,7 @@ function Player({ guild, data }: { guild: GuildInfo; data: Payload }) {
       <div className='grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-6'>
         <section className='brackets relative overflow-hidden rounded-xl border bg-card'>
           {track?.thumbnail && <img src={track.thumbnail} alt='' aria-hidden className='pointer-events-none absolute inset-0 size-full scale-110 object-cover opacity-20 blur-2xl' />}
-          <div className='relative grid gap-5 p-5 sm:grid-cols-[11rem_minmax(0,1fr)] sm:p-6'>
+          <div className='relative grid grid-cols-[minmax(0,1fr)] gap-5 p-5 sm:grid-cols-[11rem_minmax(0,1fr)] sm:p-6'>
             <div className='relative mx-auto aspect-square w-44 overflow-hidden rounded-lg border bg-muted shadow-lg sm:w-full'>
               {track?.thumbnail ? <img src={track.thumbnail} alt='' className={cn('size-full object-cover', running && 'ken-burns')} /> : (
                 <div className='grid size-full place-items-center text-muted-foreground'><Disc3 className={cn('size-16', running && 'animate-spin [animation-duration:4s]')} /></div>
@@ -190,7 +190,7 @@ function Player({ guild, data }: { guild: GuildInfo; data: Payload }) {
             </div>
           </div>
           {state.connected && (
-            <div className='relative grid gap-4 border-t bg-background/40 p-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:p-6'>
+            <div className='relative grid grid-cols-[minmax(0,1fr)] gap-4 border-t bg-background/40 p-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:p-6'>
               <Volume value={state.volume ?? 100} onCommit={(v) => act('volume', v)} />
               <div className='flex flex-wrap items-center gap-2'>
                 <Label htmlFor='music-speed' className='text-xs text-muted-foreground'>Vitesse</Label>
@@ -487,7 +487,7 @@ function Settings({ data }: { data: Payload }) {
   return (
     <Section title='Réglages' actions={<Button size='sm' loading={save.isPending} onClick={() => save.mutate()}><Save /> Enregistrer</Button>}>
       <div className='grid gap-6 p-4'>
-        <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
+        <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2 lg:grid-cols-4'>
           {number('defaultVolume', 'Volume de départ (%)', 1, 200)}
           {number('maxQueue', 'Titres max dans la file', 10, 1000)}
           {number('maxTrackMinutes', 'Durée max d’un titre (min)', 0, 1440, '0 = pas de limite')}
@@ -505,7 +505,7 @@ function Settings({ data }: { data: Payload }) {
         <div className='grid gap-2'>
           <Label>Rôles DJ par serveur</Label>
           <p className='text-xs text-muted-foreground'>Sans rôle DJ, tout le monde dans le salon vocal du bot pilote la musique. Avec, les autres peuvent seulement ajouter des titres. Les rangs qui ont « Piloter la musique » passent toujours.</p>
-          <div className='grid gap-3 sm:grid-cols-2'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2'>
             {data.guilds.map((g) => (
               <div key={g.id} className='grid min-w-0 gap-1'>
                 <span className='truncate text-xs text-muted-foreground'>{g.name}</span>
@@ -556,7 +556,7 @@ function SpotifyKeys({ spotify, onSaved }: { spotify: Payload['spotify']; onSave
         Crée une appli sur <a className='text-brand underline-offset-4 hover:underline' href='https://developer.spotify.com/dashboard' target='_blank' rel='noreferrer'>developer.spotify.com</a> (Web API, une URL de redirection quelconque comme <code>http://127.0.0.1</code>), puis colle son Client ID et son Client Secret. Spotify ne fournit pas le son : les titres trouvés sont joués depuis YouTube.
       </p>
       <form
-        className='grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end'
+        className='grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end'
         onSubmit={(e) => { e.preventDefault(); save.mutate() }}
       >
         <div className='grid gap-1.5'>

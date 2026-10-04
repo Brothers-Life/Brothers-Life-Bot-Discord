@@ -68,6 +68,8 @@ export function createVoiceRooms({ db, network, audit, executor, logger = consol
 	const toRoom = row => row && ({ channelId: row.channel_id, guildId: row.guild_id, hubId: row.hub_id, ownerId: row.owner_id, state: normalizeState(JSON.parse(row.state)), createdAt: row.created_at });
 	// channelId -> pending deletion timer of empty rooms
 	const pendingDeletes = new Map();
+	// guildId:userId whose room is being created
+	const creating = new Set();
 
 	function requireManage(actor, guildId) {
 		if (!actor.can('voice.manage')) throw new ForbiddenError('Permission manquante : voice.manage');
@@ -108,6 +110,40 @@ export function createVoiceRooms({ db, network, audit, executor, logger = consol
 		}, delaySeconds * 1000);
 		timer?.unref?.();
 		pendingDeletes.set(room.channelId, timer);
+	}
+
+	// A room for this member (hub config checks, channel, panel)
+	async function createRoom(guildId, member, hub, to) {
+		const { config } = hub;
+		if (config.allowedRoleIds.length) {
+			const roles = await executor.getMemberRoleIds(guildId, member.id) ?? [];
+			if (!config.allowedRoleIds.some(r => roles.includes(r))) {
+				await executor.voiceDisconnect(guildId, member.id, 'Pas le droit de créer un vocal').catch(() => null);
+				return;
+			}
+		}
+		if (q.roomsOf.get(guildId, member.id).n >= config.maxPerUser) {
+			// Already has a room: sent back into it instead
+			const own = q.rooms.all(guildId).map(toRoom).find(r => r.ownerId === member.id);
+			if (own) await executor.voiceMove(guildId, member.id, own.channelId, 'Retour dans son vocal').catch(() => null);
+			return;
+		}
+		const saved = config.rememberSettings ? q.prefs.get(member.id, guildId) : null;
+		const state = normalizeState({
+			userLimit: config.userLimit,
+			bitrate: config.bitrate,
+			...(saved ? JSON.parse(saved.prefs) : {}),
+		});
+		const name = state.name ?? config.nameTemplate.replace(/\{user\}/g, member.globalName ?? member.username ?? 'membre').slice(0, 100);
+		state.name = name;
+		const channelId = await executor.createVoiceRoom(guildId, { parentId: config.categoryId ?? await executor.parentOf(to), ownerId: member.id, ...state });
+		q.insertRoom.run(channelId, guildId, hub.id, member.id, JSON.stringify(state), now());
+		await executor.voiceMove(guildId, member.id, channelId, 'Vocal personnel').catch(() => null);
+		// Left the voice meanwhile: nobody will ever leave this room, so it is deleted like an empty one
+		if (!(await executor.voiceChannelMembers(channelId).catch(() => [null])).length) scheduleDelete(toRoom(q.room.get(channelId)), config.deleteAfterSeconds ?? 5);
+		await executor.sendRoomPanel(channelId, { ownerId: member.id, options: config.options }).catch(error => logger.warn('Voice room panel not sent:', error.message));
+		audit.record({ actorId: member.id, source: 'bot', action: 'voice.room_create', guildId, target: channelId, details: { name } });
+		return getRoom(channelId);
 	}
 
 	const service = {
@@ -161,34 +197,16 @@ export function createVoiceRooms({ db, network, audit, executor, logger = consol
 			}
 			const hub = to ? toHub(q.hubByChannel.get(to)) : null;
 			if (!hub) return;
-			const { config } = hub;
-			if (config.allowedRoleIds.length) {
-				const roles = await executor.getMemberRoleIds(guildId, member.id) ?? [];
-				if (!config.allowedRoleIds.some(r => roles.includes(r))) {
-					await executor.voiceDisconnect(guildId, member.id, 'Pas le droit de créer un vocal').catch(() => null);
-					return;
-				}
+			const key = `${guildId}:${member.id}`;
+			// Hopping in and out of the hub while the first room is being created must not create two
+			if (creating.has(key)) return;
+			creating.add(key);
+			try {
+				return await createRoom(guildId, member, hub, to);
 			}
-			if (q.roomsOf.get(guildId, member.id).n >= config.maxPerUser) {
-				// Already has a room: sent back into it instead
-				const own = q.rooms.all(guildId).map(toRoom).find(r => r.ownerId === member.id);
-				if (own) await executor.voiceMove(guildId, member.id, own.channelId, 'Retour dans son vocal').catch(() => null);
-				return;
+			finally {
+				creating.delete(key);
 			}
-			const saved = config.rememberSettings ? q.prefs.get(member.id, guildId) : null;
-			const state = normalizeState({
-				userLimit: config.userLimit,
-				bitrate: config.bitrate,
-				...(saved ? JSON.parse(saved.prefs) : {}),
-			});
-			const name = state.name ?? config.nameTemplate.replace(/\{user\}/g, member.globalName ?? member.username ?? 'membre').slice(0, 100);
-			state.name = name;
-			const channelId = await executor.createVoiceRoom(guildId, { parentId: config.categoryId ?? await executor.parentOf(to), ownerId: member.id, ...state });
-			q.insertRoom.run(channelId, guildId, hub.id, member.id, JSON.stringify(state), now());
-			await executor.voiceMove(guildId, member.id, channelId, 'Vocal personnel').catch(() => null);
-			await executor.sendRoomPanel(channelId, { ownerId: member.id, options: config.options }).catch(error => logger.warn('Voice room panel not sent:', error.message));
-			audit.record({ actorId: member.id, source: 'bot', action: 'voice.room_create', guildId, target: channelId, details: { name } });
-			return getRoom(channelId);
 		},
 
 		// --- Owner controls -------------------------------------------------------------------------
@@ -242,9 +260,11 @@ export function createVoiceRooms({ db, network, audit, executor, logger = consol
 			const { room } = await control(userId, channelId, 'transfer');
 			const inside = await executor.voiceChannelMembers(channelId).catch(() => []);
 			if (!inside.includes(targetId)) throw new ValidationError('Le nouveau propriétaire doit être dans le salon.');
-			const next = { ...room, ownerId: targetId };
+			// Read again after waiting on Discord: a change made meanwhile is kept, a transfer made meanwhile wins
+			const fresh = getRoom(channelId);
+			if (fresh.ownerId !== userId) throw new ForbiddenError('Seul le propriétaire du salon peut faire ça.');
 			audit.record({ actorId: userId, source: 'bot', action: 'voice.room_transfer', guildId: room.guildId, target: channelId, details: { to: `<@${targetId}>` } });
-			return persist(next, room.state);
+			return persist({ ...fresh, ownerId: targetId }, fresh.state);
 		},
 
 		// The owner left: someone still in the room takes it
@@ -254,7 +274,10 @@ export function createVoiceRooms({ db, network, audit, executor, logger = consol
 			const inside = await executor.voiceChannelMembers(channelId).catch(() => []);
 			if (!inside.includes(userId)) throw new ValidationError('Rejoins d’abord le salon.');
 			if (inside.includes(room.ownerId)) throw new ValidationError('Le propriétaire est toujours là.');
-			return persist({ ...room, ownerId: userId }, room.state);
+			// Two people claiming at once: the first one keeps it
+			const fresh = getRoom(channelId);
+			if (fresh.ownerId !== room.ownerId) throw new ValidationError('Quelqu’un d’autre vient de prendre le salon.');
+			return persist({ ...fresh, ownerId: userId }, fresh.state);
 		},
 
 		async setBitrate(userId, channelId, kbps) {

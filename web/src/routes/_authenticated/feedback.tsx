@@ -282,7 +282,7 @@ function BoxSettings({ box, data, guildId, onDeleted, onDuplicated }: { box: Box
     <div className='grid gap-6'>
       <Section title='Général' actions={manage && <div className='flex gap-2'><DuplicateButton text loading={duplicate.isPending} onClick={() => duplicate.mutate()} /><Button size='sm' variant='danger-ghost' onClick={() => setDeleting(true)}><Trash2 /> Supprimer la boîte</Button></div>}>
         <div className='grid gap-4 p-4'>
-          <div className='grid gap-4 sm:grid-cols-2'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
             <div className='grid gap-1.5'><Label htmlFor='b-name'>Nom</Label><Input id='b-name' value={name} maxLength={60} disabled={!manage} onChange={(e) => setName(e.target.value)} /></div>
             <div className='grid gap-1.5'><Label>Salon de publication</Label><ChannelSelect channels={data.channels} value={c.channelId} disabled={!manage} onChange={(v) => set({ channelId: v })} label='Salon de publication' /></div>
             <div className='grid gap-1.5'><Label>Validation par le staff avant publication</Label><ChannelSelect channels={data.channels} value={c.reviewChannelId} disabled={!manage} onChange={(v) => set({ reviewChannelId: v })} noneLabel='Non, publier directement' label='Salon de validation' /></div>
@@ -291,7 +291,7 @@ function BoxSettings({ box, data, guildId, onDeleted, onDuplicated }: { box: Box
             <div className='grid gap-1.5'><Label>Salon des propositions refusées (déplacées)</Label><ChannelSelect channels={data.channels} value={c.rejectedChannelId} disabled={!manage} onChange={(v) => set({ rejectedChannelId: v })} noneLabel='Ne pas déplacer' label='Salon des refusées' /></div>
             <div className='grid gap-1.5'><Label htmlFor='b-cool'>Délai entre deux posts (minutes)</Label><Input id='b-cool' type='number' min={0} value={c.cooldownMinutes} disabled={!manage} onChange={(e) => set({ cooldownMinutes: Number(e.target.value) || 0 })} /></div>
           </div>
-          <div className='grid gap-2 text-sm sm:grid-cols-2'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-2 text-sm sm:grid-cols-2'>
             <label className='flex items-center gap-2'><Checkbox checked={c.votes} disabled={!manage} onCheckedChange={(v) => set({ votes: v === true })} /> Votes 👍 / 👎</label>
             <label className='flex items-center gap-2'><Checkbox checked={c.thread} disabled={!manage} onCheckedChange={(v) => set({ thread: v === true })} /> Fil de discussion sous chaque proposition</label>
             <label className='flex items-center gap-2'><Checkbox checked={c.anonymousAllowed} disabled={!manage} onCheckedChange={(v) => set({ anonymousAllowed: v === true })} /> Autoriser l’anonymat (nom visible par le staff seulement)</label>
@@ -307,7 +307,7 @@ function BoxSettings({ box, data, guildId, onDeleted, onDuplicated }: { box: Box
       <Section title='Statuts' description='Le premier statut est celui des nouvelles propositions. Un statut « final » ferme le vote et verrouille le fil.'>
         <ul className='divide-y'>
           {c.statuses.map((s, i) => (
-            <li key={i} className='grid gap-2 px-4 py-2 sm:grid-cols-[auto_1fr_6rem_auto_auto] sm:items-center'>
+            <li key={i} className='grid grid-cols-[minmax(0,1fr)] gap-2 px-4 py-2 sm:grid-cols-[auto_1fr_6rem_auto_auto] sm:items-center'>
               <EmojiField value={s.emoji} label='Émoji du statut' disabled={!manage} onChange={(v) => patchStatus(i, { emoji: v })} />
               <Input value={s.label} maxLength={40} aria-label='Nom' disabled={!manage} onChange={(e) => patchStatus(i, { label: e.target.value })} />
               <ColorPicker disabled={!manage} value={s.color} onChange={(hex) => patchStatus(i, { color: hex })} label='Couleur' />
@@ -323,7 +323,7 @@ function BoxSettings({ box, data, guildId, onDeleted, onDuplicated }: { box: Box
         <Section title='Niveaux d’urgence' description='Chaque niveau mentionne des rôles à la publication, et relance si personne ne prend le bug après le délai.'>
           <ul className='divide-y'>
             {c.urgencies.map((u, i) => (
-              <li key={i} className='grid gap-2 px-4 py-2 sm:grid-cols-[1fr_6rem_1.4fr_8rem] sm:items-center'>
+              <li key={i} className='grid grid-cols-[minmax(0,1fr)] gap-2 px-4 py-2 sm:grid-cols-[1fr_6rem_1.4fr_8rem] sm:items-center'>
                 <Input value={u.label} maxLength={30} aria-label='Nom' disabled={!manage} onChange={(e) => patchUrgency(i, { label: e.target.value })} />
                 <ColorPicker disabled={!manage} value={u.color} onChange={(hex) => patchUrgency(i, { color: hex })} label='Couleur' />
                 <RolesPicker roles={data.roles} value={u.pingRoleIds} disabled={!manage} onChange={(ids) => patchUrgency(i, { pingRoleIds: ids })} placeholder='Aucun ping' label={`Rôles pour ${u.label}`} />

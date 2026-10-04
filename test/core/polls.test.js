@@ -88,3 +88,25 @@ test('conditions to vote and validation', async () => {
 	await polls.vote(poll.id, ALICE, MAIN, ['o1']);
 	await assert.rejects(polls.update(owner, poll.id, { question: 'x', options: [{ label: 'a' }, { label: 'b' }] }), /ne peuvent plus changer/);
 });
+
+test('a scheduled poll is posted once even when two ticks overlap', async () => {
+	const { polls, make, owner, executor, advance } = await setup();
+	const poll = make({}, { startsAt: Date.now() + 3600_000 });
+	await polls.publish(owner, poll.id);
+	advance(3600_000 + 60_000);
+	await Promise.all([polls.tick(), polls.tick()]);
+	assert.equal(executor.polls.length, 2, 'one message per target, not two');
+	assert.equal(polls.get(poll.id).messages.length, 2);
+});
+
+test('a vote arriving while the poll closes is refused', async () => {
+	const { polls, make, owner, executor } = await setup();
+	const poll = make({ requiredRoleIds: ['800000000000000001'] });
+	await polls.publish(owner, poll.id);
+	executor.memberRoles.set(`${MAIN}:${ALICE}`, ['800000000000000001']);
+	// The role check awaits Discord: the poll is closed meanwhile
+	const voting = polls.vote(poll.id, ALICE, MAIN, ['o1']);
+	await polls.close(owner, poll.id);
+	await assert.rejects(voting, /fermé/);
+	assert.equal(polls.results(poll.id).total, 0);
+});

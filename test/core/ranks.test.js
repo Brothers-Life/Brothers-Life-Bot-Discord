@@ -155,3 +155,13 @@ test('@everyone cannot grant a rank', async () => {
 	const rank = ranks.create(await owner(), { name: 'Modo', level: 20, permissions: ['panel.access'] });
 	assert.throws(() => ranks.setRoleLinks(ranks.system, rank.id, [MAIN]), ValidationError);
 });
+
+test('linking or assigning a rank cannot hand out permissions you do not hold', async () => {
+	const { alice } = await setupAdmin();
+	const powerful = ranks.create(await owner(), { name: 'Technique', level: 10, permissions: ['versions.install'] });
+	assert.throws(() => ranks.setRoleLinks(alice, powerful.id, ['role-membre']), ForbiddenError);
+	await assert.rejects(ranks.assignDirect(alice, BOB, powerful.id), ForbiddenError);
+	const harmless = ranks.create(alice, { name: 'Helper', level: 10, permissions: ['audit.view'] });
+	ranks.setRoleLinks(alice, harmless.id, ['role-helper']);
+	await ranks.assignDirect(alice, BOB, harmless.id);
+});

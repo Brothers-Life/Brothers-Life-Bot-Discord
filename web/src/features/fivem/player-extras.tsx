@@ -49,7 +49,7 @@ const when = (at: number | null) => <span className='ms-auto text-xs text-muted-
 export function PlayerWork({ p }: { p: Sheet }) {
   const j = p.jobs
   return (
-    <div className='grid gap-6 lg:grid-cols-2'>
+    <div className='grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2'>
       <List title='Prises de service' description='Dernière entrée et sortie de service par métier.' rows={j.checkins} empty='Aucune prise de service' render={(c, i) => (
         <li key={i} className={line}><Pill tone='info'>{c.job}</Pill><span>{c.character}</span><span className='ms-auto text-xs text-muted-foreground'>{dateTime(c.checkin)} → {c.checkout && c.checkin && c.checkout >= c.checkin ? `${dateTime(c.checkout)} (${hours((c.checkout - c.checkin) / 1000)})` : 'en service'}</span></li>
       )} />
@@ -81,7 +81,7 @@ export function PlayerWork({ p }: { p: Sheet }) {
 
 export function PlayerPolice({ p }: { p: Sheet }) {
   return (
-    <div className='grid gap-6 lg:grid-cols-2'>
+    <div className='grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2'>
       <List title='Recherches de la police (MDT)' description='Quand un agent a consulté ou modifié son dossier.' rows={p.police.lookups} empty='Aucune consultation' render={(l, i) => (
         <li key={i} className={line}><span className='font-medium'>{l.by}</span>{l.role && <span className='text-xs text-muted-foreground'>{l.role}</span>}<Pill tone={l.effect === 'allow' ? 'neutral' : 'warning'}>{l.field} {l.effect}</Pill>{l.reason && <span className='text-xs'>{l.reason}</span>}{when(l.at)}</li>
       )} />
@@ -95,7 +95,7 @@ export function PlayerPolice({ p }: { p: Sheet }) {
 export function PlayerPhone({ p }: { p: Sheet }) {
   if (!p.phone) return null
   return (
-    <div className='grid gap-6 lg:grid-cols-2'>
+    <div className='grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2'>
       <List title='Factures reçues' rows={p.phone.invoices} empty='Aucune facture' render={(f, i) => (
         <li key={i} className={line}><Pill tone={f.status === 'paid' ? 'success' : 'warning'}>{f.status}</Pill><span>{f.from}{f.title ? ` · ${f.title}` : ''}</span><span className='font-medium'>{money(f.amount)}</span><span className='text-xs text-muted-foreground'>{f.character}</span>{when(f.at)}</li>
       )} />
@@ -109,7 +109,7 @@ export function PlayerPhone({ p }: { p: Sheet }) {
 export function PlayerShop({ p }: { p: Sheet }) {
   if (!p.shop) return null
   return (
-    <div className='grid gap-6 lg:grid-cols-3'>
+    <div className='grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-3'>
       <List title='Achats boutique' rows={p.shop.purchases} empty='Aucun achat' render={(b, i) => (
         <li key={i} className={line}><span>{b.label}</span><span className='font-medium'>{b.price} pts</span>{when(b.at)}</li>
       )} />
@@ -136,7 +136,7 @@ export function PlayerStaff({ p }: { p: Sheet }) {
           <div><div className='text-xs text-muted-foreground'>Dernière fois</div><div className='font-display text-lg font-semibold'>{s.active ? 'maintenant' : dateTime(s.lastSeen)}</div></div>
         </section>
       )}
-      <div className='grid gap-6 lg:grid-cols-2'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2'>
         {s && (
           <List title='Ses actions dans le menu admin' rows={s.actions} empty='Aucune action' render={(a, i) => (
             <li key={i} className={line}><Pill tone='neutral'>{a.action}</Pill>{a.target && <span>→ {a.target}</span>}{a.details && <span className='min-w-0 truncate text-xs text-muted-foreground'>{a.details}</span>}{when(a.at)}</li>

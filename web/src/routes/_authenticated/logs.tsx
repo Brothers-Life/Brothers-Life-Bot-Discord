@@ -255,7 +255,7 @@ function Packs({ guildId, packs, onDone }: { guildId: string; packs: LogsPayload
   })
   return (
     <Section title='Packs prêts à l’emploi' description='Crée une catégorie privée (lecture seule pour les rangs qui voient les logs) avec ses salons, puis y range chaque catégorie. Les salons déjà là sont réutilisés, et tu peux tout ajuster ensuite.'>
-      <div className='grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4'>
         {packs.map((p) => (
           <button
             key={p.key}

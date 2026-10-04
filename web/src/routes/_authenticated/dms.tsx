@@ -3,7 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Ban, Lock, MailOpen, MessageSquarePlus, Save, Send, StickyNote, Trash2, Unlock, UserCheck, X, Zap } from 'lucide-react'
 import { toast } from 'sonner'
-import { api } from '@/lib/api'
+import { api, errorMessage } from '@/lib/api'
 import type { Channel } from '@/lib/types'
 import { ago, dateTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -78,7 +78,7 @@ function DmsPage() {
               { label: 'Sans personne pour les suivre', value: data.threads.filter((t) => !t.assignedTo).length, icon: UserCheck, tone: 'info' },
             ]} />
           )}
-          <div className='grid min-h-[36rem] overflow-hidden rounded-xl border bg-card md:grid-cols-[20rem_minmax(0,1fr)]'>
+          <div className='grid grid-cols-[minmax(0,1fr)] min-h-[36rem] overflow-hidden rounded-xl border bg-card md:grid-cols-[20rem_minmax(0,1fr)]'>
             <aside className={cn('flex min-w-0 flex-col border-e', selected !== null && 'hidden md:flex')}>
               <div className='flex gap-1 border-b p-2' role='group' aria-label='Filtre'>
                 {([['open', 'Ouvertes'], ['mine', 'Les miennes'], ['closed', 'Fermées']] as const).map(([v, label]) => (
@@ -171,7 +171,7 @@ function ConversationView({ id, snippets, onBack }: { id: number; snippets: Inbo
       ? api(`/dms/${id}/notes`, { method: 'POST', body: { text } })
       : api(`/dms/${id}/messages`, { method: 'POST', body: { content: text, attachments, signed } }),
     onSuccess: () => { setText(''); setAttachments([]); refresh() },
-    onError: refresh,
+    onError: (e) => { toast.error(errorMessage(e)); refresh() },
   })
   const status = useMutation({ mutationFn: (s: 'open' | 'closed') => api(`/dms/${id}/status`, { method: 'POST', body: { status: s } }), onSuccess: refresh })
   const assign = useMutation({ mutationFn: (userId: string | null) => api(`/dms/${id}/assign`, { method: 'POST', body: { userId } }), onSuccess: refresh })
@@ -257,7 +257,7 @@ function ConversationView({ id, snippets, onBack }: { id: number; snippets: Inbo
           <Textarea
             rows={3} maxLength={noteMode ? 1000 : 1800} value={text}
             onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (text.trim() || attachments.length) send.mutate() } }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if ((text.trim() || attachments.length) && !send.isPending) send.mutate() } }}
             placeholder={noteMode ? 'Note interne, visible seulement dans le panel' : 'Ton message (Ctrl+Entrée pour envoyer)'}
             className={cn(noteMode && 'border-warning/60 bg-warning/5')}
             aria-label={noteMode ? 'Note interne' : 'Message'}
@@ -310,7 +310,7 @@ function Settings({ data }: { data: Inbox }) {
         <div className='grid gap-4 p-4'>
           <label className='flex items-center gap-2 text-sm'><Switch checked={c.modmail} onCheckedChange={(v) => setC({ ...c, modmail: v })} /> Les membres peuvent écrire au bot en premier</label>
           <div className='grid gap-1.5'><Label htmlFor='dm-greeting'>Message d’accueil</Label><Textarea id='dm-greeting' rows={3} maxLength={1500} value={c.greeting} onChange={(e) => setC({ ...c, greeting: e.target.value })} /></div>
-          <div className='grid gap-4 sm:grid-cols-2'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
             <div className='grid gap-1.5'><Label htmlFor='dm-signature'>Signature des messages</Label><Input id='dm-signature' maxLength={80} value={c.signature} onChange={(e) => setC({ ...c, signature: e.target.value })} /></div>
             <div className='grid gap-1.5'>
               <Label>Salon d’alerte du staff</Label>

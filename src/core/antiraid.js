@@ -52,6 +52,28 @@ export function createAntiraid({ db, network, audit, executor, sanctions, logs, 
 	// guildId -> { startedAt, until, by, restore, actioned }
 	const raids = new Map();
 
+	// Raids are kept in the settings table: after a restart, the locks are still lifted at the end
+	const RAID_KEY = 'antiraid.raid.';
+	const stored = {
+		all: db.prepare('SELECT key, value FROM settings WHERE key LIKE \'antiraid.raid.%\''),
+		set: db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'),
+		delete: db.prepare('DELETE FROM settings WHERE key = ?'),
+	};
+	for (const row of stored.all.all()) {
+		try {
+			raids.set(row.key.slice(RAID_KEY.length), JSON.parse(row.value));
+		}
+		catch {
+			stored.delete.run(row.key);
+		}
+	}
+
+	function persist(guildId) {
+		const raid = raids.get(guildId);
+		if (raid) stored.set.run(RAID_KEY + guildId, JSON.stringify(raid));
+		else stored.delete.run(RAID_KEY + guildId);
+	}
+
 	function configOf(guildId) {
 		if (!cache.has(guildId)) {
 			const row = q.get.get(guildId);
@@ -88,13 +110,21 @@ export function createAntiraid({ db, network, audit, executor, sanctions, logs, 
 	}
 
 	async function startRaid(guildId, by, config) {
-		const restore = await executor.setRaidLocks(guildId, { disableInvites: config.disableInvites, raiseVerification: config.raiseVerification })
+		// Known before the locks are set: joins arriving meanwhile must not start (and lock) a second time,
+		// or the state to restore would be the locked one
+		const raid = { startedAt: now(), until: now() + config.raidMinutes * 60_000, by, restore: null, actioned: 0 };
+		raids.set(guildId, raid);
+		raid.restore = await executor.setRaidLocks(guildId, { disableInvites: config.disableInvites, raiseVerification: config.raiseVerification })
 			.catch((error) => {
 				logger.warn(`Raid locks on ${guildId} failed:`, error.message);
 				return null;
 			});
-		const raid = { startedAt: now(), until: now() + config.raidMinutes * 60_000, by, restore, actioned: 0 };
-		raids.set(guildId, raid);
+		// Stopped while the locks were being set: lift them right away
+		if (raids.get(guildId) !== raid) {
+			if (raid.restore) await executor.restoreRaidLocks(guildId, raid.restore).catch(error => logger.warn(`Raid unlock on ${guildId} failed:`, error.message));
+			return raid;
+		}
+		persist(guildId);
 		audit.record({ actorId: by === 'auto' ? 'antiraid' : by, source: by === 'auto' ? 'system' : 'panel', action: 'antiraid.start', guildId, target: guildId, details: { trigger: by === 'auto' ? 'automatique' : 'manuel' } });
 		await alert(guildId, {
 			title: '🚨 Raid en cours',
@@ -114,6 +144,7 @@ export function createAntiraid({ db, network, audit, executor, sanctions, logs, 
 		const raid = raids.get(guildId);
 		if (!raid) return null;
 		raids.delete(guildId);
+		persist(guildId);
 		if (raid.restore) await executor.restoreRaidLocks(guildId, raid.restore).catch(error => logger.warn(`Raid unlock on ${guildId} failed:`, error.message));
 		audit.record({ actorId: by === 'auto' ? 'antiraid' : by, source: by === 'auto' ? 'system' : 'panel', action: 'antiraid.end', guildId, target: guildId, details: { actioned: raid.actioned, minutes: Math.round((now() - raid.startedAt) / 60_000) } });
 		await alert(guildId, { title: '✅ Fin du mode raid', description: `${raid.actioned} compte(s) traité(s). Invitations et vérification remises comme avant.`, color: 'success' });
@@ -167,6 +198,7 @@ export function createAntiraid({ db, network, audit, executor, sanctions, logs, 
 			}
 			if (raid) {
 				raid.until = Math.max(raid.until, now() + config.raidMinutes * 60_000);
+				if (raids.get(guildId) === raid) persist(guildId);
 				if (config.actionOnJoin !== 'none') {
 					await act(guildId, member.id, config.actionOnJoin, 'Anti-raid : arrivé pendant le raid');
 					raid.actioned++;

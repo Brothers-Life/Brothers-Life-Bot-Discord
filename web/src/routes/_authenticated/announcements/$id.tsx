@@ -168,7 +168,7 @@ function Editor({ announcement, guilds }: { announcement: Announcement | null; g
         </div>
       }
     >
-      <div className='grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,28rem)]'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,28rem)]'>
         <div className='grid content-start gap-6' ref={varsBox}>
           <Section title='Message'>
             <div className='grid gap-4 p-4'>

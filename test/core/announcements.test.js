@@ -106,3 +106,12 @@ test('duplicate and delete: drafts disappear, sent messages are removed from Dis
 	assert.equal(await core.announcements.remove(owner, copy.id), null);
 	assert.equal(core.announcements.list().length, 1);
 });
+
+test('an announcement left « sending » by a crash can be sent again after a restart', async () => {
+	const { core, owner } = await setup();
+	const draft = await core.announcements.create(owner, { name: 'Coupée', payload, targets });
+	core.db.prepare('UPDATE announcements SET status = \'sending\' WHERE id = ?').run(draft.id);
+	const { createAnnouncements } = await import('../../src/core/announcements.js');
+	const restarted = createAnnouncements({ db: core.db, network: core.network, audit: core.audit, executor: { }, logs: { registerCategory: () => undefined } });
+	assert.equal(restarted.get(draft.id).status, 'failed');
+});

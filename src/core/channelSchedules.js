@@ -112,8 +112,11 @@ export function createChannelSchedules({ db, network, audit, executor, logger = 
 		return rule;
 	}
 
-	async function apply(rule, state, { announce = rule.announce } = {}) {
+	// `record`: false for channels taken out of the rule (its own state does not change)
+	async function apply(rule, state, { announce = rule.announce, record = true } = {}) {
 		const closed = state === 'closed';
+		// Recorded first: a tick running at the same time (save, slow Discord) does not apply it twice
+		if (record) q.applied.run(state, rule.id);
 		const next = nextChange(rule, now());
 		for (const channelId of rule.channelIds) {
 			try {
@@ -127,7 +130,6 @@ export function createChannelSchedules({ db, network, audit, executor, logger = 
 				logger.warn(`Schedule « ${rule.name} » on ${channelId}:`, error.message);
 			}
 		}
-		q.applied.run(state, rule.id);
 	}
 
 	const service = {
@@ -146,7 +148,7 @@ export function createChannelSchedules({ db, network, audit, executor, logger = 
 				q.update.run({ ...row, id });
 				// Channels taken out of the rule get their access back
 				const dropped = previous.channelIds.filter(c => !rule.channelIds.includes(c));
-				if (previous.applied === 'closed' && dropped.length) await apply({ ...previous, channelIds: dropped }, 'open', { announce: false });
+				if (previous.applied === 'closed' && dropped.length) await apply({ ...previous, channelIds: dropped }, 'open', { announce: false, record: false });
 			}
 			else {
 				id = Number(q.insert.run(row).lastInsertRowid);
@@ -167,7 +169,10 @@ export function createChannelSchedules({ db, network, audit, executor, logger = 
 
 		// Every minute: channels whose state should change
 		async tick() {
-			for (const rule of q.all.all().map(toRule)) {
+			for (const { id } of q.all.all()) {
+				// Read again: another tick may have applied it meanwhile
+				const rule = toRule(q.get.get(id));
+				if (!rule) continue;
 				if (network.find(rule.guildId)?.status !== 'active') continue;
 				if (!rule.enabled) {
 					if (rule.applied === 'closed') await apply(rule, 'open', { announce: false });

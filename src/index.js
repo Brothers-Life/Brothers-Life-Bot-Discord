@@ -26,6 +26,25 @@ const HOUR = 3600_000;
 let shuttingDown = false;
 const cleanups = [];
 
+// A periodic task that never runs twice at once: a slow run (many giveaways, Discord rate limits...) makes
+// the next one wait instead of overlapping (double draw, double post). A throw is logged, never fatal.
+function every(ms, task, label, level = 'error') {
+	let running = false;
+	return setInterval(async () => {
+		if (running || shuttingDown) return;
+		running = true;
+		try {
+			await task();
+		}
+		catch (error) {
+			logger[level](`${label}:`, level === 'warn' ? error?.message : error);
+		}
+		finally {
+			running = false;
+		}
+	}, ms);
+}
+
 async function shutdown(code = 0) {
 	if (shuttingDown) return;
 	shuttingDown = true;
@@ -95,54 +114,54 @@ async function main() {
 	core.audit.record({ actorId: 'system', source: 'system', action: 'system.start', details: { version: `v${pkg.version}`, supervised: ipc.supervised } });
 
 	const timers = [
-		setInterval(() => core.sessions.purgeExpired(), HOUR),
+		every(HOUR, () => core.sessions.purgeExpired(), 'Session purge failed'),
 		// Temporary bans reaching their end
-		setInterval(() => core.sanctions.expireDue().catch(error => logger.error('Ban expiry failed:', error)), 30_000),
+		every(30_000, () => core.sanctions.expireDue(), 'Ban expiry failed'),
 		// Scheduled announcements
-		setInterval(() => core.announcements.sendDue().catch(error => logger.error('Announcements failed:', error)), 30_000),
+		every(30_000, () => core.announcements.sendDue(), 'Announcements failed'),
 		// Statistics collected in memory, counter channels, old statistics
-		setInterval(() => core.stats.flush().catch(error => logger.error('Stats flush failed:', error)), 60_000),
-		setInterval(() => core.stats.updateCounters().catch(error => logger.error('Counters failed:', error)), 10 * 60_000),
-		setInterval(() => core.stats.purge(), 24 * HOUR),
+		every(60_000, () => core.stats.flush(), 'Stats flush failed'),
+		every(10 * 60_000, () => core.stats.updateCounters(), 'Counters failed'),
+		every(24 * HOUR, () => core.stats.purge(), 'Stats purge failed'),
 		// Dynamic messages whose variables need a refresh
-		setInterval(() => core.liveMessages.tick().catch(error => logger.error('Live messages failed:', error)), 60_000),
+		every(60_000, () => core.liveMessages.tick(), 'Live messages failed'),
 		// Scheduled polls to open, open polls reaching their end
-		setInterval(() => core.polls.tick().catch(error => logger.error('Polls failed:', error)), 30_000),
+		every(30_000, () => core.polls.tick(), 'Polls failed'),
 		// Giveaways to open, to draw, unclaimed prizes to reroll
-		setInterval(() => core.giveaways.tick().catch(error => logger.error('Giveaways failed:', error)), 30_000),
+		every(30_000, () => core.giveaways.tick(), 'Giveaways failed'),
 		// Staff bugs still unassigned after their urgency delay
-		setInterval(() => core.feedback.tick().catch(error => logger.error('Feedback reminders failed:', error)), 60_000),
+		every(60_000, () => core.feedback.tick(), 'Feedback reminders failed'),
 		// RP events: reminders, start and end
-		setInterval(() => core.rpEvents.tick().catch(error => logger.error('RP events failed:', error)), 60_000),
+		every(60_000, () => core.rpEvents.tick(), 'RP events failed'),
 		// Monthly staff activity report
-		setInterval(() => core.staffActivity.tick().catch(error => logger.error('Staff report failed:', error)), 10 * 60_000),
+		every(10 * 60_000, () => core.staffActivity.tick(), 'Staff report failed'),
 		// Nightly server backups
-		setInterval(() => core.backups.tick().catch(error => logger.error('Backups failed:', error)), 10 * 60_000),
+		every(10 * 60_000, () => core.backups.tick(), 'Backups failed'),
 		// FiveM servers (status messages) and the bot status
-		setInterval(() => core.fivem.tick().catch(error => logger.error('FiveM failed:', error)), 60_000),
-		setInterval(() => core.fivem.presenceTick().catch(error => logger.error('Bot status failed:', error)), 30_000),
+		every(60_000, () => core.fivem.tick(), 'FiveM failed'),
+		every(30_000, () => core.fivem.presenceTick(), 'Bot status failed'),
 		// Streams and videos to announce
-		setInterval(() => core.streams.tick().catch(error => logger.error('Streams failed:', error)), 60_000),
+		every(60_000, () => core.streams.tick(), 'Streams failed'),
 		// Music: leaves when alone or with nothing to play, refreshes the now-playing message
-		setInterval(() => core.music.tick().catch(error => logger.error('Music tick failed:', error)), 30_000),
+		every(30_000, () => core.music.tick(), 'Music tick failed'),
 		// Staff meetings: reminders, start, end
-		setInterval(() => core.meetings.tick().catch(error => logger.error('Meetings tick failed:', error)), 60_000),
+		every(60_000, () => core.meetings.tick(), 'Meetings tick failed'),
 		// Channels opening or closing at set hours
-		setInterval(() => core.channelSchedules.tick().catch(error => logger.error('Channel schedules failed:', error)), 60_000),
+		every(60_000, () => core.channelSchedules.tick(), 'Channel schedules failed'),
 		// Newcomers not verified in time
-		setInterval(() => core.verification.tick().catch(error => logger.error('Verification tick failed:', error)), 60_000),
+		every(60_000, () => core.verification.tick(), 'Verification tick failed'),
 		// Staff absences that start or end
-		setInterval(() => core.absences.tick().catch(error => logger.error('Absences failed:', error)), 60_000),
+		every(60_000, () => core.absences.tick(), 'Absences failed'),
 		// Raids that are over
-		setInterval(() => core.antiraid.tick().catch(error => logger.error('Anti-raid tick failed:', error)), 30_000),
+		every(30_000, () => core.antiraid.tick(), 'Anti-raid tick failed'),
 		// Temporary roles reaching their end
-		setInterval(() => core.moderation.expireTempRoles().catch(error => logger.error('Temporary roles failed:', error)), 30_000),
+		every(30_000, () => core.moderation.expireTempRoles(), 'Temporary roles failed'),
 		// Inactive tickets: reminder, then automatic close
-		setInterval(() => core.tickets.sweep().catch(error => logger.error('Ticket sweep failed:', error)), 5 * 60_000),
+		every(5 * 60_000, () => core.tickets.sweep(), 'Ticket sweep failed'),
 		// Server events older than the retention period
-		setInterval(() => core.events.purge(), 6 * HOUR),
+		every(6 * HOUR, () => core.events.purge(), 'Events purge failed'),
 		// Roles whose Discord permissions drifted from their rank profile (reported, not fixed)
-		setInterval(() => core.permissionSync.checkDrift().catch(error => logger.warn('Permission check failed:', error.message)), 6 * HOUR),
+		every(6 * HOUR, () => core.permissionSync.checkDrift(), 'Permission check failed', 'warn'),
 	];
 	if (config.GITHUB_REPO) {
 		const check = () => versions.checkForUpdate().catch(error => logger.warn('Version check failed:', error.message));

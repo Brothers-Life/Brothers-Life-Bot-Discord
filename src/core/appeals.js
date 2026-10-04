@@ -45,6 +45,8 @@ export function createAppeals({ db, audit, settings, sanctions, executor, logs, 
 		createdAt: row.created_at, decidedAt: row.decided_at,
 	});
 	const config = () => normalizeAppealsConfig(settings.get('appeals.config', {}));
+	// Appeals whose decision is being applied
+	const deciding = new Set();
 
 	// The sanction DM gets an appeal button only when appeals are open for that kind of sanction
 	sanctions.setAppealable(type => config().enabled && config().types.includes(type));
@@ -122,10 +124,17 @@ export function createAppeals({ db, audit, settings, sanctions, executor, logs, 
 		async decide(actor, id, accepted, reason = '') {
 			if (!actor.can('sanctions.revoke')) throw new ForbiddenError('Il faut pouvoir lever des sanctions (sanctions.revoke) pour décider d’un appel.');
 			const appeal = getOrThrow(id);
-			if (appeal.status !== 'pending') throw new ValidationError('Cet appel a déjà été traité.');
+			if (appeal.status !== 'pending' || deciding.has(appeal.id)) throw new ValidationError('Cet appel a déjà été traité.');
 			const text = String(reason ?? '').trim().slice(0, 500);
-			if (accepted) await sanctions.revoke(actor, appeal.sanctionId, `Appel accepté${text ? ` : ${text}` : ''}`);
-			q.decide.run(accepted ? 'accepted' : 'rejected', actor.id, text || null, now(), id);
+			// Accepting waits for the sanction to be lifted: a second decision (double click, two staff members) must not slip in
+			deciding.add(appeal.id);
+			try {
+				if (accepted) await sanctions.revoke(actor, appeal.sanctionId, `Appel accepté${text ? ` : ${text}` : ''}`);
+				q.decide.run(accepted ? 'accepted' : 'rejected', actor.id, text || null, now(), id);
+			}
+			finally {
+				deciding.delete(appeal.id);
+			}
 			const cooldown = config().cooldownDays;
 			const message = accepted
 				? `✅ Ton appel a été **accepté** : ta sanction #${appeal.sanctionId} est levée.${text ? `\nMot du staff : ${text}` : ''}`

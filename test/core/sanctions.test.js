@@ -203,3 +203,34 @@ test('templates: a base the moderator adjusts; suggestions limited to what one m
 	T.remove(owner, cheat.id);
 	assert.deepEqual(T.list().map(t => t.name), ['Insultes']);
 });
+
+test('a native ban of a protected person (owner, higher staff) is never propagated to the network', async () => {
+	const { core, executor } = await setup();
+	const onOwner = await core.sanctions.handleNative({ kind: 'ban', guildId: OTHER, userId: OWNER, executorId: BOB });
+	assert.equal(onOwner.scope, 'local');
+	const onPeer = await core.sanctions.handleNative({ kind: 'kick', guildId: OTHER, userId: BOB, executorId: ALICE });
+	assert.equal(onPeer.scope, 'local');
+	assert.deepEqual(executor.calls, []);
+});
+
+test('durations: invalid, negative or absurd values are refused', async () => {
+	const { core, bob } = await setup();
+	assert.equal(parseDuration(`${'9'.repeat(400)}d`), null);
+	assert.equal(parseDuration(-5), null);
+	assert.equal(parseDuration(Infinity), null);
+	await assert.rejects(core.sanctions.create(bob, { type: 'ban', userId: TARGET, durationMs: -60_000 }), ValidationError);
+	await assert.rejects(core.sanctions.create(bob, { type: 'ban', userId: TARGET, durationMs: Infinity }), ValidationError);
+	await assert.rejects(core.sanctions.create(bob, { type: 'ban', userId: TARGET, durationMs: 1.5 }), ValidationError);
+	assert.equal(core.sanctions.list({ userId: TARGET }).length, 0);
+});
+
+test('a staff member cannot lift their own sanction', async () => {
+	const { core, owner, bob } = await setup();
+	const warn = await core.sanctions.create(owner, { type: 'warn', userId: BOB, reason: 'Abus' });
+	await assert.rejects(core.sanctions.revoke(bob, warn.id), ForbiddenError);
+	await core.sanctions.create(owner, { type: 'ban', userId: BOB, scope: 'local', originGuildId: OTHER });
+	await assert.rejects(core.sanctions.unbanUser(bob, BOB), ForbiddenError);
+	await assert.rejects(core.sanctions.untimeoutUser(bob, BOB), ForbiddenError);
+	await assert.rejects(core.sanctions.unrestrictUser(bob, BOB), ForbiddenError);
+	assert.equal(core.sanctions.isBanned(BOB), true);
+});

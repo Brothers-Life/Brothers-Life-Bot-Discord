@@ -47,12 +47,15 @@ export async function execute(interaction) {
 			await tickets.removeMember(me, ticket.id, member.id);
 			return await interaction.reply({ content: `<@${member.id}> a été retiré du ticket.`, allowedMentions: { parse: [] } });
 		case 'renommer': {
+			// Discord allows 2 renames per 10 minutes: discord.js waits, far beyond the 3 s of the interaction
+			await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 			const name = await tickets.rename(me, ticket.id, interaction.options.getString('nom'));
-			return await interaction.reply({ content: `Salon renommé : ${name}`, flags: MessageFlags.Ephemeral });
+			return await interaction.editReply(`Salon renommé : ${name}`);
 		}
 		case 'transferer':
+			await interaction.deferReply();
 			await tickets.transfer(me, ticket.id, member.id);
-			return await interaction.reply({ content: `Ticket confié à <@${member.id}>.`, allowedMentions: { users: [member.id] } });
+			return await interaction.editReply({ content: `Ticket confié à <@${member.id}>.`, allowedMentions: { users: [member.id] } });
 		case 'statut': {
 			const updated = await tickets.setStatus(me, ticket.id, interaction.options.getString('statut'));
 			const status = tickets.statuses(updated.guildId).find(s => s.key === updated.statusKey);
@@ -63,12 +66,13 @@ export async function execute(interaction) {
 			return await interaction.reply({ content: `Priorité : **${tickets.priorities().find(p => p.key === updated.priority)?.label}**` });
 		}
 		case 'prendre':
+			await interaction.deferReply();
 			await tickets.claim(me, ticket.id);
-			return await interaction.reply({ content: `Ticket pris en charge par <@${me}>.`, allowedMentions: { parse: [] } });
+			return await interaction.editReply({ content: `Ticket pris en charge par <@${me}>.`, allowedMentions: { parse: [] } });
 		case 'fermer': {
 			await interaction.deferReply();
 			await tickets.close(me, ticket.id, interaction.options.getString('raison') ?? '');
-			return await interaction.editReply('Ticket fermé.');
+			return await interaction.editReply('Ticket fermé.').catch(() => null);
 		}
 		case 'rouvrir': {
 			if (ticket.status !== 'closed') throw new ValidationError('Ce ticket est déjà ouvert.');

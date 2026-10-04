@@ -193,7 +193,7 @@ function HubDialog({ hub, data, onClose }: { hub: Hub; data: VoicePayload; onClo
       <DialogContent className='max-h-[90svh] overflow-y-auto sm:max-w-2xl'>
         <DialogHeader><DialogTitle>Réglages des vocaux</DialogTitle></DialogHeader>
         <div className='grid gap-4'>
-          <div className='grid gap-4 sm:grid-cols-2'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
             <div className='grid gap-1.5'>
               <Label htmlFor='h-name'>Nom des salons créés</Label>
               <Input id='h-name' value={c.nameTemplate} maxLength={90} onChange={(e) => setC({ ...c, nameTemplate: e.target.value })} />
@@ -223,7 +223,7 @@ function HubDialog({ hub, data, onClose }: { hub: Hub; data: VoicePayload; onClo
           <label className='flex items-center gap-2 text-sm'><Switch checked={c.rememberSettings} onCheckedChange={(v) => setC({ ...c, rememberSettings: v })} /> Garder les réglages de chaque créateur pour son prochain salon</label>
           <fieldset>
             <legend className='mb-2 text-sm font-medium'>Ce que le créateur peut faire</legend>
-            <div className='grid gap-2 sm:grid-cols-3'>
+            <div className='grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-3'>
               {data.options.map((o) => (
                 <label key={o} className='flex items-center gap-2 text-sm'>
                   <Checkbox checked={c.options[o] !== false} onCheckedChange={(v) => setC({ ...c, options: { ...c.options, [o]: v === true } })} />

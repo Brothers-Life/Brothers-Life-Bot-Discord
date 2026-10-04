@@ -148,7 +148,7 @@ function AntiraidEditor({ guildId }: { guildId: string }) {
             <Input type='number' className='w-20' min={1} max={1440} value={config.raidMinutes} disabled={!manage} onChange={(e) => set({ raidMinutes: Number(e.target.value) })} aria-label='Durée du raid en minutes' />
             <span>minutes (prolongé tant que les arrivées continuent).</span>
           </div>
-          <div className='grid gap-4 sm:grid-cols-2'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
             <div className='grid gap-1.5'>
               <Label>Pendant un raid, chaque nouvel arrivant est</Label>
               <Select value={config.actionOnJoin} disabled={!manage} onValueChange={(v) => set({ actionOnJoin: v as AntiraidConfig['actionOnJoin'] })}>
@@ -181,7 +181,7 @@ function AntiraidEditor({ guildId }: { guildId: string }) {
         actions={<Switch checked={config.newAccount.enabled} disabled={!manage} onCheckedChange={(v) => setFresh({ enabled: v })} aria-label='Activer le filtre des comptes récents' />}
       >
         {config.newAccount.enabled && (
-          <div className='grid gap-4 p-4 sm:grid-cols-3'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 p-4 sm:grid-cols-3'>
             <div className='grid gap-1.5'>
               <Label htmlFor='fresh-days'>Âge minimum (jours)</Label>
               <Input id='fresh-days' type='number' min={1} max={365} value={config.newAccount.minAgeDays} disabled={!manage} onChange={(e) => setFresh({ minAgeDays: Number(e.target.value) })} />

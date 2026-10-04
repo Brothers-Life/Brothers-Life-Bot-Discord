@@ -31,6 +31,8 @@ export function createBot({ dataDir = path.join(__dirname, '..', '..', 'data') }
 		],
 		// Partials: still get events for messages/members that are no longer in cache
 		partials: [Partials.GuildMember, Partials.Message, Partials.Channel, Partials.User],
+		// Never @everyone/@here unless a message allows it explicitly (user text echoed in replies, templates…)
+		allowedMentions: { parse: ['users', 'roles'], repliedUser: true },
 	});
 	client.commands = new Collection();
 	client.cooldowns = new Collection();

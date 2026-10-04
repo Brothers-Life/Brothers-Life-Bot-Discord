@@ -254,6 +254,8 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 			requirePermission(actor, 'ranks.manage');
 			const rank = getOrThrow(id);
 			requireBelow(actor, rank.level);
+			// Linking a role hands the rank (and its permissions) to whoever holds that role
+			requireHeld(actor, rank.effectivePermissions);
 			const mainGuildId = getMainGuildId();
 			if (!mainGuildId) throw new ValidationError('Choisis d’abord le serveur principal.');
 			if (!Array.isArray(roleIds) || roleIds.some(r => typeof r !== 'string' || !r)) {
@@ -292,6 +294,7 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 		if (userId === ownerId) throw new ForbiddenError('Le chef du réseau a déjà toutes les permissions.');
 		const rank = getOrThrow(rankId);
 		requireBelow(actor, rank.level);
+		if (assign) requireHeld(actor, rank.effectivePermissions);
 
 		if (!actor.isOwner) {
 			// Resolve without cache: the target's level must be strictly below ours

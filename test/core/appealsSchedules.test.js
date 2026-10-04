@@ -105,3 +105,21 @@ test('archives: the channel saved as an HTML page (escaped), downloadable, delet
 	assert.equal(fs.existsSync(core.archives.pathOf(archive)), false);
 	assert.match(renderArchive({ guildName: 'G', channelName: 'c', messages: [], createdAt: Date.now(), createdBy: 'x' }), /Aucun message/);
 });
+
+test('schedules: two ticks at once open the channels once; editing out a channel posts nothing in the others', async () => {
+	let clock = paris(2026, 10, 1, 21, 0);
+	const ctx = await withNetwork();
+	const { createChannelSchedules } = await import('../../src/core/channelSchedules.js');
+	const schedules = createChannelSchedules({ db: ctx.core.db, network: ctx.core.network, audit: ctx.core.audit, executor: ctx.executor, logger: { warn: () => undefined }, now: () => clock });
+	const input = { guildId: MAIN, name: 'Event', channelIds: ['610000000000000801', '610000000000000802'], mode: 'open_during', lockType: 'write', weekly: [{ days: [5], from: '20:00', to: '23:00' }] };
+	const saved = await schedules.save(ctx.owner, input);
+	clock = paris(2026, 10, 2, 20, 1);
+	await Promise.all([schedules.tick(), schedules.tick()]);
+	assert.equal(ctx.executor.messages.length, 2, 'one « open » message per channel');
+	clock = paris(2026, 10, 2, 23, 30);
+	await schedules.tick();
+	const before = ctx.executor.messages.length;
+	await schedules.save(ctx.owner, { ...input, id: saved.id, channelIds: ['610000000000000801'] });
+	await schedules.tick();
+	assert.equal(ctx.executor.messages.length, before, 'still closed: no new « closed » message');
+});

@@ -68,7 +68,7 @@ export function MemberInsights({ userId }: { userId: string }) {
         { label: 'Classement messages', value: activity.last30?.messages ? activity.last30.rank : 0, icon: Trophy, tone: 'warning' },
       ]} />
 
-      <div className='grid gap-6 lg:grid-cols-2'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2'>
         <Section title='Activité' description={`Depuis le ${DAY_LABEL(activity.allTime.first)} : ${activity.allTime.messages.toLocaleString('fr-FR')} messages, ${Math.round(activity.allTime.voiceHours * 10) / 10} h de vocal, ${activity.allTime.days} jours actifs. Dernière activité le ${DAY_LABEL(activity.allTime.last)}.`}>
           {!activity.topChannels.length ? <EmptyState title='Aucune activité enregistrée' /> : (
             <div className='grid gap-4 p-4'>

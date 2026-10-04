@@ -30,7 +30,7 @@ export function EmbedFields({ embed: e, onChange, disabled, idPrefix = 'e', uplo
   const id = (name: string) => `${idPrefix}-${name}`
   return (
     <div className='grid gap-4'>
-      <div className='grid gap-4 sm:grid-cols-[1fr_8rem]'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-[1fr_8rem]'>
         <div className='grid gap-1.5'>
           <Label htmlFor={id('title')}>Titre</Label>
           <Input id={id('title')} value={e.title} maxLength={256} disabled={disabled} onChange={(ev) => onChange({ title: ev.target.value })} />
@@ -48,7 +48,7 @@ export function EmbedFields({ embed: e, onChange, disabled, idPrefix = 'e', uplo
         <Label htmlFor={id('desc')}>Description <span className='text-muted-foreground'>({e.description.length}/4096)</span></Label>
         <Textarea id={id('desc')} rows={6} maxLength={4096} value={e.description} disabled={disabled} onChange={(ev) => onChange({ description: ev.target.value })} />
       </div>
-      <div className='grid gap-4 sm:grid-cols-2'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
         <div className='grid gap-1.5'>
           <Label htmlFor={id('author')}>Auteur</Label>
           <Input id={id('author')} value={e.authorName} maxLength={256} disabled={disabled} onChange={(ev) => onChange({ authorName: ev.target.value })} placeholder='Équipe Brothers Life' />
@@ -82,7 +82,7 @@ export function EmbedFields({ embed: e, onChange, disabled, idPrefix = 'e', uplo
       <fieldset className='grid gap-2'>
         <legend className='mb-1 text-sm font-medium'>Champs ({e.fields.length}/25)</legend>
         {e.fields.map((f, i) => (
-          <div key={i} className='grid gap-2 rounded-md border p-2 sm:grid-cols-[1fr_1.5fr_auto_auto] sm:items-center'>
+          <div key={i} className='grid grid-cols-[minmax(0,1fr)] gap-2 rounded-md border p-2 sm:grid-cols-[1fr_1.5fr_auto_auto] sm:items-center'>
             <Input value={f.name} maxLength={256} placeholder='Titre du champ' aria-label={`Titre du champ ${i + 1}`} disabled={disabled} onChange={(ev) => onChange({ fields: e.fields.map((x, j) => (j === i ? { ...x, name: ev.target.value } : x)) })} />
             <Input value={f.value} maxLength={1024} placeholder='Contenu' aria-label={`Contenu du champ ${i + 1}`} disabled={disabled} onChange={(ev) => onChange({ fields: e.fields.map((x, j) => (j === i ? { ...x, value: ev.target.value } : x)) })} />
             <label className='flex items-center gap-1.5 text-xs'>

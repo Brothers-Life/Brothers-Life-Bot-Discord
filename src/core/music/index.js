@@ -50,6 +50,8 @@ export function normalizeMusicConfig(input = {}) {
 // (voice connection, ffmpeg) and `resolver` turns links or searches into tracks.
 export function createMusic({ db, network, audit, settings, backend, resolver, executor, logger = console, now = Date.now }) {
 	const players = new Map();
+	// guildId -> player being created (the bot joining the voice channel)
+	const joining = new Map();
 	let nextTrackId = 1;
 	const listeners = new Set();
 	const playlists = createPlaylists({ db, audit, now });
@@ -152,6 +154,9 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 
 	// Starts the current track (again) at `seekMs`: used for a new track, a seek, a speed or filter change
 	async function start(player, seekMs = 0) {
+		// Only the last start counts: a skip then a jump, the slower load of the first must not replace the second
+		const run = player.run = (player.run ?? 0) + 1;
+		const stale = () => player.run !== run || players.get(player.guildId) !== player;
 		const track = current(player);
 		if (!track) {
 			await backend.stop(player.guildId);
@@ -163,31 +168,42 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 		player.idleSince = null;
 		try {
 			const stream = await resolver.stream(track);
+			if (stale()) return;
 			Object.assign(track, stream.track ?? {});
 			const max = config().maxTrackMinutes;
 			if (max && track.durationMs > max * 60_000) throw new ValidationError(`Trop long (plus de ${max} min).`);
 			await backend.play(player.guildId, { target: stream.target, live: Boolean(track.live), seekMs, speed: player.speed, filters: [...player.filters], volume: player.volume });
+			if (stale()) return;
 			player.paused = false;
-			player.errors = 0;
 			// The next Spotify track is looked up on YouTube now, so that it starts without waiting
 			const upcoming = player.queue[player.index + 1];
 			if (upcoming && upcoming.source === 'spotify' && !upcoming.youtubeUrl) resolver.stream(upcoming).then(s => Object.assign(upcoming, s.track)).catch(() => undefined);
 		}
 		catch (error) {
+			if (stale()) return;
 			player.loading = false;
 			logger.warn(`Music: « ${track.title} » unplayable:`, error.message);
 			track.error = error.message;
-			player.errors = (player.errors ?? 0) + 1;
-			// A few broken tracks in a row: stop there instead of looping on errors
-			if (player.errors >= 5) {
-				await backend.stop(player.guildId);
-				player.idleSince = now();
-				emit(player.guildId);
-				return;
-			}
+			if (tooManyErrors(player)) return stopOnErrors(player);
 			return advance(player, { auto: true });
 		}
+		if (stale()) return;
 		player.loading = false;
+		emit(player.guildId);
+	}
+
+	// A few broken tracks in a row (failing to load or while playing): stop there instead of looping on errors
+	function tooManyErrors(player) {
+		player.errors = (player.errors ?? 0) + 1;
+		return player.errors >= 5;
+	}
+
+	// Past the end of the queue: the next request starts at once, and the idle delay runs
+	async function stopOnErrors(player) {
+		player.errors = 0;
+		player.index = player.queue.length;
+		await backend.stop(player.guildId);
+		player.idleSince = now();
 		emit(player.guildId);
 	}
 
@@ -222,19 +238,24 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 	// Adds tracks to the queue (joining the voice channel first if needed). The now-playing message goes
 	// into the chat of the voice channel; the channel where the music was asked for is the fallback.
 	// The player of this server, joining the voice channel first if the bot is not there yet
+	// Two first requests at once share the same join (two joins would leave a player and its processes behind)
 	async function ensurePlayer(guildId, channelId, textChannelId) {
 		let player = players.get(guildId);
 		if (!player) {
-			await backend.join(guildId, channelId).catch((error) => { throw new ValidationError(error.message); });
-			player = {
-				guildId, channelId, textChannelId: channelId, fallbackTextChannelId: textChannelId,
-				queue: [], index: 0, loop: 'off', volume: config().defaultVolume, speed: 1, filters: new Set(), paused: false, messageId: null, idleSince: null, loading: false,
-			};
-			players.set(guildId, player);
+			if (!joining.has(guildId)) {
+				joining.set(guildId, (async () => {
+					await backend.join(guildId, channelId).catch((error) => { throw new ValidationError(error.message); });
+					const created = {
+						guildId, channelId, textChannelId: channelId, fallbackTextChannelId: textChannelId,
+						queue: [], index: 0, loop: 'off', volume: config().defaultVolume, speed: 1, filters: new Set(), paused: false, messageId: null, idleSince: null, loading: false,
+					};
+					players.set(guildId, created);
+					return created;
+				})().finally(() => joining.delete(guildId)));
+			}
+			player = await joining.get(guildId);
 		}
-		else if (textChannelId && !player.fallbackTextChannelId) {
-			player.fallbackTextChannelId = textChannelId;
-		}
+		if (textChannelId && !player.fallbackTextChannelId) player.fallbackTextChannelId = textChannelId;
 		return player;
 	}
 
@@ -558,10 +579,15 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 		// The backend reports the end of a track (or an error while playing it)
 		async trackEnded(guildId, { error = null } = {}) {
 			const player = players.get(guildId);
-			if (!player) return;
+			// Nothing playing (stopped meanwhile): a late end must not restart a looped queue
+			if (!player || !current(player)) return;
 			if (error) {
 				const track = current(player);
 				if (track) track.error = error;
+				if (tooManyErrors(player)) return stopOnErrors(player);
+			}
+			else {
+				player.errors = 0;
 			}
 			await advance(player, { auto: true });
 		},

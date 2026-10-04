@@ -267,7 +267,7 @@ function StatusesEditor({ guildId, config, disabled }: { guildId: string; config
     >
       <ul className='divide-y'>
         {statuses.map((s, i) => (
-          <li key={i} className='grid gap-2 px-4 py-3 md:grid-cols-[auto_1fr_7rem_14rem_auto] md:items-center'>
+          <li key={i} className='grid grid-cols-[minmax(0,1fr)] gap-2 px-4 py-3 md:grid-cols-[auto_1fr_7rem_14rem_auto] md:items-center'>
             <EmojiField value={s.emoji} label={`Émoji du statut ${s.label}`} allowCustom={false} disabled={disabled} onChange={(v) => patch(i, { emoji: v })} />
             <div className='flex items-center gap-2'>
               <Input value={s.label} maxLength={50} aria-label='Nom du statut' disabled={disabled} onChange={(e) => patch(i, { label: e.target.value })} />
@@ -372,7 +372,7 @@ function CategoryDialog({ guildId, config, initial, onClose }: { guildId: string
             </TabsList>
 
             <TabsContent value='general' className='mt-4 grid gap-4'>
-              <div className='grid gap-4 sm:grid-cols-[auto_1fr]'>
+              <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-[auto_1fr]'>
                 <div className='grid gap-1.5'>
                   <Label htmlFor='cat-emoji'>Émoji</Label>
                   <EmojiField id='cat-emoji' value={c.emoji} placeholder='🛟' onChange={(v) => setC({ ...c, emoji: v })} />
@@ -398,7 +398,7 @@ function CategoryDialog({ guildId, config, initial, onClose }: { guildId: string
                   <p className='text-xs text-muted-foreground'>Exemple : support-{'{number}'}-{'{user}'} ou dossier-{'{fivem.dbid}'}. Accents et espaces sont retirés.</p>
                 </div>
               </div>
-              <div className='grid gap-4 sm:grid-cols-2'>
+              <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
                 <div className='grid gap-1.5'>
                   <Label>Catégorie Discord des tickets ouverts</Label>
                   <CategorySelect categories={config.categoryChannels} value={c.parentChannelId ?? null} onChange={(v) => setC({ ...c, parentChannelId: v })} noneLabel='Aucune (en haut du serveur)' label='Catégorie Discord des tickets ouverts' />
@@ -433,7 +433,7 @@ function CategoryDialog({ guildId, config, initial, onClose }: { guildId: string
             </TabsContent>
 
             <TabsContent value='access' className='mt-4 grid gap-4'>
-              <div className='grid gap-4 sm:grid-cols-2'>
+              <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
                 <div className='grid gap-1.5'>
                   <Label>Rôles requis pour ouvrir</Label>
                   <RolesPicker roles={config.roles} value={cfg.access.requiredRoleIds} onChange={(ids) => patch('access', { requiredRoleIds: ids })} placeholder='Tout le monde' label='Rôles requis' />
@@ -486,7 +486,7 @@ function CategoryDialog({ guildId, config, initial, onClose }: { guildId: string
             </TabsContent>
 
             <TabsContent value='messages' className='mt-4 grid gap-4'>
-              <div className='grid gap-4 sm:grid-cols-[1fr_8rem]'>
+              <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-[1fr_8rem]'>
                 <div className='grid gap-1.5'>
                   <Label htmlFor='w-title'>Titre du message d’accueil</Label>
                   <Input id='w-title' ref={titleRef} value={cfg.welcome.title} maxLength={256} onFocus={() => setWelcomeTarget('title')} onChange={(e) => patch('welcome', { title: e.target.value })} />
@@ -511,7 +511,7 @@ function CategoryDialog({ guildId, config, initial, onClose }: { guildId: string
                 </div>
               </div>
               <Toggle checked={cfg.welcome.showAnswers} onChange={(v) => patch('welcome', { showAnswers: v })}>Afficher les réponses du formulaire dans le message</Toggle>
-              <div className='grid gap-4 sm:grid-cols-2'>
+              <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
                 <div className='grid gap-1.5'>
                   <Label>Ping à l’ouverture</Label>
                   <Select value={cfg.ping} onValueChange={(v) => setCfg({ ...cfg, ping: v as TicketCategoryConfig['ping'] })}>
@@ -576,7 +576,7 @@ function CategoryDialog({ guildId, config, initial, onClose }: { guildId: string
               <p className='text-sm text-muted-foreground'>Pour ce type seulement, tu peux envoyer les tickets d’un statut dans une autre catégorie Discord que celle réglée pour le statut.</p>
               <ul className='divide-y rounded-lg border'>
                 {config.statuses.map((s) => (
-                  <li key={s.key} className='grid gap-2 px-3 py-2 sm:grid-cols-[1fr_16rem] sm:items-center'>
+                  <li key={s.key} className='grid grid-cols-[minmax(0,1fr)] gap-2 px-3 py-2 sm:grid-cols-[1fr_16rem] sm:items-center'>
                     <span className='text-sm'>{s.emoji} {s.label}</span>
                     <div className='flex items-center gap-1'>
                       <CategorySelect
@@ -638,9 +638,9 @@ function PanelDialog({ guildId, config, initial, onClose }: { guildId: string; c
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className='max-h-[92svh] overflow-y-auto sm:max-w-5xl'>
         <DialogHeader><DialogTitle>{p.id ? `Modifier ${initial.name}` : 'Nouveau panneau'}</DialogTitle></DialogHeader>
-        <form id='panel-form' className='grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]' onSubmit={(e) => { e.preventDefault(); if (p.name?.trim()) save.mutate() }}>
+        <form id='panel-form' className='grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]' onSubmit={(e) => { e.preventDefault(); if (p.name?.trim()) save.mutate() }}>
           <div className='grid content-start gap-4'>
-            <div className='grid gap-4 sm:grid-cols-2'>
+            <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
               <div className='grid gap-1.5'>
                 <Label htmlFor='panel-name'>Nom interne</Label>
                 <Input id='panel-name' value={p.name ?? ''} maxLength={50} required onChange={(e) => setP({ ...p, name: e.target.value })} placeholder='Support général' />

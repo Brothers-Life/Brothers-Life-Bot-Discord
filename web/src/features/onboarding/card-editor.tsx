@@ -143,7 +143,7 @@ export function CardEditor({ design, onChange, fonts, renderPreview }: {
 
   const bg = design.background
   return (
-    <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]'>
+    <div className='grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]'>
       <div className='grid min-w-0 content-start gap-3'>
         <div
           ref={stage}
@@ -186,7 +186,7 @@ export function CardEditor({ design, onChange, fonts, renderPreview }: {
 
         <fieldset className='grid gap-3 rounded-lg border p-3'>
           <legend className='px-1 text-sm font-semibold'>Fond</legend>
-          <div className='grid gap-3 sm:grid-cols-3'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-3'>
             <Field label='Format'>
               <Select value={`${design.width}x${design.height}`} onValueChange={(v) => { const [width, height] = v.split('x').map(Number); onChange({ ...design, width, height }) }}>
                 <SelectTrigger className='h-8'><SelectValue /></SelectTrigger>

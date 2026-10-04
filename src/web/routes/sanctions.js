@@ -50,7 +50,7 @@ export function registerSanctionRoutes(app, { core }) {
 					reason: { type: 'string', maxLength: 500 },
 					duration: { type: ['string', 'null'], maxLength: 20 },
 					scope: { type: 'string', enum: ['network', 'local'] },
-					originGuildId: { anyOf: [snowflake, { type: 'null' }] },
+					originGuildId: { anyOf: [{ type: 'null' }, snowflake] },
 					profile: { type: ['string', 'null'], maxLength: 30 },
 					deleteMessageSeconds: { type: 'integer', enum: [0, 3600, 86400, 604800] },
 				},
@@ -136,7 +136,7 @@ export function registerSanctionRoutes(app, { core }) {
 
 	app.post('/api/restrictions/repair', {
 		config: { permission: 'restrictions.manage', confirm: true },
-		schema: { body: { type: 'object', properties: { guildId: { anyOf: [snowflake, { type: 'null' }] }, confirm: { type: 'boolean' } } } },
+		schema: { body: { type: 'object', properties: { guildId: { anyOf: [{ type: 'null' }, snowflake] }, confirm: { type: 'boolean' } } } },
 	}, async (request) => restrictions.repair(request.actor, request.body.guildId ?? null));
 
 	// --- Temporary roles ---------------------------------------------------------------------------

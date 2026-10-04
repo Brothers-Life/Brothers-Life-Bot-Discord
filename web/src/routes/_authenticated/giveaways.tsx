@@ -64,7 +64,7 @@ function GiveawaysPage() {
       description='Des lots à gagner, avec conditions d’entrée, entrées bonus par rôle, tirage vérifiable, réclamation et relance automatique si un gagnant ne se manifeste pas.'
       actions={can('giveaways.manage') && <Button onClick={() => setSelected('new')}><Plus /> Nouveau giveaway</Button>}
     >
-      <div className='grid gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]'>
         <Section title='Giveaways'>
           {!list ? <Skeleton className='m-4 h-24' /> : !list.length ? <EmptyState title='Aucun giveaway'>Lance le premier, ou utilise /giveaway creer.</EmptyState> : (
             <ul className='divide-y'>
@@ -122,7 +122,7 @@ function Overview({ g, onSaved }: { g: Giveaway; onSaved: (id: number) => void }
   const winners = g.winners.filter((w) => w.status === 'winner')
   return (
     <div className='grid gap-6'>
-      <div className='grid gap-3 sm:grid-cols-3'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-3'>
         <div className='rounded-lg border bg-card p-4'><div className='text-xs text-muted-foreground'>Participants</div><div className='text-2xl font-semibold tabular-nums'>{g.participants}</div></div>
         <div className='rounded-lg border bg-card p-4'><div className='text-xs text-muted-foreground'>Entrées (avec bonus)</div><div className='text-2xl font-semibold tabular-nums'>{g.entries}</div></div>
         <div className='rounded-lg border bg-card p-4'><div className='text-xs text-muted-foreground'>{g.status === 'open' ? 'Fin' : 'Statut'}</div><div className='text-lg font-semibold'>{g.status === 'open' ? dateTime(g.endsAt) : STATUS[g.status].label}</div></div>
@@ -238,14 +238,14 @@ function Form({ giveaway, guilds, onSaved, onDeleted }: { giveaway: Giveaway | n
     <div className='grid gap-6'>
       <Section title={giveaway ? 'Réglages' : 'Nouveau giveaway'} actions={giveaway && can('giveaways.manage') && <Button size='sm' variant='danger-ghost' onClick={() => setDeleting(true)}><Trash2 /> Supprimer</Button>}>
         <div className='grid gap-4 p-4'>
-          <div className='grid gap-4 sm:grid-cols-[1fr_8rem_6rem]'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-[1fr_8rem_6rem]'>
             <div className='grid gap-1.5'><Label htmlFor='g-prize'>Lot</Label><Input id='g-prize' value={prize} maxLength={200} disabled={!editable} onChange={(e) => setPrize(e.target.value)} placeholder='Voiture de sport en jeu' /></div>
             <div className='grid gap-1.5'><Label htmlFor='g-w'>Gagnants</Label><Input id='g-w' type='number' min={1} max={50} value={winnersCount} disabled={!editable} onChange={(e) => setWinnersCount(Number(e.target.value) || 1)} /></div>
             <div className='grid gap-1.5'><Label htmlFor='g-c'>Couleur</Label><ColorPicker disabled={!editable} id='g-c' value={s.color} onChange={(hex) => set({ color: hex })} /></div>
           </div>
           <div className='grid gap-1.5'><Label htmlFor='g-desc'>Description</Label><Textarea id='g-desc' rows={3} maxLength={2000} value={description} disabled={!editable} onChange={(e) => setDescription(e.target.value)} /></div>
           <div className='grid gap-1.5'><Label htmlFor='g-img'>Image (adresse https)</Label><Input id='g-img' value={s.image ?? ''} placeholder='https://…' disabled={!editable} onChange={(e) => set({ image: e.target.value })} /></div>
-          <div className='grid gap-4 sm:grid-cols-2'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
             <div className='grid gap-1.5'><Label htmlFor='g-start'>Début (vide = au lancement)</Label><Input id='g-start' type='datetime-local' value={startsAt} disabled={!editable || started} onChange={(e) => setStartsAt(e.target.value)} /></div>
             <div className='grid gap-1.5'><Label htmlFor='g-end'>Fin</Label><Input id='g-end' type='datetime-local' value={endsAt} disabled={!editable} onChange={(e) => setEndsAt(e.target.value)} /></div>
           </div>
@@ -254,7 +254,7 @@ function Form({ giveaway, guilds, onSaved, onDeleted }: { giveaway: Giveaway | n
 
       <Section title='Conditions pour participer' description='Si une condition manque, le membre voit exactement laquelle. Elles sont revérifiées au moment du tirage.'>
         <div className='grid gap-4 p-4'>
-          <div className='grid gap-4 sm:grid-cols-2'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
             <div className='grid gap-1.5'>
               <Label>Rôles requis</Label>
               <RolesPicker roles={allRoles} value={s.requiredRoleIds} disabled={!editable} onChange={(ids) => set({ requiredRoleIds: ids })} placeholder='Tout le monde' label='Rôles requis' />
@@ -267,7 +267,7 @@ function Form({ giveaway, guilds, onSaved, onDeleted }: { giveaway: Giveaway | n
             </div>
             <div className='grid content-start gap-1.5'><Label>Rôles exclus</Label><RolesPicker roles={allRoles} value={s.blockedRoleIds} disabled={!editable} onChange={(ids) => set({ blockedRoleIds: ids })} placeholder='Aucun' label='Rôles exclus' /></div>
           </div>
-          <div className='grid gap-4 sm:grid-cols-3'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-3'>
             {num('Âge du compte (jours)', s.minAccountAgeDays, (n) => set({ minAccountAgeDays: n }), 'g-age')}
             {num('Ancienneté sur le serveur (jours)', s.minMemberDays, (n) => set({ minMemberDays: n }), 'g-seniority')}
             {num('Pas d’avertissement depuis (jours)', s.noWarnDays, (n) => set({ noWarnDays: n }), 'g-warn')}
@@ -301,7 +301,7 @@ function Form({ giveaway, guilds, onSaved, onDeleted }: { giveaway: Giveaway | n
           <fieldset className='grid gap-2'>
             <legend className='mb-1 text-sm font-medium'>Entrées bonus par rôle</legend>
             {s.bonusRoles.map((b, i) => (
-              <div key={i} className='grid gap-2 sm:grid-cols-[1fr_8rem_auto]'>
+              <div key={i} className='grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-[1fr_8rem_auto]'>
                 <Select value={b.roleId} disabled={!editable} onValueChange={(v) => set({ bonusRoles: s.bonusRoles.map((x, j) => (j === i ? { ...x, roleId: v } : x)) })}>
                   <SelectTrigger aria-label='Rôle bonus'><SelectValue placeholder='Rôle' /></SelectTrigger>
                   <SelectContent>{allRoles.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent>
@@ -322,7 +322,7 @@ function Form({ giveaway, guilds, onSaved, onDeleted }: { giveaway: Giveaway | n
               <div className='grid gap-1.5'><Label htmlFor='g-maxe'>Entrées maximum</Label><Input id='g-maxe' type='number' className='w-28' min={1} max={100} value={s.maxEntries} disabled={!editable} onChange={(e) => set({ maxEntries: Number(e.target.value) || 1 })} /></div>
             </div>
           </fieldset>
-          <div className='grid gap-4 sm:grid-cols-3'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-3'>
             <div className='grid gap-1.5'>
               <Label>Rôle donné aux gagnants</Label>
               <Select value={s.winnerRoleId ?? 'none'} disabled={!editable} onValueChange={(v) => set({ winnerRoleId: v === 'none' ? null : v })}>

@@ -57,6 +57,14 @@ export function createMusicBackend(client, { ytdlp, ffmpeg, logger = console }) 
 			if (!channel?.isVoiceBased()) throw new Error('Salon vocal introuvable.');
 			const me = guild.members.me;
 			if (!channel.permissionsFor(me)?.has(['Connect', 'Speak'])) throw new Error(`Le bot ne peut pas parler dans ${channel.name}.`);
+			// Already there (should not happen): the old player and its processes go first
+			const old = sessions.get(guildId);
+			if (old) {
+				sessions.delete(guildId);
+				old.stopping = true;
+				old.player.stop(true);
+				kill(old.processes);
+			}
 			const connection = joinVoiceChannel({ channelId, guildId, adapterCreator: guild.voiceAdapterCreator, selfDeaf: true });
 			try {
 				await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
@@ -104,7 +112,22 @@ export function createMusicBackend(client, { ytdlp, ffmpeg, logger = console }) 
 
 		async play(guildId, { target, live = false, seekMs = 0, speed = 1, filters = [], volume = 100 }) {
 			const s = session(guildId);
-			const [source, ffmpegPath] = await Promise.all([ytdlp.spawnAudio(target), ffmpeg.path()]);
+			// Only the last play counts: two quick changes, the slower start must not replace the newer one
+			const token = s.playToken = (s.playToken ?? 0) + 1;
+			const [spawned, located] = await Promise.allSettled([ytdlp.spawnAudio(target), ffmpeg.path()]);
+			// No ffmpeg: the yt-dlp already started would download for nobody
+			if (spawned.status === 'fulfilled' && located.status === 'rejected') kill([spawned.value]);
+			const failed = [spawned, located].find(r => r.status === 'rejected');
+			if (failed) throw new Error(`Lecture impossible : ${failed.reason?.message ?? failed.reason}`);
+			const [source, ffmpegPath] = [spawned.value, located.value];
+			source.on('error', (error) => {
+				s.lastError = `yt-dlp ne démarre pas (${error.code ?? error.message}).`;
+			});
+			if (sessions.get(guildId) !== s || s.playToken !== token) {
+				kill([source]);
+				if (sessions.get(guildId) !== s) throw new Error('Le bot n’est plus en vocal sur ce serveur.');
+				return;
+			}
 			const af = [...filters.map(f => FILTERS[f]).filter(Boolean), speed !== 1 ? `atempo=${speed}` : null].filter(Boolean).join(',');
 			const args = [
 				'-hide_banner', '-loglevel', 'error', '-i', 'pipe:0',
@@ -112,7 +135,12 @@ export function createMusicBackend(client, { ytdlp, ffmpeg, logger = console }) 
 				...(seekMs && !live ? ['-ss', (seekMs / 1000).toFixed(2)] : []),
 				'-vn', ...(af ? ['-af', af] : []), '-f', 's16le', '-ar', '48000', '-ac', '2', 'pipe:1',
 			];
-			const encoder = spawn(ffmpegPath, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+			const encoder = spawn(ffmpegPath, args, { stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true });
+			encoder.on('error', (error) => {
+				s.lastError = `ffmpeg ne démarre pas (${error.code ?? error.message}).`;
+				logger.warn('ffmpeg spawn failed:', error.message);
+				kill([source]);
+			});
 			source.stdout.pipe(encoder.stdin);
 			// A killed pipe is expected when skipping: not an error
 			for (const stream of [encoder.stdin, source.stdout, encoder.stdout]) stream.on('error', () => undefined);
@@ -138,6 +166,8 @@ export function createMusicBackend(client, { ytdlp, ffmpeg, logger = console }) 
 		async stop(guildId) {
 			const s = sessions.get(guildId);
 			if (!s) return;
+			// A play still starting must not start after this stop
+			s.playToken = (s.playToken ?? 0) + 1;
 			s.stopping = s.player.state.status !== AudioPlayerStatus.Idle;
 			s.player.stop(true);
 			kill(s.processes);

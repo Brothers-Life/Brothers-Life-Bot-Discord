@@ -97,6 +97,7 @@ export function registerDmRoutes(app, { core }) {
 			const actor = await authenticate(request, core).catch(() => null);
 			if (!actor?.can('panel.access') || !actor.can('dm.view')) socket.close(4003, 'Forbidden');
 		}, PERMISSION_RECHECK_MS);
+		recheck.unref?.();
 		socket.on('close', () => {
 			clearInterval(recheck);
 			unsubscribe();

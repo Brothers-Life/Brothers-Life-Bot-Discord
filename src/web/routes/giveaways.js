@@ -1,4 +1,4 @@
-import { networkTargets, resolveNames, snowflake } from './helpers.js';
+import { csvCell, networkTargets, resolveNames, snowflake } from './helpers.js';
 
 const idParam = { type: 'object', properties: { id: { type: 'integer' } }, required: ['id'] };
 const body = {
@@ -14,11 +14,6 @@ const body = {
 		endsAt: { type: 'integer' },
 	},
 };
-
-function csvCell(value) {
-	const text = value === null || value === undefined ? '' : String(value);
-	return /[";\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
 
 export function registerGiveawayRoutes(app, { core }) {
 	const { giveaways, executor, network } = core;
@@ -60,7 +55,7 @@ export function registerGiveawayRoutes(app, { core }) {
 	app.post('/api/giveaways/:id/duplicate', { config: manage, schema: { params: idParam } }, async (request) => giveaways.duplicate(request.actor, request.params.id));
 	app.post('/api/giveaways/:id/reroll', {
 		config: { ...manage, confirm: true },
-		schema: { params: idParam, body: { type: 'object', properties: { userId: { anyOf: [snowflake, { type: 'null' }] }, count: { type: 'integer' }, confirm: { type: 'boolean' } } } },
+		schema: { params: idParam, body: { type: 'object', properties: { userId: { anyOf: [{ type: 'null' }, snowflake] }, count: { type: 'integer' }, confirm: { type: 'boolean' } } } },
 	}, async (request) => ({ winners: await giveaways.reroll(request.actor, request.params.id, { userId: request.body.userId ?? null, count: request.body.count ?? 1 }) }));
 	app.delete('/api/giveaways/:id', { config: { ...manage, confirm: true }, schema: { params: idParam } }, async (request) => {
 		await giveaways.remove(request.actor, request.params.id);

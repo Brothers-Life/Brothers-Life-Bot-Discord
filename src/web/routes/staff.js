@@ -1,13 +1,8 @@
 import { NotFoundError } from '../../core/errors.js';
-import { resolveNames, snowflake } from './helpers.js';
+import { csvCell, resolveNames, snowflake } from './helpers.js';
 
 const idParam = { type: 'object', properties: { id: { type: 'integer' } }, required: ['id'] };
 const guildParam = { type: 'object', properties: { guildId: snowflake }, required: ['guildId'] };
-
-function csvCell(value) {
-	const text = value === null || value === undefined ? '' : String(value);
-	return /[";\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
 
 // Staff recruitment and absences
 export function registerStaffRoutes(app, { core }) {

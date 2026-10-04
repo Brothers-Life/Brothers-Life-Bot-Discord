@@ -86,3 +86,24 @@ test('staff exclusion and recent winners', async () => {
 	executor.memberRoles.set(`${MAIN}:${ALICE}`, []);
 	await assert.rejects(giveaways.toggleEntry(g.id, ALICE, MAIN), /staff/);
 });
+
+test('a giveaway ended twice at once (tick + panel) draws and announces only once', async () => {
+	const { giveaways, g, executor, owner, advance } = await setup();
+	for (const u of users.slice(0, 5)) await giveaways.toggleEntry(g.id, u, MAIN);
+	advance(3600_000 + 60_000);
+	await Promise.allSettled([giveaways.tick(), giveaways.end(owner, g.id), giveaways.tick()]);
+	const ended = giveaways.get(g.id);
+	assert.equal(ended.winners.length, 2, 'no extra winners stored');
+	assert.equal(executor.winnerAnnouncements.length, 1);
+});
+
+test('a scheduled giveaway is posted once even when two ticks overlap', async () => {
+	const { giveaways, executor, owner, advance } = await setup();
+	const s = giveaways.create(owner, { prize: 'Plus tard', startsAt: Date.now() + 3600_000, endsAt: Date.now() + 7200_000, targets: [{ guildId: MAIN, channelId: C_MAIN, ping: 'none' }] });
+	await giveaways.publish(owner, s.id);
+	const posts = () => executor.giveawayMessages.filter(m => m.messageId === null && m.data.giveaway.id === s.id).length;
+	advance(3600_000 + 60_000);
+	await Promise.all([giveaways.tick(), giveaways.tick()]);
+	assert.equal(giveaways.get(s.id).messages.length, 1);
+	assert.equal(posts(), 1);
+});

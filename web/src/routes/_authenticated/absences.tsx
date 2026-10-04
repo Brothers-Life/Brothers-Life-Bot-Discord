@@ -134,7 +134,7 @@ function DeclareDialog({ canForOthers, onClose }: { canForOthers: boolean; onClo
         <DialogHeader><DialogTitle>Déclarer une absence</DialogTitle></DialogHeader>
         <div className='grid gap-4'>
           {canForOthers && <div className='grid gap-1.5'><Label>Pour un autre membre (facultatif)</Label><UserPicker value={userId} onChange={(id) => setUserId(id)} placeholder='Moi-même' /></div>}
-          <div className='grid gap-4 sm:grid-cols-2'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
             <div className='grid gap-1.5'><Label htmlFor='abs-start'>Début</Label><Input id='abs-start' type='datetime-local' value={startAt} onChange={(e) => setStartAt(e.target.value)} /></div>
             <div className='grid gap-1.5'><Label htmlFor='abs-end'>Retour</Label><Input id='abs-end' type='datetime-local' value={endAt} onChange={(e) => setEndAt(e.target.value)} /></div>
           </div>
@@ -182,7 +182,7 @@ function Settings({ data }: { data: Payload }) {
         <div className='grid gap-1.5 sm:max-w-xs'><Label htmlFor='abs-prefix'>Préfixe de pseudo pendant l’absence</Label><Input id='abs-prefix' maxLength={10} value={c.nicknamePrefix} onChange={(e) => setC({ ...c, nicknamePrefix: e.target.value })} placeholder='[ABS]' /></div>
         <div className='grid gap-2'>
           <Label>Rôle « absent » par serveur</Label>
-          <div className='grid gap-3 sm:grid-cols-2'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2'>
             {data.guilds.map((g) => (
               <div key={g.id} className='grid min-w-0 gap-1'>
                 <span className='truncate text-xs text-muted-foreground'>{g.name}</span>
@@ -200,7 +200,7 @@ function Settings({ data }: { data: Payload }) {
               <Label>Validation sur Discord</Label>
               <p className='text-xs text-muted-foreground'>Chaque demande est postée avec les boutons Valider et Refuser. Seuls les rôles choisis peuvent décider (sans rôle choisi : les rangs qui gèrent les absences). Personne ne valide sa propre absence.</p>
             </div>
-            <div className='grid gap-3 sm:grid-cols-2'>
+            <div className='grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2'>
               <Select value={reviewGuild} onValueChange={(v) => { setReviewGuild(v); setC({ ...c, review: null, reviewerRoleIds: [] }) }}>
                 <SelectTrigger aria-label='Serveur de validation'><SelectValue /></SelectTrigger>
                 <SelectContent>{data.guilds.map((g) => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
@@ -216,7 +216,7 @@ function Settings({ data }: { data: Payload }) {
         )}
         <div className='grid gap-2'>
           <Label>Annonce des départs et retours</Label>
-          <div className='grid gap-3 sm:grid-cols-2'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2'>
             <Select value={announceGuild} onValueChange={(v) => { setAnnounceGuild(v); setC({ ...c, announce: null }) }}>
               <SelectTrigger aria-label='Serveur de l’annonce'><SelectValue /></SelectTrigger>
               <SelectContent>{data.guilds.map((g) => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>

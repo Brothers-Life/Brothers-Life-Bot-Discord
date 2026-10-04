@@ -52,7 +52,7 @@ export function registerMeetingRoutes(app, { core }) {
 	}, async (request) => meetings.saveNotes(request.actor, request.params.id, request.body));
 	app.post('/api/meetings/:id/actions', {
 		config: { permission: 'meetings.manage' },
-		schema: { params: idParam, body: { type: 'object', required: ['text'], properties: { text: { type: 'string', maxLength: 300 }, assigneeId: { anyOf: [snowflake, { type: 'null' }] }, dueAt: { type: ['integer', 'null'] } } } },
+		schema: { params: idParam, body: { type: 'object', required: ['text'], properties: { text: { type: 'string', maxLength: 300 }, assigneeId: { anyOf: [{ type: 'null' }, snowflake] }, dueAt: { type: ['integer', 'null'] } } } },
 	}, async (request) => meetings.addAction(request.actor, request.params.id, request.body));
 	app.patch('/api/meeting-actions/:id', {
 		config: { permission: null },

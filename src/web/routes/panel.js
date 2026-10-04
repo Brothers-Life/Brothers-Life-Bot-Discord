@@ -69,8 +69,16 @@ export function registerPanelRoutes(app, { core, runtime }) {
 	});
 
 	// --- Network -----------------------------------------------------------------------------
-	app.get('/api/network', { config: { permission: 'network.view' } }, async () => {
-		return network.list().map(g => ({ ...g, icon: executor.guildIcon(g.id) ?? g.icon }));
+	// Every page with a server picker (tickets, suggestions, stats...) reads this list: open to any panel user,
+	// the dates of the network history stay behind network.view
+	app.get('/api/network', { config: { permission: null } }, async (request) => {
+		const full = request.actor.can('network.view');
+		return network.list().map((g) => {
+			const guild = { ...g, icon: executor.guildIcon(g.id) ?? g.icon };
+			if (full) return guild;
+			const { id, name, icon, status, isMain, botPresent } = guild;
+			return { id, name, icon, status, isMain, botPresent };
+		});
 	});
 
 	// Invite link with exactly the permissions the bot needs (moderation, logs, staff roles, tickets)
@@ -204,7 +212,7 @@ export function registerPanelRoutes(app, { core, runtime }) {
 		schema: {
 			params: { type: 'object', properties: { guildId: { type: 'string', pattern: '^(\\d{17,20}|\\*)$' }, category: { type: 'string', maxLength: 80 } }, required: ['guildId', 'category'] },
 			// channelId "0" turns one type ("category:type") off
-			body: { type: 'object', properties: { channelId: { anyOf: [SNOWFLAKE, { type: 'string', const: '0' }, { type: 'null' }] }, enabled: { type: 'boolean' } }, required: ['channelId'] },
+			body: { type: 'object', properties: { channelId: { anyOf: [{ type: 'null' }, SNOWFLAKE, { type: 'string', const: '0' }] }, enabled: { type: 'boolean' } }, required: ['channelId'] },
 		},
 	}, async (request) => {
 		const { guildId, category } = request.params;

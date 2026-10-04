@@ -164,7 +164,7 @@ function ProfileEditor({ rankId, rankName, linkedRoles, catalogue, initial, edit
         </div>
       )}
     >
-      <div className='grid gap-5 p-4 md:grid-cols-2'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-5 p-4 md:grid-cols-2'>
         {groups.map(([group, permissions]) => {
           const togglable = permissions.filter((p) => editable && !(p.ownerOnly && !isOwner)).map((p) => p.key)
           const count = permissions.filter((p) => selected.has(p.key)).length

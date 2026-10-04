@@ -208,7 +208,7 @@ function Editor({ guildId, data }: { guildId: string; data: OnboardingPayload })
                 <Switch checked={config.rules.enabled} disabled={!manage} onCheckedChange={(v) => set('rules', { enabled: v })} />
                 Bouton d’acceptation
               </label>
-              <div className='grid gap-4 sm:grid-cols-2'>
+              <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
                 <div className='grid gap-1.5'>
                   <Label>Salon</Label>
                   <ChannelSelect channels={data.channels} value={config.rules.channelId} disabled={!manage} onChange={(v) => set('rules', { channelId: v, messageId: v === config.rules.channelId ? config.rules.messageId : null })} label='Salon du règlement' />
@@ -255,7 +255,7 @@ function Editor({ guildId, data }: { guildId: string; data: OnboardingPayload })
 
         <TabsContent value='autoroles' className='mt-4'>
           <Section title='Rôles automatiques' description='Donnés à chaque arrivée. Si le règlement est à accepter, les rôles des membres peuvent attendre l’acceptation (onglet Règlement).'>
-            <div className='grid gap-4 p-4 sm:grid-cols-2'>
+            <div className='grid grid-cols-[minmax(0,1fr)] gap-4 p-4 sm:grid-cols-2'>
               <div className='grid gap-1.5'>
                 <Label>Membres</Label>
                 <RolesPicker roles={data.roles} value={config.autoroles.humanRoleIds} disabled={!manage} onChange={(ids) => set('autoroles', { humanRoleIds: ids })} label='Rôles des membres' />
@@ -310,7 +310,7 @@ function PayloadEditor({ payload, onChange, disabled, idPrefix, withPreview = fa
   )
   if (!withPreview) return editor
   return (
-    <div className='grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]'>
+    <div className='grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]'>
       {editor}
       <div className='xl:sticky xl:top-20 xl:self-start'><DiscordPreview content={payload.content} embed={embed} roles={new Map()} /></div>
     </div>
@@ -347,7 +347,7 @@ function MessageSection({ title, kind, section, channels, fonts, disabled, onCha
         }
       >
         {section.enabled && (
-          <div className='grid gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_24rem]'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_24rem]'>
             <div className='grid content-start gap-4'>
               <div className='grid gap-1.5 sm:max-w-sm'>
                 <Label>Salon</Label>

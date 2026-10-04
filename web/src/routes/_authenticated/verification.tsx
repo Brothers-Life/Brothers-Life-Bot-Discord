@@ -83,7 +83,7 @@ function Editor({ guild }: { guild: GuildData }) {
   )
 
   return (
-    <div className='grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]'>
+    <div className='grid grid-cols-[minmax(0,1fr)] gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]'>
       <Section
         title='Réglages'
         description={c.enabled ? `${guild.pending} nouveau${guild.pending > 1 ? 'x' : ''} pas encore vérifié${guild.pending > 1 ? 's' : ''}.` : 'Désactivée sur ce serveur.'}
@@ -98,7 +98,7 @@ function Editor({ guild }: { guild: GuildData }) {
           <label className='flex items-center gap-2 text-sm font-medium'><Switch checked={c.enabled} onCheckedChange={(enabled) => set({ enabled })} disabled={!manage} /> Vérification active</label>
           <div className='grid gap-2'>
             <Label>Méthode</Label>
-            <div className='grid gap-2 sm:grid-cols-2' role='radiogroup' aria-label='Méthode'>
+            <div className='grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-2' role='radiogroup' aria-label='Méthode'>
               {([['button', 'Bouton', 'Un clic sur « Je ne suis pas un robot ». Simple, arrête les bots basiques.'], ['captcha', 'Captcha', 'Une image avec 5 caractères à recopier. Plus sûr contre les raids de comptes.']] as const).map(([value, title, hint]) => (
                 <button key={value} type='button' role='radio' aria-checked={c.mode === value} disabled={!manage} onClick={() => set({ mode: value })} className='grid gap-1 rounded-lg border p-3 text-start transition-colors hover:border-primary/60 aria-checked:border-primary aria-checked:bg-primary/10'>
                   <span className='font-medium'>{title}</span><span className='text-xs text-muted-foreground'>{hint}</span>
@@ -110,11 +110,11 @@ function Editor({ guild }: { guild: GuildData }) {
             <Label>Salon de vérification</Label>
             <ChannelSelect channels={guild.channels} value={c.channelId} onChange={(channelId) => set({ channelId })} label='Salon de vérification' noneLabel='Choisir un salon' disabled={!manage} />
           </div>
-          <div className='grid gap-4 sm:grid-cols-2'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
             {roleSelect('verifiedRoleId', 'Rôle donné une fois vérifié', 'Donne accès aux salons du serveur.')}
             {roleSelect('unverifiedRoleId', 'Rôle « non vérifié »', 'Donné à l’arrivée, retiré une fois vérifié.')}
           </div>
-          <div className='grid gap-4 sm:grid-cols-3'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-3'>
             <div className='grid gap-1.5'><Label htmlFor='v-age'>Âge minimum du compte (jours)</Label><Input id='v-age' type='number' min={0} max={365} value={c.minAccountAgeDays} disabled={!manage} onChange={(e) => set({ minAccountAgeDays: Number(e.target.value) })} /></div>
             <div className='grid gap-1.5'><Label htmlFor='v-kick'>Expulser si non vérifié après (min)</Label><Input id='v-kick' type='number' min={0} max={10080} value={c.kickAfterMinutes} disabled={!manage} onChange={(e) => set({ kickAfterMinutes: Number(e.target.value) })} /><p className='text-xs text-muted-foreground'>0 = jamais</p></div>
             <div className='grid gap-1.5'><Label htmlFor='v-label'>Texte du bouton</Label><Input id='v-label' maxLength={80} value={c.buttonLabel} disabled={!manage} onChange={(e) => set({ buttonLabel: e.target.value })} /></div>

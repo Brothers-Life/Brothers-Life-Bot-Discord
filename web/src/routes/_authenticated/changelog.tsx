@@ -58,7 +58,7 @@ function ChangelogPage() {
       description='Les nouveautés de tes serveurs, rangées par type et publiées dans les salons choisis. Une entrée modifiée après publication est mise à jour partout. Les membres la retrouvent avec /changelog.'
       actions={can('changelog.manage') && <Button onClick={() => setSelected('new')}><Plus /> Nouvelle entrée</Button>}
     >
-      <div className='grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]'>
         <Section title='Entrées'>
           {!list ? <Skeleton className='m-4 h-24' /> : !list.length ? <EmptyState title='Aucune entrée'>Écris ta première mise à jour.</EmptyState> : (
             <ul className='divide-y'>
@@ -123,11 +123,11 @@ function EntryEditor({ entry, guilds, onSaved, onDeleted }: { entry: Entry | nul
   }
 
   return (
-    <div className='grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]'>
+    <div className='grid grid-cols-[minmax(0,1fr)] gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]'>
       <div className='grid content-start gap-6'>
         <Section title={entry ? 'Modifier l’entrée' : 'Nouvelle entrée'} actions={entry && manage && <Button size='sm' variant='danger-ghost' onClick={() => setDeleting(true)}><Trash2 /> Supprimer</Button>}>
           <div className='grid gap-4 p-4'>
-            <div className='grid gap-4 sm:grid-cols-[8rem_1fr_6rem]'>
+            <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-[8rem_1fr_6rem]'>
               <div className='grid gap-1.5'><Label htmlFor='cl-v'>Version</Label><Input id='cl-v' value={e.version} maxLength={30} placeholder='v2.4' disabled={!manage} onChange={(ev) => setE({ ...e, version: ev.target.value })} /></div>
               <div className='grid gap-1.5'><Label htmlFor='cl-t'>Titre</Label><Input id='cl-t' value={e.title} maxLength={150} placeholder='Mise à jour d’automne' disabled={!manage} onChange={(ev) => setE({ ...e, title: ev.target.value })} /></div>
               <div className='grid gap-1.5'><Label htmlFor='cl-c'>Couleur</Label><ColorPicker disabled={!manage} id='cl-c' value={e.color} onChange={(hex) => setE({ ...e, color: hex })} /></div>
@@ -137,7 +137,7 @@ function EntryEditor({ entry, guilds, onSaved, onDeleted }: { entry: Entry | nul
             <fieldset className='grid gap-2'>
               <legend className='mb-1 text-sm font-medium'>Éléments ({e.items.length}/60)</legend>
               {e.items.map((item, i) => (
-                <div key={i} className='grid gap-2 sm:grid-cols-[10rem_1fr_auto]'>
+                <div key={i} className='grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-[10rem_1fr_auto]'>
                   <Select value={item.type} disabled={!manage} onValueChange={(v) => setE({ ...e, items: e.items.map((x, j) => (j === i ? { ...x, type: v as ItemType } : x)) })}>
                     <SelectTrigger aria-label='Type'><SelectValue /></SelectTrigger>
                     <SelectContent>{(Object.keys(TYPES) as ItemType[]).map((t) => <SelectItem key={t} value={t}>{TYPES[t].emoji} {TYPES[t].label}</SelectItem>)}</SelectContent>

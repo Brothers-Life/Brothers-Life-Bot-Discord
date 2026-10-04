@@ -12,7 +12,7 @@ export function registerPermissionRoutes(app, { core }) {
 
 	app.put('/api/permissions/:rankId', {
 		config: { permission: 'permsync.manage' },
-		schema: { params: rankParam, body: { type: 'object', required: ['permissions'], properties: { permissions: { anyOf: [{ type: 'array', items: { type: 'string' }, maxItems: 60 }, { type: 'null' }] } } } },
+		schema: { params: rankParam, body: { type: 'object', required: ['permissions'], properties: { permissions: { anyOf: [{ type: 'null' }, { type: 'array', items: { type: 'string' }, maxItems: 60 }] } } } },
 	}, async (request) => permissionSync.setProfile(request.actor, request.params.rankId, request.body.permissions));
 
 	app.post('/api/permissions/apply', {

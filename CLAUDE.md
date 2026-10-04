@@ -2,7 +2,7 @@
 
 Bot Discord multi-serveurs pour la communauté RP **Brothers Life** (serveur FiveM Qbox) : il gère plusieurs serveurs Discord comme un seul réseau et s'administre depuis un panel web React en français. Tout le texte visible (Discord, panel, commits) est en **français** ; le code et ses commentaires en anglais.
 
-État au 2026-10-03 : **v1.9.0 publiée**, tout est poussé, 330 tests verts.
+État au 2026-10-04 : **v1.9.0 publiée** ; audit complet (sécurité + bugs) commité en local, non publié, 372 tests.
 
 ## Commandes
 

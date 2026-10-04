@@ -163,6 +163,8 @@ export function createAnnouncements({ db, network, audit, executor, logs, upload
 		addTemplate: db.prepare('INSERT INTO announcement_templates (name, payload, options, targets, created_by, created_at) VALUES (@name, @payload, @options, @targets, @createdBy, @at)'),
 		dropTemplate: db.prepare('DELETE FROM announcement_templates WHERE id = ?'),
 	};
+	// Cut while sending (crash, restart): shown as failed so it can be sent again, instead of stuck forever
+	db.prepare('UPDATE announcements SET status = \'failed\' WHERE status = \'sending\'').run();
 
 	function toAnnouncement(row) {
 		if (!row) return null;
@@ -259,6 +261,17 @@ export function createAnnouncements({ db, network, audit, executor, logs, upload
 
 	async function deliver(id, actor) {
 		if (!q.claim.run(now(), id).changes) throw new ValidationError('Cette annonce est déjà envoyée ou en cours d’envoi.');
+		try {
+			return await sendClaimed(id, actor);
+		}
+		catch (error) {
+			// Never left « sending »: it could not be sent again
+			db.prepare('UPDATE announcements SET status = \'failed\', updated_at = ? WHERE id = ? AND status = \'sending\'').run(now(), id);
+			throw error;
+		}
+	}
+
+	async function sendClaimed(id, actor) {
 		const a = getOrThrow(id);
 		const results = [];
 		const guildCache = new Map();

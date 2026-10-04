@@ -84,7 +84,7 @@ export function OptionsEditor({ value: o, onChange, disabled }: { value: Announc
         </div>
       </div>
 
-      <div className='grid gap-4 sm:grid-cols-2'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
         <label className='flex items-center gap-2 text-sm'><Switch checked={o.pin} disabled={disabled} onCheckedChange={(v) => set({ pin: v })} /> Épingler le message</label>
         <label className='flex items-center gap-2 text-sm'><Switch checked={o.thread.enabled} disabled={disabled} onCheckedChange={(v) => set({ thread: { ...o.thread, enabled: v } })} /> Ouvrir un fil de discussion</label>
         {o.thread.enabled && (

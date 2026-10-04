@@ -62,7 +62,7 @@ export function Playlists({ guildId, connected, channelId, onPlayed }: { guildId
       {!data ? <Skeleton className='m-4 h-32' /> : !data.length ? (
         <EmptyState title='Aucune playlist' icon={ListMusic}>Crée-en une, ou enregistre la file en cours pour la relancer plus tard.</EmptyState>
       ) : (
-        <ul className='grid gap-3 p-4 sm:grid-cols-2'>
+        <ul className='grid grid-cols-[minmax(0,1fr)] gap-3 p-4 sm:grid-cols-2'>
           {data.map((p) => (
             <li key={p.id} className='lift flex min-w-0 gap-3 rounded-lg border bg-card p-3'>
               <button type='button' onClick={() => setOpen(p.id)} className='relative size-16 shrink-0 overflow-hidden rounded-md bg-muted' aria-label={`Ouvrir ${p.name}`}>

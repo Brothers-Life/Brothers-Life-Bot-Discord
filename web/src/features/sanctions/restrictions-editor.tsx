@@ -78,7 +78,7 @@ export function RestrictionsEditor() {
     >
       <ul className='divide-y'>
         {profiles.map((p, i) => (
-          <li key={i} className='grid gap-2 px-4 py-3 md:grid-cols-[16rem_1fr_auto] md:items-center'>
+          <li key={i} className='grid grid-cols-[minmax(0,1fr)] gap-2 px-4 py-3 md:grid-cols-[16rem_1fr_auto] md:items-center'>
             <Input value={p.label} maxLength={40} disabled={!manage} aria-label='Nom de la restriction' onChange={(e) => patch(i, { label: e.target.value })} />
             <div className='flex flex-wrap items-center gap-1'>
               {p.deny.map((d) => <Pill key={d} tone='danger'>{LABELS[d] ?? d}</Pill>)}

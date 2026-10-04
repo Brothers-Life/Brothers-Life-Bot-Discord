@@ -35,7 +35,7 @@ export function ActivityTab({ r }: { r: ServerReport }) {
         { label: 'Heures jouées (30 j)', value: count(a.totals.hours), icon: Clock, tone: 'warning' },
         { label: 'Session moyenne', value: `${a.totals.avgMinutes} min`, icon: Clock, tone: 'info', hint: plural(a.totals.sessions, 'session') },
       ]} />
-      <div className='grid gap-4 lg:grid-cols-2'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2'>
         <Chart title='Joueurs par jour et record simultané' className='lg:col-span-2'>
           <AreaChart data={a.days} margin={{ left: -16, right: 8, top: 4 }}>
             <defs>
@@ -92,7 +92,7 @@ export function ActivityTab({ r }: { r: ServerReport }) {
           </table>
         </div>
       </Section>
-      <div className='grid gap-6 lg:grid-cols-2'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2'>
         <Section title={`En jeu maintenant (${a.online.length})`}>
           {!a.online.length ? <EmptyState title='Personne en jeu' icon={Users} /> : (
             <ul className='divide-y'>{a.online.map((o) => <li key={o.userId} className='flex items-center gap-2 px-4 py-2 text-sm'><span className='live-dot size-2 rounded-full bg-success' aria-hidden /><span className='flex-1'>{o.username}</span><span className='text-xs text-muted-foreground'>depuis {o.since ? hours((r.at - o.since) / 1000) : '?'}</span></li>)}</ul>
@@ -204,7 +204,7 @@ export function VehiclesTab({ r }: { r: ServerReport }) {
         { label: 'Dehors', value: v.out, icon: MapPin, tone: 'warning' },
         { label: 'En fourrière', value: v.impound, icon: Siren, tone: 'danger', hint: `${v.damaged} abîmés · ${v.fakePlates} fausses plaques` },
       ]} />
-      <div className='grid gap-6 lg:grid-cols-2'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2'>
         <Section title='Modèles les plus possédés'><Bars rows={v.models.map((m) => ({ key: m.model, label: m.model, value: m.count }))} /></Section>
         <Section title='Garages les plus remplis' description={`${v.customGarages} garages configurés sur le serveur.`}><Bars rows={v.garages.map((g) => ({ key: g.garage, label: g.garage, value: g.count }))} tone='bg-info/20' /></Section>
       </div>
@@ -225,7 +225,7 @@ export function JusticeTab({ r, onOpen }: { r: ServerReport; onOpen: (userId: nu
         { label: 'Signalements ouverts', value: openReports.length, icon: Siren, tone: 'info' },
         { label: 'Sanctions (30 j)', value: Object.values(j.sanctions30).reduce((a, b) => a + b, 0), icon: Gavel, tone: 'accent', hint: Object.entries(j.sanctions30).map(([k, n]) => `${n} ${k}`).join(' · ') || undefined },
       ]} />
-      <div className='grid gap-6 lg:grid-cols-2'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2'>
         <Section title='Dernières sanctions en jeu'>
           {!j.sanctions.length ? <EmptyState title='Aucune sanction' icon={Gavel} /> : (
             <ul className='divide-y'>
@@ -307,7 +307,7 @@ export function WorldTab({ r }: { r: ServerReport }) {
           ))}
         </dl>
       </Section>
-      <div className='grid gap-6 lg:grid-cols-2'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2'>
         <Section title='Zones safe' description='Temps passé dedans par les joueurs.'>
           {!w.safezones.length ? <EmptyState title='Aucune zone' /> : (
             <ul className='divide-y'>{w.safezones.map((z) => <li key={z.name} className='flex items-center gap-2 px-4 py-2 text-sm'><Pill tone={z.active ? 'success' : 'neutral'}>{z.active ? 'active' : 'off'}</Pill><span className='flex-1 truncate'>{z.name}</span><span className='text-xs text-muted-foreground'>{plural(z.visits, 'visite')}</span><span className='w-20 text-end tabular-nums'>{hours(z.seconds)}</span></li>)}</ul>
@@ -362,7 +362,7 @@ export function StaffTab({ r }: { r: ServerReport }) {
           </div>
         )}
       </Section>
-      <div className='grid gap-6 lg:grid-cols-2'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2'>
         <Section title='Rôles du menu admin' description='Nombre de permissions de chaque rôle.'>
           <Bars rows={s.roles.map((role) => ({ key: String(role.id), label: <>{role.label}{role.protected ? ' 🔒' : ''}</>, value: role.actions }))} tone='bg-accent' />
         </Section>
@@ -387,7 +387,7 @@ export function EconomyTab({ r }: { r: ServerReport }) {
         { label: 'Comptes partagés (entreprises…)', value: money(e.accounts.total), icon: Landmark, tone: 'accent' },
         { label: 'Points premium', value: count(e.premium.points), icon: Coins, tone: 'warning', hint: `${e.premium.purchases30} achats (30 j)` },
       ]} />
-      <div className='grid gap-6 lg:grid-cols-2'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2'>
         <Section title='Plus grosses fortunes' description='Liquide + banque par personnage.'>
           <Bars rows={e.fortunes.map((f) => ({ key: f.citizenId, label: <span title={`${money(f.cash)} liquide · ${money(f.bank)} banque`}>{f.name}</span>, value: f.cash + f.bank }))} format={money} tone='bg-success/20' />
         </Section>

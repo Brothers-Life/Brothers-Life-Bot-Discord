@@ -89,7 +89,7 @@ function MeetingsPage() {
             </TabsList>
             <TabsContent value='upcoming' className='mt-4'>
               {!upcoming.length ? <Section title='À venir'><EmptyState title='Aucune réunion prévue' icon={CalendarDays}>Programme la prochaine réunion du staff : le bot convoque, rappelle et compte les présents.</EmptyState></Section> : (
-                <div className='stagger grid gap-4 lg:grid-cols-2'>{upcoming.map((m) => <MeetingCard key={m.id} meeting={m} data={data} onOpen={() => setOpen(m.id)} onEdit={() => setEditing(m)} onDuplicate={() => setEditing(meetingCopy(m))} />)}</div>
+                <div className='stagger grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2'>{upcoming.map((m) => <MeetingCard key={m.id} meeting={m} data={data} onOpen={() => setOpen(m.id)} onEdit={() => setEditing(m)} onDuplicate={() => setEditing(meetingCopy(m))} />)}</div>
               )}
             </TabsContent>
             <TabsContent value='past' className='mt-4'>
@@ -213,7 +213,7 @@ function MeetingDialog({ meeting: m, data, onClose, onEdit }: { meeting: Meeting
         )}
         {m.description && <p className='text-sm whitespace-pre-line text-muted-foreground'>{m.description}</p>}
 
-        <div className='grid gap-6 lg:grid-cols-2'>
+        <div className='grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2'>
           <div className='grid content-start gap-2'>
             <h3 className='font-medium'>{m.report ? 'Présences' : 'Réponses'}</h3>
             <ul className='divide-y rounded-lg border'>
@@ -262,7 +262,7 @@ function MeetingDialog({ meeting: m, data, onClose, onEdit }: { meeting: Meeting
             </div>
           ))}
           {manage && (
-            <form className='grid gap-2 sm:grid-cols-[minmax(0,1fr)_14rem_11rem_auto]' onSubmit={(e) => { e.preventDefault(); if (task.text.trim()) addTask.mutate() }}>
+            <form className='grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-[minmax(0,1fr)_14rem_11rem_auto]' onSubmit={(e) => { e.preventDefault(); if (task.text.trim()) addTask.mutate() }}>
               <Input value={task.text} maxLength={300} placeholder='Nouvelle tâche…' aria-label='Nouvelle tâche' onChange={(e) => setTask({ ...task, text: e.target.value })} />
               <UserPicker value={task.assigneeId} onChange={(assigneeId) => setTask({ ...task, assigneeId })} placeholder='Pour qui ?' />
               <Input type='date' aria-label='Échéance' value={task.due} onChange={(e) => setTask({ ...task, due: e.target.value })} />
@@ -317,12 +317,12 @@ function EditDialog({ meeting, data, onClose }: { meeting: Partial<Meeting>; dat
         </DialogHeader>
         <div className='grid gap-4'>
           <div className='grid gap-1.5'><Label htmlFor='m-title'>Titre</Label><Input id='m-title' value={m.title} maxLength={100} onChange={(e) => set({ title: e.target.value })} placeholder='Réunion staff hebdomadaire' autoFocus /></div>
-          <div className='grid gap-4 sm:grid-cols-[minmax(0,1fr)_8rem]'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-[minmax(0,1fr)_8rem]'>
             <div className='grid gap-1.5'><Label htmlFor='m-start'>Date et heure</Label><Input id='m-start' type='datetime-local' value={toLocalInput(m.startsAt)} onChange={(e) => set({ startsAt: new Date(e.target.value).getTime() })} /></div>
             <div className='grid gap-1.5'><Label htmlFor='m-duration'>Durée (min)</Label><Input id='m-duration' type='number' min={5} max={600} value={m.durationMinutes} onChange={(e) => set({ durationMinutes: Number(e.target.value) })} /></div>
           </div>
           <label className='flex items-center gap-2 text-sm'><Switch checked={m.weekly} onCheckedChange={(weekly) => set({ weekly })} /> Toutes les semaines ({start.toLocaleDateString('fr-FR', { weekday: 'long' })} à {start.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })})</label>
-          <div className='grid gap-4 sm:grid-cols-3'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-3'>
             <div className='grid gap-1.5'>
               <Label>Serveur</Label>
               <Select value={m.guildId} onValueChange={(guildId) => set({ guildId, voiceChannelId: '', announceChannelId: null, invites: { ...m.invites, roleIds: [] } })}>

@@ -105,6 +105,19 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 		`),
 	};
 	const refreshes = new Map();
+	// Giveaways being opened, drawn or rerolled: the tick and the panel can reach the same one together
+	const busy = new Set();
+
+	async function exclusive(id, fn) {
+		if (busy.has(id)) throw new ValidationError('Une action est déjà en cours sur ce giveaway, réessaie dans un instant.');
+		busy.add(id);
+		try {
+			return await fn();
+		}
+		finally {
+			busy.delete(id);
+		}
+	}
 
 	function toGiveaway(row) {
 		if (!row) return null;
@@ -208,6 +221,8 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 	}
 
 	async function openGiveaway(g) {
+		// Opened meanwhile (by an earlier tick or the panel)
+		if (!['draft', 'scheduled'].includes(getOrThrow(g.id).status)) return getOrThrow(g.id);
 		const messages = [];
 		for (const target of g.targets) {
 			try {
@@ -223,7 +238,8 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 		return getOrThrow(g.id);
 	}
 
-	// Draws `count` winners among eligible entries (re-checked now), never someone already drawn
+	// Draws `count` winners among eligible entries (re-checked now), never someone already drawn.
+	// Not stored here: the caller saves them once the draw is sure to count.
 	async function drawWinners(g, count, exclude = new Set()) {
 		const pool = [];
 		const skipped = [];
@@ -234,7 +250,6 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 			else pool.push({ userId: e.user_id, guildId: e.guild_id, entries: e.entries });
 		}
 		const chosen = weightedDraw(pool, count);
-		for (const c of chosen) q.addWinner.run(g.id, c.userId, now());
 		return { chosen, pool: pool.length, skipped };
 	}
 
@@ -266,6 +281,7 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 	}
 
 	async function endGiveaway(g, by) {
+		if (getOrThrow(g.id).status !== 'open') return getOrThrow(g.id);
 		const result = await drawWinners(g, g.winnersCount);
 		const draw = {
 			at: now(),
@@ -275,6 +291,7 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 			method: 'crypto.randomInt, pondéré par les entrées, sans remise',
 		};
 		if (!q.end.run(now(), JSON.stringify(draw), now(), g.id).changes) return getOrThrow(g.id);
+		for (const c of result.chosen) q.addWinner.run(g.id, c.userId, now());
 		const ended = getOrThrow(g.id);
 		const winners = result.chosen.map(c => c.userId);
 		await refreshMessages(ended);
@@ -292,6 +309,7 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 		const exclude = new Set(current.map(w => w.user_id));
 		const result = await drawWinners(g, userId ? replaced.length : count, exclude);
 		const winners = result.chosen.map(c => c.userId);
+		for (const c of result.chosen) q.addWinner.run(g.id, c.userId, now());
 		const draw = { ...(g.draw ?? {}), rerolls: [...(g.draw?.rerolls ?? []), { at: now(), replaced: replaced.map(w => w.user_id), picks: winners, reason }] };
 		q.setDraw.run(JSON.stringify(draw), g.id);
 		await refreshMessages(getOrThrow(g.id));
@@ -336,7 +354,7 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 				q.setStatus.run('scheduled', now(), id);
 				return getOrThrow(id);
 			}
-			const opened = await openGiveaway(g);
+			const opened = await exclusive(id, () => openGiveaway(g));
 			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'giveaways.publish', target: String(id), details: { prize: g.prize } });
 			return opened;
 		},
@@ -345,14 +363,14 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 			need(actor);
 			const g = getOrThrow(id);
 			if (g.status !== 'open') throw new ValidationError('Ce giveaway n’est pas en cours.');
-			return endGiveaway(g, actor.id);
+			return exclusive(id, () => endGiveaway(g, actor.id));
 		},
 
 		async reroll(actor, id, { userId = null, count = 1 } = {}) {
 			need(actor);
 			const g = getOrThrow(id);
 			if (g.status !== 'ended') throw new ValidationError('Le giveaway doit être terminé pour relancer un tirage.');
-			return redraw(g, { userId, count: int(count, 1, 50, 1), by: actor.id });
+			return exclusive(id, () => redraw(getOrThrow(id), { userId, count: int(count, 1, 50, 1), by: actor.id }));
 		},
 
 		async cancel(actor, id) {
@@ -416,12 +434,22 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 
 		// Every 30 s: scheduled giveaways to open, ended ones to draw, unclaimed prizes to reroll
 		async tick() {
-			for (const row of q.dueStart.all(now())) await openGiveaway(toGiveaway(row)).catch(error => logger.warn(`Giveaway #${row.id} failed to open:`, error.message));
-			for (const row of q.dueEnd.all(now())) await endGiveaway(toGiveaway(row), 'system').catch(error => logger.warn(`Giveaway #${row.id} failed to end:`, error.message));
+			// A giveaway already being handled is left to the next tick
+			for (const row of q.dueStart.all(now())) {
+				if (!busy.has(row.id)) await exclusive(row.id, () => openGiveaway(toGiveaway(row))).catch(error => logger.warn(`Giveaway #${row.id} failed to open:`, error.message));
+			}
+			for (const row of q.dueEnd.all(now())) {
+				if (!busy.has(row.id)) await exclusive(row.id, () => endGiveaway(toGiveaway(row), 'system')).catch(error => logger.warn(`Giveaway #${row.id} failed to end:`, error.message));
+			}
 			for (const w of q.unclaimed.all()) {
 				const settings = JSON.parse(w.settings);
-				if (settings.claimMinutes && w.drawn_at + settings.claimMinutes * 60_000 <= now()) {
-					await redraw(getOrThrow(w.giveaway_id), { userId: w.user_id, by: 'system', reason: 'expired' }).catch(error => logger.warn(`Reroll of giveaway #${w.giveaway_id} failed:`, error.message));
+				if (settings.claimMinutes && w.drawn_at + settings.claimMinutes * 60_000 <= now() && !busy.has(w.giveaway_id)) {
+					await exclusive(w.giveaway_id, async () => {
+						// Claimed or rerolled meanwhile
+						const still = q.winners.all(w.giveaway_id).find(x => x.id === w.id);
+						if (still?.status !== 'winner' || still.claimed_at) return;
+						await redraw(getOrThrow(w.giveaway_id), { userId: w.user_id, by: 'system', reason: 'expired' });
+					}).catch(error => logger.warn(`Reroll of giveaway #${w.giveaway_id} failed:`, error.message));
 				}
 			}
 		},

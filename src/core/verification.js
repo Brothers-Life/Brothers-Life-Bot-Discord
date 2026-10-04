@@ -84,7 +84,7 @@ export function createVerification({ db, network, audit, settings, executor, log
 
 		setConfig(actor, guildId, input) {
 			if (!actor.can('verification.manage')) throw new ForbiddenError('Permission manquante : verification.manage');
-			if (!network.find(guildId)) throw new ValidationError('Serveur inconnu.');
+			if (network.find(guildId)?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
 			const previous = config(guildId);
 			const cfg = { ...normalizeVerification(input), messageId: previous.messageId };
 			if (cfg.enabled && !cfg.verifiedRoleId && !cfg.unverifiedRoleId) throw new ValidationError('Choisis le rôle donné une fois vérifié, ou le rôle « non vérifié » retiré ensuite.');
@@ -96,6 +96,7 @@ export function createVerification({ db, network, audit, settings, executor, log
 		// The message with the button, in the verification channel (edited in place when it exists)
 		async publish(actor, guildId) {
 			if (!actor.can('verification.manage')) throw new ForbiddenError('Permission manquante : verification.manage');
+			if (network.find(guildId)?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
 			const cfg = config(guildId);
 			if (!cfg.channelId) throw new ValidationError('Choisis d’abord le salon de vérification.');
 			const messageId = await executor.publishVerificationPanel(cfg.channelId, cfg.messageId, cfg);

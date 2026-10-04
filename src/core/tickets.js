@@ -93,7 +93,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			UPDATE tickets SET status = 'open', status_key = @key, status_history = @history, closed_at = NULL, closed_by = NULL, close_reason = NULL,
 				archived = 0, last_activity_at = @at, reminded_at = NULL WHERE id = @id AND status = 'closed' AND archived = 1
 		`),
-		unarchive: db.prepare('UPDATE tickets SET archived = 0 WHERE id = ?'),
+		unarchive: db.prepare('UPDATE tickets SET archived = 0 WHERE id = ? AND archived = 1'),
 		rate: db.prepare('UPDATE tickets SET rating = ? WHERE id = ? AND rating IS NULL'),
 		rateComment: db.prepare('UPDATE tickets SET rating_comment = ? WHERE id = ? AND rating IS NOT NULL'),
 		inactive: db.prepare('SELECT * FROM tickets WHERE status = \'open\' AND last_activity_at < ?'),
@@ -209,6 +209,12 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 		const ticket = toTicket(q.ticket.get(id));
 		if (!ticket) throw new NotFoundError('Ticket introuvable.');
 		return ticket;
+	}
+
+	// What the staff actions return (also sent as is by the panel API): never the opening variables,
+	// which may hold FiveM data
+	function publicTicket(id) {
+		return { ...getTicket(id), vars: undefined };
 	}
 
 	function categoryOf(ticket) {
@@ -391,6 +397,12 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 				: access.requiredRoleIds.some(r => roles.includes(r));
 			if (access.requiredRoleIds.length && !has) throw new ValidationError('Il te manque un rôle pour ouvrir ce type de ticket.');
 		}
+		checkLimits(guildId, userId, category);
+	}
+
+	// Open tickets and delay: synchronous, so it can run again right before the insert (double click on the panel)
+	function checkLimits(guildId, userId, category) {
+		const { access } = category.config;
 		const { maxOpen } = settingsOf(guildId);
 		if (q.openOf.get(guildId, userId).n >= maxOpen) {
 			throw new ValidationError(maxOpen === 1 ? 'Tu as déjà un ticket ouvert.' : `Tu as déjà ${maxOpen} tickets ouverts.`);
@@ -626,6 +638,8 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 
 			const cleanAnswers = answers.filter(a => a.value).slice(0, 25).map(a => ({ id: a.id, label: a.label.slice(0, 45), type: a.type ?? 'paragraph', value: a.value.slice(0, 4000) }));
 			const vars = await ticketVars({ guildId, userId, userName, answers: cleanAnswers, category });
+			// Another opening of the same member may have finished meanwhile: no await between this check and the insert
+			checkLimits(guildId, userId, category);
 			const number = q.nextNumber.get(guildId).n;
 			const id = Number(q.insertTicket.run({
 				guildId,
@@ -710,7 +724,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 					.catch(error => logger.warn('Ticket writers not updated:', error.message));
 			}
 			record(userId, source, 'tickets.claim', ticket);
-			return getTicket(ticketId);
+			return publicTicket(ticketId);
 		},
 
 		async transfer(userId, ticketId, toUserId, source = 'bot') {
@@ -731,7 +745,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 				}
 			}
 			record(userId, source, 'tickets.transfer', ticket, { to: `<@${toUserId}>` });
-			return getTicket(ticketId);
+			return publicTicket(ticketId);
 		},
 
 		async setStatus(userId, ticketId, key, source = 'bot') {
@@ -741,11 +755,11 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			if (key === 'closed') throw new ValidationError('Pour fermer un ticket, utilise « Fermer ».');
 			const status = statusesOf(ticket.guildId).find(s => s.key === key);
 			if (!status) throw new ValidationError('Statut inconnu.');
-			if (ticket.statusKey === key) return ticket;
+			if (ticket.statusKey === key) return publicTicket(ticketId);
 			q.setStatus.run(key, pushHistory(ticket, key, userId), ticketId);
 			applyChannelState(categoryOf(ticket), ticket, key);
 			record(userId, source, 'tickets.status', ticket, { status: status.label });
-			return getTicket(ticketId);
+			return publicTicket(ticketId);
 		},
 
 		async setPriority(userId, ticketId, priority, source = 'bot') {
@@ -754,7 +768,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			await requireHandle(userId, ticket, 'Seul le staff peut changer la priorité.');
 			q.setPriority.run(priority, ticketId);
 			record(userId, source, 'tickets.priority', ticket, { priority: PRIORITY_LABELS[priority] });
-			return getTicket(ticketId);
+			return publicTicket(ticketId);
 		},
 
 		async rename(userId, ticketId, name, source = 'bot') {
@@ -872,7 +886,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 					timer.unref?.();
 				}
 			}
-			return getTicket(ticketId);
+			return publicTicket(ticketId);
 		},
 
 		async reopen(userId, ticketId, source = 'bot') {
@@ -880,14 +894,15 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			if (ticket.status !== 'closed' || !ticket.archived) throw new ValidationError('Seul un ticket archivé peut être rouvert.');
 			await requireHandle(userId, ticket, 'Seul le staff peut rouvrir un ticket.');
 			const key = ticket.claimedBy ? 'claimed' : 'open';
-			q.reopen.run({ key, history: pushHistory(ticket, key, userId), at: now(), id: ticketId });
+			// Two clicks on "Rouvrir": only the first one reopens
+			if (!q.reopen.run({ key, history: pushHistory(ticket, key, userId), at: now(), id: ticketId }).changes) throw new ValidationError('Ce ticket est déjà rouvert.');
 			openChannels.add(ticket.channelId);
 			liveChannels.set(ticket.channelId, ticket.id);
 			await executor.addChannelMember(ticket.channelId, ticket.openerId).catch(() => null);
 			applyChannelState(categoryOf(ticket), ticket, key);
 			await executor.sendTicketNotice(ticket.channelId, { kind: 'reopened', ticket: getTicket(ticketId), by: userId }).catch(() => null);
 			record(userId, source, 'tickets.reopen', ticket);
-			return getTicket(ticketId);
+			return publicTicket(ticketId);
 		},
 
 		// Deletes the channel of an archived ticket
@@ -895,7 +910,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			const ticket = getTicket(ticketId);
 			if (!ticket.archived) throw new ValidationError('Ce ticket n’est pas archivé.');
 			await requireHandle(userId, ticket, 'Seul le staff peut supprimer un ticket.');
-			q.unarchive.run(ticketId);
+			if (!q.unarchive.run(ticketId).changes) throw new ValidationError('Ce ticket n’est pas archivé.');
 			liveChannels.delete(ticket.channelId);
 			await executor.deleteChannel(ticket.channelId, `Ticket #${ticket.number} supprimé`).catch(() => null);
 			record(userId, source, 'tickets.delete', ticket);
@@ -908,14 +923,14 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			if (!Number.isInteger(rating) || rating < 1 || rating > 5) throw new ValidationError('Note entre 1 et 5.');
 			if (!q.rate.run(rating, ticketId).changes) throw new ValidationError('Tu as déjà noté ce ticket.');
 			record(userId, 'bot', 'tickets.rating', ticket, { rating: '★'.repeat(rating) + '☆'.repeat(5 - rating) });
-			return getTicket(ticketId);
+			return publicTicket(ticketId);
 		},
 
 		rateComment(userId, ticketId, comment) {
 			const ticket = getTicket(ticketId);
 			if (ticket.openerId !== userId) throw new ForbiddenError('Seule la personne qui a ouvert le ticket peut le commenter.');
 			q.rateComment.run(comment.slice(0, 1000) || null, ticketId);
-			return getTicket(ticketId);
+			return publicTicket(ticketId);
 		},
 
 		// A message in a ticket channel: recorded for the panel, resets the inactivity timer

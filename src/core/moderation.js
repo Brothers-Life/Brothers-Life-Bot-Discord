@@ -46,6 +46,9 @@ export function createModeration({ db, network, ranks, audit, executor, settings
 		removedBy: row.removed_by,
 	});
 
+	// Servers whose lockdown is in progress
+	const lockingDown = new Set();
+
 	function need(actor, permission) {
 		if (!actor.can(permission)) throw new ForbiddenError(`Permission manquante : ${permission}`);
 	}
@@ -88,8 +91,16 @@ export function createModeration({ db, network, ranks, audit, executor, settings
 			requireGuild(guildId);
 			const key = `lockdown.${guildId}`;
 			if (on) {
-				if (settings.get(key)) throw new ValidationError('Le serveur est déjà verrouillé.');
-				const channelIds = await executor.lockGuild(guildId, `Lockdown par ${actor.id}${reason ? ` : ${reason}` : ''}`);
+				if (settings.get(key) || lockingDown.has(guildId)) throw new ValidationError('Le serveur est déjà verrouillé.');
+				// A second lockdown during the first one would find nothing left to lock and erase the list to reopen
+				lockingDown.add(guildId);
+				let channelIds;
+				try {
+					channelIds = await executor.lockGuild(guildId, `Lockdown par ${actor.id}${reason ? ` : ${reason}` : ''}`);
+				}
+				finally {
+					lockingDown.delete(guildId);
+				}
 				settings.set(key, { channelIds, at: now(), by: actor.id });
 				record(actor, 'moderation.lockdown', guildId, guildId, { channels: channelIds.length, reason: reason || null });
 				return channelIds.length;
@@ -197,7 +208,11 @@ export function createModeration({ db, network, ranks, audit, executor, settings
 		// Every 30 s: temporary roles reaching their end
 		async expireTempRoles() {
 			const due = q.due.all(now()).map(toTemp);
+			let expired = 0;
 			for (const temp of due) {
+				// Closed first: an overlapping tick (slow Discord calls) must not remove and audit it twice
+				if (!q.close.run(now(), 'system', temp.id).changes) continue;
+				expired++;
 				try {
 					await executor.removeRole(temp.guildId, temp.userId, temp.roleId, 'Fin du rôle temporaire');
 				}
@@ -205,10 +220,9 @@ export function createModeration({ db, network, ranks, audit, executor, settings
 					// Deleted role or server gone: nothing left to remove
 					logger.warn(`Temporary role #${temp.id} not removed:`, error.message);
 				}
-				q.close.run(now(), 'system', temp.id);
 				audit.record({ actorId: 'system', source: 'system', action: 'temproles.expire', guildId: temp.guildId, target: temp.userId, details: { member: `<@${temp.userId}>`, role: temp.roleName } });
 			}
-			return due.length;
+			return expired;
 		},
 
 		// /userinfo: the network profile of someone, as the panel shows it

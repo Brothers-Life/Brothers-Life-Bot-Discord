@@ -56,7 +56,7 @@ function FivemPage() {
           )}
           {!data.servers.length
             ? <Section title='Serveurs'><EmptyState title='Aucun serveur FiveM'>Ajoute l’adresse ip:port de ton serveur.</EmptyState></Section>
-            : <div className='stagger grid gap-4 lg:grid-cols-2'>{data.servers.map((s) => <ServerCard key={s.id} server={s} data={data} manage={manage} onEdit={() => setEditing(s)} onDuplicate={() => setEditing(copyOf(s, 'name'))} />)}</div>}
+            : <div className='stagger grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2'>{data.servers.map((s) => <ServerCard key={s.id} server={s} data={data} manage={manage} onEdit={() => setEditing(s)} onDuplicate={() => setEditing(copyOf(s, 'name'))} />)}</div>}
           {manage && data.servers.length > 0 && <PresenceSection key={JSON.stringify(data.presence)} data={data} />}
         </div>
       )}
@@ -215,7 +215,7 @@ function PresenceSection({ data }: { data: Data }) {
             )
           })}
         </div>
-        <div className='grid gap-4 sm:grid-cols-2'>
+        <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
           <div className='grid gap-1.5'><Label htmlFor='pr-on'>En ligne</Label><Input id='pr-on' value={p.text} maxLength={120} onChange={(e) => setP({ ...p, text: e.target.value })} /></div>
           <div className='grid gap-1.5'><Label htmlFor='pr-off'>Hors ligne</Label><Input id='pr-off' value={p.offlineText} maxLength={120} onChange={(e) => setP({ ...p, offlineText: e.target.value })} /></div>
         </div>

@@ -81,7 +81,7 @@ function MessagesPage() {
       description='Un message posté dans un ou plusieurs salons du réseau et modifiable d’ici sans le renvoyer. Avec des variables, il se met à jour tout seul : membres, vocal, joueurs FiveM, date…'
       actions={can('messages.manage') && <Button onClick={() => setSelected('new')}><Plus /> Nouveau message</Button>}
     >
-      <div className='grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]'>
         <Section title='Messages'>
           {!list ? <Skeleton className='m-4 h-24' /> : !list.length ? <EmptyState title='Aucun message'>Crée par exemple un tableau « Infos du serveur » avec le nombre de membres en direct.</EmptyState> : (
             <ul className='divide-y'>
@@ -159,7 +159,7 @@ function Editor({ message, guilds, onSaved, onDeleted }: { message: LiveMessage 
   const varsBox = useRef<HTMLDivElement>(null)
 
   return (
-    <div className='grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]'>
+    <div className='grid grid-cols-[minmax(0,1fr)] gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]'>
       <div className='grid content-start gap-6' ref={varsBox}>
         <Section title={message ? message.name : 'Nouveau message'} actions={message && manage && (
           <div className='flex gap-2'>
@@ -169,7 +169,7 @@ function Editor({ message, guilds, onSaved, onDeleted }: { message: LiveMessage 
           </div>
         )}>
           <div className='grid gap-4 p-4'>
-            <div className='grid gap-4 sm:grid-cols-2'>
+            <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
               <div className='grid gap-1.5'>
                 <Label htmlFor='lm-name'>Nom interne</Label>
                 <Input id='lm-name' value={d.name} maxLength={100} disabled={!manage} onChange={(e) => set({ name: e.target.value })} placeholder='Infos du serveur' />
@@ -198,7 +198,7 @@ function Editor({ message, guilds, onSaved, onDeleted }: { message: LiveMessage 
         <Section title='Variables libres' description='Des valeurs que tu changes d’ici en un clic, sans toucher au message (ex. {var.event} = prochain événement).'>
           <div className='grid gap-2 p-4'>
             {d.variables.map(([k, v], i) => (
-              <div key={i} className='grid gap-2 sm:grid-cols-[12rem_1fr_auto]'>
+              <div key={i} className='grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-[12rem_1fr_auto]'>
                 <Input value={k} placeholder='event' aria-label='Nom' disabled={!manage} onChange={(e) => set({ variables: d.variables.map((x, j) => (j === i ? [e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''), x[1]] : x)) })} />
                 <Input value={v} placeholder='Soirée casino samedi 21h' aria-label='Valeur' disabled={!manage} onChange={(e) => set({ variables: d.variables.map((x, j) => (j === i ? [x[0], e.target.value] : x)) })} />
                 <Button size='icon' variant='ghost' aria-label='Supprimer' disabled={!manage} onClick={() => set({ variables: d.variables.filter((_, j) => j !== i) })}><X /></Button>

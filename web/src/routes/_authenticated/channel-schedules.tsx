@@ -72,7 +72,7 @@ function SchedulesPage() {
             </nav>
           )}
           {!list.length ? <Section title='Horaires'><EmptyState title='Aucun horaire' icon={CalendarClock}>Par exemple : salon « events » ouvert le vendredi et le samedi de 20 h à 2 h, et fermé du 24 au 26 décembre.</EmptyState></Section> : (
-            <div className='stagger grid gap-4 lg:grid-cols-2'>
+            <div className='stagger grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2'>
               {list.map((s) => <ScheduleCard key={s.id} schedule={s} guild={guild} manage={manage} onEdit={() => setEditing({ ...s })} onDuplicate={() => setEditing(copyOf(s, 'name'))} />)}
             </div>
           )}
@@ -128,7 +128,7 @@ function Editor({ draft, guild, onClose }: { draft: Draft; guild: GuildData; onC
           <DialogDescription>Heures de Paris. Un créneau qui finit avant son début continue le lendemain (20:00 → 02:00).</DialogDescription>
         </DialogHeader>
         <div className='grid gap-5'>
-          <div className='grid gap-4 sm:grid-cols-2'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
             <div className='grid gap-1.5'><Label htmlFor='s-name'>Nom</Label><Input id='s-name' value={d.name} maxLength={60} onChange={(e) => set({ name: e.target.value })} placeholder='Soirées event' /></div>
             <div className='grid gap-1.5'>
               <Label>Les salons sont…</Label>
@@ -140,7 +140,7 @@ function Editor({ draft, guild, onClose }: { draft: Draft; guild: GuildData; onC
           </div>
           <div className='grid gap-2'>
             <Label>Salons</Label>
-            <div className='grid max-h-40 gap-1 overflow-y-auto rounded-lg border p-2 sm:grid-cols-2'>
+            <div className='grid grid-cols-[minmax(0,1fr)] max-h-40 gap-1 overflow-y-auto rounded-lg border p-2 sm:grid-cols-2'>
               {guild.channels.map((c) => (
                 <label key={c.id} className='flex items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-accent/40'>
                   <Checkbox checked={d.channelIds.includes(c.id)} onCheckedChange={(on) => set({ channelIds: on ? [...d.channelIds, c.id] : d.channelIds.filter((x) => x !== c.id) })} />
@@ -172,7 +172,7 @@ function Editor({ draft, guild, onClose }: { draft: Draft; guild: GuildData; onC
           <div className='grid gap-2'>
             <div className='flex items-center justify-between'><Label>Dates précises</Label><Button size='sm' variant='ghost' onClick={() => set({ dates: [...d.dates, { from: hour + 86_400_000, to: hour + 2 * 86_400_000, label: '' }] })}><CalendarPlus /> Période</Button></div>
             {d.dates.map((p, i) => (
-              <div key={i} className='grid gap-2 rounded-lg border p-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:items-center'>
+              <div key={i} className='grid grid-cols-[minmax(0,1fr)] gap-2 rounded-lg border p-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:items-center'>
                 <Input aria-label='Nom de la période' value={p.label} maxLength={60} placeholder='Soirée Halloween' onChange={(e) => setPeriod(i, { label: e.target.value })} className='h-8' />
                 <Input type='datetime-local' aria-label='Début' value={toLocalInput(p.from)} onChange={(e) => setPeriod(i, { from: new Date(e.target.value).getTime() })} className='h-8' />
                 <Input type='datetime-local' aria-label='Fin' value={toLocalInput(p.to)} onChange={(e) => setPeriod(i, { to: new Date(e.target.value).getTime() })} className='h-8' />

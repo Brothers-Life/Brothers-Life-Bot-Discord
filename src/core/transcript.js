@@ -83,7 +83,7 @@ export function markdown(text, mentions = {}) {
 		.replace(/(^|[\s(])(https?:\/\/[^\s<]+)/g, '$1<a href="$2" target="_blank" rel="noreferrer">$2</a>')
 		.replace(/@(everyone|here)/g, '<span class="mention">@$1</span>')
 		.replace(/\n/g, '<br>');
-	return out.replace(/(\d+)/g, (_, i) => blocks[Number(i)]);
+	return out.replace(/(\d+)/g, (_, i) => blocks[Number(i)] ?? '');
 }
 
 function embedHtml(e, mentions) {

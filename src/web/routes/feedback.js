@@ -1,13 +1,8 @@
-import { NotFoundError } from '../../core/errors.js';
-import { resolveNames, snowflake } from './helpers.js';
+import { ForbiddenError, NotFoundError } from '../../core/errors.js';
+import { csvCell, resolveNames, snowflake } from './helpers.js';
 
 const idParam = { type: 'object', properties: { id: { type: 'integer' } }, required: ['id'] };
 const guildParam = { type: 'object', properties: { guildId: snowflake }, required: ['guildId'] };
-
-function csvCell(value) {
-	const text = value === null || value === undefined ? '' : String(value);
-	return /[";\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
 
 export function registerFeedbackRoutes(app, { core }) {
 	const { feedback, executor, network } = core;
@@ -15,6 +10,15 @@ export function registerFeedbackRoutes(app, { core }) {
 	async function withNames(items) {
 		const names = await resolveNames(executor, items.flatMap(i => [i.authorId, i.assigneeId]));
 		return items.map(i => ({ ...i, author: i.anonymous ? null : names.get(i.authorId) ?? { name: i.authorName, avatar: null }, assignee: i.assigneeId ? names.get(i.assigneeId) ?? null : null }));
+	}
+
+	// The service only gets the user id and checks their whole rank: an API key limited
+	// to other permissions must be stopped here, with the permissions of the request
+	async function requireHandler(request) {
+		const { actor } = request;
+		const item = feedback.get({ can: () => true }, request.params.id);
+		const box = feedback.getBox(item.boxId);
+		if (!actor.can('feedback.manage') && !(box.kind === 'staff' && actor.can('feedback.staff'))) throw new ForbiddenError('Réservé au staff.');
 	}
 
 	// Boxes the panel user may see, with the channels and roles of the server
@@ -57,16 +61,19 @@ export function registerFeedbackRoutes(app, { core }) {
 
 	app.post('/api/feedback/items/:id/status', {
 		config: { permission: null },
+		preHandler: requireHandler,
 		schema: { params: idParam, body: { type: 'object', required: ['status'], properties: { status: { type: 'string', maxLength: 20 }, reason: { type: 'string', maxLength: 500 }, duplicateOf: { type: ['integer', 'null'] } } } },
 	}, async (request) => (await withNames([await feedback.setStatus(request.actor.id, request.params.id, request.body.status, { reason: request.body.reason ?? '', duplicateOf: request.body.duplicateOf ?? null, source: 'panel' })]))[0]);
 
 	app.post('/api/feedback/items/:id/assign', {
 		config: { permission: null },
-		schema: { params: idParam, body: { type: 'object', properties: { userId: { anyOf: [snowflake, { type: 'null' }] } } } },
+		preHandler: requireHandler,
+		schema: { params: idParam, body: { type: 'object', properties: { userId: { anyOf: [{ type: 'null' }, snowflake] } } } },
 	}, async (request) => (await withNames([await feedback.assign(request.actor.id, request.params.id, request.body.userId ?? request.actor.id, 'panel')]))[0]);
 
 	app.post('/api/feedback/items/:id/review', {
 		config: { permission: null },
+		preHandler: requireHandler,
 		schema: { params: idParam, body: { type: 'object', required: ['approved'], properties: { approved: { type: 'boolean' } } } },
 	}, async (request) => ({ item: await feedback.review(request.actor.id, request.params.id, request.body.approved, 'panel') }));
 

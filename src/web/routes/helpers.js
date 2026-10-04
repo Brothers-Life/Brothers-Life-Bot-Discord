@@ -7,6 +7,14 @@ export async function resolveNames(executor, ids) {
 	return new Map(users.map(([id, user]) => [id, user ? { name: user.globalName ?? user.username, avatar: user.avatar } : null]));
 }
 
+// One cell of a CSV export (";" separated). Text typed by members starting with = + - @ would run
+// as a formula in Excel / LibreOffice: it is prefixed with a quote and kept as plain text.
+export function csvCell(value) {
+	let text = value === null || value === undefined ? '' : String(value);
+	if (typeof value === 'string' && /^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+	return /[";\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
 export const snowflake = { type: 'string', pattern: '^\\d{17,20}$' };
 
 // Servers of the network with their text channels (and roles), to choose where to post

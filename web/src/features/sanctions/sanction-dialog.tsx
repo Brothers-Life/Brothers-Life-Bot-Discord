@@ -111,7 +111,7 @@ export function SanctionDialog({ userId: initialUserId = '', onClose }: { userId
             <p className='text-xs text-muted-foreground'>Pour quelqu’un qui a quitté tous les serveurs, colle son ID Discord.</p>
           </div>
 
-          <div className='grid gap-4 sm:grid-cols-2'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
             <div className='grid gap-1.5'>
               <Label>Sanction</Label>
               <Select value={type} onValueChange={(v) => setType(v as SanctionType)}>
@@ -159,7 +159,7 @@ export function SanctionDialog({ userId: initialUserId = '', onClose }: { userId
           </div>
 
           {type !== 'warn' && (
-            <div className='grid gap-4 sm:grid-cols-2'>
+            <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
               <div className='grid gap-1.5'>
                 <Label>Portée</Label>
                 <Select value={scope} onValueChange={(v) => setScope(v as 'network' | 'local')}>

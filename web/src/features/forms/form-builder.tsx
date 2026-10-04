@@ -120,7 +120,7 @@ export function FormBuilder({ value, onChange, disabled, allowEmpty = true }: {
                     <Button type='button' size='icon' variant='ghost' aria-label='Descendre la question' disabled={disabled || qi === step.questions.length - 1} onClick={() => patchStep(si, { questions: move(step.questions, qi, qi + 1) })}><ArrowDown /></Button>
                     <Button type='button' size='icon' variant='danger-ghost' aria-label='Supprimer la question' disabled={disabled || step.questions.length === 1} onClick={() => patchStep(si, { questions: step.questions.filter((_, j) => j !== qi) })}><X /></Button>
                   </div>
-                  <div className='grid gap-3 sm:grid-cols-2'>
+                  <div className='grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2'>
                     <div className='grid gap-1.5'>
                       <Label htmlFor={`q-${si}-${qi}-desc`}>Aide sous la question (100 max)</Label>
                       <Input id={`q-${si}-${qi}-desc`} value={q.description} maxLength={100} disabled={disabled} onChange={(e) => patchField(si, qi, { description: e.target.value })} />

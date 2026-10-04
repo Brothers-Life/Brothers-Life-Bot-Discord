@@ -1,6 +1,6 @@
 import { NotFoundError, ValidationError } from '../../core/errors.js';
 import { COUNTER_VARIABLES } from '../../core/stats.js';
-import { resolveNames, snowflake } from './helpers.js';
+import { csvCell, resolveNames, snowflake } from './helpers.js';
 
 const filters = {
 	type: 'object',
@@ -17,11 +17,6 @@ const filters = {
 		kind: { type: 'string', enum: ['days', 'members', 'channels', 'staff'] },
 	},
 };
-
-function csvCell(value) {
-	const text = value === null || value === undefined ? '' : String(value);
-	return /[";\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
 
 // Byte order mark + semicolons: Excel in French opens it directly with the accents
 const BOM = String.fromCharCode(0xfeff);
@@ -142,7 +137,7 @@ export function registerStatsRoutes(app, { core }) {
 			body: {
 				type: 'object',
 				required: ['guildId', 'template'],
-				properties: { guildId: snowflake, template: { type: 'string', maxLength: 90 }, channelId: { anyOf: [snowflake, { type: 'null' }] }, categoryId: { anyOf: [snowflake, { type: 'null' }] } },
+				properties: { guildId: snowflake, template: { type: 'string', maxLength: 90 }, channelId: { anyOf: [{ type: 'null' }, snowflake] }, categoryId: { anyOf: [{ type: 'null' }, snowflake] } },
 				additionalProperties: false,
 			},
 		},

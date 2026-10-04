@@ -121,7 +121,8 @@ export function createFeedback({ db, network, ranks, audit, executor, logger = c
 		setMessage: db.prepare('UPDATE feedback_items SET channel_id = ?, message_id = ?, thread_id = COALESCE(?, thread_id) WHERE id = ?'),
 		setStatus: db.prepare('UPDATE feedback_items SET status = ?, status_reason = ?, status_history = ?, duplicate_of = ?, updated_at = ? WHERE id = ?'),
 		setAssignee: db.prepare('UPDATE feedback_items SET assignee_id = ?, updated_at = ? WHERE id = ?'),
-		approve: db.prepare('UPDATE feedback_items SET approved = 1, updated_at = ? WHERE id = ?'),
+		approve: db.prepare('UPDATE feedback_items SET approved = 1, updated_at = ? WHERE id = ? AND approved = 0'),
+		removePending: db.prepare('DELETE FROM feedback_items WHERE id = ? AND approved = 0'),
 		remove: db.prepare('DELETE FROM feedback_items WHERE id = ?'),
 		reminded: db.prepare('UPDATE feedback_items SET reminded_at = ? WHERE id = ?'),
 		vote: db.prepare('INSERT INTO feedback_votes (item_id, user_id, value, at) VALUES (?, ?, ?, ?) ON CONFLICT(item_id, user_id) DO UPDATE SET value = excluded.value, at = excluded.at'),
@@ -297,14 +298,14 @@ export function createFeedback({ db, network, ranks, audit, executor, logger = c
 			const box = getBox(item.boxId);
 			if (!await isHandler(userId, box)) throw new ForbiddenError('Réservé au staff.');
 			if (item.approved) throw new ValidationError('Déjà validé.');
+			// Decided before any await: a double click (or two staff members) acts only once
+			if (!(approved ? q.approve.run(now(), itemId) : q.removePending.run(itemId)).changes) throw new ValidationError('Déjà traité.');
 			if (item.messageId) await executor.deleteMessage(item.channelId, item.messageId).catch(() => null);
 			if (!approved) {
-				q.remove.run(itemId);
 				if (box.config.dmAuthor) await executor.sendDM(item.authorId, `Ta proposition « ${item.title} » n’a pas été retenue par le staff.`).catch(() => null);
 				audit.record({ actorId: userId, source, action: 'feedback.reject_review', guildId: item.guildId, target: String(itemId), details: { title: item.title } });
 				return null;
 			}
-			q.approve.run(now(), itemId);
 			const published = await publish(box, getItem(itemId));
 			audit.record({ actorId: userId, source, action: 'feedback.approve', guildId: item.guildId, target: String(itemId), details: { title: item.title } });
 			return published;

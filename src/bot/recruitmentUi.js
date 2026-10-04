@@ -1,4 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } from 'discord.js';
+import { fitFields } from './ticketsUi.js';
 
 const STATUS_OPTIONS = [
 	['review', 'En étude', '🔎'], ['interview', 'Entretien', '🗣️'], ['accepted', 'Acceptée', '✅'], ['rejected', 'Refusée', '❌'],
@@ -21,16 +22,20 @@ export function recruitmentPanelPayload(positions) {
 
 // Application as the staff sees it in the review channel
 export function applicationPayload({ position, application: a, status }) {
+	const author = `Candidature · ${position.name}`;
+	const title = `${a.userName ?? a.userId}`;
+	const description = `<@${a.userId}> · candidature #${a.id}`;
+	const fixed = [
+		{ name: 'Statut', value: `${status.emoji} ${status.label}`, inline: true },
+		{ name: 'Votes du staff', value: `👍 ${a.score.for} · 🤷 ${a.score.neutral} · 👎 ${a.score.against}`, inline: true },
+	];
+	const answers = a.answers.slice(0, 20).map(x => ({ name: x.label.slice(0, 256), value: (x.value || '—').slice(0, 1024) }));
 	const embed = new EmbedBuilder()
 		.setColor(Number.parseInt(status.color.slice(1), 16))
-		.setAuthor({ name: `Candidature · ${position.name}` })
-		.setTitle(`${a.userName ?? a.userId}`)
-		.setDescription(`<@${a.userId}> · candidature #${a.id}`)
-		.addFields(
-			...a.answers.slice(0, 20).map(x => ({ name: x.label.slice(0, 256), value: (x.value || '—').slice(0, 1024) })),
-			{ name: 'Statut', value: `${status.emoji} ${status.label}`, inline: true },
-			{ name: 'Votes du staff', value: `👍 ${a.score.for} · 🤷 ${a.score.neutral} · 👎 ${a.score.against}`, inline: true },
-		)
+		.setAuthor({ name: author })
+		.setTitle(title)
+		.setDescription(description)
+		.addFields(...fitFields(answers, author, title, description, ...fixed.flatMap(f => [f.name, f.value])), ...fixed)
 		.setTimestamp(new Date(a.createdAt));
 	const open = ['received', 'review', 'interview'].includes(a.status);
 	const components = open ? [

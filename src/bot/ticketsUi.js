@@ -8,6 +8,25 @@ const COLOR = 0xd6a249;
 const STYLES = { primary: ButtonStyle.Primary, secondary: ButtonStyle.Secondary, success: ButtonStyle.Success, danger: ButtonStyle.Danger };
 const PRIORITY_EMOJI = { low: '⚪', normal: '🔵', high: '🟠', urgent: '🔴' };
 
+const EMBED_MAX = 6000;
+const textLength = (...texts) => texts.reduce((n, t) => n + (t ? String(t).length : 0), 0);
+
+// Discord refuses the whole message when an embed is over 6000 characters (title, description,
+// author, footer, fields): long form answers share what is left, the short ones stay whole.
+// reserved: characters of the rest of the embed (fixed fields included)
+export function fitFields(fields, ...reserved) {
+	let budget = EMBED_MAX - textLength(...reserved) - fields.reduce((n, f) => n + f.name.length, 0);
+	if (fields.reduce((n, f) => n + f.value.length, 0) <= budget) return fields;
+	const caps = new Map();
+	const order = [...fields.keys()].sort((a, b) => fields[a].value.length - fields[b].value.length);
+	order.forEach((i, rank) => {
+		const cap = Math.min(fields[i].value.length, Math.max(1, Math.floor(budget / (order.length - rank))));
+		caps.set(i, cap);
+		budget -= cap;
+	});
+	return fields.map((f, i) => (caps.get(i) < f.value.length ? { ...f, value: `${f.value.slice(0, caps.get(i) - 1)}…` } : f));
+}
+
 // Panel: the embed chosen in the panel, then buttons (one per type) or a menu
 export function panelPayload({ id, payload, style, placeholder, categories }) {
 	const components = [];
@@ -48,11 +67,12 @@ export function nextStepPayload(prefix, id, next, total) {
 }
 
 export function welcomePayload({ ticket, title, message, color, answers, pingRoleIds, statuses, priorities }) {
+	const fields = answers.slice(0, 25).map(a => ({ name: a.label.slice(0, 256), value: a.value.slice(0, 1024) || '—' }));
 	const embed = new EmbedBuilder()
 		.setColor(Number.parseInt(color.slice(1), 16) || COLOR)
 		.setTitle(title)
 		.setDescription(message)
-		.addFields(answers.slice(0, 25).map(a => ({ name: a.label.slice(0, 256), value: a.value.slice(0, 1024) || '—' })));
+		.addFields(fitFields(fields, title, message));
 	const buttons = new ActionRowBuilder().addComponents(
 		new ButtonBuilder().setCustomId(`ticket:claim:${ticket.id}`).setLabel('Prendre en charge').setStyle(ButtonStyle.Primary),
 		new ButtonBuilder().setCustomId(`ticket:add:${ticket.id}`).setLabel('Ajouter un membre').setStyle(ButtonStyle.Secondary),

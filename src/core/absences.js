@@ -91,6 +91,8 @@ export function createAbsences({ db, network, ranks, audit, executor, settings, 
 
 	// Approve or reject a pending absence (checks done by the caller)
 	async function decide(actorId, source, absence, approved) {
+		// Read again with no await before the update: two reviewers clicking at once decide only once
+		if (getOrThrow(absence.id).status !== 'pending') throw new ValidationError('Cette absence a déjà été traitée.');
 		q.setStatus.run(approved ? 'approved' : 'rejected', actorId, now(), absence.id);
 		await executor.sendDM(absence.userId, approved ? `Ton absence jusqu’au ${new Date(absence.endAt).toLocaleDateString('fr-FR')} est validée.` : 'Ton absence n’a pas été validée.').catch(() => null);
 		audit.record({ actorId, source, action: approved ? 'absences.approve' : 'absences.reject', target: absence.userId, details: { member: `<@${absence.userId}>` } });

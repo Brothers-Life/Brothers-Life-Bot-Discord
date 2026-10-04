@@ -1,4 +1,4 @@
-import { networkTargets, resolveNames } from './helpers.js';
+import { csvCell, networkTargets, resolveNames } from './helpers.js';
 
 const idParam = { type: 'object', properties: { id: { type: 'integer' } }, required: ['id'] };
 const body = {
@@ -14,11 +14,6 @@ const body = {
 		endsAt: { type: ['integer', 'null'] },
 	},
 };
-
-function csvCell(value) {
-	const text = value === null || value === undefined ? '' : String(value);
-	return /[";\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
 
 export function registerPollRoutes(app, { core }) {
 	const { polls, executor, network } = core;

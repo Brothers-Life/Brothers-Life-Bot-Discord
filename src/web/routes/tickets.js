@@ -60,6 +60,7 @@ export function registerTicketRoutes(app, { core }) {
 			const actor = await authenticate(request, core).catch(() => null);
 			if (!actor?.can('panel.access') || !actor.can('tickets.view')) socket.close(4003, 'Forbidden');
 		}, PERMISSION_RECHECK_MS);
+		recheck.unref?.();
 		socket.on('close', () => {
 			clearInterval(recheck);
 			unsubscribe();
@@ -176,8 +177,8 @@ export function registerTicketRoutes(app, { core }) {
 					name: { type: 'string', maxLength: 50 },
 					emoji: { type: ['string', 'null'], maxLength: 64 },
 					description: { type: ['string', 'null'], maxLength: 100 },
-					parentChannelId: { anyOf: [snowflake, { type: 'null' }] },
-					transcriptChannelId: { anyOf: [snowflake, { type: 'null' }] },
+					parentChannelId: { anyOf: [{ type: 'null' }, snowflake] },
+					transcriptChannelId: { anyOf: [{ type: 'null' }, snowflake] },
 					rankIds: { type: 'array', items: { type: 'integer' }, maxItems: 50 },
 					roleIds: { type: 'array', items: snowflake, maxItems: 50 },
 					position: { type: 'integer' },
@@ -206,7 +207,7 @@ export function registerTicketRoutes(app, { core }) {
 				properties: {
 					id: { type: 'integer' },
 					name: { type: 'string', maxLength: 50 },
-					channelId: { anyOf: [snowflake, { type: 'null' }] },
+					channelId: { anyOf: [{ type: 'null' }, snowflake] },
 					payload: { type: 'object' },
 					style: { type: 'string', enum: ['buttons', 'select'] },
 					placeholder: { type: ['string', 'null'], maxLength: 150 },

@@ -58,7 +58,7 @@ function PollsPage() {
       description='Un sondage publié dans un ou plusieurs salons du réseau, avec les votes comptés ensemble. Résultats en direct, à la fin ou jamais ; anonyme ou non ; conditions pour voter.'
       actions={can('polls.manage') && <Button onClick={() => setSelected('new')}><Plus /> Nouveau sondage</Button>}
     >
-      <div className='grid gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]'>
         <Section title='Sondages'>
           {!list ? <Skeleton className='m-4 h-24' /> : !list.length ? <EmptyState title='Aucun sondage'>Crée ton premier sondage, ou utilise /sondage creer dans Discord.</EmptyState> : (
             <ul className='divide-y'>
@@ -181,7 +181,7 @@ function PollForm({ poll, guilds, onSaved, onDeleted }: { poll: Poll | null; gui
 
       <Section title='Règles du vote'>
         <div className='grid gap-4 p-4'>
-          <div className='grid gap-4 sm:grid-cols-3'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-3'>
             <div className='grid gap-1.5'>
               <Label>Affichage</Label>
               <Select value={settings.style} disabled={!editable} onValueChange={(v) => set({ style: v as Settings['style'] })}>
@@ -198,7 +198,7 @@ function PollForm({ poll, guilds, onSaved, onDeleted }: { poll: Poll | null; gui
             </div>
             <div className='grid gap-1.5'><Label htmlFor='p-color'>Couleur</Label><ColorPicker disabled={!editable} id='p-color' value={settings.color} onChange={(hex) => set({ color: hex })} /></div>
           </div>
-          <div className='grid gap-2 text-sm sm:grid-cols-2'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-2 text-sm sm:grid-cols-2'>
             <label className='flex items-center gap-2'><Checkbox checked={settings.multiple} disabled={!editable || locked} onCheckedChange={(v) => set({ multiple: v === true, maxChoices: v === true ? options.length : 1 })} /> Plusieurs choix possibles</label>
             <label className='flex items-center gap-2'><Checkbox checked={settings.allowChange} disabled={!editable} onCheckedChange={(v) => set({ allowChange: v === true })} /> On peut changer son vote</label>
             <label className='flex items-center gap-2'><Checkbox checked={settings.anonymous} disabled={!editable} onCheckedChange={(v) => set({ anonymous: v === true })} /> Vote anonyme</label>
@@ -211,7 +211,7 @@ function PollForm({ poll, guilds, onSaved, onDeleted }: { poll: Poll | null; gui
               <div className='grid gap-1.5'><Label htmlFor='p-max'>Choix maximum</Label><Input id='p-max' type='number' className='w-24' min={1} max={options.length} value={settings.maxChoices} disabled={!editable || locked} onChange={(e) => set({ maxChoices: Number(e.target.value) || 1 })} /></div>
             </div>
           )}
-          <div className='grid gap-4 sm:grid-cols-2'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
             <div className='grid gap-1.5'><Label>Rôles requis pour voter</Label><RolesPicker roles={allRoles} value={settings.requiredRoleIds} disabled={!editable} onChange={(ids) => set({ requiredRoleIds: ids })} placeholder='Tout le monde' label='Rôles requis' /></div>
             <div className='grid gap-1.5'><Label>Rôles interdits</Label><RolesPicker roles={allRoles} value={settings.blockedRoleIds} disabled={!editable} onChange={(ids) => set({ blockedRoleIds: ids })} placeholder='Aucun' label='Rôles interdits' /></div>
             <div className='grid gap-1.5'><Label htmlFor='p-age'>Âge minimum du compte (jours)</Label><Input id='p-age' type='number' min={0} value={settings.minAccountAgeDays} disabled={!editable} onChange={(e) => set({ minAccountAgeDays: Number(e.target.value) || 0 })} /></div>
@@ -223,7 +223,7 @@ function PollForm({ poll, guilds, onSaved, onDeleted }: { poll: Poll | null; gui
       <Section title='Publication'>
         <div className='grid gap-4 p-4'>
           <TargetsEditor guilds={guilds} targets={targets} onChange={setTargets} disabled={!editable || locked} />
-          <div className='grid gap-4 sm:grid-cols-3'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-3'>
             <div className='grid gap-1.5'><Label htmlFor='p-start'>Début (vide = à la publication)</Label><Input id='p-start' type='datetime-local' value={startsAt} disabled={!editable || locked} onChange={(e) => setStartsAt(e.target.value)} /></div>
             <div className='grid gap-1.5'><Label htmlFor='p-end'>Fin (vide = fermeture à la main)</Label><Input id='p-end' type='datetime-local' value={endsAt} disabled={!editable} onChange={(e) => setEndsAt(e.target.value)} /></div>
             <div className='grid gap-1.5'><Label htmlFor='p-maxv'>Fin après N votants (0 = non)</Label><Input id='p-maxv' type='number' min={0} value={settings.maxVotes} disabled={!editable} onChange={(e) => set({ maxVotes: Number(e.target.value) || 0 })} /></div>

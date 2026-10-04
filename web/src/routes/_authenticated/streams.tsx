@@ -158,7 +158,14 @@ function CredentialsSection({ credentials: c }: { credentials: Credentials }) {
   const [youtubeApiKey, setYoutubeApiKey] = useState('')
   const save = useMutation({
     mutationFn: () => api('/streams/credentials', { method: 'PUT', body: { twitch, kick, youtubeApiKey } }),
-    onSuccess: () => { toast.success('Clés enregistrées'); qc.invalidateQueries({ queryKey: ['streams'] }) },
+    onSuccess: () => {
+      toast.success('Clés enregistrées')
+      // Secrets are never shown again: drop them from the form once saved
+      setTwitch((t) => ({ ...t, clientSecret: '' }))
+      setKick((k) => ({ ...k, clientSecret: '' }))
+      setYoutubeApiKey('')
+      qc.invalidateQueries({ queryKey: ['streams'] })
+    },
   })
   const secret = (has: boolean) => (has ? '•••••••• (enregistré, vide = inchangé)' : 'Secret')
   return (
@@ -167,7 +174,7 @@ function CredentialsSection({ credentials: c }: { credentials: Credentials }) {
       description='Twitch et Kick demandent une application développeur (ID client et secret). YouTube marche sans clé ; une clé API YouTube Data détecte les lives de façon plus fiable. Les secrets ne sont jamais réaffichés.'
       actions={<Button size='sm' onClick={() => save.mutate()} disabled={save.isPending}><KeyRound /> Enregistrer</Button>}
     >
-      <div className='grid gap-5 p-4 lg:grid-cols-3'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-5 p-4 lg:grid-cols-3'>
         <fieldset className='grid content-start gap-2'>
           <legend className='mb-1 flex items-center gap-2 text-sm font-medium'><PlatformBadge platform='twitch' /> dev.twitch.tv</legend>
           <Input value={twitch.clientId} onChange={(e) => setTwitch({ ...twitch, clientId: e.target.value })} placeholder='ID client' aria-label='ID client Twitch' />
@@ -191,7 +198,7 @@ function PayloadEditor({ value, onChange, idPrefix, guilds, target }: { value: P
   const roles = new Map(guilds.flatMap((g) => g.roles.map((r) => [r.id, r.name] as const)))
   const sample = (t: string) => t.replaceAll('{streamer}', 'BRL_TV').replaceAll('{title}', 'Soirée RP sur le serveur').replaceAll('{game}', 'Grand Theft Auto V').replaceAll('{viewers}', '128')
   return (
-    <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]'>
+    <div className='grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]'>
       <div className='grid content-start gap-4'>
         <div className='grid gap-1.5'>
           <Label htmlFor={`${idPrefix}-content`}>Texte</Label>
@@ -250,7 +257,7 @@ function SubscriptionDialog({ initial, guilds, onClose }: { initial: Partial<Sub
             <TabsTrigger value='role'>Rôle en live</TabsTrigger>
           </TabsList>
           <TabsContent value='general' className='mt-4 grid gap-4'>
-            <div className='grid gap-4 sm:grid-cols-3'>
+            <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-3'>
               <div className='grid gap-1.5'>
                 <Label>Plateforme</Label>
                 <Select value={platform} disabled={!isNew} onValueChange={(v) => { setPlatform(v as Platform); if (isNew) setPayloads(DEFAULTS(v as Platform)) }}>
@@ -272,7 +279,7 @@ function SubscriptionDialog({ initial, guilds, onClose }: { initial: Partial<Sub
               {youtube && <label className='flex items-center gap-2 text-sm'><Switch checked={config.videos} onCheckedChange={(v) => set({ videos: v })} /> Nouvelles vidéos</label>}
               {youtube && <label className='flex items-center gap-2 text-sm'><Switch checked={config.shorts} onCheckedChange={(v) => set({ shorts: v })} /> Shorts</label>}
             </div>
-            <div className='grid gap-4 sm:grid-cols-3'>
+            <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-3'>
               <div className='grid gap-1.5'>
                 <Label htmlFor='st-require'>Le titre doit contenir un de ces mots</Label>
                 <Input id='st-require' value={require} onChange={(e) => setRequire(e.target.value)} placeholder='RP, event (vide = tout)' />
@@ -311,7 +318,7 @@ function SubscriptionDialog({ initial, guilds, onClose }: { initial: Partial<Sub
               <Label>Membre Discord du streamer</Label>
               <UserPicker value={config.liveRole.userId ?? ''} onChange={(id) => set({ liveRole: { ...config.liveRole, userId: id || null } })} />
             </div>
-            <div className='grid gap-3 sm:grid-cols-2'>
+            <div className='grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2'>
               {guilds.map((g) => (
                 <div key={g.id} className='grid min-w-0 gap-1'>
                   <span className='truncate text-xs text-muted-foreground'>{g.name}</span>

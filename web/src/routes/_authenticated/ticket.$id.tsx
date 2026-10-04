@@ -99,7 +99,7 @@ function TicketPage() {
         </div>
       }
     >
-      <div className='grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]'>
         <Section title='Conversation' className='flex min-h-[60svh] flex-col'>
           <div className='flex max-h-[62svh] flex-1 flex-col gap-1 overflow-y-auto p-4' aria-live='polite'>
             {!ticket.messages.length && <p className='m-auto text-sm text-muted-foreground'>Pas encore de message enregistré.</p>}
@@ -115,7 +115,7 @@ function TicketPage() {
                 value={reply}
                 onChange={(e) => setReply(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && reply.trim()) send.mutate()
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && reply.trim() && !send.isPending) send.mutate()
                 }}
                 maxLength={2000}
                 rows={3}

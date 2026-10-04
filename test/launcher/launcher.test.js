@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createLauncher } from '../../launcher/launcher.js';
-import { readCurrent } from '../../launcher/versions.js';
+import { installVersion, readCurrent } from '../../launcher/versions.js';
 
 // A fake app: behaviour chosen by the MODE constant written in its source
 function fakeApp(mode, { schema = 1, version = 'dev' } = {}) {
@@ -65,6 +65,7 @@ function fakeRelease(mode, schema) {
 	return {
 		fetchImpl: async () => new Response('archive'),
 		runImpl: async (command, args, options = {}) => {
+			if (command === 'tar' && args[0] === '-tzf') return ['src/', 'src/index.js', 'package.json'];
 			if (command === 'tar') {
 				const dir = args[args.indexOf('-C') + 1];
 				fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
@@ -167,4 +168,50 @@ test('a failed download leaves everything untouched', async () => {
 	assert.equal(launcher.supervisor.pid, pid, 'the running bot was not touched');
 	assert.equal(fs.existsSync(path.join(root, 'versions', 'v1.0.0')), false);
 	await launcher.supervisor.stop();
+});
+
+// Archive whose listing is chosen by the test; extraction writes a normal app (plus extra hook)
+function listedRelease(entries, afterExtract = () => undefined) {
+	const calls = [];
+	return {
+		calls,
+		fetchImpl: async () => new Response('archive'),
+		runImpl: async (command, args, options = {}) => {
+			calls.push([command, ...args]);
+			if (command === 'tar' && args[0] === '-tzf') return entries;
+			if (command === 'tar') {
+				const dir = args[args.indexOf('-C') + 1];
+				fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
+				fs.writeFileSync(path.join(dir, 'src', 'index.js'), '');
+				afterExtract(dir);
+			}
+			if (command === 'npm') fs.mkdirSync(path.join(options.cwd, 'node_modules'), { recursive: true });
+			return [];
+		},
+	};
+}
+
+for (const bad of ['../evil.js', 'src/../../evil.js', '/etc/cron.d/evil', 'C:\\evil.js', 'src\\..\\..\\evil.js']) {
+	test(`refuses an archive with an unsafe path (${bad}) before extracting it`, async () => {
+		const root = makeRoot('ready');
+		const release = listedRelease(['src/', 'src/index.js', bad]);
+		await assert.rejects(installVersion({ root, version: 'v1.0.0', assetId: 1, repo: 'owner/repo', ...release }), /unsafe/i);
+		assert.ok(!release.calls.some(c => c[0] === 'tar' && c[1] === '-xzf'), 'nothing extracted');
+		assert.equal(fs.existsSync(path.join(root, 'versions', 'v1.0.0')), false);
+	});
+}
+
+test('refuses an archive that contains a symbolic link', { skip: process.platform === 'win32' && 'symlinks need privileges on Windows' }, async () => {
+	const root = makeRoot('ready');
+	const release = listedRelease(['src/', 'src/index.js', 'src/link'], dir => fs.symlinkSync('/etc', path.join(dir, 'src', 'link')));
+	await assert.rejects(installVersion({ root, version: 'v1.0.0', assetId: 1, repo: 'owner/repo', ...release }), /link/i);
+	assert.equal(fs.existsSync(path.join(root, 'versions', 'v1.0.0')), false);
+});
+
+test('refuses an asset id or a repository that is not well formed', async () => {
+	const root = makeRoot('ready');
+	const release = listedRelease(['src/index.js']);
+	await assert.rejects(installVersion({ root, version: 'v1.0.0', assetId: '1/../../x', repo: 'owner/repo', ...release }), /asset/i);
+	await assert.rejects(installVersion({ root, version: 'v1.0.0', assetId: 1, repo: 'owner/repo/../x', ...release }), /repo/i);
+	assert.equal(release.calls.length, 0);
 });

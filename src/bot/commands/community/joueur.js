@@ -1,5 +1,5 @@
 import { InteractionContextType, MessageFlags, SlashCommandBuilder } from 'discord.js';
-import { AppError, ValidationError } from '../../../core/errors.js';
+import { AppError, ForbiddenError, ValidationError } from '../../../core/errors.js';
 import { actorOf } from '../../moderation.js';
 import { hours, playerPayload } from '../../fivemDataUi.js';
 
@@ -25,6 +25,8 @@ export async function execute(interaction) {
 	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 	try {
 		const actor = await actorOf(interaction);
+		// Before any lookup: whether a member has a linked FiveM account is itself private
+		if (!actor.can('fivemdata.view')) throw new ForbiddenError('Permission manquante : fivemdata.view');
 		const member = interaction.options.getUser('membre');
 		const search = interaction.options.getString('recherche');
 		let userId = null;

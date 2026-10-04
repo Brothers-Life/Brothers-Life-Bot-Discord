@@ -11,6 +11,16 @@ test('outgoing addresses typed in the panel: local network, loopback and metadat
 	assert.equal(blockedHost('192.168.1.2', { allowPrivate: true }), null);
 	assert.ok(blockedHost('169.254.169.254', { allowPrivate: true }));
 
+	// Disguised forms of the same addresses
+	for (const url of ['https://[::ffff:169.254.169.254]/', 'https://[::ffff:7f00:1]/', 'https://localhost./', 'https://metadata.google.internal./', 'https://0x7f.1/', 'https://2130706433/']) {
+		assert.ok(blockedUrl(url), url);
+	}
+	for (const host of ['0xa9.0xfe.0xa9.0xfe', '2852039166', '::ffff:a9fe:a9fe', 'metadata.google.internal.', 'fe90::1']) {
+		assert.ok(blockedHost(host, { allowPrivate: true }), host);
+	}
+	assert.equal(blockedHost('example.com', { allowPrivate: true }), null);
+	assert.equal(blockedHost('51.75.12.34'), null);
+
 	// A redirect towards the local network is not followed
 	const calls = [];
 	const fetchImpl = async (url) => {

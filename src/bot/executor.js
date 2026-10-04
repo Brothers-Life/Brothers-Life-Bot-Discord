@@ -1123,7 +1123,9 @@ export function createExecutor(client) {
 					?? await channel.createWebhook({ name: 'Panel tickets', reason: 'Réponses aux tickets depuis le panel' });
 				ticketWebhooks.set(channelId, webhook);
 			}
-			const message = await webhook.send({ content, username: username.slice(0, 80), avatarURL: avatarUrl ?? undefined, allowedMentions: { parse: ['users'] } });
+			// Discord refuses webhook names containing "discord" or "clyde"
+			const name = username.replace(/discord|clyde/gi, '').trim().slice(0, 80) || 'Staff';
+			const message = await webhook.send({ content, username: name, avatarURL: avatarUrl ?? undefined, allowedMentions: { parse: ['users'] } });
 			return message.id;
 		},
 

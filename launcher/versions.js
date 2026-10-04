@@ -6,6 +6,25 @@ import { Readable } from 'node:stream';
 
 const KEEP_VERSIONS = 3;
 const VERSION = /^v\d+\.\d+\.\d+$/;
+const REPO = /^[\w.-]+\/[\w.-]+$/;
+
+// Archive member that would land outside the extraction folder ("zip slip")
+function unsafeEntry(name) {
+	return path.isAbsolute(name) || /^[a-z]:/i.test(name) || name.split(/[\\/]/).includes('..');
+}
+
+// First symbolic link under dir (a release never contains one)
+function findLink(dir) {
+	for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+		const full = path.join(dir, entry.name);
+		if (entry.isSymbolicLink()) return full;
+		if (entry.isDirectory()) {
+			const found = findLink(full);
+			if (found) return found;
+		}
+	}
+	return null;
+}
 
 export function readCurrent(root) {
 	try {
@@ -57,6 +76,8 @@ export function run(command, args, { cwd, onLine = () => undefined } = {}) {
 // Nothing changes for the running bot until the caller switches current.json.
 export async function installVersion({ root, version, assetId, repo, token, fetchImpl = fetch, runImpl = run, onStep = () => undefined }) {
 	if (!VERSION.test(version)) throw new Error(`Invalid version ${version}`);
+	if (!/^\d+$/.test(String(assetId))) throw new Error(`Invalid asset id ${assetId}`);
+	if (!REPO.test(String(repo)) || String(repo).split('/').some(part => /^\.+$/.test(part))) throw new Error(`Invalid repo ${repo} (expected owner/repo)`);
 	const versionsDir = path.join(root, 'versions');
 	const finalDir = path.join(versionsDir, version);
 	if (fs.existsSync(path.join(finalDir, 'node_modules')) && fs.existsSync(path.join(finalDir, 'src', 'index.js'))) {
@@ -78,7 +99,11 @@ export async function installVersion({ root, version, assetId, repo, token, fetc
 		await pipeline(Readable.fromWeb(res.body), fs.createWriteStream(archive));
 
 		onStep('extracting');
-		await runImpl('tar', ['-xzf', archive, '-C', tmpDir]);
+		const unsafe = (await runImpl('tar', ['-tzf', archive])).find(unsafeEntry);
+		if (unsafe) throw new Error(`Unsafe path in the archive: ${unsafe}`);
+		await runImpl('tar', ['-xzf', archive, '-C', tmpDir, '--no-same-owner']);
+		const link = findLink(tmpDir);
+		if (link) throw new Error(`The archive contains a symbolic link: ${path.relative(tmpDir, link)}`);
 		if (!fs.existsSync(path.join(tmpDir, 'src', 'index.js'))) throw new Error('The archive does not contain src/index.js');
 
 		onStep('installing dependencies');

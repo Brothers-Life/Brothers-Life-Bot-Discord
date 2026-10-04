@@ -142,7 +142,7 @@ function RestoreDialog({ backup, guild, onClose, onStarted }: { backup: Backup; 
           <DialogDescription>{backup.name} · {dateTime(backup.createdAt)}</DialogDescription>
         </DialogHeader>
         <div className='grid gap-4'>
-          <div className='grid gap-2 sm:grid-cols-2' role='radiogroup' aria-label='Type de restauration'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-2' role='radiogroup' aria-label='Type de restauration'>
             {([['repair', Hammer, 'Réparer', 'Remet ce qui manque et corrige ce qui a changé. Rien n’est supprimé.'], ['restore', RotateCcw, 'Restauration complète', 'Comme réparer, et supprime aussi les salons et rôles qui n’étaient pas dans la sauvegarde (après un raid).']] as const).map(([value, Icon, title, text]) => (
               <button key={value} type='button' role='radio' aria-checked={mode === value} onClick={() => setMode(value)} className={`lift grid gap-1 rounded-lg border p-3 text-start ${mode === value ? 'border-brand bg-brand/10' : ''}`}>
                 <Icon className='size-5 text-primary' />
@@ -178,7 +178,7 @@ function Settings({ data }: { data: Data }) {
   const save = useMutation({ mutationFn: () => api('/backups/config', { method: 'PUT', body: c }), onSuccess: () => { toast.success('Réglages enregistrés'); qc.invalidateQueries({ queryKey: ['backups'] }) } })
   return (
     <Section title='Sauvegardes automatiques' actions={<Button size='sm' loading={save.isPending} onClick={() => save.mutate()}><Save /> Enregistrer</Button>}>
-      <div className='grid gap-4 p-4 sm:grid-cols-3'>
+      <div className='grid grid-cols-[minmax(0,1fr)] gap-4 p-4 sm:grid-cols-3'>
         <label className='flex items-center gap-2 text-sm sm:col-span-3'><Switch checked={c.enabled} onCheckedChange={(enabled) => setC({ ...c, enabled })} /> Une sauvegarde de chaque serveur, chaque nuit</label>
         <div className='grid gap-1.5'>
           <Label htmlFor='bk-hour'>Heure (heure de Paris)</Label>

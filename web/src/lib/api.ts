@@ -31,7 +31,13 @@ export async function api<T>(path: string, { method = 'GET', body }: Options = {
   })
 
   const text = await res.text()
-  const data = text ? JSON.parse(text) : null
+  // A proxy or crash page answers in HTML: keep the HTTP status instead of a JSON parse error
+  let data = null
+  try {
+    data = text ? JSON.parse(text) : null
+  } catch {
+    if (res.ok) throw new ApiError(res.status, 'BAD_RESPONSE', 'Réponse invalide du serveur')
+  }
 
   if (!res.ok) {
     const error = data?.error ?? {}

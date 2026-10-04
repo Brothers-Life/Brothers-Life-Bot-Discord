@@ -3,7 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
-import { api, ApiError } from '@/lib/api'
+import { api, ApiError, errorMessage } from '@/lib/api'
 import type { Release, VersionsPayload } from '@/lib/types'
 import { bytes, dateTime } from '@/lib/format'
 import { useMe } from '@/hooks/use-me'
@@ -43,6 +43,8 @@ function VersionsPage() {
       // Older database schema: ask again, this time explicitly accepting the data loss
       if (error instanceof ApiError && error.code === 'DATA_LOSS') {
         setPending({ release: p.release, acceptDataLoss: true, lossMessage: error.message })
+      } else {
+        toast.error(errorMessage(error))
       }
     },
   })
@@ -68,7 +70,7 @@ function VersionsPage() {
       {isLoading && <Skeleton className='h-64 w-full' />}
       {data && (
         <>
-          <div className='grid gap-4 rounded-lg border bg-card p-4 sm:grid-cols-3'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 rounded-lg border bg-card p-4 sm:grid-cols-3'>
             <div>
               <div className='text-xs text-muted-foreground'>Version en cours</div>
               <div className='text-2xl font-semibold tabular-nums'>{data.current.version}</div>

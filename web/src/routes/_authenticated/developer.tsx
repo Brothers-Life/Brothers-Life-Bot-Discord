@@ -265,7 +265,7 @@ function CreateKeyDialog({ payload, baseUrl, onClose }: { payload: KeysPayload; 
             if (valid) create.mutate()
           }}
         >
-          <div className='grid gap-4 sm:grid-cols-[1fr_11rem]'>
+          <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-[1fr_11rem]'>
             <div className='grid gap-1.5'>
               <Label htmlFor='key-name'>Nom</Label>
               <Input id='key-name' value={name} maxLength={60} required autoFocus onChange={(e) => setName(e.target.value)} placeholder='Site web, script de stats…' />
@@ -318,7 +318,7 @@ function CreateKeyDialog({ payload, baseUrl, onClose }: { payload: KeysPayload; 
                         </button>
                       </div>
                       {open && (
-                        <div className='grid gap-1 border-t px-3 py-2 sm:grid-cols-2'>
+                        <div className='grid grid-cols-[minmax(0,1fr)] gap-1 border-t px-3 py-2 sm:grid-cols-2'>
                           {list.map((p) => (
                             <label key={p.key} className='flex items-start gap-2 rounded px-1.5 py-1 text-sm hover:bg-accent/40'>
                               <Checkbox checked={selected.has(p.key)} onCheckedChange={(on) => toggle([p.key], on === true)} className='mt-0.5' />

@@ -202,7 +202,7 @@ function Editor({ saved, guilds, onSaved, onDeleted }: { saved?: Saved; guilds: 
               {manage && b.buttons.length < 25 && <Button size='sm' variant='ghost' onClick={() => setB({ ...b, buttons: [...b.buttons, { label: '', url: 'https://', emoji: null }] })}><Link2 /> Bouton</Button>}
             </div>
             {b.buttons.map((x, i) => (
-              <div key={i} className='grid gap-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1.5fr)_auto]'>
+              <div key={i} className='grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1.5fr)_auto]'>
                 <EmojiField value={x.emoji} label='Émoji du bouton' placeholder='🔗' onChange={(v) => setButton(i, { emoji: v || null })} disabled={!manage} />
                 <Input aria-label='Texte du bouton' value={x.label} placeholder='Site web' maxLength={80} onChange={(e) => setButton(i, { label: e.target.value })} disabled={!manage} />
                 <Input aria-label='Lien' value={x.url} placeholder='https://…' onChange={(e) => setButton(i, { url: e.target.value })} disabled={!manage} />
@@ -217,7 +217,7 @@ function Editor({ saved, guilds, onSaved, onDeleted }: { saved?: Saved; guilds: 
           </div>
 
           {manage && (
-            <div className='grid gap-3 rounded-lg border bg-muted/30 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end'>
+            <div className='grid grid-cols-[minmax(0,1fr)] gap-3 rounded-lg border bg-muted/30 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end'>
               <div className='grid gap-1.5'>
                 <Label>Serveur</Label>
                 <Select value={guildId} onValueChange={(v) => { setGuildId(v); setChannelId(null) }}>
