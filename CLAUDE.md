@@ -2,7 +2,7 @@
 
 Bot Discord multi-serveurs pour la communauté RP **Brothers Life** (serveur FiveM Qbox) : il gère plusieurs serveurs Discord comme un seul réseau et s'administre depuis un panel web React en français. Tout le texte visible (Discord, panel, commits) est en **français** ; le code et ses commentaires en anglais.
 
-État au 2026-10-04 : **v1.9.0 publiée** ; audit complet (sécurité + bugs) commité en local, non publié, 372 tests.
+État au 2026-10-05 : **v1.9.0 publiée** ; en local et non publié : audit complet (sécurité + bugs, dont une faille critique de l’API) + anti-nuke, Tebex, pont txAdmin/maintenance, tickets v3, flux RSS/TikTok, page publique, notifications du panel. 447 tests.
 
 ## Commandes
 
@@ -22,7 +22,7 @@ Avant tout commit : `npm run lint`, `npm test`, et pour le panel `npx tsc -b` + 
 
 ## Architecture
 
-- **Node ESM**, discord.js 14, **better-sqlite3** (migrations numérotées `src/db/migrations/NNN_*.sql`, dernière : `036_api_keys.sql`), **Fastify** pour l'API du panel.
+- **Node ESM**, discord.js 14, **better-sqlite3** (migrations numérotées `src/db/migrations/NNN_*.sql`, dernière : `042_public_notifications.sql`), **Fastify** pour l'API du panel.
 - **Panel** (`web/`) : React 19, Vite, TanStack Router (routes fichiers dans `web/src/routes/_authenticated/`, `routeTree.gen.ts` généré par Vite) + TanStack Query, shadcn/ui, Tailwind v4, recharts. Composants maison dans `web/src/components/app/ui.tsx` (`Page`, `Section`, `StatCards`, `Pill`, `EmptyState`, `Notice`, `UserAvatar`…) et `pickers.tsx`.
 - `src/core/` : toute la logique, **sans discord.js**. Chaque service est créé dans `src/core/context.js` (`createCore`) et reçoit `executor` (accès Discord), `audit`, `settings`, `logs`, `network`, `ranks`…
 - `src/bot/executor.js` : la seule couche qui parle à Discord (envoyer, rôles, membres, vocal, messages de log…). Dans les tests, `test/helpers.js` fournit un **faux exécuteur** (`createTestCore`, `withNetwork`).
@@ -47,7 +47,16 @@ Avant tout commit : `npm run lint`, `npm test`, et pour le panel `npx tsc -b` + 
 
 ## Fonctionnalités (ce qui existe)
 
-Réseau de serveurs, rangs et permissions synchronisés, staff sync, sanctions (modèles, appels de sanction, restrictions, rôles temporaires), automod, anti-raid, tickets v2 (formulaires, statuts, variables, transcripts HTML style Discord : `src/core/transcript.js`, copie staff avec notes internes dans `data/transcripts/`, copie membre en MP), logs par catégorie/type avec packs et miroir réseau, annonces, embeds (créateur), messages privés, onboarding/bienvenue, vérification (bouton/captcha), salons automatiques (compteur, un mot, sticky, auto-publication, médias seuls), horaires d'ouverture de salons, archives HTML de salons, sondages, giveaways, suggestions/bugs, candidatures, absences (embed Valider/Refuser), événements RP, activité staff, réunions staff (convocation, présence vocale, compte rendu), salons vocaux perso, stats Discord (messages/vocal, carte de chaleur), fiches membres réseau, commandes perso, sauvegardes, modèles de serveur, streams, musique, FiveM (statut + données), API publique à clés (+ collection Bruno).
+Réseau de serveurs, rangs et permissions synchronisés, staff sync, sanctions (modèles, appels de sanction, restrictions, rôles temporaires), automod, anti-raid, tickets v2 (formulaires, statuts, variables, transcripts HTML style Discord : `src/core/transcript.js`, copie staff avec notes internes dans `data/transcripts/`, copie membre en MP), logs par catégorie/type avec packs et miroir réseau, annonces, embeds (créateur), messages privés, onboarding/bienvenue, vérification (bouton/captcha), salons automatiques (compteur, un mot, sticky, auto-publication, médias seuls), horaires d'ouverture de salons, archives HTML de salons, sondages, giveaways, suggestions/bugs, candidatures, absences (embed Valider/Refuser), événements RP, activité staff, réunions staff (convocation, présence vocale, compte rendu), salons vocaux perso, stats Discord (messages/vocal, carte de chaleur), fiches membres réseau, commandes perso, sauvegardes, modèles de serveur, streams, musique, FiveM (statut + données), API publique à clés (+ collection Bruno), anti-nuke, boutique Tebex, annonces txAdmin + maintenance FiveM, flux RSS/TikTok, page publique, notifications du panel.
+
+### Ajouts d'octobre 2026 (non publiés au 2026-10-05)
+- **Anti-nuke** (`src/core/antinuke.js`, event `antinukeAuditLog.js`) : limites par action lues dans le journal d'audit Discord, comptées sur tout le réseau ; quarantaine (rôles dangereux retirés partout, rendus en 1 clic), alerte log + MP chef. **Désactivé par défaut.** Config dans `settings` `antinuke.config`.
+- **Tebex** (`src/core/tebex.js`) : relève de l'API Plugin (`plugin.tebex.io`, `X-Tebex-Secret`) toutes les 2 min, clé jamais renvoyée ; acheteur → Discord via liaison manuelle mémorisée, puis base FiveM (`fivemData.findByTebexPlayer`, `users.fivem`/licence/pseudo) ; rôles par article (durée via `temp_roles`), retirés au remboursement.
+- **Pont txAdmin** : ressource `fivem/brl-bridge/` (Lua) → `POST /api/fivem/events` avec une clé d'API limitée à `fivem.events` ; `src/core/fivemEvents.js` (annonces, compte à rebours, logs staff, mode maintenance, `publicState()`). `/fivem` a des sous-commandes `statut` / `maintenance`. Le HTTPS auto-signé de la prod est refusé par PerformHttpRequest : vrai certificat ou HTTP en LAN.
+- **Tickets v3** : demande de fermeture (`ticket:creq:`, fermeture auto après `config.closeRequest.autoCloseHours`), réponses enregistrées (`ticket_replies`, `/ticket reponse`), première réponse + SLA (`config.sla.firstResponseMinutes`), stats (`src/core/ticketStats.js`). Les retours au panel passent par `publicTicket()` (jamais `vars`).
+- **Flux** (`src/core/feeds.js`, `feedParser.js`) : RSS/Atom et TikTok via une URL RSS (RSSHub) dans la page Streams ; YouTube reste dans streams. Fetch : netGuard + DNS, 2 Mo, 10 s.
+- **Page publique** `/public` (désactivée par défaut, `src/core/publicPage.js`, rendu Markdown sûr `richText.js`) et **notifications du panel** (`src/core/notifications.js` : `core.notifications.push({ permission, title, body, url, type })`, types via `registerType`, sources dans `notificationSources.js`). Pas de web push (certificat auto-signé).
+- **Sécurité** : le guard se base sur `request.routeOptions.url` (`isApiRoute`), jamais sur l'URL brute ; origine vérifiée sur les websockets ; `csvCell` pour tout export CSV ; mentions par défaut `parse: ['users','roles']` sur le client ; tâches périodiques via `every()` dans `src/index.js` (pas de chevauchement).
 
 ### Musique (`src/core/music/`, `src/bot/music/`)
 - yt-dlp (zip **onedir** sous Linux, décompressé par `src/bot/music/unzip.js`, car le `/tmp` du conteneur est trop petit) et ffmpeg **téléchargés dans `data/bin`** au démarrage (`.npmrc` a `ignore-scripts=true`, donc pas de binaire ffmpeg-static).
@@ -111,5 +120,5 @@ Réseau de serveurs, rangs et permissions synchronisés, staff sync, sanctions (
 
 ## Pistes proposées, pas encore faites
 
-- FiveM : synchro **automatique** des rôles Discord selon les métiers, signalements et logs du jeu envoyés sur Discord, sanctions/bans unifiés jeu ↔ Discord, service staff en jeu compté dans le score d'activité staff, mode maintenance FiveM.
-- Autres : entreprises/factions, tâches staff, évaluations staff, notifications du panel (PWA), niveaux/XP, anti-alt, page publique, rappels perso.
+- FiveM : synchro **automatique** des rôles Discord selon les métiers, signalements et logs du jeu envoyés sur Discord, sanctions/bans unifiés jeu ↔ Discord, service staff en jeu compté dans le score d'activité staff.
+- Autres : entreprises/factions, tâches staff, évaluations staff, web push (exige un vrai certificat), niveaux/XP, anti-alt, rappels perso, prises de service staff + quotas, whitelist liée aux candidatures, `/report` en jeu.
