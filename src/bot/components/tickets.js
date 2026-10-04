@@ -113,6 +113,14 @@ export async function execute(interaction) {
 			await tickets.close(interaction.user.id, id, interaction.fields.getTextInputValue('reason') ?? '');
 			return await interaction.editReply('Ticket fermé.').catch(() => null);
 		}
+		case 'creq': {
+			// Answer of the opener to a close request; closing can take a while (transcript)
+			await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+			const accept = extra === 'yes';
+			await tickets.answerCloseRequest(interaction.user.id, id, accept);
+			await interaction.message.edit({ components: [] }).catch(() => null);
+			return await interaction.editReply(accept ? 'Ticket fermé. Merci !' : 'C’est noté : le staff est prévenu et revient vers toi.');
+		}
 		case 'reopen': {
 			await interaction.deferReply();
 			await tickets.reopen(interaction.user.id, id);

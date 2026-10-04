@@ -10,10 +10,19 @@ import {
 	BUILTIN_KEYS, BUILTIN_STATUSES, PRIORITIES, PRIORITY_LABELS,
 	TICKET_VARIABLES, accountCreatedAt, fill, isWithinHours, normalizeCategoryConfig, normalizeGuildConfig, normalizeStatuses, slugName,
 } from './ticketConfig.js';
+import { ticketStats } from './ticketStats.js';
 
 definePermission('tickets.view', { label: 'Voir les tickets et leurs transcripts', category: 'Tickets' });
 definePermission('tickets.handle', { label: 'Traiter les tickets (prendre en charge, statut, fermer)', category: 'Tickets' });
 definePermission('tickets.manage', { label: 'Configurer les tickets', category: 'Tickets' });
+definePermission('tickets.replies', { label: 'Gérer les réponses enregistrées des tickets', category: 'Tickets' });
+
+// Variables of the saved replies on top of the ticket ones: who sends the answer
+export const STAFF_VARIABLES = [
+	{ key: 'staff', label: 'Mention du membre du staff qui répond' },
+	{ key: 'staff.name', label: 'Nom du membre du staff qui répond' },
+];
+const STATS_MAX_MS = 366 * 86_400_000;
 
 const FORM_TTL_MS = 15 * 60_000;
 // Discord refuses bot files above 10 Mo: the inlined images of a transcript stay well below
@@ -87,7 +96,8 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 		reminded: db.prepare('UPDATE tickets SET reminded_at = ? WHERE id = ?'),
 		close: db.prepare(`
 			UPDATE tickets SET status = 'closed', status_key = 'closed', status_history = @history, closed_at = @at, closed_by = @by, close_reason = @reason,
-				transcript = @transcript, archived = @archived WHERE id = @id AND status = 'open'
+				transcript = @transcript, archived = @archived,
+				close_request_at = NULL, close_request_by = NULL, close_request_reason = NULL WHERE id = @id AND status = 'open'
 		`),
 		reopen: db.prepare(`
 			UPDATE tickets SET status = 'open', status_key = @key, status_history = @history, closed_at = NULL, closed_by = NULL, close_reason = NULL,
@@ -108,6 +118,25 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 		editMessage: db.prepare('UPDATE ticket_messages SET content = @content, embeds = @embeds, edited_at = @at WHERE id = @id'),
 		removeMessage: db.prepare('UPDATE ticket_messages SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL'),
 		staffRoles: db.prepare('SELECT DISTINCT role_id FROM rank_roles WHERE guild_id = ? AND rank_id = ?'),
+		// Tickets v3: first response, SLA, close requests, saved replies
+		firstResponse: db.prepare(`
+			UPDATE tickets SET first_response_at = @at, first_responder_id = @userId
+			WHERE id = @id AND status = 'open' AND first_response_at IS NULL AND opener_id != @userId
+		`),
+		markSla: db.prepare('UPDATE tickets SET sla_breached_at = ? WHERE id = ? AND sla_breached_at IS NULL'),
+		slaPending: db.prepare('SELECT * FROM tickets WHERE status = \'open\' AND first_response_at IS NULL AND sla_breached_at IS NULL'),
+		setCloseRequest: db.prepare('UPDATE tickets SET close_request_at = ?, close_request_by = ?, close_request_reason = ? WHERE id = ?'),
+		clearCloseRequest: db.prepare('UPDATE tickets SET close_request_at = NULL, close_request_by = NULL, close_request_reason = NULL WHERE id = ?'),
+		closeRequests: db.prepare('SELECT * FROM tickets WHERE status = \'open\' AND close_request_at IS NOT NULL'),
+		replies: db.prepare('SELECT * FROM ticket_replies WHERE guild_id = ? ORDER BY name COLLATE NOCASE'),
+		reply: db.prepare('SELECT * FROM ticket_replies WHERE id = ?'),
+		insertReply: db.prepare(`
+			INSERT INTO ticket_replies (guild_id, category_id, name, content, created_by, created_at, updated_at)
+			VALUES (@guildId, @categoryId, @name, @content, @by, @at, @at)
+		`),
+		updateReply: db.prepare('UPDATE ticket_replies SET category_id = @categoryId, name = @name, content = @content, updated_at = @at WHERE id = @id'),
+		deleteReply: db.prepare('DELETE FROM ticket_replies WHERE id = ?'),
+		usedReply: db.prepare('UPDATE ticket_replies SET uses = uses + 1 WHERE id = ?'),
 	};
 
 	// Channels of open tickets: lets the message handler skip the database for every other channel
@@ -185,6 +214,10 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			closeReason: row.close_reason,
 			rating: row.rating,
 			ratingComment: row.rating_comment,
+			firstResponseAt: row.first_response_at ?? null,
+			firstResponderId: row.first_responder_id ?? null,
+			slaBreachedAt: row.sla_breached_at ?? null,
+			closeRequest: row.close_request_at ? { at: row.close_request_at, by: row.close_request_by, reason: row.close_request_reason } : null,
 			...(withTranscript ? { transcript: row.transcript } : { hasTranscript: Boolean(row.transcript) }),
 		};
 	}
@@ -431,6 +464,76 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 		for (const [key, value] of forms) if (now() - value.at > FORM_TTL_MS) forms.delete(key);
 	}
 
+	// First answer of someone else than the opener (Discord message or panel reply): response time and SLA
+	function markFirstResponse(ticketId, userId, at = now()) {
+		if (!userId || !q.firstResponse.run({ id: ticketId, userId, at }).changes) return;
+		const ticket = getTicket(ticketId);
+		const minutes = categoryOf(ticket)?.config.sla.firstResponseMinutes ?? 0;
+		// Answered late: counted as a breach, no alert any more (someone is on it)
+		if (minutes && at - ticket.createdAt > minutes * 60_000) q.markSla.run(at, ticketId);
+		emit({ type: 'ticket', ticket: getTicket(ticketId), action: 'tickets.first_response' });
+	}
+
+	function closeRequestHours(ticket) {
+		return (categoryOf(ticket)?.config ?? normalizeCategoryConfig()).closeRequest.autoCloseHours;
+	}
+
+	function toReply(row) {
+		return {
+			id: row.id,
+			guildId: row.guild_id,
+			categoryId: row.category_id,
+			name: row.name,
+			content: row.content,
+			uses: row.uses,
+			createdBy: row.created_by,
+			createdAt: row.created_at,
+			updatedAt: row.updated_at,
+		};
+	}
+
+	// Saved replies usable in a ticket: those of every type and those of its own type
+	function repliesFor(ticket) {
+		return q.replies.all(ticket.guildId).map(toReply).filter(r => r.categoryId === null || r.categoryId === ticket.categoryId);
+	}
+
+	function findReplyFor(ticket, replyId) {
+		const reply = repliesFor(ticket).find(r => r.id === Number(replyId));
+		if (!reply) throw new NotFoundError('Réponse enregistrée introuvable pour ce ticket.');
+		return reply;
+	}
+
+	function requireReplies(actor, guildId) {
+		if (!actor.can('tickets.replies')) throw new ForbiddenError('Permission manquante : tickets.replies');
+		if (network.find(guildId)?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
+	}
+
+	// Fills a saved reply: shared variables (member, server), ticket ones, staff ones.
+	// {fivem.*}: only the keys in `fivemKeys` (those of the saved reply, checked when it was saved)
+	async function renderReply(ticket, text, staffId, fivemKeys) {
+		const allowed = new Set(fivemKeys);
+		const keep = vars => Object.fromEntries(Object.entries(vars).filter(([key]) => !key.startsWith('fivem.') || allowed.has(key)));
+		const [shared, staff] = await Promise.all([
+			variables.member(ticket.guildId, ticket.openerId, { fivem: allowed.size > 0 }).catch((error) => {
+				logger.warn('Saved reply variables:', error.message);
+				return {};
+			}),
+			executor.getUser(staffId).catch(() => null),
+		]);
+		const category = categoryOf(ticket);
+		return fill(text, {
+			...keep(ticket.vars),
+			...keep(shared),
+			number: ticket.number,
+			type: category?.name ?? 'Ticket',
+			subject: ticket.subject ?? 'aucun',
+			status: statusOf(ticket.guildId, ticket.statusKey).label,
+			claimer: ticket.claimedBy ? `<@${ticket.claimedBy}>` : 'personne',
+			'staff': `<@${staffId}>`,
+			'staff.name': staff?.globalName ?? staff?.username ?? staffId,
+		}).trim().slice(0, 2000);
+	}
+
 	const service = {
 		settings: settingsOf,
 		statuses: statusesOf,
@@ -443,6 +546,8 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 				panels: q.panels.all(guildId).map(toPanel),
 				statuses: statusesOf(guildId),
 				variables: [{ title: 'Ticket', items: TICKET_VARIABLES }, ...variables.catalog('member', actor)],
+				replies: q.replies.all(guildId).map(toReply),
+				replyVariables: [{ title: 'Ticket', items: TICKET_VARIABLES }, { title: 'Staff', items: STAFF_VARIABLES }, ...variables.catalog('member', actor)],
 			};
 		},
 
@@ -526,6 +631,17 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 					},
 				});
 				ids.set(c.id, created.id);
+			}
+			// Saved replies too, for whoever may manage them (a name already taken there is kept as it is)
+			if (actor.can('tickets.replies')) {
+				for (const r of service.replies(fromGuildId)) {
+					try {
+						service.saveReply(copy, toGuildId, { name: r.name, content: r.content, categoryId: r.categoryId === null ? null : ids.get(r.categoryId) ?? null });
+					}
+					catch (error) {
+						if (!(error instanceof ValidationError || error instanceof ForbiddenError)) throw error;
+					}
+				}
 			}
 			let panels = 0;
 			for (const row of q.panels.all(fromGuildId)) {
@@ -810,13 +926,14 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 		},
 
 		// The transcript is saved, logged and sent to the opener; the channel is deleted or archived
-		async close(userId, ticketId, reason = '', source = 'bot') {
+		// accepted: the opener said yes to a close request of the staff (allowed even if members cannot close)
+		async close(userId, ticketId, reason = '', source = 'bot', { accepted = false } = {}) {
 			const ticket = getTicket(ticketId);
 			if (ticket.status !== 'open') throw new ValidationError('Ce ticket est déjà fermé.');
 			const category = categoryOf(ticket);
 			const config = category?.config ?? normalizeCategoryConfig();
 			const system = userId === 'system';
-			if (!system) {
+			if (!system && !accepted) {
 				const staff = await canHandle(userId, ticket);
 				if (!staff && !(userId === ticket.openerId && config.close.openerCanClose)) {
 					throw new ForbiddenError(config.close.openerCanClose ? 'Seuls la personne qui a ouvert le ticket et le staff peuvent le fermer.' : 'Seul le staff peut fermer ce ticket.');
@@ -938,7 +1055,9 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			const ticketId = liveChannels.get(channelId);
 			if (!ticketId) return null;
 			if (!message.bot && openChannels.has(channelId)) q.touch.run(now(), channelId);
-			return insertMessage(ticketId, message);
+			const saved = insertMessage(ticketId, message);
+			if (!message.bot && !message.internal) markFirstResponse(ticketId, message.authorId, message.createdAt ?? now());
+			return saved;
 		},
 
 		updateMessage(channelId, { id, content, embeds }) {
@@ -969,10 +1088,18 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 		},
 
 		// Answer from the panel: sent in the channel with the panel user's name, or kept as an internal note
-		async reply(actor, ticketId, { content, internal = false }) {
+		// replyId: the text comes from a saved reply (maybe edited): its variables are filled
+		async reply(actor, ticketId, { content, internal = false, replyId = null }) {
 			const ticket = getTicket(ticketId);
 			await requireHandle(actor.id, ticket, 'Il te faut la permission de traiter ce ticket.');
-			const text = String(content ?? '').trim();
+			let text = String(content ?? '').trim();
+			if (replyId) {
+				const saved = findReplyFor(ticket, replyId);
+				// FiveM data: the keys of the saved reply, any other one only with the right to see it
+				const keys = actor.can('fivemdata.view') ? fivemKeysIn(text) : fivemKeysIn(saved.content);
+				text = await renderReply(ticket, text, actor.id, keys);
+				q.usedReply.run(saved.id);
+			}
 			if (!text || text.length > 2000) throw new ValidationError('Le message fait 1 à 2000 caractères.');
 			const user = await executor.getUser(actor.id);
 			const author = { authorId: actor.id, authorName: user?.globalName ?? user?.username ?? actor.id, authorAvatar: user?.avatar ?? null, panelUser: actor.id };
@@ -985,8 +1112,139 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			const id = await executor.sendTicketReply(ticket.channelId, { content: text, username: `${author.authorName} · Panel`, avatarUrl: author.authorAvatar });
 			if (openChannels.has(ticket.channelId)) q.touch.run(now(), ticket.channelId);
 			const saved = insertMessage(ticketId, { id, ...author, content: text });
+			markFirstResponse(ticketId, actor.id);
 			audit.record({ actorId: actor.id, source: 'panel', action: 'tickets.reply', guildId: ticket.guildId, target: String(ticket.id), details: { number: ticket.number } });
 			return saved;
+		},
+
+		// --- Close request: the staff asks the opener whether the ticket can be closed ---------
+		async requestClose(userId, ticketId, reason = '', source = 'bot') {
+			const ticket = getTicket(ticketId);
+			if (ticket.status !== 'open') throw new ValidationError('Ce ticket est fermé.');
+			await requireHandle(userId, ticket, 'Seul le staff peut demander la fermeture d’un ticket.');
+			if (!ticket.channelId || !openChannels.has(ticket.channelId)) throw new ValidationError('Le salon de ce ticket n’existe plus.');
+			const clean = String(reason ?? '').trim().slice(0, 200);
+			const hours = closeRequestHours(ticket);
+			q.setCloseRequest.run(now(), userId, clean || null, ticketId);
+			try {
+				await executor.sendTicketNotice(ticket.channelId, { kind: 'close_request', ticket: getTicket(ticketId), by: userId, reason: clean, closeInHours: hours || null });
+			}
+			catch (error) {
+				q.clearCloseRequest.run(ticketId);
+				logger.warn(`Close request of ticket #${ticket.number} not sent:`, error.message);
+				throw new ValidationError('Impossible d’envoyer la demande dans le salon du ticket.');
+			}
+			record(userId, source, 'tickets.close_request', ticket, { reason: clean || null, 'Fermeture automatique': hours ? `après ${hours} h sans réponse` : 'jamais' });
+			return getTicket(ticketId);
+		},
+
+		// The opener answers: yes closes the ticket, no cancels the request and tells the staff
+		async answerCloseRequest(userId, ticketId, accept) {
+			const ticket = getTicket(ticketId);
+			if (ticket.status !== 'open') throw new ValidationError('Ce ticket est déjà fermé.');
+			if (userId !== ticket.openerId) throw new ForbiddenError('Seule la personne qui a ouvert le ticket peut répondre à cette demande.');
+			if (!ticket.closeRequest) throw new ValidationError('Il n’y a plus de demande de fermeture en cours.');
+			q.clearCloseRequest.run(ticketId);
+			if (accept) return service.close(userId, ticketId, ticket.closeRequest.reason || 'Fermeture acceptée par le membre', 'bot', { accepted: true });
+			if (openChannels.has(ticket.channelId)) q.touch.run(now(), ticket.channelId);
+			await executor.sendTicketNotice(ticket.channelId, { kind: 'close_refused', ticket, by: ticket.closeRequest.by })
+				.catch(error => logger.warn(`Refusal of ticket #${ticket.number} not sent:`, error.message));
+			record(userId, 'bot', 'tickets.close_refused', ticket, { 'Demandée par': `<@${ticket.closeRequest.by}>` });
+			return getTicket(ticketId);
+		},
+
+		// --- Saved replies ---------------------------------------------------------------
+		replies(guildId) {
+			return q.replies.all(guildId).map(toReply);
+		},
+
+		ticketReplies(ticketId) {
+			return repliesFor(getTicket(ticketId));
+		},
+
+		saveReply(actor, guildId, input = {}) {
+			requireReplies(actor, guildId);
+			const name = String(input.name ?? '').trim();
+			const content = String(input.content ?? '').trim();
+			if (!name || name.length > 50) throw new ValidationError('Le nom fait 1 à 50 caractères.');
+			if (!content || content.length > 2000) throw new ValidationError('Le texte fait 1 à 2000 caractères.');
+			const existing = input.id ? q.reply.get(input.id) : null;
+			if (input.id && (!existing || existing.guild_id !== guildId)) throw new NotFoundError('Réponse enregistrée introuvable.');
+			const categoryId = input.categoryId ?? null;
+			if (categoryId !== null) {
+				const category = q.category.get(categoryId);
+				if (!category || category.guild_id !== guildId) throw new ValidationError('Ce type de ticket n’existe pas sur ce serveur.');
+			}
+			assertFivemAllowed(actor, content, existing?.content ?? null);
+			const values = { guildId, categoryId, name, content, at: now() };
+			let id = input.id;
+			try {
+				if (existing) q.updateReply.run({ ...values, id });
+				else id = Number(q.insertReply.run({ ...values, by: actor.id }).lastInsertRowid);
+			}
+			catch (error) {
+				if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') throw new ValidationError(`Une réponse s’appelle déjà « ${name} » sur ce serveur.`);
+				throw error;
+			}
+			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'tickets.reply_save', guildId, target: String(id), details: { name } });
+			return toReply(q.reply.get(id));
+		},
+
+		deleteReply(actor, guildId, id) {
+			requireReplies(actor, guildId);
+			const existing = q.reply.get(id);
+			if (!existing || existing.guild_id !== guildId) throw new NotFoundError('Réponse enregistrée introuvable.');
+			q.deleteReply.run(id);
+			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'tickets.reply_delete', guildId, target: String(id), details: { name: existing.name } });
+		},
+
+		// From Discord (/ticket reponse): sent like a panel reply, with the staff member's name and avatar
+		async sendSavedReply(userId, ticketId, replyId, source = 'bot') {
+			const ticket = getTicket(ticketId);
+			if (ticket.status !== 'open') throw new ValidationError('Ce ticket est fermé.');
+			await requireHandle(userId, ticket, 'Seul le staff peut utiliser les réponses enregistrées.');
+			if (!ticket.channelId || !liveChannels.has(ticket.channelId)) throw new ValidationError('Le salon de ce ticket n’existe plus.');
+			const saved = findReplyFor(ticket, replyId);
+			const text = await renderReply(ticket, saved.content, userId, fivemKeysIn(saved.content));
+			if (!text) throw new ValidationError('Cette réponse est vide une fois remplie.');
+			const user = await executor.getUser(userId).catch(() => null);
+			const author = { authorId: userId, authorName: user?.globalName ?? user?.username ?? userId, authorAvatar: user?.avatar ?? null };
+			const id = await executor.sendTicketReply(ticket.channelId, { content: text, username: author.authorName, avatarUrl: author.authorAvatar });
+			if (openChannels.has(ticket.channelId)) q.touch.run(now(), ticket.channelId);
+			insertMessage(ticketId, { id, ...author, content: text });
+			markFirstResponse(ticketId, userId);
+			q.usedReply.run(saved.id);
+			audit.record({ actorId: userId, source, action: 'tickets.saved_reply', guildId: ticket.guildId, target: String(ticket.id), details: { number: ticket.number, name: saved.name } });
+			return text;
+		},
+
+		// --- Statistics ------------------------------------------------------------------
+		// guildId / categoryId optional; from / to in ms (default: the last 30 days, a year at most)
+		stats({ guildId = null, categoryId = null, from = null, to = null } = {}) {
+			const end = Number.isFinite(to) && to > 0 ? Math.min(to, now()) : now();
+			const start = Math.max(Number.isFinite(from) && from > 0 ? from : end - 30 * 86_400_000, end - STATS_MAX_MS);
+			if (start >= end) throw new ValidationError('La période choisie est vide.');
+			const where = [
+				'((created_at BETWEEN @start AND @end) OR (closed_at BETWEEN @start AND @end))',
+				guildId && 'guild_id = @guildId',
+				categoryId && 'category_id = @categoryId',
+			].filter(Boolean);
+			const rows = db.prepare(`
+				SELECT id, guild_id, category_id, opener_id, created_at, closed_at, closed_by, claimed_by, first_response_at, first_responder_id, sla_breached_at, rating
+				FROM tickets WHERE ${where.join(' AND ')}
+			`).all({ start, end, guildId, categoryId }).map(r => ({
+				id: r.id, guildId: r.guild_id, categoryId: r.category_id, openerId: r.opener_id, createdAt: r.created_at, closedAt: r.closed_at, closedBy: r.closed_by,
+				claimedBy: r.claimed_by, firstResponseAt: r.first_response_at, firstResponderId: r.first_responder_id, slaBreachedAt: r.sla_breached_at, rating: r.rating,
+			}));
+			const sla = new Map();
+			const slaMinutes = (id) => {
+				if (!sla.has(id)) {
+					const row = id ? q.category.get(id) : null;
+					sla.set(id, row ? toCategory(row).config.sla.firstResponseMinutes : 0);
+				}
+				return sla.get(id);
+			};
+			return ticketStats(rows, { from: start, to: end, slaMinutes });
 		},
 
 		subscribe(listener) {
@@ -1011,6 +1269,30 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 					await executor.sendTicketNotice(ticket.channelId, { kind: 'reminder', ticket, closeInHours: closeHours ? Math.max(1, Math.round(closeHours - idle / 3600_000)) : null })
 						.catch(error => logger.warn(`Reminder of ticket #${ticket.number} failed:`, error.message));
 				}
+			}
+			// Close requests left without an answer
+			for (const row of q.closeRequests.all()) {
+				const ticket = toTicket(row);
+				const hours = closeRequestHours(ticket);
+				if (!hours || now() - ticket.closeRequest.at < hours * 3600_000) continue;
+				await service.close('system', ticket.id, 'Pas de réponse à la demande de fermeture', 'bot')
+					.catch(error => logger.warn(`Close request of ticket #${ticket.number} not applied:`, error.message));
+			}
+			// First response delay (SLA) exceeded: one alert in the "tickets" logs
+			for (const row of q.slaPending.all()) {
+				const ticket = toTicket(row);
+				const category = categoryOf(ticket);
+				const minutes = category?.config.sla.firstResponseMinutes ?? 0;
+				if (!minutes || now() - ticket.createdAt < minutes * 60_000) continue;
+				if (!q.markSla.run(now(), ticket.id).changes) continue;
+				audit.record({
+					actorId: 'system', source: 'system', action: 'tickets.sla_breach', guildId: ticket.guildId, target: String(ticket.id),
+					details: {
+						number: ticket.number, opener: ticket.openerName, Type: category.name, 'Délai prévu': `${minutes} min`,
+						...(ticket.channelId ? { Salon: `<#${ticket.channelId}>` } : {}),
+					},
+				});
+				emit({ type: 'ticket', ticket: getTicket(ticket.id), action: 'tickets.sla_breach' });
 			}
 		},
 

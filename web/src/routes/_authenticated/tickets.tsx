@@ -7,6 +7,7 @@ import type { Guild, Ticket, TicketConfig, TicketPriority } from '@/lib/types'
 import { ago, dateTime } from '@/lib/format'
 import { Page, Section, EmptyState, Pill, UserAvatar, GuildIcon } from '@/components/app/ui'
 import { TicketConfigPanel } from '@/features/tickets/ticket-config'
+import { TicketStatsPanel } from '@/features/tickets/ticket-stats'
 import { PRIORITY_LABELS, PRIORITY_TONES } from '@/features/tickets/defaults'
 import { useTicketLive } from '@/features/tickets/use-ticket-live'
 import { Button } from '@/components/ui/button'
@@ -50,13 +51,20 @@ function TicketsPage() {
       <Tabs defaultValue='list'>
         <TabsList>
           <TabsTrigger value='list'>Tickets</TabsTrigger>
+          <TabsTrigger value='stats'>Statistiques</TabsTrigger>
           <TabsTrigger value='config'>Configuration</TabsTrigger>
         </TabsList>
         <TabsContent value='list' className='mt-4'>{current && <TicketList key={current} guildId={current} />}</TabsContent>
+        <TabsContent value='stats' className='mt-4'>{current && <TicketStats key={current} guildId={current} />}</TabsContent>
         <TabsContent value='config' className='mt-4'>{current && <TicketConfigPanel key={current} guildId={current} />}</TabsContent>
       </Tabs>
     </Page>
   )
+}
+
+function TicketStats({ guildId }: { guildId: string }) {
+  const config = useQuery({ queryKey: ['ticket-config', guildId], queryFn: () => api<TicketConfig>(`/tickets/config/${guildId}`) })
+  return <TicketStatsPanel guildId={guildId} config={config.data} />
 }
 
 function TicketList({ guildId }: { guildId: string }) {

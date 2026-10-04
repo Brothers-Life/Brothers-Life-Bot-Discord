@@ -110,6 +110,31 @@ export function noticePayload({ kind, ticket, reason, by, closeInHours }) {
 			)],
 		};
 	}
+	if (kind === 'close_request') {
+		const embed = new EmbedBuilder()
+			.setColor(COLOR)
+			.setTitle('Ton ticket peut-il être fermé ?')
+			.setDescription([
+				`<@${by}> pense que ta demande est réglée.`,
+				reason ? `> ${reason}` : null,
+				closeInHours ? `Sans réponse de ta part, le ticket sera fermé automatiquement dans ${closeInHours} h.` : null,
+			].filter(Boolean).join('\n'));
+		return {
+			content: `<@${ticket.openerId}>`,
+			embeds: [embed],
+			components: [new ActionRowBuilder().addComponents(
+				new ButtonBuilder().setCustomId(`ticket:creq:${ticket.id}:yes`).setLabel('Fermer le ticket').setStyle(ButtonStyle.Success),
+				new ButtonBuilder().setCustomId(`ticket:creq:${ticket.id}:no`).setLabel('J’ai encore besoin d’aide').setStyle(ButtonStyle.Secondary),
+			)],
+			allowedMentions: { users: [ticket.openerId] },
+		};
+	}
+	if (kind === 'close_refused') {
+		return {
+			content: `<@${by}> : <@${ticket.openerId}> a encore besoin d’aide, la demande de fermeture est annulée.`,
+			allowedMentions: { users: [by] },
+		};
+	}
 	if (kind === 'reopened') {
 		return { content: `Ticket rouvert par <@${by}>. <@${ticket.openerId}>`, allowedMentions: { users: [ticket.openerId] } };
 	}

@@ -24,7 +24,7 @@ export const COMMANDS = [
 	{ name: 'userinfo', category: 'Modération', description: 'Fiche réseau d’un membre', permissions: ['commands.userinfo'] },
 	{ name: 'archive', category: 'Modération', description: 'Archiver un salon en page HTML (aussi depuis le panel)', permissions: ['archives.manage'] },
 	{ name: 'raid', category: 'Modération', description: 'Activer ou arrêter le mode raid', permissions: ['antiraid.manage'] },
-	{ name: 'ticket', category: 'Tickets', description: 'Gérer le ticket du salon : ajouter, statut, priorité, transférer, fermer…', permissions: ['tickets.handle'] },
+	{ name: 'ticket', category: 'Tickets', description: 'Gérer le ticket du salon : ajouter, statut, priorité, transférer, réponses enregistrées, demande de fermeture, fermer…', permissions: ['tickets.handle'] },
 	{ name: 'musique', category: 'Communauté', description: 'Musique en vocal (YouTube, Spotify…) : jouer, file, volume, vitesse, position, boucle, effets', permissions: ['music.use'] },
 	{ name: 'embed', category: 'Communauté', description: 'Créer ou modifier un embed (le panel permet plusieurs embeds et des boutons)', permissions: ['embeds.manage'] },
 	{ name: 'info', category: 'Communauté', description: 'Informations : serveur, avatar, rôle, salon, bot', permissions: [] },

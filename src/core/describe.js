@@ -71,6 +71,12 @@ const TITLES = {
 	'tickets.rating': 'Ticket noté',
 	'tickets.reply': 'Réponse à un ticket depuis le panel',
 	'tickets.note': 'Note interne sur un ticket',
+	'tickets.close_request': 'Fermeture d’un ticket demandée au membre',
+	'tickets.close_refused': 'Demande de fermeture refusée par le membre',
+	'tickets.sla_breach': 'Délai de première réponse dépassé',
+	'tickets.saved_reply': 'Réponse enregistrée envoyée dans un ticket',
+	'tickets.reply_save': 'Réponse enregistrée de ticket modifiée',
+	'tickets.reply_delete': 'Réponse enregistrée de ticket supprimée',
 	'sanctions.restrict': 'Membre restreint',
 	'sanctions.unrestrict': 'Restriction levée',
 	'sanctions.edit': 'Raison d’une sanction modifiée',
@@ -270,6 +276,8 @@ const COLORS = {
 	'permissions.drift': 'warning',
 	'fivemevents.maintenance_on': 'warning',
 	'fivemevents.maintenance_off': 'success',
+	'tickets.sla_breach': 'warning',
+	'tickets.close_request': 'info',
 };
 
 const PERSON_ACTIONS = /^(sanctions|moderation|members|fivemroles|absences|recruitment|dms|verification|appeals|temp_roles|restrictions)\.|^ranks\.(assign|unassign)/;

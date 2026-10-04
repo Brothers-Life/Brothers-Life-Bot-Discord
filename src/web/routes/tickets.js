@@ -68,10 +68,34 @@ export function registerTicketRoutes(app, { core }) {
 		socket.on('message', () => undefined);
 	});
 
+	// Volume, response and resolution times, SLA, ratings, per staff member
+	app.get('/api/tickets/stats', {
+		config: { permission: 'tickets.view' },
+		schema: {
+			querystring: {
+				type: 'object',
+				properties: { guildId: snowflake, categoryId: { type: 'integer' }, from: { type: 'integer', minimum: 0 }, to: { type: 'integer', minimum: 0 } },
+				additionalProperties: false,
+			},
+		},
+	}, async (request) => {
+		const stats = tickets.stats(request.query);
+		const names = await resolveNames(executor, stats.staff.map(s => s.userId));
+		const categories = new Map(network.list().flatMap(g => tickets.describe(g.id).categories.map(c => [c.id, c])));
+		return {
+			...stats,
+			staff: stats.staff.map(s => ({ ...s, user: names.get(s.userId) ?? null })),
+			categories: stats.categories.map(c => ({ ...c, name: categories.get(c.categoryId)?.name ?? null, emoji: categories.get(c.categoryId)?.emoji ?? null })),
+		};
+	});
+
 	app.get('/api/tickets/:id', { config: { permission: 'tickets.view' }, schema: { params: idParam } }, async (request) => {
 		const [ticket] = await withNames([tickets.get(request.params.id, { withTranscript: true })]);
+		const category = ticket.categoryId ? tickets.describe(ticket.guildId).categories.find(c => c.id === ticket.categoryId) : null;
 		return {
 			...ticket,
+			slaMinutes: category?.config.sla.firstResponseMinutes ?? 0,
+			closeRequestHours: category?.config.closeRequest.autoCloseHours ?? 24,
 			messages: tickets.messages(ticket.id),
 			statuses: tickets.statuses(ticket.guildId),
 			priorities: tickets.priorities(),
@@ -98,9 +122,17 @@ export function registerTicketRoutes(app, { core }) {
 		config: handle,
 		schema: {
 			params: idParam,
-			body: { type: 'object', required: ['content'], properties: { content: { type: 'string', maxLength: 2000 }, internal: { type: 'boolean' } }, additionalProperties: false },
+			body: { type: 'object', required: ['content'], properties: { content: { type: 'string', maxLength: 2000 }, internal: { type: 'boolean' }, replyId: { type: 'integer' } }, additionalProperties: false },
 		},
 	}, async (request) => tickets.reply(request.actor, request.params.id, request.body));
+
+	// Saved replies usable in this ticket (the panel fills their variables when sending)
+	app.get('/api/tickets/:id/replies', { config: handle, schema: { params: idParam } }, async (request) => tickets.ticketReplies(request.params.id));
+
+	app.post('/api/tickets/:id/close-request', {
+		config: handle,
+		schema: { params: idParam, body: { type: 'object', properties: { reason: { type: 'string', maxLength: 200 } }, additionalProperties: false } },
+	}, async (request) => tickets.requestClose(request.actor.id, request.params.id, request.body?.reason ?? '', 'panel'));
 
 	app.post('/api/tickets/:id/claim', { config: handle, schema: { params: idParam } }, async (request) => tickets.claim(request.actor.id, request.params.id, 'panel'));
 
@@ -223,6 +255,32 @@ export function registerTicketRoutes(app, { core }) {
 		schema: { params: guildIdParam },
 	}, async (request) => {
 		await tickets.deletePanel(request.actor, request.params.guildId, request.params.id);
+		return { ok: true };
+	});
+
+	app.put('/api/tickets/config/:guildId/replies', {
+		config: { permission: 'tickets.replies' },
+		schema: {
+			params: guildParam,
+			body: {
+				type: 'object',
+				required: ['name', 'content'],
+				properties: {
+					id: { type: 'integer' },
+					name: { type: 'string', maxLength: 50 },
+					content: { type: 'string', maxLength: 2000 },
+					categoryId: { anyOf: [{ type: 'null' }, { type: 'integer' }] },
+				},
+				additionalProperties: false,
+			},
+		},
+	}, async (request) => tickets.saveReply(request.actor, request.params.guildId, request.body));
+
+	app.delete('/api/tickets/config/:guildId/replies/:id', {
+		config: { permission: 'tickets.replies', confirm: true },
+		schema: { params: guildIdParam },
+	}, async (request) => {
+		tickets.deleteReply(request.actor, request.params.guildId, request.params.id);
 		return { ok: true };
 	});
 
