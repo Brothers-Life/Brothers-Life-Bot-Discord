@@ -23,6 +23,8 @@ export const FILTERS = {
 export const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 // Everyone in the voice channel may add music and see the queue; the rest needs a DJ role when there are some
 const OPEN_ACTIONS = new Set(['play', 'view']);
+// Empty voice channel: the bot leaves after about this long (a short grace for someone who reconnects)
+const ALONE_MS = 60_000;
 
 export function normalizeMusicConfig(input = {}) {
 	const djRoles = {};
@@ -581,17 +583,23 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 			emit(guildId);
 		},
 
-		// Every 30 s: leaves after a while alone in the channel, or with nothing to play
+		// Every 30 s: leaves about a minute after the channel is empty, or after the idle delay with nothing playing.
+		// A track playing (or loading) with people listening never makes it leave.
 		async tick() {
 			const limit = config().idleMinutes * 60_000;
 			for (const player of [...players.values()]) {
 				// Keeps the progress bar of the now-playing message roughly right
 				if (current(player) && !player.paused) refreshMessage(player, { keepPlace: true });
-				const alone = (await backend.listeners(player.guildId).catch(() => 1)) === 0;
+				const alone = (await backend.listeners(player.guildId, player.channelId).catch(() => null)) === 0;
 				if (alone) player.aloneSince ??= now();
 				else player.aloneSince = null;
-				if ((player.aloneSince && now() - player.aloneSince >= limit) || (player.idleSince && now() - player.idleSince >= limit)) {
-					await service.leave(player.guildId, { reason: player.aloneSince ? 'plus personne dans le salon' : 'file terminée' });
+				if (current(player) || player.loading) player.idleSince = null;
+				else player.idleSince ??= now();
+				if (player.aloneSince && now() - player.aloneSince >= Math.min(limit, ALONE_MS)) {
+					await service.leave(player.guildId, { reason: 'plus personne dans le salon' });
+				}
+				else if (player.idleSince && now() - player.idleSince >= limit) {
+					await service.leave(player.guildId, { reason: 'aucune musique en cours' });
 				}
 			}
 		},

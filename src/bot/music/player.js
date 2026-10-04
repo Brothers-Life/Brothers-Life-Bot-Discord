@@ -177,9 +177,14 @@ export function createMusicBackend(client, { ytdlp, ffmpeg, logger = console }) 
 		},
 
 		// People (not bots) in the bot's voice channel
-		async listeners(guildId) {
-			const channel = client.guilds.cache.get(guildId)?.members.me?.voice.channel;
-			return channel ? channel.members.filter(m => !m.user.bot).size : 0;
+		// Counted from the voice states: channel.members only sees cached members, so someone already in the
+		// channel when the bot started was missed and the bot thought it was alone. Unknown users count as people.
+		// null when the channel is not known: the caller must not take it for "nobody".
+		async listeners(guildId, channelId = null) {
+			const guild = client.guilds.cache.get(guildId);
+			const target = channelId ?? guild?.members.me?.voice.channelId;
+			if (!guild || !target) return null;
+			return guild.voiceStates.cache.filter(state => state.channelId === target && state.id !== client.user.id && !client.users.cache.get(state.id)?.bot).size;
 		},
 
 		voiceChannelOf(guildId) {

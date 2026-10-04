@@ -450,7 +450,7 @@ export function createFakeExecutor() {
 			async resume(guildId) { this.played.push({ guildId, resumed: true }); },
 			async setVolume(guildId, volume) { this.volumes.set(guildId, volume); },
 			position(guildId) { return this.positions.get(guildId) ?? 0; },
-			async listeners(guildId) { return this.listenerCount.get(guildId) ?? 1; },
+			async listeners(guildId) { return this.listenerCount.has(guildId) ? this.listenerCount.get(guildId) : 1; },
 		},
 		musicResolver: {
 			calls: [],

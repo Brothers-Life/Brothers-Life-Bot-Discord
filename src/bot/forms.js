@@ -1,9 +1,16 @@
 import {
 	ChannelSelectMenuBuilder, FileUploadBuilder, LabelBuilder, ModalBuilder, RoleSelectMenuBuilder, StringSelectMenuBuilder,
-	TextInputBuilder, TextInputStyle, UserSelectMenuBuilder,
+	MessageFlags, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder,
 } from 'discord.js';
 import { emojiOf } from './messages.js';
 import logger from '../utils/logger.js';
+
+// A modal submitted from the ephemeral "continue" message of a form, which can be replaced.
+// A modal opened from a public panel (tickets, applications, suggestions) also counts as
+// "from a message": updating it would wipe the panel for everyone.
+export function fromEphemeralMessage(interaction) {
+	return Boolean(interaction.isFromMessage?.() && interaction.message?.flags?.has(MessageFlags.Ephemeral));
+}
 
 // Modal of one step of a form (src/core/forms.js)
 export function formModal(customId, title, step, { emojis = true } = {}) {

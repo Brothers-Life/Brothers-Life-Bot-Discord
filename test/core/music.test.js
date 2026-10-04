@@ -131,6 +131,27 @@ test('broken tracks are skipped; the bot leaves when alone or idle for a while',
 	assert.equal(music.state(MAIN).connected, false, 'nothing left to play');
 });
 
+test('a track playing with people listening never makes the bot leave; an empty channel does within a minute', async () => {
+	const { music, member, backend, advance } = await setup();
+	await music.play(member(ALICE), MAIN, 'Long');
+	for (let i = 0; i < 30; i++) {
+		advance(60_000);
+		await music.tick();
+	}
+	assert.equal(music.state(MAIN).connected, true, 'still playing after 30 min');
+
+	backend.listenerCount.set(MAIN, null);
+	advance(60 * 60_000);
+	await music.tick();
+	assert.equal(music.state(MAIN).connected, true, 'channel unknown: not taken for empty');
+
+	backend.listenerCount.set(MAIN, 0);
+	await music.tick();
+	advance(60_000);
+	await music.tick();
+	assert.equal(music.state(MAIN).connected, false, 'nobody left in the channel');
+});
+
 test('playlists: saved from the queue, personal or shared, played (shuffled or not), only the owner edits', async () => {
 	const { music, member, backend } = await setup();
 	await music.play(member(ALICE), MAIN, 'playlist:A,B,C');

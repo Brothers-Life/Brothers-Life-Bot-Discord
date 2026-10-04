@@ -1,6 +1,6 @@
 import { MessageFlags } from 'discord.js';
 import { AppError } from '../../core/errors.js';
-import { showFormModal, readModal } from '../forms.js';
+import { showFormModal, readModal, fromEphemeralMessage } from '../forms.js';
 import { nextStepPayload } from '../ticketsUi.js';
 
 // customId: fb:<action>:<id>[:<step>]
@@ -43,10 +43,10 @@ export async function execute(interaction) {
 			const result = feedback.submitStep(id, me, step, readModal(interaction, box.config.form.steps[step]));
 			if (!result.done) {
 				const payload = nextStepPayload('fb', id, result.next, result.total);
-				if (interaction.isFromMessage?.()) return await interaction.update(payload);
+				if (fromEphemeralMessage(interaction)) return await interaction.update(payload);
 				return await interaction.reply({ ...payload, flags: MessageFlags.Ephemeral });
 			}
-			if (interaction.isFromMessage?.()) await interaction.update({ content: 'Envoi…', components: [] });
+			if (fromEphemeralMessage(interaction)) await interaction.update({ content: 'Envoi…', components: [] });
 			else await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 			const item = await feedback.create({ boxId: id, guildId: interaction.guildId, userId: me, userName: interaction.user.username, answers: result.answers, anonymous: result.anonymous });
 			return await interaction.editReply({ content: item.approved ? `Merci ! C’est publié (#${item.number}).` : 'Merci ! Le staff va le relire avant publication.', components: [] });

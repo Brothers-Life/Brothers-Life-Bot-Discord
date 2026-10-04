@@ -1,6 +1,6 @@
 import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { AppError } from '../../core/errors.js';
-import { showFormModal, readModal } from '../forms.js';
+import { showFormModal, readModal, fromEphemeralMessage } from '../forms.js';
 import { addMemberMenu, closeModal, nextStepPayload, ratingCommentModal } from '../ticketsUi.js';
 
 // customId: ticket:<action>:<id>[:<extra>]
@@ -59,10 +59,10 @@ export async function execute(interaction) {
 			if (!result.done) {
 				const payload = nextStepPayload('ticket', id, result.next, result.total);
 				// A modal opened from the previous "continue" message: replace it instead of stacking messages
-				if (interaction.isFromMessage?.()) return await interaction.update(payload);
+				if (fromEphemeralMessage(interaction)) return await interaction.update(payload);
 				return await interaction.reply({ ...payload, flags: MessageFlags.Ephemeral });
 			}
-			if (interaction.isFromMessage?.()) {
+			if (fromEphemeralMessage(interaction)) {
 				await interaction.update({ content: 'Ouverture du ticket…', components: [] });
 				return await interaction.editReply(await openTicket(interaction, id, result.answers));
 			}

@@ -1,6 +1,7 @@
 import { MessageFlags } from 'discord.js';
 import { AppError } from '../../core/errors.js';
 import { captchaModal, captchaPayload } from '../channelsUi.js';
+import { fromEphemeralMessage } from '../forms.js';
 
 // customId: verify:<start|code|answer>
 export const prefix = 'verify';
@@ -29,7 +30,7 @@ export async function execute(interaction) {
 			return await interaction.showModal(captchaModal());
 		case 'answer': {
 			await verification.answer(guildId, userId, interaction.fields.getTextInputValue('code'));
-			if (interaction.isFromMessage?.()) return await interaction.update({ content: '✅ Vérifié, bienvenue ! Les salons du serveur s’ouvrent à toi.', files: [], components: [], attachments: [] });
+			if (fromEphemeralMessage(interaction)) return await interaction.update({ content: '✅ Vérifié, bienvenue ! Les salons du serveur s’ouvrent à toi.', files: [], components: [], attachments: [] });
 			return await answer({ content: '✅ Vérifié, bienvenue !' });
 		}
 		}
