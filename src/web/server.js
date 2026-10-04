@@ -21,6 +21,7 @@ import { registerPermissionRoutes } from './routes/permissions.js';
 import { registerAnnouncementRoutes } from './routes/announcements.js';
 import { registerOnboardingRoutes } from './routes/onboarding.js';
 import { registerAntiraidRoutes } from './routes/antiraid.js';
+import { registerAntinukeRoutes } from './routes/antinuke.js';
 import { registerStatsRoutes } from './routes/stats.js';
 import { registerVoiceRoutes } from './routes/voice.js';
 import { registerMessageRoutes } from './routes/messages.js';
@@ -98,6 +99,7 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	registerAnnouncementRoutes(app, { core });
 	registerOnboardingRoutes(app, { core });
 	registerAntiraidRoutes(app, { core });
+	registerAntinukeRoutes(app, { core });
 	registerStatsRoutes(app, { core });
 	registerVoiceRoutes(app, { core });
 	registerMessageRoutes(app, { core });

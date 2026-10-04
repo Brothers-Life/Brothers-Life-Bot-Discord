@@ -51,6 +51,7 @@ import { createStaffActivity } from './staffActivity.js';
 import { createRpEvents } from './rpEvents.js';
 import { COMMANDS } from './commandCatalog.js';
 import { createPermissionSync } from './permissionSync.js';
+import { createAntinuke } from './antinuke.js';
 import { definePermission } from './permissions.js';
 
 definePermission('members.view', { label: 'Rechercher des membres sur le réseau', category: 'Membres' });
@@ -144,6 +145,9 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const music = createMusic({ db, network, audit, settings, backend: executor.music, resolver: executor.musicResolver, executor, logger });
 	logs.registerCategory('music', 'Musique (lancée, arrêtée, réglages)');
 	const permissionSync = createPermissionSync({ db, network, ranks, audit, executor, logs, settings });
+	const antinuke = createAntinuke({ db, network, ranks, audit, executor, settings, logs, ownerId: config.OWNER_ID, logger });
+	// The quarantine posts its own detailed alert
+	SELF_LOGGED_ACTIONS.add('antinuke.quarantine');
 
 	// Panel actions become log types (e.g. "sanctions:ban"), each of which can be routed apart
 	for (const [category, types] of Object.entries(auditTypes())) logs.registerTypes(category, types);
@@ -179,5 +183,5 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 		sanctions.syncGuild(guild.id).catch(error => logger.error(`Ban sync failed on ${guild.name}:`, error));
 	});
 
-	return { db, config, executor, variables, settings, audit, network, ranks, logs, sessions, apiKeys, sanctions, sanctionTemplates, music, memberInsights, channelFeatures, verification, embedBuilder, appeals, channelSchedules, archives, meetings, fivemData, fivemRoles, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents };
+	return { db, config, executor, variables, settings, audit, network, ranks, logs, sessions, apiKeys, sanctions, sanctionTemplates, music, memberInsights, channelFeatures, verification, embedBuilder, appeals, channelSchedules, archives, meetings, fivemData, fivemRoles, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents, antinuke };
 }
