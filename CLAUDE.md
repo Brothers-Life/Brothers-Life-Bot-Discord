@@ -2,7 +2,7 @@
 
 Bot Discord multi-serveurs pour la communauté RP **Brothers Life** (serveur FiveM Qbox) : il gère plusieurs serveurs Discord comme un seul réseau et s'administre depuis un panel web React en français. Tout le texte visible (Discord, panel, commits) est en **français** ; le code et ses commentaires en anglais.
 
-État au 2026-10-05 : **v1.9.0 publiée** ; en local et non publié : audit complet (sécurité + bugs, dont une faille critique de l’API) + anti-nuke, Tebex, pont txAdmin/maintenance, tickets v3, flux RSS/TikTok, page publique, notifications du panel. 447 tests.
+État au 2026-10-05 : **v1.10.0 publiée**, tout est poussé, 447 tests.
 
 ## Commandes
 
@@ -49,7 +49,7 @@ Avant tout commit : `npm run lint`, `npm test`, et pour le panel `npx tsc -b` + 
 
 Réseau de serveurs, rangs et permissions synchronisés, staff sync, sanctions (modèles, appels de sanction, restrictions, rôles temporaires), automod, anti-raid, tickets v2 (formulaires, statuts, variables, transcripts HTML style Discord : `src/core/transcript.js`, copie staff avec notes internes dans `data/transcripts/`, copie membre en MP), logs par catégorie/type avec packs et miroir réseau, annonces, embeds (créateur), messages privés, onboarding/bienvenue, vérification (bouton/captcha), salons automatiques (compteur, un mot, sticky, auto-publication, médias seuls), horaires d'ouverture de salons, archives HTML de salons, sondages, giveaways, suggestions/bugs, candidatures, absences (embed Valider/Refuser), événements RP, activité staff, réunions staff (convocation, présence vocale, compte rendu), salons vocaux perso, stats Discord (messages/vocal, carte de chaleur), fiches membres réseau, commandes perso, sauvegardes, modèles de serveur, streams, musique, FiveM (statut + données), API publique à clés (+ collection Bruno), anti-nuke, boutique Tebex, annonces txAdmin + maintenance FiveM, flux RSS/TikTok, page publique, notifications du panel.
 
-### Ajouts d'octobre 2026 (non publiés au 2026-10-05)
+### Ajouts de la v1.10.0
 - **Anti-nuke** (`src/core/antinuke.js`, event `antinukeAuditLog.js`) : limites par action lues dans le journal d'audit Discord, comptées sur tout le réseau ; quarantaine (rôles dangereux retirés partout, rendus en 1 clic), alerte log + MP chef. **Désactivé par défaut.** Config dans `settings` `antinuke.config`.
 - **Tebex** (`src/core/tebex.js`) : relève de l'API Plugin (`plugin.tebex.io`, `X-Tebex-Secret`) toutes les 2 min, clé jamais renvoyée ; acheteur → Discord via liaison manuelle mémorisée, puis base FiveM (`fivemData.findByTebexPlayer`, `users.fivem`/licence/pseudo) ; rôles par article (durée via `temp_roles`), retirés au remboursement.
 - **Pont txAdmin** : ressource `fivem/brl-bridge/` (Lua) → `POST /api/fivem/events` avec une clé d'API limitée à `fivem.events` ; `src/core/fivemEvents.js` (annonces, compte à rebours, logs staff, mode maintenance, `publicState()`). `/fivem` a des sous-commandes `statut` / `maintenance`. Le HTTPS auto-signé de la prod est refusé par PerformHttpRequest : vrai certificat ou HTTP en LAN.
@@ -117,6 +117,7 @@ Réseau de serveurs, rangs et permissions synchronisés, staff sync, sanctions (
 - **v1.8.1** : émojis validés (`src/core/emoji.js`) : un émoji invalide est ignoré au lieu de faire refuser la modale/le message par Discord.
 - **v1.8.2** : sélecteur d'émojis limité à Unicode ≤ 15.1 (`DISCORD_EMOJI_VERSION`, Discord refuse les plus récents) ; `showFormModal` réaffiche une modale sans émojis si Discord en refuse un.
 - **v1.9.0** : recherche de musique par plateforme (YouTube, YouTube Music, SoundCloud, Spotify via l'API Web avec clés dans les réglages musique), préfixes `yt:` `ytm:` `sc:` `sp:`, plateforme par défaut.
+- **v1.10.0** : fixes panneau de tickets et départ de la musique ; audit complet (faille critique d'authentification de l'API par URL encodée, websockets, SSRF, rangs/sanctions, launcher, doubles clics, ticks) ; anti-nuke, boutique Tebex, pont txAdmin + maintenance FiveM, tickets v3 (demande de fermeture, réponses enregistrées, SLA, stats), flux RSS/TikTok, page publique, notifications du panel.
 
 ## Pistes proposées, pas encore faites
 
