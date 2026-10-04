@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as PublicRouteImport } from './routes/public'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedAbsencesRouteImport } from './routes/_authenticated/absences'
 import { Route as AuthenticatedAntiraidRouteImport } from './routes/_authenticated/antiraid'
@@ -43,6 +44,7 @@ import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authentic
 import { Route as AuthenticatedPeopleRouteImport } from './routes/_authenticated/people'
 import { Route as AuthenticatedPermissionsRouteImport } from './routes/_authenticated/permissions'
 import { Route as AuthenticatedPollsRouteImport } from './routes/_authenticated/polls'
+import { Route as AuthenticatedPublicPageRouteImport } from './routes/_authenticated/public-page'
 import { Route as AuthenticatedRanksRouteImport } from './routes/_authenticated/ranks'
 import { Route as AuthenticatedRecruitmentRouteImport } from './routes/_authenticated/recruitment'
 import { Route as AuthenticatedRpEventsRouteImport } from './routes/_authenticated/rp-events'
@@ -68,6 +70,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PublicRoute = PublicRouteImport.update({
+  id: '/public',
+  path: '/public',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
@@ -235,6 +242,11 @@ const AuthenticatedPollsRoute = AuthenticatedPollsRouteImport.update({
   path: '/polls',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedPublicPageRoute = AuthenticatedPublicPageRouteImport.update({
+  id: '/public-page',
+  path: '/public-page',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedRanksRoute = AuthenticatedRanksRouteImport.update({
   id: '/ranks',
   path: '/ranks',
@@ -329,6 +341,7 @@ const AuthenticatedTicketIdRoute = AuthenticatedTicketIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/login': typeof LoginRoute
+  '/public': typeof PublicRoute
   '/absences': typeof AuthenticatedAbsencesRoute
   '/antiraid': typeof AuthenticatedAntiraidRoute
   '/appeals': typeof AuthenticatedAppealsRoute
@@ -360,6 +373,7 @@ export interface FileRoutesByFullPath {
   '/people': typeof AuthenticatedPeopleRoute
   '/permissions': typeof AuthenticatedPermissionsRoute
   '/polls': typeof AuthenticatedPollsRoute
+  '/public-page': typeof AuthenticatedPublicPageRoute
   '/ranks': typeof AuthenticatedRanksRoute
   '/recruitment': typeof AuthenticatedRecruitmentRoute
   '/rp-events': typeof AuthenticatedRpEventsRoute
@@ -380,6 +394,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
+  '/public': typeof PublicRoute
   '/absences': typeof AuthenticatedAbsencesRoute
   '/antiraid': typeof AuthenticatedAntiraidRoute
   '/appeals': typeof AuthenticatedAppealsRoute
@@ -411,6 +426,7 @@ export interface FileRoutesByTo {
   '/people': typeof AuthenticatedPeopleRoute
   '/permissions': typeof AuthenticatedPermissionsRoute
   '/polls': typeof AuthenticatedPollsRoute
+  '/public-page': typeof AuthenticatedPublicPageRoute
   '/ranks': typeof AuthenticatedRanksRoute
   '/recruitment': typeof AuthenticatedRecruitmentRoute
   '/rp-events': typeof AuthenticatedRpEventsRoute
@@ -434,6 +450,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/login': typeof LoginRoute
+  '/public': typeof PublicRoute
   '/_authenticated/absences': typeof AuthenticatedAbsencesRoute
   '/_authenticated/antiraid': typeof AuthenticatedAntiraidRoute
   '/_authenticated/appeals': typeof AuthenticatedAppealsRoute
@@ -465,6 +482,7 @@ export interface FileRoutesById {
   '/_authenticated/people': typeof AuthenticatedPeopleRoute
   '/_authenticated/permissions': typeof AuthenticatedPermissionsRoute
   '/_authenticated/polls': typeof AuthenticatedPollsRoute
+  '/_authenticated/public-page': typeof AuthenticatedPublicPageRoute
   '/_authenticated/ranks': typeof AuthenticatedRanksRoute
   '/_authenticated/recruitment': typeof AuthenticatedRecruitmentRoute
   '/_authenticated/rp-events': typeof AuthenticatedRpEventsRoute
@@ -489,6 +507,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/public'
     | '/absences'
     | '/antiraid'
     | '/appeals'
@@ -520,6 +539,7 @@ export interface FileRouteTypes {
     | '/people'
     | '/permissions'
     | '/polls'
+    | '/public-page'
     | '/ranks'
     | '/recruitment'
     | '/rp-events'
@@ -540,6 +560,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
+    | '/public'
     | '/absences'
     | '/antiraid'
     | '/appeals'
@@ -571,6 +592,7 @@ export interface FileRouteTypes {
     | '/people'
     | '/permissions'
     | '/polls'
+    | '/public-page'
     | '/ranks'
     | '/recruitment'
     | '/rp-events'
@@ -593,6 +615,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_authenticated'
     | '/login'
+    | '/public'
     | '/_authenticated/absences'
     | '/_authenticated/antiraid'
     | '/_authenticated/appeals'
@@ -624,6 +647,7 @@ export interface FileRouteTypes {
     | '/_authenticated/people'
     | '/_authenticated/permissions'
     | '/_authenticated/polls'
+    | '/_authenticated/public-page'
     | '/_authenticated/ranks'
     | '/_authenticated/recruitment'
     | '/_authenticated/rp-events'
@@ -647,6 +671,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   LoginRoute: typeof LoginRoute
+  PublicRoute: typeof PublicRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -663,6 +688,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/public': {
+      id: '/public'
+      path: '/public'
+      fullPath: '/public'
+      preLoaderRoute: typeof PublicRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/': {
@@ -889,6 +921,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPollsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/public-page': {
+      id: '/_authenticated/public-page'
+      path: '/public-page'
+      fullPath: '/public-page'
+      preLoaderRoute: typeof AuthenticatedPublicPageRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/ranks': {
       id: '/_authenticated/ranks'
       path: '/ranks'
@@ -1043,6 +1082,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedPeopleRoute: typeof AuthenticatedPeopleRoute
   AuthenticatedPermissionsRoute: typeof AuthenticatedPermissionsRoute
   AuthenticatedPollsRoute: typeof AuthenticatedPollsRoute
+  AuthenticatedPublicPageRoute: typeof AuthenticatedPublicPageRoute
   AuthenticatedRanksRoute: typeof AuthenticatedRanksRoute
   AuthenticatedRecruitmentRoute: typeof AuthenticatedRecruitmentRoute
   AuthenticatedRpEventsRoute: typeof AuthenticatedRpEventsRoute
@@ -1095,6 +1135,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedPeopleRoute: AuthenticatedPeopleRoute,
   AuthenticatedPermissionsRoute: AuthenticatedPermissionsRoute,
   AuthenticatedPollsRoute: AuthenticatedPollsRoute,
+  AuthenticatedPublicPageRoute: AuthenticatedPublicPageRoute,
   AuthenticatedRanksRoute: AuthenticatedRanksRoute,
   AuthenticatedRecruitmentRoute: AuthenticatedRecruitmentRoute,
   AuthenticatedRpEventsRoute: AuthenticatedRpEventsRoute,
@@ -1121,6 +1162,7 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   LoginRoute: LoginRoute,
+  PublicRoute: PublicRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

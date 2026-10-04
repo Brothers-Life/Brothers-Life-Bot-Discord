@@ -42,6 +42,8 @@ import { registerModerationToolRoutes } from './routes/moderationTools.js';
 import { registerMeetingRoutes } from './routes/meetings.js';
 import { registerFivemDataRoutes } from './routes/fivemData.js';
 import { registerApiRoutes } from './routes/api.js';
+import { registerPublicPageRoutes } from './routes/publicPage.js';
+import { registerNotificationRoutes } from './routes/notifications.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_STATIC_DIR = path.resolve(__dirname, '..', '..', 'web', 'dist');
@@ -126,6 +128,8 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	registerModerationToolRoutes(app, { core });
 	registerMeetingRoutes(app, { core });
 	registerFivemDataRoutes(app, { core });
+	registerPublicPageRoutes(app, { core });
+	registerNotificationRoutes(app, { core });
 	registerApiRoutes(app, { core, runtime, routes });
 	onRoutes?.(routes);
 
@@ -139,6 +143,11 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	}
 	// "/" is a directory for @fastify/static, which refuses it (403) when index is off: serve the app explicitly
 	app.get('/', (request, reply) => sendPanel(reply));
+	// The public page (no login) is part of the React app, but only exists while it is switched on
+	app.get('/public', (request, reply) => {
+		if (!core.publicPage.enabled()) return reply.code(404).type('text/plain; charset=utf-8').send('Page introuvable.');
+		return sendPanel(reply);
+	});
 
 	// Unknown /api routes answer JSON, missing build files a real 404; everything else is the React app
 	app.setNotFoundHandler((request, reply) => {

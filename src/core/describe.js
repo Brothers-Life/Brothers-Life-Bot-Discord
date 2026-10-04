@@ -134,6 +134,7 @@ const TITLES = {
 	'antiraid.config': 'Anti-raid configuré',
 	'antiraid.start': 'Mode raid activé',
 	'antiraid.end': 'Fin du mode raid',
+	'publicpage.settings': 'Page publique modifiée',
 	'stats.counter_add': 'Salon compteur ajouté',
 	'stats.counter_delete': 'Salon compteur supprimé',
 	'voice.hub_add': 'Salon « créer un vocal » ajouté',
