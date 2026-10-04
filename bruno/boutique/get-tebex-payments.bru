@@ -1,0 +1,28 @@
+meta {
+  name: GET /tebex/payments
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/tebex/payments
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~filter: 
+  ~q: 
+  ~before: 
+}
+
+docs {
+  Consulter — `GET /api/tebex/payments`
+
+  Permission requise : `tebex.view`
+
+  Paramètres de requête :
+  - `filter` ("all" | "unlinked" | "revoked" | "errors" | "baseline")
+  - `q` (string)
+  - `before` (integer)
+}

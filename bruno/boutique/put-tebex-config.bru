@@ -1,0 +1,36 @@
+meta {
+  name: PUT /tebex/config
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{baseUrl}}/api/tebex/config
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "enabled": false,
+    "showPrice": false,
+    "removeOnRefund": false,
+    "mappings": [
+      {}
+    ],
+    "thanks": {}
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/tebex/config`
+
+  Permission requise : `tebex.manage`
+
+  Corps JSON :
+  - `enabled` (boolean)
+  - `showPrice` (boolean)
+  - `removeOnRefund` (boolean)
+  - `mappings` (array)
+  - `thanks` (object)
+}

@@ -1,0 +1,32 @@
+meta {
+  name: POST /tebex/payments/:id/link
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/tebex/payments/:id/link
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "discordId": null,
+    "remember": false
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/tebex/payments/:id/link`
+
+  Permission requise : `tebex.manage`
+
+  Corps JSON :
+  - `discordId` (null | string) — obligatoire
+  - `remember` (boolean)
+}

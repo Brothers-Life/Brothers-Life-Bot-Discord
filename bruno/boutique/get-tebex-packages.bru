@@ -1,0 +1,17 @@
+meta {
+  name: GET /tebex/packages
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/tebex/packages
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/tebex/packages`
+
+  Permission requise : `tebex.manage`
+}

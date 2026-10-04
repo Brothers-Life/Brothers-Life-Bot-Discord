@@ -140,6 +140,8 @@ async function main() {
 		// FiveM servers (status messages) and the bot status
 		every(60_000, () => core.fivem.tick(), 'FiveM failed'),
 		every(30_000, () => core.fivem.presenceTick(), 'Bot status failed'),
+		// Tebex store: new payments (roles, logs, thanks), refunds and chargebacks
+		every(2 * 60_000, () => core.tebex.tick(), 'Tebex poll failed', 'warn'),
 		// Streams and videos to announce
 		every(60_000, () => core.streams.tick(), 'Streams failed'),
 		// RSS / Atom feeds and TikTok (each feed has its own interval)
