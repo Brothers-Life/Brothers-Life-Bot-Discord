@@ -145,6 +145,7 @@ const TITLES = {
 	'antinuke.restore': 'Anti-nuke : rôles rendus',
 	'antinuke.dismiss': 'Anti-nuke : incident classé',
 	'antinuke.bot_kick': 'Anti-nuke : bot non autorisé expulsé',
+	'publicpage.settings': 'Page publique modifiée',
 	'stats.counter_add': 'Salon compteur ajouté',
 	'stats.counter_delete': 'Salon compteur supprimé',
 	'voice.hub_add': 'Salon « créer un vocal » ajouté',

@@ -13,7 +13,7 @@ const GROUPS = {
 	polls: 'Sondages', giveaways: 'Giveaways', feedback: 'Suggestions et bugs', recruitment: 'Candidatures', absences: 'Absences',
 	'rp-events': 'Événements RP', meetings: 'Réunions staff', 'meeting-actions': 'Réunions staff', voice: 'Salons vocaux perso', stats: 'Statistiques',
 	'custom-commands': 'Commandes perso', backups: 'Sauvegardes', templates: 'Modèles de serveur', streams: 'Streams', feeds: 'Flux RSS et TikTok', music: 'Musique', changelog: 'Changelog',
-	fivem: 'FiveM', 'fivem-data': 'Données FiveM', 'fivem-events': 'Annonces FiveM', tebex: 'Boutique',
+	fivem: 'FiveM', 'fivem-data': 'Données FiveM', 'fivem-events': 'Annonces FiveM', tebex: 'Boutique', 'public-page': 'Page publique',
 };
 
 const VERBS = { GET: 'Consulter', POST: 'Créer / agir', PUT: 'Remplacer', PATCH: 'Modifier', DELETE: 'Supprimer' };

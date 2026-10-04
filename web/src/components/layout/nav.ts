@@ -56,6 +56,7 @@ import {
   Plug,
   Wrench,
   ShoppingCart,
+  Globe,
 } from 'lucide-react'
 
 export type NavEntry = {
@@ -138,6 +139,7 @@ export const navSections: NavSection[] = [
       { title: 'Événements RP', url: '/rp-events', icon: CalendarDays, permission: 'rpevents.view' },
       { title: 'Sondages', url: '/polls', icon: Vote, permission: 'polls.view' },
       { title: 'Giveaways', url: '/giveaways', icon: Gift, permission: 'giveaways.view' },
+      { title: 'Page publique', url: '/public-page', icon: Globe, permission: 'public.manage', keywords: 'site vitrine statut règlement équipe lien' },
     ],
   },
   {

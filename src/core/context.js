@@ -55,6 +55,9 @@ import { createRpEvents } from './rpEvents.js';
 import { COMMANDS } from './commandCatalog.js';
 import { createPermissionSync } from './permissionSync.js';
 import { createAntinuke } from './antinuke.js';
+import { createNotifications } from './notifications.js';
+import { attachNotificationSources } from './notificationSources.js';
+import { createPublicPage } from './publicPage.js';
 import { definePermission } from './permissions.js';
 
 definePermission('members.view', { label: 'Rechercher des membres sur le réseau', category: 'Membres' });
@@ -189,5 +192,13 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 		sanctions.syncGuild(guild.id).catch(error => logger.error(`Ban sync failed on ${guild.name}:`, error));
 	});
 
-	return { db, config, executor, variables, settings, audit, network, ranks, logs, sessions, apiKeys, sanctions, sanctionTemplates, music, memberInsights, channelFeatures, verification, embedBuilder, appeals, channelSchedules, archives, meetings, fivemData, fivemRoles, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents, antinuke, fivemEvents, feeds, tebex };
+	const core = { db, config, executor, variables, settings, audit, network, ranks, logs, sessions, apiKeys, sanctions, sanctionTemplates, music, memberInsights, channelFeatures, verification, embedBuilder, appeals, channelSchedules, archives, meetings, fivemData, fivemRoles, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents, antinuke, fivemEvents, feeds, tebex };
+
+	// Panel notification center: other features call core.notifications.push({ permission, title, body, url, guildId })
+	core.notifications = createNotifications({ db });
+	attachNotificationSources({ notifications: core.notifications, audit, tickets, network, executor, logger });
+	// Public page (no login); the maintenance block shows only when a fivemEvents service exists
+	core.publicPage = createPublicPage({ settings, audit, network, ranks, executor, fivem, rpEvents, recruitment, logger, maintenance: () => core.fivemEvents?.publicState?.() ?? null });
+	logs.registerCategory('publicpage', 'Page publique (réglages)', auditTypes().publicpage);
+	return core;
 }
