@@ -42,6 +42,7 @@ import { createFeedback } from './feedback.js';
 import { createRecruitment } from './recruitment.js';
 import { createAbsences } from './absences.js';
 import { createStreams } from './streams.js';
+import { createFeeds } from './feeds.js';
 import { createFivem } from './fivem.js';
 import { createFivemEvents } from './fivemEvents.js';
 import { createDms } from './dms.js';
@@ -110,7 +111,8 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const recruitment = createRecruitment({ db, network, ranks, audit, executor, sanctions, stats, variables, logger });
 	logs.registerCategory('recruitment', 'Recrutement (candidatures, décisions)');
 	const absences = createAbsences({ db, network, ranks, audit, executor, settings, logger });
-	const streams = createStreams({ db, network, audit, executor, settings, logs, fetchImpl, logger });
+	const streams = createStreams({ db, network, audit, executor, settings, logs, variables, fetchImpl, logger });
+	const feeds = createFeeds({ db, network, audit, executor, logs, variables, fetchImpl, logger });
 	const fivem = createFivem({ db, network, audit, executor, settings, logs, fetchImpl, logger });
 	stats.addVariables(async () => fivem.variables());
 	const fivemEvents = createFivemEvents({ db, settings, audit, logs, executor, network, variables, fivem, logger });
@@ -185,5 +187,5 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 		sanctions.syncGuild(guild.id).catch(error => logger.error(`Ban sync failed on ${guild.name}:`, error));
 	});
 
-	return { db, config, executor, variables, settings, audit, network, ranks, logs, sessions, apiKeys, sanctions, sanctionTemplates, music, memberInsights, channelFeatures, verification, embedBuilder, appeals, channelSchedules, archives, meetings, fivemData, fivemRoles, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents, antinuke, fivemEvents };
+	return { db, config, executor, variables, settings, audit, network, ranks, logs, sessions, apiKeys, sanctions, sanctionTemplates, music, memberInsights, channelFeatures, verification, embedBuilder, appeals, channelSchedules, archives, meetings, fivemData, fivemRoles, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents, antinuke, fivemEvents, feeds };
 }

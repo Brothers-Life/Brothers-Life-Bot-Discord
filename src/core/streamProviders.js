@@ -1,6 +1,10 @@
 // Stream platforms: who is live, latest videos. Each function returns plain data, errors are thrown with a French message.
 
+import { findNode, nodeText, parseFeed } from './feedParser.js';
+
 const UA = { 'User-Agent': 'Mozilla/5.0 (compatible; BrothersLifeBot/1.0)', 'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8' };
+// YouTube pages asked from the EU may first redirect to a consent wall: this cookie declines the optional cookies
+const YT = { ...UA, Cookie: 'SOCS=CAI' };
 
 function chunk(list, size) {
 	const out = [];
@@ -71,35 +75,35 @@ export async function kickLive({ fetchImpl, token, clientId, clientSecret }, slu
 }
 
 // --- YouTube ----------------------------------------------------------------------------------------
-// "@handle", a channel URL or "UC…" -> channel id
+// "@handle", a channel link (/channel/UC…, /@nom, /c/nom, /user/nom) or "UC…" -> channel id
 export async function youtubeChannelId({ fetchImpl }, input) {
 	const value = String(input).trim();
 	const direct = /(UC[\w-]{22})/.exec(value);
 	if (direct) return direct[1];
-	const handle = /@[\w.-]+/.exec(value)?.[0];
-	if (!handle) throw new Error('Donne l’identifiant de la chaîne YouTube (@nom ou UC…).');
-	const response = await fetchImpl(`https://www.youtube.com/${handle}`, { headers: UA });
-	if (!response.ok) throw new Error(`Chaîne YouTube ${handle} introuvable.`);
+	const path = /youtube\.com\/((?:c|user)\/[\w.-]+|@[\w.%-]+)/i.exec(value)?.[1] ?? /^@[\w.-]+$/.exec(value)?.[0];
+	if (!path) throw new Error('Donne la chaîne YouTube : @nom, lien de la chaîne ou identifiant UC….');
+	const response = await fetchImpl(`https://www.youtube.com/${path}`, { headers: YT });
+	if (!response.ok) throw new Error(`Chaîne YouTube ${path} introuvable.`);
 	const html = await response.text();
-	const id = /"(?:channelId|externalId)":"(UC[\w-]{22})"/.exec(html)?.[1] ?? /channel\/(UC[\w-]{22})/.exec(html)?.[1];
-	if (!id) throw new Error(`Chaîne YouTube ${handle} introuvable.`);
+	const id = /<link rel="canonical" href="https:\/\/www\.youtube\.com\/channel\/(UC[\w-]{22})"/.exec(html)?.[1]
+		?? /"(?:externalId|channelId)":"(UC[\w-]{22})"/.exec(html)?.[1] ?? /channel\/(UC[\w-]{22})/.exec(html)?.[1];
+	if (!id) throw new Error(`Chaîne YouTube ${path} introuvable.`);
 	return id;
 }
 
-// Latest uploads from the public RSS feed (newest first); Shorts are recognised by their /shorts/ link
+// Latest uploads from the public Atom feed (newest first); Shorts are recognised by their /shorts/ link
 export async function youtubeVideos({ fetchImpl }, channelId) {
 	const response = await fetchImpl(`https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`, { headers: UA });
 	if (!response.ok) throw new Error(`Flux YouTube indisponible (HTTP ${response.status}).`);
-	const xml = await response.text();
-	const author = decode(/<author>\s*<name>([^<]*)<\/name>/.exec(xml)?.[1] ?? '');
-	return [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].map(([, entry]) => {
-		const id = /<yt:videoId>([^<]+)<\/yt:videoId>/.exec(entry)?.[1];
-		const link = /<link rel="alternate" href="([^"]+)"/.exec(entry)?.[1] ?? `https://www.youtube.com/watch?v=${id}`;
+	const feed = parseFeed(await response.text());
+	return feed.items.map((item) => {
+		const id = nodeText(findNode(item.node, 'yt:videoId')) || /(?:v=|shorts\/)([\w-]{11})/.exec(item.link ?? '')?.[1];
+		const url = item.link ?? `https://www.youtube.com/watch?v=${id}`;
 		return {
-			id, title: decode(/<title>([^<]*)<\/title>/.exec(entry)?.[1] ?? ''), url: link, short: link.includes('/shorts/'), name: author,
-			publishedAt: Date.parse(/<published>([^<]+)<\/published>/.exec(entry)?.[1] ?? '') || 0,
-			thumbnail: /<media:thumbnail url="([^"]+)"/.exec(entry)?.[1] ?? `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
-			viewers: Number(/<media:statistics views="(\d+)"/.exec(entry)?.[1] ?? 0),
+			id, title: item.title, url, short: url.includes('/shorts/'), name: feed.author || item.author || feed.title,
+			description: item.description, publishedAt: item.publishedAt ?? 0,
+			thumbnail: item.image ?? `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+			viewers: Number(findNode(item.node, 'media:statistics')?.attrs.views ?? 0),
 		};
 	}).filter(v => v.id).sort((a, b) => b.publishedAt - a.publishedAt);
 }
@@ -114,7 +118,7 @@ export async function youtubeLive({ fetchImpl, apiKey }, channelId) {
 		const id = item.id.videoId;
 		return { id, title: decode(item.snippet.title ?? ''), game: '', viewers: 0, name: item.snippet.channelTitle ?? '', thumbnail: `https://i.ytimg.com/vi/${id}/maxresdefault_live.jpg`, startedAt: null, url: `https://www.youtube.com/watch?v=${id}` };
 	}
-	const response = await fetchImpl(`https://www.youtube.com/channel/${channelId}/live`, { headers: UA });
+	const response = await fetchImpl(`https://www.youtube.com/channel/${channelId}/live`, { headers: YT });
 	if (!response.ok) return null;
 	const html = await response.text();
 	if (!/"isLiveNow":true/.test(html)) return null;

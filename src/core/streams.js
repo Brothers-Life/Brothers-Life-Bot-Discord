@@ -51,7 +51,7 @@ function durationText(ms) {
 	return h ? `${h} h ${String(minutes % 60).padStart(2, '0')}` : `${minutes} min`;
 }
 
-export function createStreams({ db, network, audit, executor, settings, logs, fetchImpl = fetch, logger = console, now = Date.now }) {
+export function createStreams({ db, network, audit, executor, settings, logs, variables = null, fetchImpl = fetch, logger = console, now = Date.now }) {
 	logs.registerCategory('stream', 'Notifications de streams et vidéos');
 	const token = createTokenCache({ fetchImpl, now });
 
@@ -120,12 +120,22 @@ export function createStreams({ db, network, audit, executor, settings, logs, fe
 	// Message of a live or a video, sent to every channel of the subscription
 	// `logAs`: kind written in the history (a test uses the live message)
 	async function notify(s, kind, data, logAs = kind) {
-		const payload = fillPayload(s.payloads[kind === 'live' ? 'live' : 'video'], {
+		const own = {
 			streamer: data.name || s.displayName, title: data.title, game: data.game || '—', url: data.url, thumbnail: data.thumbnail, viewers: data.viewers ?? 0,
-		});
+			// French names shared with the feed messages
+			'chaine.nom': data.name || s.displayName, 'video.titre': data.title, 'video.lien': data.url, 'video.image': data.thumbnail,
+		};
+		const template = s.payloads[kind === 'live' ? 'live' : 'video'];
+		const servers = new Map();
+		let payload = fillPayload(template, own);
 		const messages = [];
 		for (const target of s.targets) {
 			try {
+				// Common server variables ({server}, {date}…) of the target's server
+				if (variables) {
+					if (!servers.has(target.guildId)) servers.set(target.guildId, await variables.server(target.guildId).catch(() => ({})));
+					payload = fillPayload(template, { ...servers.get(target.guildId), ...own });
+				}
 				messages.push({ channelId: target.channelId, messageId: await executor.sendAnnouncement(target.channelId, payload, target) });
 			}
 			catch (error) {

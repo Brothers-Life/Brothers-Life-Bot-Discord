@@ -26,8 +26,8 @@ function str(value, max) {
 	return value;
 }
 
-// Besides https URLs: the avatar / server icon variables of welcome messages, the stream variables, and attached files
-const URL_TOKEN = /^(\{(user\.avatar|server\.icon|thumbnail|url)\}|attachment:\/\/[\w.-]+)$/;
+// Besides https URLs: the avatar / server icon variables of welcome messages, the stream and feed variables, and attached files
+const URL_TOKEN = /^(\{(user\.avatar|server\.icon|thumbnail|url|(?:item|video)\.(?:lien|image)|flux\.lien)\}|attachment:\/\/[\w.-]+)$/;
 
 function url(value, label, uploads) {
 	if (!value) return null;

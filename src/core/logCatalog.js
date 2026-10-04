@@ -106,7 +106,7 @@ export const LOG_PACKS = {
 			{ name: 'logs-vocal', categories: ['voice'] },
 			{ name: 'logs-serveur', categories: ['roles', 'channels', 'threads', 'server', 'integrations', 'permissions'] },
 			{ name: 'logs-staff', categories: ['ranks', 'staff_sync', 'tickets', 'recruitment', 'absences', 'dm', 'staffactivity'] },
-			{ name: 'logs-communaute', categories: ['announcements', 'polls', 'giveaways', 'feedback', 'rpevents', 'onboarding', 'changelog', 'stream', 'fivem', 'customcommands'] },
+			{ name: 'logs-communaute', categories: ['announcements', 'polls', 'giveaways', 'feedback', 'rpevents', 'onboarding', 'changelog', 'stream', 'feed', 'fivem', 'customcommands'] },
 			{ name: 'logs-bot', categories: ['network', 'panel', 'system', 'logs', 'backups', 'templates'], rest: true },
 		],
 	},

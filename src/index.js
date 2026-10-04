@@ -142,6 +142,8 @@ async function main() {
 		every(30_000, () => core.fivem.presenceTick(), 'Bot status failed'),
 		// Streams and videos to announce
 		every(60_000, () => core.streams.tick(), 'Streams failed'),
+		// RSS / Atom feeds and TikTok (each feed has its own interval)
+		every(60_000, () => core.feeds.tick(), 'Feeds failed'),
 		// Music: leaves when alone or with nothing to play, refreshes the now-playing message
 		every(30_000, () => core.music.tick(), 'Music tick failed'),
 		// Staff meetings: reminders, start, end

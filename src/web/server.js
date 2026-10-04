@@ -30,6 +30,7 @@ import { registerGiveawayRoutes } from './routes/giveaways.js';
 import { registerFeedbackRoutes } from './routes/feedback.js';
 import { registerStaffRoutes } from './routes/staff.js';
 import { registerStreamRoutes } from './routes/streams.js';
+import { registerFeedRoutes } from './routes/feeds.js';
 import { registerFivemRoutes } from './routes/fivem.js';
 import { registerFivemEventRoutes } from './routes/fivemEvents.js';
 import { registerDmRoutes } from './routes/dms.js';
@@ -116,6 +117,7 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	registerFeedbackRoutes(app, { core });
 	registerStaffRoutes(app, { core });
 	registerStreamRoutes(app, { core });
+	registerFeedRoutes(app, { core });
 	registerFivemRoutes(app, { core });
 	registerFivemEventRoutes(app, { core });
 	registerDmRoutes(app, { core });

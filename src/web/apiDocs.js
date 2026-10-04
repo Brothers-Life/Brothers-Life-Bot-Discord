@@ -12,7 +12,7 @@ const GROUPS = {
 	onboarding: 'Accueil', verification: 'Vérification', 'channel-features': 'Salons automatiques', 'channel-schedules': 'Horaires de salons', archives: 'Archives',
 	polls: 'Sondages', giveaways: 'Giveaways', feedback: 'Suggestions et bugs', recruitment: 'Candidatures', absences: 'Absences',
 	'rp-events': 'Événements RP', meetings: 'Réunions staff', 'meeting-actions': 'Réunions staff', voice: 'Salons vocaux perso', stats: 'Statistiques',
-	'custom-commands': 'Commandes perso', backups: 'Sauvegardes', templates: 'Modèles de serveur', streams: 'Streams', music: 'Musique', changelog: 'Changelog',
+	'custom-commands': 'Commandes perso', backups: 'Sauvegardes', templates: 'Modèles de serveur', streams: 'Streams', feeds: 'Flux RSS et TikTok', music: 'Musique', changelog: 'Changelog',
 	fivem: 'FiveM', 'fivem-data': 'Données FiveM', 'fivem-events': 'Annonces FiveM',
 };
 
