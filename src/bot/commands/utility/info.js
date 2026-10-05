@@ -1,5 +1,6 @@
 import { ChannelType, EmbedBuilder, GuildVerificationLevel, InteractionContextType, MessageFlags, PermissionFlagsBits, SlashCommandBuilder, version as djsVersion } from 'discord.js';
 import { createRequire } from 'node:module';
+import { openGiveawaysEmbed } from '../community/giveaway.js';
 
 const pkg = createRequire(import.meta.url)('../../../../package.json');
 const ts = (ms, style = 'D') => `<t:${Math.round(ms / 1000)}:${style}>`;
@@ -13,9 +14,14 @@ const KEY_PERMISSIONS = {
 
 export const data = new SlashCommandBuilder()
 	.setName('info')
-	.setDescription('Informations : serveur, avatar, rôle, salon, bot')
+	.setDescription('Informations : serveur, membre, avatar, rôle, salon, giveaways, bot')
 	.setContexts(InteractionContextType.Guild)
 	.addSubcommand(s => s.setName('serveur').setDescription('Informations sur ce serveur')
+		.addBooleanOption(o => o.setName('prive').setDescription('Réponse visible par toi seul')))
+	.addSubcommand(s => s.setName('membre').setDescription('Informations publiques sur un membre : arrivée, compte, rôles')
+		.addUserOption(o => o.setName('membre').setDescription('Membre (toi par défaut)'))
+		.addBooleanOption(o => o.setName('prive').setDescription('Réponse visible par toi seul')))
+	.addSubcommand(s => s.setName('giveaways').setDescription('Les giveaways en cours sur ce serveur')
 		.addBooleanOption(o => o.setName('prive').setDescription('Réponse visible par toi seul')))
 	.addSubcommand(s => s.setName('avatar').setDescription('Avatar (et bannière) d’un membre en grand')
 		.addUserOption(o => o.setName('membre').setDescription('Membre (toi par défaut)'))
@@ -67,6 +73,25 @@ async function avatarEmbed(interaction) {
 		.setDescription(links.join(' · '))
 		.setImage(server ?? global);
 	if (server) embed.setThumbnail(global);
+	return embed;
+}
+
+// Public profile only: nothing about sanctions or ranks (that is /fiche, for the staff)
+async function memberEmbed(interaction) {
+	const user = interaction.options.getUser('membre') ?? interaction.user;
+	const member = interaction.guild.members.cache.get(user.id) ?? await interaction.guild.members.fetch(user.id).catch(() => null);
+	const roles = member ? member.roles.cache.filter(r => r.id !== interaction.guild.id) : null;
+	const embed = new EmbedBuilder()
+		.setColor(member?.displayColor || 0xff9628)
+		.setTitle(member?.displayName ?? user.globalName ?? user.username)
+		.setThumbnail((member ?? user).displayAvatarURL({ size: 256 }))
+		.addFields(
+			{ name: 'Compte créé', value: `${ts(user.createdTimestamp)} (${ts(user.createdTimestamp, 'R')})`, inline: true },
+			{ name: 'Arrivé ici', value: member?.joinedTimestamp ? `${ts(member.joinedTimestamp)} (${ts(member.joinedTimestamp, 'R')})` : 'pas membre de ce serveur', inline: true },
+			{ name: 'Rôles', value: roles ? String(roles.size) : '—', inline: true },
+		)
+		.setFooter({ text: `@${user.username}` });
+	if (member?.premiumSinceTimestamp) embed.addFields({ name: 'Booste le serveur depuis', value: ts(member.premiumSinceTimestamp), inline: true });
 	return embed;
 }
 
@@ -139,6 +164,8 @@ export async function execute(interaction) {
 	const sub = interaction.options.getSubcommand();
 	let embed;
 	if (sub === 'serveur') embed = await serverEmbed(interaction.guild);
+	else if (sub === 'membre') embed = await memberEmbed(interaction);
+	else if (sub === 'giveaways') embed = openGiveawaysEmbed(interaction.client.core.giveaways, interaction.guildId);
 	else if (sub === 'avatar') embed = await avatarEmbed(interaction);
 	else if (sub === 'role') embed = roleEmbed(interaction.options.getRole('role'));
 	else if (sub === 'salon') embed = channelEmbed(interaction.options.getChannel('salon') ?? interaction.channel);

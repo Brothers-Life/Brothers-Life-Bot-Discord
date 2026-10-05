@@ -74,13 +74,14 @@ export function welcomePayload({ ticket, title, message, color, answers, pingRol
 		.setDescription(message)
 		.addFields(fitFields(fields, title, message));
 	const buttons = new ActionRowBuilder().addComponents(
-		new ButtonBuilder().setCustomId(`ticket:claim:${ticket.id}`).setLabel('Prendre en charge').setStyle(ButtonStyle.Primary),
-		new ButtonBuilder().setCustomId(`ticket:add:${ticket.id}`).setLabel('Ajouter un membre').setStyle(ButtonStyle.Secondary),
+		// 🛡️ = for the staff only (the member who opened the ticket sees the same message)
+		new ButtonBuilder().setCustomId(`ticket:claim:${ticket.id}`).setEmoji('🛡️').setLabel('Prendre en charge (staff)').setStyle(ButtonStyle.Primary),
+		new ButtonBuilder().setCustomId(`ticket:add:${ticket.id}`).setEmoji('🛡️').setLabel('Ajouter un membre (staff)').setStyle(ButtonStyle.Secondary),
 		new ButtonBuilder().setCustomId(`ticket:close:${ticket.id}`).setLabel('Fermer').setStyle(ButtonStyle.Danger),
 	);
 	const status = new StringSelectMenuBuilder()
 		.setCustomId(`ticket:status:${ticket.id}`)
-		.setPlaceholder('Changer le statut (staff)')
+		.setPlaceholder('🛡️ Changer le statut (staff)')
 		.addOptions(statuses.slice(0, 25).map((s) => {
 			const option = { label: s.label.slice(0, 100), value: s.key };
 			const emoji = emojiOf(s.emoji);
@@ -89,7 +90,7 @@ export function welcomePayload({ ticket, title, message, color, answers, pingRol
 		}));
 	const priority = new StringSelectMenuBuilder()
 		.setCustomId(`ticket:priority:${ticket.id}`)
-		.setPlaceholder('Priorité (staff)')
+		.setPlaceholder('🛡️ Priorité (staff)')
 		.addOptions(priorities.map(p => ({ label: p.label, value: p.key, emoji: PRIORITY_EMOJI[p.key] })));
 	return {
 		content: [`<@${ticket.openerId}>`, ...pingRoleIds.map(id => `<@&${id}>`)].join(' '),
@@ -99,13 +100,13 @@ export function welcomePayload({ ticket, title, message, color, answers, pingRol
 	};
 }
 
-export function noticePayload({ kind, ticket, reason, by, closeInHours }) {
+export function noticePayload({ kind, ticket, reason, by, closeInHours, answered = false }) {
 	if (kind === 'archived') {
 		return {
 			embeds: [new EmbedBuilder().setColor(0x8b8b8b).setTitle(`Ticket #${ticket.number} archivé`).setDescription(reason ? `Raison : ${reason}` : 'Le ticket est fermé. Le staff peut le rouvrir ou le supprimer.')],
 			components: [new ActionRowBuilder().addComponents(
 				new ButtonBuilder().setCustomId(`ticket:reopen:${ticket.id}`).setLabel('Rouvrir').setStyle(ButtonStyle.Success),
-				new ButtonBuilder().setCustomId(`ticket:transcript:${ticket.id}`).setLabel('Transcript').setStyle(ButtonStyle.Secondary),
+				new ButtonBuilder().setCustomId(`ticket:transcript:${ticket.id}`).setLabel('Conversation').setEmoji('📄').setStyle(ButtonStyle.Secondary),
 				new ButtonBuilder().setCustomId(`ticket:delete:${ticket.id}`).setLabel('Supprimer').setStyle(ButtonStyle.Danger),
 			)],
 		};
@@ -130,6 +131,8 @@ export function noticePayload({ kind, ticket, reason, by, closeInHours }) {
 		};
 	}
 	if (kind === 'close_refused') {
+		// answered: the member wrote in the ticket instead of clicking a button
+		if (answered) return { content: `Demande de fermeture annulée : <@${ticket.openerId}> a répondu.`, allowedMentions: { parse: [] } };
 		return {
 			content: `<@${by}> : <@${ticket.openerId}> a encore besoin d’aide, la demande de fermeture est annulée.`,
 			allowedMentions: { users: [by] },
@@ -146,7 +149,7 @@ export function noticePayload({ kind, ticket, reason, by, closeInHours }) {
 
 export function ratingPayload(ticket) {
 	return {
-		content: `Comment s’est passé ton ticket #${ticket.number} ? Donne une note de 1 à 5.`,
+		content: `Comment s’est passé ton ticket #${ticket.number}${ticket.guildName ? ` sur **${ticket.guildName}**` : ''} ? Donne une note de 1 à 5.`,
 		components: [new ActionRowBuilder().addComponents([1, 2, 3, 4, 5].map(n =>
 			new ButtonBuilder().setCustomId(`ticket:rate:${ticket.id}:${n}`).setLabel('★'.repeat(n)).setStyle(n >= 4 ? ButtonStyle.Success : n <= 2 ? ButtonStyle.Danger : ButtonStyle.Secondary),
 		))],
@@ -163,6 +166,17 @@ export function closeModal(ticketId, { requireReason }) {
 	return formModal(`ticket:closeform:${ticketId}`, 'Fermer le ticket', {
 		questions: [{ id: 'reason', type: 'short', label: requireReason ? 'Raison' : 'Raison (facultatif)', required: requireReason, maxLength: 200 }],
 	});
+}
+
+// Private confirmation before deleting the channel of an archived ticket
+export function deleteConfirmPayload(ticket) {
+	return {
+		content: `Supprimer le salon du ticket #${ticket.number} ? La conversation reste consultable depuis le panel.`,
+		components: [new ActionRowBuilder().addComponents(
+			new ButtonBuilder().setCustomId(`ticket:delconfirm:${ticket.id}`).setLabel('Confirmer').setStyle(ButtonStyle.Danger),
+			new ButtonBuilder().setCustomId(`ticket:delcancel:${ticket.id}`).setLabel('Annuler').setStyle(ButtonStyle.Secondary),
+		)],
+	};
 }
 
 export function addMemberMenu(ticketId) {

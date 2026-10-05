@@ -1,4 +1,4 @@
 {
-  "cooldown": "Veuillez patienter, vous êtes en cooldown pour `{command}`. Vous pouvez l'utiliser à nouveau {timestamp}.",
-  "command_execution": "Une erreur est survenue lors de l'exécution de cette commande !"
+  "cooldown": "Attends un peu : tu pourras recommencer {timestamp}.",
+  "command_execution": "Oups, ça n’a pas marché. Réessaie, et préviens le staff si ça continue."
 }

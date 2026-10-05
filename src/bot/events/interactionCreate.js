@@ -2,8 +2,12 @@ import { Events, MessageFlags, Collection } from 'discord.js';
 import logger from '../../utils/logger.js';
 import { t } from '../../utils/i18n.js';
 import { runCustomInteraction } from '../customCommands.js';
+import { AppError } from '../../core/errors.js';
+import { errorContent } from '../userError.js';
 
-const DEFAULT_COOLDOWN_SECONDS = 3;
+const DEFAULT_COOLDOWN_SECONDS = 0;
+// Bot messages are in French for everyone, whatever the Discord language of the member
+const LOCALE = 'fr';
 
 export const name = Events.InteractionCreate;
 export async function execute(interaction) {
@@ -24,45 +28,39 @@ export async function execute(interaction) {
 		}
 		return runCustomInteraction(interaction, custom).catch(async (error) => {
 			logger.error(`Custom command ${interaction.commandName} failed:`, error);
-			await safeReply(interaction, t('errors.command_execution', interaction.locale));
+			await safeReply(interaction, t('errors.command_execution', LOCALE));
 		});
 	}
 	if (!interaction.isChatInputCommand()) return;
 
 	const command = interaction.client.commands.get(interaction.commandName);
 
-	const { cooldowns } = interaction.client;
-
-	if (!cooldowns.has(command.data.name)) {
-		cooldowns.set(command.data.name, new Collection());
-	}
-
-	const now = Date.now();
-	const timestamps = cooldowns.get(command.data.name);
+	// No cooldown by default: only the commands that export one (cheap spam targets like /ping)
 	const cooldownAmount = (command.cooldown ?? DEFAULT_COOLDOWN_SECONDS) * 1_000;
-
-	if (timestamps.has(interaction.user.id)) {
-		const expirationTime = timestamps.get(interaction.user.id) + cooldownAmount;
-
+	if (cooldownAmount > 0) {
+		const { cooldowns } = interaction.client;
+		const sub = interaction.options.getSubcommand(false);
+		const key = sub ? `${command.data.name} ${sub}` : command.data.name;
+		if (!cooldowns.has(key)) cooldowns.set(key, new Collection());
+		const timestamps = cooldowns.get(key);
+		const now = Date.now();
+		const expirationTime = (timestamps.get(interaction.user.id) ?? 0) + cooldownAmount;
 		if (now < expirationTime) {
-			const expiredTimestamp = Math.round(expirationTime / 1_000);
-			return safeReply(interaction, t('errors.cooldown', interaction.locale, {
-				command: command.data.name,
-				timestamp: `<t:${expiredTimestamp}:R>`,
-			}));
+			return safeReply(interaction, t('errors.cooldown', LOCALE, { timestamp: `<t:${Math.ceil(expirationTime / 1_000)}:R>` }));
 		}
+		timestamps.set(interaction.user.id, now);
+		setTimeout(() => timestamps.delete(interaction.user.id), cooldownAmount);
 	}
-
-	timestamps.set(interaction.user.id, now);
-	setTimeout(() => timestamps.delete(interaction.user.id), cooldownAmount);
 
 	try {
 		await command.execute(interaction);
 	}
 	catch (error) {
-		const where = interaction.guildId ? `guild ${interaction.guildId}` : 'DM';
-		logger.error(`Error while executing /${command.data.name} (${where}, user ${interaction.user.id}):`, error);
-		await safeReply(interaction, t('errors.command_execution', interaction.locale));
+		if (!(error instanceof AppError)) {
+			const where = interaction.guildId ? `guild ${interaction.guildId}` : 'DM';
+			logger.error(`Error while executing /${command.data.name} (${where}, user ${interaction.user.id}):`, error);
+		}
+		await safeReply(interaction, errorContent(error));
 	}
 }
 
@@ -73,8 +71,8 @@ async function handleComponent(interaction) {
 		await handler.execute(interaction);
 	}
 	catch (error) {
-		logger.error(`Error while handling ${interaction.customId}:`, error);
-		await safeReply(interaction, t('errors.command_execution', interaction.locale));
+		if (!(error instanceof AppError)) logger.error(`Error while handling ${interaction.customId}:`, error);
+		await safeReply(interaction, errorContent(error));
 	}
 }
 

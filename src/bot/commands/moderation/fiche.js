@@ -1,7 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
 import { moderationCommand, runModeration } from '../../moderation.js';
 
-export const data = moderationCommand('userinfo', 'Fiche réseau d’un membre : rangs, serveurs, sanctions')
+export const data = moderationCommand('fiche', 'Voir la fiche réseau d’un membre : rangs, serveurs, sanctions')
 	.addUserOption(o => o.setName('membre').setDescription('Membre').setRequired(true));
 
 export async function execute(interaction) {

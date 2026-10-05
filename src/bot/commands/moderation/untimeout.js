@@ -1,6 +1,6 @@
 import { moderationCommand, runModeration, scopeOf, sanctionEmbed, resultsLine } from '../../moderation.js';
 
-export const data = moderationCommand('untimeout', 'Lever le timeout d’un membre')
+export const data = moderationCommand('untimeout', 'Lever le timeout d’un membre (réseau ou ce serveur)')
 	.addUserOption(o => o.setName('membre').setDescription('Membre').setRequired(true))
 	.addStringOption(o => o.setName('raison').setDescription('Raison').setMaxLength(500))
 	.addBooleanOption(o => o.setName('local').setDescription('Seulement sur ce serveur'));

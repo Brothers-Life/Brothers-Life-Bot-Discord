@@ -15,6 +15,10 @@ export function isKnownPermission(key) {
 	return registry.has(key);
 }
 
+export function permissionLabel(key) {
+	return registry.get(key)?.label ?? null;
+}
+
 definePermission('panel.access', { label: 'Accéder au panel', category: 'Panel' });
 definePermission('network.view', { label: 'Voir les serveurs du réseau', category: 'Réseau' });
 definePermission('network.manage', { label: 'Gérer le réseau (ajout, retrait, serveur principal)', category: 'Réseau' });

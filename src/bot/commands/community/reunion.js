@@ -1,11 +1,13 @@
-import { EmbedBuilder, InteractionContextType, MessageFlags, SlashCommandBuilder } from 'discord.js';
+import { EmbedBuilder, InteractionContextType, MessageFlags, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import { AppError, ValidationError } from '../../../core/errors.js';
 import { actorOf } from '../../moderation.js';
+import { errorContent } from '../../userError.js';
 
 export const data = new SlashCommandBuilder()
 	.setName('reunion')
 	.setDescription('Réunions du staff')
 	.setContexts(InteractionContextType.Guild)
+	.setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
 	.addSubcommand(s => s.setName('liste').setDescription('Les prochaines réunions'))
 	.addSubcommand(s => s.setName('presence').setDescription('Qui est là (réunion en cours)')
 		.addStringOption(o => o.setName('reunion').setDescription('Réunion (celle en cours par défaut)').setAutocomplete(true)))
@@ -102,6 +104,6 @@ export async function execute(interaction) {
 	}
 	catch (error) {
 		if (!(error instanceof AppError)) throw error;
-		await interaction.editReply(`Impossible : ${error.message}`);
+		await interaction.editReply(errorContent(error));
 	}
 }

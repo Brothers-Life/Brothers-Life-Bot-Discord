@@ -1,12 +1,22 @@
-import { ChannelType, EmbedBuilder, InteractionContextType, MessageFlags, SlashCommandBuilder } from 'discord.js';
+import { ChannelType, EmbedBuilder, InteractionContextType, MessageFlags, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import { AppError, ForbiddenError, ValidationError } from '../../../core/errors.js';
 import { parseDuration } from '../../../core/duration.js';
 import { actorOf } from '../../moderation.js';
+import { errorContent } from '../../userError.js';
 
+// Open giveaways (of one server, or of the whole network); members see them with /info giveaways
+export function openGiveawaysEmbed(giveaways, guildId = null) {
+	const open = giveaways.list().filter(g => g.status === 'open' && (!guildId || g.targets.some(t => t.guildId === guildId)));
+	return new EmbedBuilder().setColor(0xe5484d).setTitle('Giveaways en cours')
+		.setDescription(open.map(g => `**#${g.id}** ${g.prize} · ${g.participants} participant(s) · fin <t:${Math.round(g.endsAt / 1000)}:R>`).join('\n').slice(0, 4096) || 'Aucun giveaway en cours.');
+}
+
+// Staff only: hidden for members without "Moderate Members" (server admins can change it in Integrations)
 export const data = new SlashCommandBuilder()
 	.setName('giveaway')
-	.setDescription('Giveaways')
+	.setDescription('Lancer, finir ou relancer un giveaway')
 	.setContexts(InteractionContextType.Guild)
+	.setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
 	.addSubcommand(s => s.setName('creer').setDescription('Lancer un giveaway rapide (le panel offre toutes les options)')
 		.addStringOption(o => o.setName('lot').setDescription('Ce qu’on gagne').setRequired(true).setMaxLength(200))
 		.addStringOption(o => o.setName('duree').setDescription('Durée (ex : 1h, 3j)').setRequired(true))
@@ -25,14 +35,10 @@ export async function execute(interaction) {
 	try {
 		const actor = await actorOf(interaction);
 		switch (interaction.options.getSubcommand()) {
-		case 'liste': {
-			const open = giveaways.list().filter(g => g.status === 'open');
-			const embed = new EmbedBuilder().setColor(0xe5484d).setTitle('Giveaways en cours')
-				.setDescription(open.map(g => `**#${g.id}** ${g.prize} · ${g.participants} participant(s) · fin <t:${Math.round(g.endsAt / 1000)}:R>`).join('\n') || 'Aucun giveaway en cours.');
-			return await interaction.editReply({ embeds: [embed] });
-		}
+		case 'liste':
+			return await interaction.editReply({ embeds: [openGiveawaysEmbed(giveaways)] });
 		case 'creer': {
-			if (!actor.can('giveaways.manage')) throw new ForbiddenError('il te faut la permission de gérer les giveaways.');
+			if (!actor.can('giveaways.manage')) throw new ForbiddenError('Permission manquante : giveaways.manage');
 			const durationMs = parseDuration(interaction.options.getString('duree'));
 			if (!durationMs) throw new ValidationError('Durée invalide. Exemples : 30m, 2h, 3j.');
 			const g = giveaways.create(actor, {
@@ -55,6 +61,6 @@ export async function execute(interaction) {
 	}
 	catch (error) {
 		if (!(error instanceof AppError)) throw error;
-		await interaction.editReply(`Impossible : ${error.message}`);
+		await interaction.editReply(errorContent(error));
 	}
 }

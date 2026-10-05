@@ -1,9 +1,9 @@
 import { moderationCommand, runModeration, scopeOf, sanctionEmbed } from '../../moderation.js';
 
-export const data = moderationCommand('kick', 'Expulser un membre du réseau (ou de ce serveur)')
+export const data = moderationCommand('kick', 'Expulser un membre de ce serveur (ou du réseau)')
 	.addUserOption(o => o.setName('membre').setDescription('Membre à expulser').setRequired(true))
 	.addStringOption(o => o.setName('raison').setDescription('Raison').setMaxLength(500))
-	.addBooleanOption(o => o.setName('local').setDescription('Seulement sur ce serveur'));
+	.addBooleanOption(o => o.setName('reseau').setDescription('Expulser de tout le réseau (sinon : ce serveur seulement)'));
 
 export async function execute(interaction) {
 	await runModeration(interaction, async (actor) => {

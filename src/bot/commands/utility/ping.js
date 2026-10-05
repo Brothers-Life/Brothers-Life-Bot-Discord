@@ -1,11 +1,13 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { MessageFlags, SlashCommandBuilder } from 'discord.js';
 
-export const cooldown = 1;
+// Cheap to spam: the only command with a cooldown by default
+export const cooldown = 3;
 
 export const data = new SlashCommandBuilder()
 	.setName('ping')
-	.setDescription('Replies with Pong!');
+	.setDescription('Latence du bot');
 
 export async function execute(interaction) {
-	await interaction.reply('Pong!');
+	const ping = interaction.client.ws.ping;
+	await interaction.reply({ content: `Latence : ${ping >= 0 ? `${ping} ms` : 'en cours de mesure, réessaie dans un instant'}`, flags: MessageFlags.Ephemeral });
 }

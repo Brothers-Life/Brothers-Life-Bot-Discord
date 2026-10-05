@@ -1,7 +1,7 @@
 import { ChannelType } from 'discord.js';
 import { moderationCommand, runModeration } from '../../moderation.js';
 
-export const data = moderationCommand('unlock', 'Déverrouiller un salon')
+export const data = moderationCommand('unlock', 'Déverrouiller un salon verrouillé')
 	.addChannelOption(o => o.setName('salon').setDescription('Salon (par défaut : celui-ci)').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement));
 
 export async function execute(interaction) {

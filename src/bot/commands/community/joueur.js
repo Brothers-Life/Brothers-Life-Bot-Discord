@@ -1,12 +1,15 @@
-import { InteractionContextType, MessageFlags, SlashCommandBuilder } from 'discord.js';
+import { InteractionContextType, MessageFlags, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import { AppError, ForbiddenError, ValidationError } from '../../../core/errors.js';
 import { actorOf } from '../../moderation.js';
 import { hours, playerPayload } from '../../fivemDataUi.js';
+import { errorContent } from '../../userError.js';
 
+// Staff only: hidden for members without "Moderate Members" (server admins can change it in Integrations)
 export const data = new SlashCommandBuilder()
 	.setName('joueur')
 	.setDescription('Fiche FiveM d’un joueur : personnages, métier, temps de jeu, véhicules, sanctions')
 	.setContexts(InteractionContextType.Guild)
+	.setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
 	.addUserOption(o => o.setName('membre').setDescription('Membre Discord (compte FiveM lié)'))
 	.addStringOption(o => o.setName('recherche').setDescription('Nom RP, pseudo, citizen ID, téléphone ou plaque').setAutocomplete(true).setMaxLength(100));
 
@@ -46,6 +49,6 @@ export async function execute(interaction) {
 	}
 	catch (error) {
 		if (!(error instanceof AppError)) throw error;
-		await interaction.editReply(`Impossible : ${error.message}`);
+		await interaction.editReply(errorContent(error));
 	}
 }

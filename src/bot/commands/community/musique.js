@@ -2,7 +2,8 @@ import { InteractionContextType, MessageFlags, SlashCommandBuilder } from 'disco
 import { AppError, ValidationError } from '../../../core/errors.js';
 import { FILTERS, SPEEDS } from '../../../core/music/index.js';
 import { musicContext, playOrPick } from '../../components/music.js';
-import { clock, platformChoices, queuePayload, musicPayload } from '../../musicUi.js';
+import { clock, musicPanelUrl, platformChoices, queuePayload, musicPayload } from '../../musicUi.js';
+import { errorContent } from '../../userError.js';
 
 export const data = new SlashCommandBuilder()
 	.setName('musique')
@@ -28,7 +29,7 @@ export const data = new SlashCommandBuilder()
 		.addIntegerOption(o => o.setName('niveau').setDescription('0 à 200 %').setRequired(true).setMinValue(0).setMaxValue(200)))
 	.addSubcommand(s => s.setName('vitesse').setDescription('Vitesse de lecture')
 		.addNumberOption(o => o.setName('valeur').setDescription('Vitesse').setRequired(true).addChoices(...SPEEDS.map(v => ({ name: `×${v}`, value: v })))))
-	.addSubcommand(s => s.setName('aller').setDescription('Aller à un moment du titre')
+	.addSubcommand(s => s.setName('position').setDescription('Aller à un moment du titre en cours')
 		.addStringOption(o => o.setName('position').setDescription('Ex : 1:30, 90, +30, -10').setRequired(true).setMaxLength(12)))
 	.addSubcommand(s => s.setName('boucle').setDescription('Répéter le titre ou la file')
 		.addStringOption(o => o.setName('mode').setDescription('Mode').setRequired(true).addChoices(
@@ -45,7 +46,7 @@ export const data = new SlashCommandBuilder()
 	.addSubcommand(s => s.setName('deplacer').setDescription('Changer l’ordre de la file')
 		.addIntegerOption(o => o.setName('numero').setDescription('Numéro dans « À suivre »').setRequired(true).setMinValue(1))
 		.addIntegerOption(o => o.setName('vers').setDescription('Nouvelle place dans « À suivre »').setRequired(true).setMinValue(1)))
-	.addSubcommand(s => s.setName('sauter').setDescription('Aller directement à un titre de la file')
+	.addSubcommand(s => s.setName('jouer-numero').setDescription('Jouer tout de suite un titre de la file (par son numéro)')
 		.addIntegerOption(o => o.setName('numero').setDescription('Numéro dans « À suivre »').setRequired(true).setMinValue(1)))
 	.addSubcommand(s => s.setName('vider').setDescription('Vider la suite de la file'))
 	.addSubcommandGroup(g => g.setName('playlist').setDescription('Playlists enregistrées')
@@ -67,6 +68,12 @@ export const data = new SlashCommandBuilder()
 			.addStringOption(o => o.setName('nom').setDescription('Playlist').setRequired(true).setAutocomplete(true))));
 
 const URL_LIKE = /^https?:\/\//i;
+
+// What plays after a skip / previous / jump, said in the reply
+export function nowPlaying(state) {
+	const title = state?.current?.title;
+	return title ? `Au tour de « ${title} ».` : 'La file est terminée.';
+}
 
 export async function autocomplete(interaction) {
 	if (interaction.options.getSubcommandGroup(false) === 'playlist') {
@@ -125,13 +132,14 @@ export async function execute(interaction) {
 			if (!query) return await interaction.editReply(await openPlayer(interaction, ctx));
 			return await interaction.editReply(await playOrPick(interaction, ctx, query, interaction.options.getString('quand') ?? 'end', interaction.options.getString('plateforme')));
 		case 'pause': reply = (await music.pause(ctx, guildId)).paused ? '⏸️ En pause.' : '▶️ Reprise.'; break;
-		case 'passer':
-			await music.skip(ctx, guildId, interaction.options.getInteger('nombre') ?? 1);
-			reply = '⏭️ Titre passé.';
+		case 'passer': {
+			const count = interaction.options.getInteger('nombre') ?? 1;
+			const s = await music.skip(ctx, guildId, count);
+			reply = `⏭️ ${count > 1 ? `${count} titres passés` : 'Titre passé'}. ${nowPlaying(s)}`;
 			break;
+		}
 		case 'precedent':
-			await music.previous(ctx, guildId);
-			reply = '⏮️ OK.';
+			reply = `⏮️ ${nowPlaying(await music.previous(ctx, guildId))}`;
 			break;
 		case 'stop':
 			await music.stop(ctx, guildId);
@@ -146,7 +154,7 @@ export async function execute(interaction) {
 		}
 		case 'volume': reply = `🔊 Volume : ${(await music.setVolume(ctx, guildId, interaction.options.getInteger('niveau'))).volume} %.`; break;
 		case 'vitesse': reply = `⏩ Vitesse : ×${(await music.setSpeed(ctx, guildId, interaction.options.getNumber('valeur'))).speed}.`; break;
-		case 'aller': {
+		case 'position': {
 			const target = parsePosition(interaction.options.getString('position'), state().position ?? 0);
 			if (target === null) throw new ValidationError('Position invalide. Exemples : 1:30, 90, +30, -10.');
 			await music.seek(ctx, guildId, target);
@@ -171,9 +179,8 @@ export async function execute(interaction) {
 			music.move(ctx, guildId, upcomingIndex(interaction.options.getInteger('numero')), upcomingIndex(interaction.options.getInteger('vers')));
 			reply = '↕️ File réorganisée.';
 			break;
-		case 'sauter':
-			await music.jump(ctx, guildId, upcomingIndex(interaction.options.getInteger('numero')));
-			reply = '⏭️ OK.';
+		case 'jouer-numero':
+			reply = `⏭️ ${nowPlaying(await music.jump(ctx, guildId, upcomingIndex(interaction.options.getInteger('numero'))))}`;
 			break;
 		case 'vider':
 			music.clear(ctx, guildId);
@@ -184,7 +191,7 @@ export async function execute(interaction) {
 	}
 	catch (error) {
 		if (!(error instanceof AppError)) throw error;
-		await interaction.editReply({ content: `Impossible : ${error.message}` });
+		await interaction.editReply({ content: errorContent(error) });
 	}
 }
 
@@ -193,11 +200,14 @@ async function openPlayer(interaction, ctx) {
 	const { music } = interaction.client.core;
 	const { joined, state } = await music.join(ctx, interaction.guildId);
 	const where = state.textChannelId ? `<#${state.textChannelId}>` : 'ce salon';
+	// This reply is private: the panel link is only for those who may pilot the music from there
+	const panel = ctx.can?.('music.use') && musicPanelUrl(interaction.guildId);
+	const panelLine = panel ? `\n🖥️ [Gérer sur le panel](${panel})` : '';
 	if (!music.config().announce) {
 		const payload = musicPayload(state);
-		return { content: joined ? `🎧 Je suis dans <#${state.channelId}>.` : null, ...payload };
+		return { content: joined || panel ? `${joined ? `🎧 Je suis dans <#${state.channelId}>.` : ''}${panelLine}`.trim() : null, ...payload };
 	}
-	return { content: `${joined ? `🎧 J’arrive dans <#${state.channelId}>.` : '🎧 Je suis déjà là.'} Le lecteur est dans ${where} : ➕ **Ajouter** pour chercher un titre, ou \`/musique jouer recherche:…\`.`, components: [] };
+	return { content: `${joined ? `🎧 J’arrive dans <#${state.channelId}>.` : '🎧 Je suis déjà là.'} Le lecteur est dans ${where} : ➕ **Ajouter** pour chercher un titre, ou \`/musique jouer recherche:…\`.${panelLine}`, components: [] };
 }
 
 async function playlistCommand(interaction, sub) {
@@ -243,6 +253,6 @@ async function playlistCommand(interaction, sub) {
 	}
 	catch (error) {
 		if (!(error instanceof AppError)) throw error;
-		await interaction.editReply({ content: `Impossible : ${error.message}` });
+		await interaction.editReply({ content: errorContent(error) });
 	}
 }

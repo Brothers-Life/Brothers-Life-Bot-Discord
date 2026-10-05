@@ -5,7 +5,7 @@ import { moderationCommand, runModeration } from '../../moderation.js';
 const LABELS = { ban: 'Ban', kick: 'Kick', timeout: 'Timeout', warn: 'Warn', restrict: 'Restriction' };
 const clip = (text, max) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
-export const data = moderationCommand('historique', 'Sanctions d’un membre sur tout le réseau')
+export const data = moderationCommand('historique', 'Voir les sanctions d’un membre sur tout le réseau')
 	.addUserOption(o => o.setName('membre').setDescription('Membre').setRequired(true));
 
 export async function execute(interaction) {
