@@ -2,7 +2,7 @@
 
 Bot Discord multi-serveurs pour la communauté RP **Brothers Life** (serveur FiveM Qbox) : il gère plusieurs serveurs Discord comme un seul réseau et s'administre depuis un panel web React en français. Tout le texte visible (Discord, panel, commits) est en **français** ; le code et ses commentaires en anglais.
 
-État au 2026-10-05 : **v1.10.0 publiée**, tout est poussé, 447 tests.
+État au 2026-10-05 : **v1.10.0 publiée** ; en local et non publié : suivi des suggestions + `/bug`, correctifs de l’audit de logique humaine (commandes, panel, règles métier). 475 tests.
 
 ## Commandes
 
@@ -48,6 +48,12 @@ Avant tout commit : `npm run lint`, `npm test`, et pour le panel `npx tsc -b` + 
 ## Fonctionnalités (ce qui existe)
 
 Réseau de serveurs, rangs et permissions synchronisés, staff sync, sanctions (modèles, appels de sanction, restrictions, rôles temporaires), automod, anti-raid, tickets v2 (formulaires, statuts, variables, transcripts HTML style Discord : `src/core/transcript.js`, copie staff avec notes internes dans `data/transcripts/`, copie membre en MP), logs par catégorie/type avec packs et miroir réseau, annonces, embeds (créateur), messages privés, onboarding/bienvenue, vérification (bouton/captcha), salons automatiques (compteur, un mot, sticky, auto-publication, médias seuls), horaires d'ouverture de salons, archives HTML de salons, sondages, giveaways, suggestions/bugs, candidatures, absences (embed Valider/Refuser), événements RP, activité staff, réunions staff (convocation, présence vocale, compte rendu), salons vocaux perso, stats Discord (messages/vocal, carte de chaleur), fiches membres réseau, commandes perso, sauvegardes, modèles de serveur, streams, musique, FiveM (statut + données), API publique à clés (+ collection Bruno), anti-nuke, boutique Tebex, annonces txAdmin + maintenance FiveM, flux RSS/TikTok, page publique, notifications du panel.
+
+### Commandes et panel après l'audit de logique (non publié au 2026-10-05)
+- Commandes staff masquées aux membres (`setDefaultMemberPermissions(ModerateMembers)`). `/ticket` (membre) = `fermer` seulement ; gestion dans `/ticket-staff`. `/maintenance` (sorti de `/fivem`), `/fiche` (ex-`/userinfo`), `/sanction lever|modele` (ex-`/lever`, `/sanctionner`), `/aide`, `/info membre|giveaways`, `/bug` (boîtes de type bug) vs `/proposer` (type suggestion, `config.type` des boîtes).
+- Erreurs montrées aux membres : `src/bot/userError.js` (« Ton rang ne te permet pas de : <label> » via `permissionLabel`), messages toujours en français tutoyé, pas de cooldown global.
+- `/kick` = ce serveur par défaut (option `reseau`). Sanctions de l’anti-raid `automatic`, MP neutres, ignorées par l’éligibilité des candidatures ; une expulsion peut être retirée de l’historique.
+- Panel : `web/src/components/app/confirm.tsx` (`useConfirm`, `useDiscardGuard`, `SaveBar`, `AutoSaved`, `SeeAlso`) à réutiliser pour toute action destructive, brouillon ou enregistrement. Les « Tester » envoient sans mention après confirmation.
 
 ### Ajouts de la v1.10.0
 - **Anti-nuke** (`src/core/antinuke.js`, event `antinukeAuditLog.js`) : limites par action lues dans le journal d'audit Discord, comptées sur tout le réseau ; quarantaine (rôles dangereux retirés partout, rendus en 1 clic), alerte log + MP chef. **Désactivé par défaut.** Config dans `settings` `antinuke.config`.
