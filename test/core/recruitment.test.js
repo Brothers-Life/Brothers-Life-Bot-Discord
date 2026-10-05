@@ -149,3 +149,29 @@ test('absences: request posted as an embed with Valider / Refuser, only the revi
 	assert.equal((await absences.reviewByButton(ALICE, [], next.id, true)).status, 'approved');
 	assert.match(executor.dms.at(-1)[1], /validée/);
 });
+
+test('decision: the candidate leaves the interview channel; the delay counts from the decision and ignores a withdrawal', async () => {
+	const { recruitment, owner, executor, advance } = await setup();
+	const removed = [];
+	executor.removeChannelMember = async (channelId, userId) => {
+		removed.push([channelId, userId]);
+	};
+	const position = recruitment.savePosition(owner, MAIN, { name: 'Helper', config: { form: { steps: [{ questions: [{ id: 'why', label: 'Pourquoi ?' }] }] }, cooldownDays: 7 } });
+
+	// Withdrawn: no delay, and the interview channel is closed to the candidate
+	const first = await apply(recruitment, position.id, [{ why: 'Motivé' }]);
+	await recruitment.setStatus(owner, first.id, 'interview');
+	await recruitment.setStatus({ id: CANDIDATE, can: () => false }, first.id, 'withdrawn');
+	assert.deepEqual(removed, [['830000000000000001', CANDIDATE]]);
+
+	// Decided 10 days after applying: the 7 days count from the decision
+	const second = await apply(recruitment, position.id, [{ why: 'Encore motivé' }]);
+	advance(10 * 86_400_000);
+	await recruitment.setStatus(owner, second.id, 'interview');
+	await recruitment.setStatus(owner, second.id, 'rejected', { reason: 'Pas assez d’expérience' });
+	assert.equal(removed.length, 2);
+	assert.match(executor.dms.at(-1)[1], /pas été retenue[\s\S]*Pas assez d’expérience/);
+	await assert.rejects(recruitment.startApplication(position.id, CANDIDATE, MAIN), /dans 7 jour/);
+	advance(7 * 86_400_000 + 60_000);
+	await recruitment.startApplication(position.id, CANDIDATE, MAIN);
+});

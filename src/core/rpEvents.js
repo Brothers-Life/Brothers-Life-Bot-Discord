@@ -128,6 +128,19 @@ export function createRpEvents({ db, network, audit, executor, uploads = null, l
 		}
 	}
 
+	// Free seats (capacity raised or removed): the waiting list moves up in order. Returns who got a seat
+	function promoteWaitlist(e) {
+		const promoted = [];
+		let going = e.counts.going;
+		for (const r of e.rsvps.filter(x => x.status === 'waitlist')) {
+			if (e.capacity !== null && going >= e.capacity) break;
+			q.upsertRsvp.run(e.id, r.userId, 'going', now());
+			promoted.push(r.userId);
+			going += 1;
+		}
+		return promoted;
+	}
+
 	return {
 		list: () => q.list.all().map(toEvent),
 		get: getOrThrow,
@@ -145,9 +158,23 @@ export function createRpEvents({ db, network, audit, executor, uploads = null, l
 			let id = current?.id;
 			if (current) q.update.run({ ...row, id });
 			else id = Number(q.insert.run(row).lastInsertRowid);
+			const moved = current && current.startsAt !== c.startsAt;
+			// New date: the reminders are sent again before it
+			if (moved) q.setReminded.run('[]', id);
+			const promoted = current ? promoteWaitlist(getOrThrow(id)) : [];
 			const e = getOrThrow(id);
 			// New channels get the message, the others are edited
 			await refreshMessages(e, { create: true });
+			if (moved) {
+				const when = `<t:${Math.floor(e.startsAt / 1000)}:F>`;
+				for (const r of e.rsvps) await executor.sendDM(r.userId, `📅 L’événement « ${e.title} » a été déplacé au ${when}.`).catch(() => null);
+			}
+			for (const userId of promoted) {
+				await executor.sendDM(userId, `🎟️ Des places ont été ajoutées : tu es inscrit à « ${e.title} » (<t:${Math.floor(e.startsAt / 1000)}:F>).`).catch(() => null);
+				if (e.status === 'live') {
+					for (const [guildId, roleId] of Object.entries(e.roles)) await executor.addRole(guildId, userId, roleId, `Événement « ${e.title} »`).catch(() => null);
+				}
+			}
 			record(actor, current ? 'rpevents.update' : 'rpevents.create', e, { when: new Date(e.startsAt).toISOString() });
 			return getOrThrow(id);
 		},
@@ -160,7 +187,8 @@ export function createRpEvents({ db, network, audit, executor, uploads = null, l
 			q.setStatus.run('cancelled', now(), id);
 			const cancelled = getOrThrow(id);
 			await refreshMessages(cancelled);
-			for (const r of cancelled.rsvps.filter(x => x.status !== 'maybe')) {
+			// Everyone who answered: registered, maybe and waiting list
+			for (const r of cancelled.rsvps) {
 				await executor.sendDM(r.userId, `❌ L’événement « ${e.title} » est annulé.${reason ? ` ${String(reason).slice(0, 300)}` : ''}`).catch(() => null);
 			}
 			record(actor, 'rpevents.cancel', e, { reason: reason || null });

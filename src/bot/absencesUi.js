@@ -1,4 +1,12 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
+
+// Refusal: an optional reason, sent to the person in DM (customId abs:rejectform:<id>)
+export function rejectModal(absenceId) {
+	return new ModalBuilder().setCustomId(`abs:rejectform:${absenceId}`).setTitle('Refuser l’absence').addComponents(
+		new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Raison du refus (facultatif, envoyée en MP)')
+			.setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(500)),
+	);
+}
 
 const STATUS = {
 	pending: { color: 0xf5a524, label: '⏳ En attente de validation' },

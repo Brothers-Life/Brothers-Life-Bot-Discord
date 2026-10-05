@@ -69,3 +69,29 @@ test('reminders once, participant role while it lasts, ended at the end; cancel 
 	await assert.rejects(rpEvents.save({ id: '1', can: () => false }, { title: 'x' }), ForbiddenError);
 	await assert.rejects(rpEvents.save(owner, { title: 'x', startsAt: at() + HOUR, endsAt: at(), targets: [{ guildId: MAIN, channelId: CHANNEL }] }), /après le début/);
 });
+
+test('update: a new date resets the reminders and warns everyone; more seats promote the waiting list; cancel warns maybe and waiting too', async () => {
+	const { rpEvents, owner, executor, at, advance } = await setup();
+	const DAVE = '300000000000000042';
+	const input = { title: 'Braquage', startsAt: at() + 2 * HOUR, endsAt: at() + 3 * HOUR, capacity: 1, reminders: [60], targets: [{ guildId: MAIN, channelId: CHANNEL }] };
+	const e = await rpEvents.save(owner, input);
+	await rpEvents.rsvp(ALICE, e.id, 'going');
+	await rpEvents.rsvp(BOB, e.id, 'going');
+	await rpEvents.rsvp(CAROL, e.id, 'maybe');
+	await rpEvents.rsvp(DAVE, e.id, 'going');
+	advance(HOUR + 1);
+	await rpEvents.tick();
+	assert.deepEqual(rpEvents.get(e.id).reminded, [60]);
+
+	executor.dms.length = 0;
+	const moved = await rpEvents.save(owner, { ...input, id: e.id, startsAt: at() + 5 * HOUR, endsAt: at() + 6 * HOUR, capacity: 2 });
+	assert.deepEqual(moved.reminded, [], 'reminders sent again before the new date');
+	assert.deepEqual(executor.dms.filter(d => /a été déplacé au/.test(d[1])).map(d => d[0]).sort(), [ALICE, BOB, CAROL, DAVE].sort());
+	assert.equal(moved.rsvps.find(r => r.userId === BOB).status, 'going', 'first waiting promoted');
+	assert.equal(moved.rsvps.find(r => r.userId === DAVE).status, 'waitlist');
+	assert.ok(executor.dms.some(d => d[0] === BOB && /places ont été ajoutées/.test(d[1])));
+
+	executor.dms.length = 0;
+	await rpEvents.cancel(owner, e.id, 'Météo');
+	assert.deepEqual(executor.dms.filter(d => /annulé/.test(d[1])).map(d => d[0]).sort(), [ALICE, BOB, CAROL, DAVE].sort());
+});

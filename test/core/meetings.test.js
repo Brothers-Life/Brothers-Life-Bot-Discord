@@ -70,7 +70,38 @@ test('meeting: convocation by rank and role, answers (absent with a reason), rem
 
 	const stats = meetings.stats();
 	assert.equal(stats.meetings, 1);
-	assert.deepEqual(stats.people.find(p => p.userId === BOB), { userId: BOB, invited: 1, present: 0, late: 0, excused: 1, absent: 0, minutes: 0, rate: 0 });
+	assert.deepEqual(stats.people.find(p => p.userId === BOB), { userId: BOB, invited: 1, present: 0, late: 0, excused: 1, absent: 0, minutes: 0, rate: 100 }, 'being excused does not lower the rate');
+});
+
+test('meeting: an invitee on a validated absence is excused; a new date resets the answers and asks everyone again', async () => {
+	const { core, meetings, owner, executor, at, advance } = await setup();
+	const { createAbsences } = await import('../../src/core/absences.js');
+	const absences = createAbsences({ db: core.db, network: core.network, ranks: core.ranks, audit: core.audit, executor, settings: core.settings, logger: { warn: () => undefined }, now: at });
+	await absences.declare(owner, { userId: BOB, startAt: at(), endAt: at() + 2 * 86_400_000, reason: 'Vacances' });
+	const planned = await absences.declare(owner, { userId: CAROL, startAt: at() + 10 * MINUTE, endAt: at() + 2 * 86_400_000 });
+	assert.equal(planned.status, 'approved');
+	await absences.cancel(owner, planned.id);
+
+	const m = await meetings.create(owner, { guildId: MAIN, title: 'Point', startsAt: at() + 60 * MINUTE, durationMinutes: 30, voiceChannelId: VOICE, invites: { userIds: [ALICE, BOB, CAROL] } });
+	assert.equal(meetings.get(m.id).invitees.find(i => i.userId === BOB).onLeave, true);
+	await meetings.rsvp(ALICE, m.id, 'yes');
+	await meetings.rsvp(CAROL, m.id, 'no', 'Malade');
+
+	executor.meetingDMs.length = 0;
+	const moved = await meetings.update(owner, m.id, { ...m, startsAt: at() + 120 * MINUTE });
+	assert.deepEqual(moved.answers, { yes: 0, maybe: 0, no: 0, pending: 3 }, 'answers back to pending');
+	assert.deepEqual(executor.meetingDMs.filter(d => d.kind === 'moved').map(d => d.userId).sort(), [ALICE, BOB, CAROL].sort(), 'even the ones who had said no');
+
+	executor.voice.set(VOICE, [ALICE]);
+	advance(120 * MINUTE);
+	await meetings.tick();
+	advance(30 * MINUTE);
+	const { meeting } = await meetings.end(owner, m.id);
+	const people = Object.fromEntries(meeting.report.people.map(p => [p.userId, p.status]));
+	assert.deepEqual(people, { [ALICE]: 'present', [BOB]: 'excused', [CAROL]: 'absent' });
+	assert.match(meeting.report.people.find(p => p.userId === BOB).reason, /En absence · Vacances/);
+	assert.equal(meetings.stats().people.find(p => p.userId === BOB).rate, 100);
+	assert.equal(meetings.stats().people.find(p => p.userId === CAROL).rate, 0);
 });
 
 test('meeting: changes, cancellation, a series planned again, the end once the channel is empty, checks', async () => {

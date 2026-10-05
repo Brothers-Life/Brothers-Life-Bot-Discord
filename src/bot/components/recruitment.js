@@ -3,6 +3,7 @@ import { AppError } from '../../core/errors.js';
 import { showFormModal, readModal, fromEphemeralMessage } from '../forms.js';
 import { nextStepPayload } from '../ticketsUi.js';
 import { actorOf } from '../moderation.js';
+import { decisionModal } from '../recruitmentUi.js';
 
 // customId: rc:<action>:<id>[:<extra>]
 export const prefix = 'rc';
@@ -56,9 +57,19 @@ export async function execute(interaction) {
 			return await interaction.editReply('Vote enregistré.');
 		}
 		case 'status': {
+			const status = interaction.values[0];
+			// Accept / refuse: first a modal for an optional reason sent to the candidate
+			if (['accepted', 'rejected'].includes(status)) return await interaction.showModal(decisionModal(id, status));
 			await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-			await recruitment.setStatus(await actorOf(interaction), id, interaction.values[0]);
+			await recruitment.setStatus(await actorOf(interaction), id, status);
 			return await interaction.editReply('Décision enregistrée : le candidat est prévenu.');
+		}
+		case 'decide': {
+			if (!['accepted', 'rejected'].includes(extra)) return;
+			await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+			const reason = (interaction.fields.getTextInputValue('reason') ?? '').trim();
+			await recruitment.setStatus(await actorOf(interaction), id, extra, { reason });
+			return await interaction.editReply(extra === 'accepted' ? '✅ Candidature acceptée : le candidat est prévenu.' : '❌ Candidature refusée : le candidat est prévenu.');
 		}
 		}
 	}
