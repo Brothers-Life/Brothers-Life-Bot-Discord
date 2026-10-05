@@ -9,7 +9,7 @@ definePermission('commands.slowmode', { label: '/slowmode : régler le mode lent
 definePermission('commands.roles', { label: '/role : donner ou retirer des rôles (aussi temporaires)', category: 'Commandes' });
 definePermission('commands.nick', { label: '/nick : changer le pseudo d’un membre', category: 'Commandes' });
 definePermission('commands.voice', { label: '/voc : déconnecter, déplacer, rendre muet en vocal', category: 'Commandes' });
-definePermission('commands.userinfo', { label: '/userinfo : fiche d’un membre', category: 'Commandes' });
+definePermission('commands.userinfo', { label: '/fiche : fiche d’un membre', category: 'Commandes' });
 
 const MAX_SLOWMODE = 21_600;
 const MAX_TEMP_ROLE_MS = 365 * 86_400_000;
@@ -225,7 +225,7 @@ export function createModeration({ db, network, ranks, audit, executor, settings
 			return expired;
 		},
 
-		// /userinfo: the network profile of someone, as the panel shows it
+		// /fiche: the network profile of someone, as the panel shows it
 		async userInfo(actor, userId) {
 			need(actor, 'commands.userinfo');
 			const profile = await members.lookup(userId);

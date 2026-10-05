@@ -8,7 +8,7 @@ const TYPES = new Set(['ban', 'kick', 'timeout', 'warn', 'restrict']);
 const DELETE_WINDOWS = new Set([0, 3600, 86400, 604800]);
 const MAX_TIMEOUT = 28 * 86_400_000;
 
-// Sanction templates: a base (type, reason, duration, scope) picked from the panel or /sanctionner.
+// Sanction templates: a base (type, reason, duration, scope) picked from the panel or /sanction modele.
 // Everything stays adjustable when sanctioning: the template only fills the form.
 export function createSanctionTemplates({ db, audit, restrictions, now = Date.now }) {
 	const q = {
@@ -67,7 +67,7 @@ export function createSanctionTemplates({ db, audit, restrictions, now = Date.no
 			return template;
 		},
 
-		// Search by name (autocomplete of /sanctionner), only templates the person may apply
+		// Search by name (autocomplete of /sanction modele), only templates the person may apply
 		suggest(actor, typed = '', limit = 25) {
 			const text = String(typed).toLowerCase();
 			return service.list().filter(t => actor.can(`sanctions.${t.type}`) && (!text || t.name.toLowerCase().includes(text) || t.reason.toLowerCase().includes(text))).slice(0, limit);
