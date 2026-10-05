@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { fitFields } from './ticketsUi.js';
 
 const STATUS_OPTIONS = [
@@ -48,4 +48,14 @@ export function applicationPayload({ position, application: a, status }) {
 			.addOptions(STATUS_OPTIONS.map(([value, label, emoji]) => ({ value, label, emoji })))),
 	] : [];
 	return { embeds: [embed], components };
+}
+
+// Final decision from the menu: an optional word for the candidate, added to the DM (customId rc:decide:<id>:<accepted|rejected>)
+export function decisionModal(applicationId, status) {
+	const accepted = status === 'accepted';
+	return new ModalBuilder().setCustomId(`rc:decide:${applicationId}:${status}`).setTitle(accepted ? 'Accepter la candidature' : 'Refuser la candidature').addComponents(
+		new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason')
+			.setLabel(accepted ? 'Mot pour le candidat (facultatif)' : 'Raison du refus (facultatif, en MP)')
+			.setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(500)),
+	);
 }

@@ -91,6 +91,8 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 		`),
 		get: db.prepare('SELECT * FROM recruit_applications WHERE id = ?'),
 		lastOf: db.prepare('SELECT * FROM recruit_applications WHERE position_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 1'),
+		// Last decision of the staff (a withdrawn application does not delay the next one)
+		lastDecided: db.prepare('SELECT * FROM recruit_applications WHERE position_id = ? AND user_id = ? AND status IN (\'accepted\', \'rejected\') ORDER BY COALESCE(decided_at, created_at) DESC LIMIT 1'),
 		setStatus: db.prepare('UPDATE recruit_applications SET status = ?, history = ?, decided_by = ?, decided_at = ?, updated_at = ? WHERE id = ?'),
 		setReview: db.prepare('UPDATE recruit_applications SET review_channel_id = ?, review_message_id = ?, thread_id = ? WHERE id = ?'),
 		setInterview: db.prepare('UPDATE recruit_applications SET interview_channel_id = ? WHERE id = ?'),
@@ -222,8 +224,11 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 			if (!position.config.open || (position.config.closesAt && position.config.closesAt <= now())) throw new ValidationError('Les candidatures pour ce poste sont fermées.');
 			const last = toApplication(q.lastOf.get(positionId, userId));
 			if (last && ['received', 'review', 'interview'].includes(last.status)) throw new ValidationError('Tu as déjà une candidature en cours pour ce poste.');
-			if (last && position.config.cooldownDays && last.createdAt > now() - position.config.cooldownDays * DAY_MS) {
-				throw new ValidationError(`Tu pourras repostuler à ce poste dans ${Math.ceil((last.createdAt + position.config.cooldownDays * DAY_MS - now()) / DAY_MS)} jour(s).`);
+			// The delay counts from the decision; a withdrawn application does not count
+			const decided = position.config.cooldownDays ? toApplication(q.lastDecided.get(positionId, userId)) : null;
+			const decidedAt = decided ? decided.decidedAt ?? decided.createdAt : null;
+			if (decided && decidedAt > now() - position.config.cooldownDays * DAY_MS) {
+				throw new ValidationError(`Tu pourras repostuler à ce poste dans ${Math.ceil((decidedAt + position.config.cooldownDays * DAY_MS - now()) / DAY_MS)} jour(s).`);
 			}
 			const reasons = await requirements(position, userId, guildId);
 			if (reasons.length) throw new ValidationError(`Tu ne remplis pas les conditions :\n• ${reasons.join('\n• ')}`);
@@ -316,6 +321,11 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 					return null;
 				});
 				if (channelId) q.setInterview.run(channelId, applicationId);
+			}
+			// Interview over: the candidate no longer sees the channel (the staff keeps its history)
+			if (final && application.interviewChannelId) {
+				await executor.removeChannelMember(application.interviewChannelId, application.userId)
+					.catch(error => logger.warn(`Interview channel of #${applicationId} not closed:`, error.message));
 			}
 			if (status === 'accepted') {
 				for (const roleId of position.config.acceptRoleIds) {

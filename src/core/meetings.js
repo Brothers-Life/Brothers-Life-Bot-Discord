@@ -76,6 +76,9 @@ export function createMeetings({ db, network, ranks, audit, executor, logs, logg
 		doneAction: db.prepare('UPDATE meeting_actions SET done_at = ? WHERE id = ?'),
 		removeAction: db.prepare('DELETE FROM meeting_actions WHERE id = ?'),
 		history: db.prepare('SELECT * FROM meetings WHERE status = \'ended\' AND started_at >= ? ORDER BY started_at'),
+		// Validated staff absences (planned, in progress or over) covering a moment
+		onLeave: db.prepare('SELECT user_id, reason FROM absences WHERE status IN (\'approved\', \'active\', \'ended\') AND start_at <= ? AND end_at >= ?'),
+		resetAnswers: db.prepare('UPDATE meeting_invites SET rsvp = \'pending\', reason = NULL, responded_at = NULL WHERE meeting_id = ?'),
 	};
 
 	const toMeeting = row => row && ({
@@ -107,7 +110,12 @@ export function createMeetings({ db, network, ranks, audit, executor, logs, logg
 		return [...out];
 	}
 
-	// Who came, how long, late or not, excused or not
+	// userId -> reason of the validated absence covering the start of the meeting
+	function onLeave(meeting) {
+		return new Map(q.onLeave.all(meeting.startsAt, meeting.startsAt).map(row => [row.user_id, row.reason]));
+	}
+
+	// Who came, how long, late or not, excused (answered "absent" or on a validated absence) or not
 	function report(meeting) {
 		const invites = q.invites.all(meeting.id);
 		const stays = q.attendance.all(meeting.id);
@@ -122,12 +130,22 @@ export function createMeetings({ db, network, ranks, audit, executor, logs, logg
 			entry.inVoice ||= s.left_at === null;
 			byUser.set(s.user_id, entry);
 		}
+		const leave = onLeave(meeting);
 		const people = invites.map((i) => {
 			const presence = byUser.get(i.user_id);
 			let status = 'absent';
-			if (presence) status = presence.firstJoin > reference + LATE_AFTER ? 'late' : 'present';
-			else if (i.rsvp === 'no') status = 'excused';
-			return { userId: i.user_id, invited: true, rsvp: i.rsvp, reason: i.reason, status, minutes: Math.round(presence?.minutes ?? 0), firstJoin: presence?.firstJoin ?? null, inVoice: presence?.inVoice ?? false };
+			let reason = i.reason;
+			if (presence) {
+				status = presence.firstJoin > reference + LATE_AFTER ? 'late' : 'present';
+			}
+			else if (i.rsvp === 'no') {
+				status = 'excused';
+			}
+			else if (leave.has(i.user_id)) {
+				status = 'excused';
+				reason = leave.get(i.user_id) ? `En absence · ${leave.get(i.user_id)}` : 'En absence';
+			}
+			return { userId: i.user_id, invited: true, rsvp: i.rsvp, reason, status, onLeave: leave.has(i.user_id), minutes: Math.round(presence?.minutes ?? 0), firstJoin: presence?.firstJoin ?? null, inVoice: presence?.inVoice ?? false };
 		});
 		for (const [userId, presence] of byUser) {
 			if (!invites.some(i => i.user_id === userId)) people.push({ userId, invited: false, rsvp: null, reason: null, status: 'guest', minutes: Math.round(presence.minutes), firstJoin: presence.firstJoin, inVoice: presence.inVoice });
@@ -139,11 +157,12 @@ export function createMeetings({ db, network, ranks, audit, executor, logs, logg
 	function view(meeting) {
 		const invites = q.invites.all(meeting.id);
 		const answers = Object.fromEntries(['yes', 'maybe', 'no', 'pending'].map(a => [a, invites.filter(i => i.rsvp === a).length]));
+		const leave = onLeave(meeting);
 		return {
 			...meeting,
 			endsAt: meeting.startsAt + meeting.durationMinutes * MINUTE,
 			answers,
-			invitees: invites.map(i => ({ userId: i.user_id, rsvp: i.rsvp, reason: i.reason, respondedAt: i.responded_at })),
+			invitees: invites.map(i => ({ userId: i.user_id, rsvp: i.rsvp, reason: i.reason, respondedAt: i.responded_at, onLeave: leave.has(i.user_id) })),
 			report: meeting.status === 'scheduled' ? null : report(meeting),
 			actions: q.actions.all(meeting.id).map(toAction),
 		};
@@ -204,7 +223,11 @@ export function createMeetings({ db, network, ranks, audit, executor, logs, logg
 			const data = normalizeMeeting({ ...input, startsAt: input.startsAt ?? before.startsAt }, { creating: input.startsAt !== undefined && input.startsAt !== before.startsAt, now: now() });
 			q.update.run({ ...data, id, agenda: JSON.stringify(data.agenda), invites: JSON.stringify(data.invites), reminders: JSON.stringify(data.reminders), recurrence: data.recurrence ? JSON.stringify(data.recurrence) : null, at: now() });
 			const moved = data.startsAt !== before.startsAt;
-			if (moved) q.reminded.run('[]', id);
+			// New date: the answers given for the old one no longer hold
+			if (moved) {
+				q.reminded.run('[]', id);
+				q.resetAnswers.run(id);
+			}
 			const people = await resolveInvitees(before.guildId, data.invites);
 			const known = new Set(q.invites.all(id).map(i => i.user_id));
 			const added = people.filter(p => !known.has(p));
@@ -215,7 +238,14 @@ export function createMeetings({ db, network, ranks, audit, executor, logs, logg
 			const meeting = getOrThrow(id);
 			await refreshMessage(meeting);
 			for (const userId of added) await executor.sendMeetingDM(userId, view(meeting), { kind: 'invite' }).catch(() => undefined);
-			if (moved) await dmAll(meeting, 'moved', `La réunion **${meeting.title}** est déplacée au <t:${Math.round(meeting.startsAt / 1000)}:F>.`);
+			// Everyone already invited (even those who had said no) is asked again
+			if (moved) {
+				const text = `La réunion **${meeting.title}** est déplacée au <t:${Math.round(meeting.startsAt / 1000)}:F>. Redonne ta réponse avec les boutons ci-dessous.`;
+				const v = view(meeting);
+				for (const invite of q.invites.all(id).filter(i => !added.includes(i.user_id))) {
+					await executor.sendMeetingDM(invite.user_id, v, { kind: 'moved', text }).catch(() => undefined);
+				}
+			}
 			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'meetings.update', guildId: meeting.guildId, target: String(id), details: { réunion: meeting.title } });
 			return service.get(id);
 		},
@@ -366,7 +396,12 @@ export function createMeetings({ db, network, ranks, audit, executor, logs, logg
 					people.set(p.userId, s);
 				}
 			}
-			return { meetings: meetings.length, people: [...people.values()].map(s => ({ ...s, rate: s.invited ? Math.round(((s.present + s.late) / s.invited) * 100) : 0 })).sort((a, b) => b.rate - a.rate || b.invited - a.invited) };
+			// Being excused does not lower the rate: only the meetings where the person was expected count
+			const rate = (s) => {
+				const expected = s.invited - s.excused;
+				return expected > 0 ? Math.round(((s.present + s.late) / expected) * 100) : 100;
+			};
+			return { meetings: meetings.length, people: [...people.values()].map(s => ({ ...s, rate: rate(s) })).sort((a, b) => b.rate - a.rate || b.invited - a.invited) };
 		},
 
 		// Every minute: reminders, start at the set time, end once the time is over and the channel is empty
