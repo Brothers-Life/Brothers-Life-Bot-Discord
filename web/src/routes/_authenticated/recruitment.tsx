@@ -10,6 +10,7 @@ import { useMe } from '@/hooks/use-me'
 import { Page, Section, EmptyState, Pill, StatCards, UserAvatar, GuildIcon } from '@/components/app/ui'
 import { CategorySelect, ChannelSelect, RolesPicker } from '@/components/app/pickers'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { useConfirm } from '@/components/app/confirm'
 import { FormBuilder } from '@/features/forms/form-builder'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -152,6 +153,28 @@ function ApplicationDialog({ id, data, guildId, onClose }: { id: number; data: P
   const decide = useMutation({ mutationFn: (status: string) => api(`/recruitment/applications/${id}/status`, { method: 'POST', body: { status, reason } }), onSuccess: () => { toast.success('Décision enregistrée, le candidat est prévenu'); setReason(''); refresh() } })
   const name = (userId: string) => a?.names[userId]?.name ?? userId
   const open = a && ['received', 'review', 'interview'].includes(a.status)
+  const { confirm, dialog } = useConfirm()
+  // Final decisions: the candidate gets a DM (and the roles on acceptance), so ask first
+  const decideFinal = async (status: 'accepted' | 'rejected') => {
+    if (!a) return
+    const position = data.positions.find((p) => p.id === a.positionId)
+    const roles = position?.config.acceptRoleIds.length ?? 0
+    const accept = status === 'accepted'
+    const ok = await confirm({
+      title: accept ? `Accepter ${name(a.userId)} ?` : `Refuser ${name(a.userId)} ?`,
+      desc: (
+        <div className='grid gap-2'>
+          <p>{accept
+            ? `Le candidat reçoit un MP d’acceptation${roles ? ` et ${roles} rôle${roles > 1 ? 's' : ''}` : ''}${position?.config.acceptRankId ? ', ainsi que son rang' : ''}.`
+            : 'Le candidat reçoit un MP de refus.'} La décision est définitive.</p>
+          <p>{reason.trim() ? <>Message ajouté au MP : « {reason.trim()} »</> : 'Aucun message personnel ajouté (champ « Message ajouté au MP » vide).'}</p>
+        </div>
+      ),
+      confirmText: accept ? 'Accepter' : 'Refuser',
+      destructive: !accept,
+    })
+    if (ok) decide.mutate(status)
+  }
   const myVote = a?.votes.find((v) => v.userId === me?.user.id)?.vote
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -202,13 +225,14 @@ function ApplicationDialog({ id, data, guildId, onClose }: { id: number; data: P
                 <div className='flex flex-wrap justify-end gap-2'>
                   {a.status === 'received' && <Button variant='outline' onClick={() => decide.mutate('review')}>🔎 En étude</Button>}
                   {a.status !== 'interview' && <Button variant='outline' onClick={() => decide.mutate('interview')}>🗣️ Entretien</Button>}
-                  <Button variant='destructive' onClick={() => decide.mutate('rejected')}>Refuser</Button>
-                  <Button variant='success' onClick={() => decide.mutate('accepted')}>Accepter</Button>
+                  <Button variant='destructive' disabled={decide.isPending} onClick={() => void decideFinal('rejected')}>Refuser</Button>
+                  <Button variant='success' disabled={decide.isPending} onClick={() => void decideFinal('accepted')}>Accepter</Button>
                 </div>
               </DialogFooter>
             )}
           </>
         )}
+        {dialog}
       </DialogContent>
     </Dialog>
   )

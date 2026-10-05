@@ -48,7 +48,7 @@ function FivemPlayersPage() {
   const [settings, setSettings] = useState(false)
   return (
     <Page
-      title='Données FiveM'
+      title='FiveM · Base de données'
       description='Tout ce que contient la base du serveur FiveM : joueurs, activité, métiers, véhicules, justice, carte, staff, économie et logs du jeu. Ce que chacun voit dépend de ses permissions.'
       actions={
         <div className='flex gap-2'>
@@ -421,7 +421,8 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
     onSuccess: () => { toast.success('Connexion enregistrée'); qc.invalidateQueries(); setForm(null) },
   })
   const test = useMutation({
-    mutationFn: () => api<{ version: string; tables: number; features: Record<string, boolean> }>('/fivem-data/test', { method: 'POST' }),
+    // Tests what is typed (not yet saved); an empty password reuses the saved one for the same host and user
+    mutationFn: () => api<{ version: string; tables: number; features: Record<string, boolean> }>('/fivem-data/test', { method: 'POST', body: f ? { host: f.host, port: f.port, database: f.database, user: f.user, password: f.password } : {} }),
     onSuccess: (r) => toast.success(`Connecté : ${r.tables} tables (MariaDB ${r.version.split('-')[0]})`),
   })
   const set = (patch: Partial<NonNullable<typeof f>>) => f && setForm({ ...f, ...patch })
@@ -444,11 +445,19 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
               <div className='grid gap-1.5'><Label htmlFor='db-user'>Utilisateur</Label><Input id='db-user' value={f.user} onChange={(e) => set({ user: e.target.value })} autoComplete='off' /></div>
             </div>
             <div className='grid gap-1.5'><Label htmlFor='db-pass'>Mot de passe</Label><Input id='db-pass' type='password' value={f.password} onChange={(e) => set({ password: e.target.value })} placeholder={data?.hasPassword ? 'inchangé' : ''} autoComplete='new-password' /></div>
-            {test.data && <div className='flex flex-wrap gap-1'>{Object.entries(test.data.features).map(([t, ok]) => <Pill key={t} tone={ok ? 'success' : 'neutral'}>{t}</Pill>)}</div>}
+            {test.data && (
+              <div className='grid gap-1 text-sm'>
+                <p className='text-success'>Connexion réussie : {test.data.tables} tables trouvées.</p>
+                <details className='text-xs text-muted-foreground'>
+                  <summary className='cursor-pointer'>Détails techniques (tables utilisées par le panel)</summary>
+                  <div className='mt-2 flex flex-wrap gap-1'>{Object.entries(test.data.features).map(([t, ok]) => <Pill key={t} tone={ok ? 'success' : 'neutral'}>{t}</Pill>)}</div>
+                </details>
+              </div>
+            )}
           </div>
         )}
         <DialogFooter>
-          <Button variant='outline' loading={test.isPending} onClick={() => test.mutate()}>Tester</Button>
+          <Button variant='outline' loading={test.isPending} onClick={() => test.mutate()}>Tester ces réglages</Button>
           <Button loading={save.isPending} disabled={!f} onClick={() => save.mutate()}>Enregistrer</Button>
         </DialogFooter>
       </DialogContent>

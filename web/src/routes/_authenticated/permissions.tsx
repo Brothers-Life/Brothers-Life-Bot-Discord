@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
@@ -10,6 +10,10 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
+
+import { SeeAlso, useConfirm } from '@/components/app/confirm'
+
+import { RANKS_SEE_ALSO, others } from '@/features/navigation/see-also'
 
 export const Route = createFileRoute('/_authenticated/permissions')({
   component: PermissionsPage,
@@ -46,8 +50,9 @@ function PermissionsPage() {
       description='Pour chaque rang, choisis les permissions Discord que ses rôles doivent avoir. Le bot applique le profil sur tous les serveurs et signale toutes les 6 heures les rôles qui ne le respectent plus. Les permissions des salons ne sont pas touchées.'
       actions={manage && drift.length > 0 && <Button onClick={() => setApplying('all')}>Tout appliquer ({drift.length})</Button>}
     >
+      <SeeAlso links={others(RANKS_SEE_ALSO, '/permissions')}>Ici : les droits Discord (salons, modération…) que doivent avoir les rôles de chaque rang.</SeeAlso>
       {isLoading && <Skeleton className='h-96 w-full' />}
-      {data && !data.ranks.length && <Section title='Aucun rang'><EmptyState title='Crée d’abord des rangs' /></Section>}
+      {data && !data.ranks.length && <Section title='Aucun rang'><EmptyState title='Crée d’abord des rangs'>Sur la page <Link to='/ranks' className='text-primary hover:underline'>Rangs</Link>.</EmptyState></Section>}
       {data && rank && (
         <div className='grid grid-cols-1 gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]'>
           <nav aria-label='Rangs' className='flex gap-1 overflow-x-auto lg:flex-col'>
@@ -100,7 +105,7 @@ function PermissionsPage() {
 
 function RowsTable({ rows, labels, hasProfile }: { rows: PermissionRow[]; labels: Map<string, string>; hasProfile: boolean }) {
   if (!hasProfile) return <EmptyState title='Pas de profil pour ce rang'>Coche des permissions ci-dessus puis enregistre.</EmptyState>
-  if (!rows.length) return <EmptyState title='Aucun rôle lié'>Lie ce rang à des rôles dans « Rôles du staff ».</EmptyState>
+  if (!rows.length) return <EmptyState title='Aucun rôle lié'>Lie ce rang à des rôles sur la page <Link to='/staff-roles' className='text-primary hover:underline'>Rôles du staff</Link>.</EmptyState>
   return (
     <ul className='divide-y'>
       {rows.map((r) => {
@@ -143,6 +148,7 @@ function ProfileEditor({ rankId, rankName, linkedRoles, catalogue, initial, edit
     return [...map]
   }, [catalogue])
   const dirty = JSON.stringify([...selected].sort()) !== JSON.stringify([...(initial ?? [])].sort()) || initial === null
+  const { confirm, dialog } = useConfirm()
 
   const save = useMutation({
     mutationFn: (permissions: string[] | null) => api(`/permissions/${rankId}`, { method: 'PUT', body: { permissions } }),
@@ -159,7 +165,10 @@ function ProfileEditor({ rankId, rankName, linkedRoles, catalogue, initial, edit
       description={`${linkedRoles} rôle${linkedRoles > 1 ? 's' : ''} lié${linkedRoles > 1 ? 's' : ''} à ce rang.`}
       actions={editable && (
         <div className='flex gap-2'>
-          {initial && <Button size='sm' variant='ghost' onClick={() => save.mutate(null)}>Supprimer le profil</Button>}
+          {initial && <Button size='sm' variant='ghost' onClick={async () => {
+            if (await confirm({ title: `Supprimer le profil de ${rankName} ?`, desc: `Les ${initial.length} permission${initial.length > 1 ? 's' : ''} Discord choisie${initial.length > 1 ? 's' : ''} pour ce rang sont oubliées. Les rôles déjà modifiés sur Discord ne changent pas tant que tu n’appliques rien.`, confirmText: 'Supprimer le profil', destructive: true })) save.mutate(null)
+          }}>Supprimer le profil</Button>}
+          {dialog}
           <Button size='sm' onClick={() => save.mutate([...selected])} disabled={!dirty || save.isPending}>Enregistrer</Button>
         </div>
       )}

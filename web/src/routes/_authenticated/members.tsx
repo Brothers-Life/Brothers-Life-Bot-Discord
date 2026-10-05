@@ -15,6 +15,10 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 
+import { SeeAlso, useConfirm } from '@/components/app/confirm'
+
+import { RANKS_SEE_ALSO, others } from '@/features/navigation/see-also'
+
 export const Route = createFileRoute('/_authenticated/members')({
   component: MembersPage,
 })
@@ -30,6 +34,7 @@ function MembersPage() {
   const myLevel = me?.isOwner ? Infinity : (me?.level ?? 0)
   const assignable = (ranks.data?.ranks ?? []).filter((r) => r.level < myLevel)
 
+  const { confirm, dialog } = useConfirm()
   const unassign = useMutation({
     mutationFn: ({ userId, rankId }: { userId: string; rankId: number }) =>
       api(`/members/${userId}/ranks/${rankId}`, { method: 'DELETE' }),
@@ -41,12 +46,13 @@ function MembersPage() {
 
   return (
     <Page
-      title='Membres du panel'
+      title='Accès au panel'
       description='Qui a un rang, et comment : par un rôle du serveur principal, ou attribué directement ici (utile pour quelqu’un qui n’a pas de rôle Discord).'
       actions={assign && assignable.length > 0 && (
         <Button onClick={() => setAdding(true)}><UserPlus /> Attribuer un rang</Button>
       )}
     >
+      <SeeAlso links={others(RANKS_SEE_ALSO, '/members')}>Ici : qui a accès au panel, et avec quel rang.</SeeAlso>
       {members.isLoading && <Skeleton className='h-48 w-full' />}
       {members.data && (
         <Section title={`${members.data.length} membre${members.data.length > 1 ? 's' : ''} avec un rang`}>
@@ -74,7 +80,9 @@ function MembersPage() {
                             variant='ghost'
                             className='size-6'
                             aria-label={`Retirer le rang ${r.name}`}
-                            onClick={() => unassign.mutate({ userId: m.id, rankId: r.id })}
+                            onClick={async () => {
+                              if (await confirm({ title: `Retirer le rang ${r.name} à ${userName(m)} ?`, desc: 'Il perd tout de suite les permissions de ce rang (sauf s’il l’a aussi par un rôle Discord).', confirmText: 'Retirer le rang', destructive: true })) unassign.mutate({ userId: m.id, rankId: r.id })
+                            }}
                           >
                             <X className='size-3.5' />
                           </Button>
@@ -90,6 +98,7 @@ function MembersPage() {
       )}
 
       {adding && <AssignDialog ranks={assignable} onClose={() => setAdding(false)} />}
+      {dialog}
     </Page>
   )
 }

@@ -7,7 +7,7 @@ import { api } from '@/lib/api'
 import type { Channel } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useMe } from '@/hooks/use-me'
-import { Page, Section, EmptyState, StatCards, UserAvatar, RankBadge } from '@/components/app/ui'
+import { Page, Section, EmptyState, StatCards, UserAvatar, RankBadge, Pill } from '@/components/app/ui'
 import { ChannelSelect } from '@/components/app/pickers'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -23,6 +23,7 @@ type Member = {
   userId: string; name: string; avatar: string | null; level: number; ranks: { id: number; name: string; color: string | null }[]
   ticketsClosed: number; ticketsClaimed: number; ticketReplies: number; rating: number | null; sanctions: number; sanctionsDetail: { bans: number; warns: number; timeouts: number }
   dmReplies: number; panelActions: number; messages: number; voiceHours: number; absentDays: number; score: number
+  absent?: boolean
 }
 type Data = { from: number; to: number; weights: Record<string, number>; members: Member[]; config: { enabled: boolean; guildId: string | null; channelId: string | null } | null; guilds: { id: string; name: string; channels: Channel[] }[] }
 type SortKey = 'score' | 'ticketsClosed' | 'ticketReplies' | 'sanctions' | 'dmReplies' | 'panelActions' | 'messages' | 'voiceHours' | 'absentDays'
@@ -94,6 +95,7 @@ function StaffActivityPage() {
                     <Trophy className={cn('size-6', i === 0 ? 'text-brand' : i === 1 ? 'text-muted-foreground' : 'text-warning')} />
                     <UserAvatar src={m.avatar} name={m.name} className='size-14' />
                     <div className='font-display text-lg font-semibold'>{m.name}</div>
+                    {m.absent && <Pill tone='info'>absent</Pill>}
                     <div className='font-display text-3xl font-bold text-primary tabular-nums'>{m.score}</div>
                     <div className='text-xs text-muted-foreground'>{m.ticketsClosed} tickets · {m.sanctions} sanctions · {m.voiceHours} h vocal</div>
                   </div>
@@ -126,7 +128,7 @@ function StaffActivityPage() {
                             <span className='w-5 text-xs text-muted-foreground tabular-nums'>{i + 1}</span>
                             <UserAvatar src={m.avatar} name={m.name} className='size-7' />
                             <div className='min-w-0'>
-                              <div className='truncate font-medium'>{m.name}</div>
+                              <div className='flex items-center gap-1.5'><span className='truncate font-medium'>{m.name}</span>{m.absent && <Pill tone='info' className='px-1.5 py-0 text-[10px]'>absent</Pill>}</div>
                               <div className='flex gap-1'>{m.ranks.slice(0, 2).map((r) => <RankBadge key={r.id} name={r.name} color={r.color} className='py-0 text-[10px]' />)}</div>
                             </div>
                           </div>

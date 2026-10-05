@@ -11,6 +11,8 @@ import { useMe } from '@/hooks/use-me'
 import { Page, Section, GuildIcon } from '@/components/app/ui'
 import { RolesPicker } from '@/components/app/pickers'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { SeeAlso } from '@/components/app/confirm'
+import { PROTECTION_SEE_ALSO, others } from '@/features/navigation/see-also'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -68,6 +70,7 @@ function AntiraidPage() {
         </div>
       )}
     >
+      <SeeAlso links={others(PROTECTION_SEE_ALSO, '/antiraid')}>L’anti-raid surveille les arrivées. Les autres protections :</SeeAlso>
       {current && <AntiraidEditor key={current} guildId={current} />}
     </Page>
   )

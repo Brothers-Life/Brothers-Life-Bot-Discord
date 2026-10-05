@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Send, ShieldCheck } from 'lucide-react'
@@ -8,6 +8,8 @@ import type { AnnouncementEmbed, Channel, Role } from '@/lib/types'
 import { useMe } from '@/hooks/use-me'
 import { Page, Section, Pill, GuildIcon, Notice } from '@/components/app/ui'
 import { ChannelSelect } from '@/components/app/pickers'
+import { SaveBar, SeeAlso, useConfirm, useDiscardGuard } from '@/components/app/confirm'
+import { PROTECTION_SEE_ALSO, others } from '@/features/navigation/see-also'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -31,34 +33,41 @@ type GuildData = { id: string; name: string; icon: string | null; config: Config
 function VerificationPage() {
   const { data, isLoading } = useQuery({ queryKey: ['verification'], queryFn: () => api<{ guilds: GuildData[] }>('/verification') })
   const [selected, setSelected] = useState<string | null>(null)
+  const [dirty, setDirty] = useState(false)
+  const { guard, dialog } = useDiscardGuard(dirty)
   const guild = data?.guilds.find((g) => g.id === selected) ?? data?.guilds[0]
   return (
     <Page title='Vérification des nouveaux' description='Avant d’accéder au serveur, chaque nouveau clique sur un bouton ou recopie un captcha. Ça arrête les comptes automatiques et complète l’anti-raid.'>
+      <SeeAlso links={others(PROTECTION_SEE_ALSO, '/verification')}>La vérification filtre les arrivées. Les autres protections :</SeeAlso>
       {isLoading && <Skeleton className='h-96 w-full' />}
       {data && guild && (
         <div className='grid grid-cols-[minmax(0,1fr)] gap-6'>
           {data.guilds.length > 1 && (
             <nav aria-label='Serveurs' className='flex gap-2 overflow-x-auto pb-1'>
               {data.guilds.map((g) => (
-                <button key={g.id} type='button' onClick={() => setSelected(g.id)} aria-current={g.id === guild.id ? 'page' : undefined} className='flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors hover:bg-accent aria-[current=page]:border-primary aria-[current=page]:bg-primary/10'>
+                <button key={g.id} type='button' onClick={() => { if (g.id !== guild.id) void guard(() => { setDirty(false); setSelected(g.id) }) }} aria-current={g.id === guild.id ? 'page' : undefined} className='flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors hover:bg-accent aria-[current=page]:border-primary aria-[current=page]:bg-primary/10'>
                   <GuildIcon src={g.icon} name={g.name} className='size-5' />{g.name}{g.config.enabled && <ShieldCheck className='size-3.5 text-success' aria-label='active' />}
                 </button>
               ))}
             </nav>
           )}
-          <Editor key={guild.id} guild={guild} />
+          <Editor key={guild.id} guild={guild} onDirty={setDirty} />
         </div>
       )}
+      {dialog}
     </Page>
   )
 }
 
-function Editor({ guild }: { guild: GuildData }) {
+function Editor({ guild, onDirty }: { guild: GuildData; onDirty: (dirty: boolean) => void }) {
   const { can } = useMe()
   const manage = can('verification.manage')
   const qc = useQueryClient()
   const [c, setC] = useState(guild.config)
   const set = (patch: Partial<Config>) => setC((prev) => ({ ...prev, ...patch }))
+  const dirty = JSON.stringify(c) !== JSON.stringify(guild.config)
+  useEffect(() => { onDirty(dirty) }, [dirty, onDirty])
+  const { confirm, dialog } = useConfirm()
   const body = () => ({ ...c, payload: { content: c.payload.content, embed: cleanEmbed(c.payload.embed) } })
   const save = useMutation({ mutationFn: () => api(`/verification/${guild.id}`, { method: 'PUT', body: body() }), onSuccess: () => { toast.success('Vérification enregistrée'); qc.invalidateQueries({ queryKey: ['verification'] }) } })
   const publish = useMutation({
@@ -89,8 +98,14 @@ function Editor({ guild }: { guild: GuildData }) {
         description={c.enabled ? `${guild.pending} nouveau${guild.pending > 1 ? 'x' : ''} pas encore vérifié${guild.pending > 1 ? 's' : ''}.` : 'Désactivée sur ce serveur.'}
         actions={manage && (
           <div className='flex gap-2'>
-            <Button size='sm' variant='outline' loading={save.isPending} onClick={() => save.mutate()}>Enregistrer</Button>
-            <Button size='sm' loading={publish.isPending} disabled={!c.channelId} onClick={() => publish.mutate()}><Send /> {c.messageId ? 'Mettre à jour le message' : 'Publier le message'}</Button>
+            <Button size='sm' loading={publish.isPending} disabled={!c.channelId} onClick={async () => {
+              const channel = guild.channels.find((x) => x.id === c.channelId)?.name ?? 'salon'
+              if (await confirm({
+                title: c.messageId ? 'Mettre à jour le message de vérification ?' : 'Publier le message de vérification ?',
+                desc: `Les réglages sont enregistrés puis le message est ${c.messageId ? 'modifié' : 'posté'} dans #${channel} (${guild.name}), visible par les nouveaux arrivants.`,
+                confirmText: c.messageId ? 'Mettre à jour' : 'Publier',
+              })) publish.mutate()
+            }}><Send /> {c.messageId ? 'Mettre à jour le message' : 'Publier le message'}</Button>
           </div>
         )}
       >
@@ -135,6 +150,8 @@ function Editor({ guild }: { guild: GuildData }) {
         </Notice>
         {c.enabled && !c.channelId && <Pill tone='warning'>Choisis un salon puis publie le message</Pill>}
       </div>
+      {manage && <div className='xl:col-span-2'><SaveBar dirty={dirty} saving={save.isPending} onSave={() => save.mutate()} onCancel={() => setC(guild.config)} /></div>}
+      {dialog}
     </div>
   )
 }

@@ -18,6 +18,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 
+import { SaveBar, useConfirm } from '@/components/app/confirm'
+import { ConfirmDialog } from '@/components/confirm-dialog'
+import { Textarea } from '@/components/ui/textarea'
+
 export const Route = createFileRoute('/_authenticated/absences')({
   component: AbsencesPage,
 })
@@ -55,10 +59,16 @@ function AbsencesPage() {
   const [filter, setFilter] = useState<'current' | 'all'>('current')
   const manage = can('absences.manage')
   const refresh = () => qc.invalidateQueries({ queryKey: ['absences'] })
-  const review = useMutation({ mutationFn: ({ id, approved }: { id: number; approved: boolean }) => api(`/absences/${id}/review`, { method: 'POST', body: { approved } }), onSuccess: (_, v) => { toast.success(v.approved ? 'Absence validée' : 'Absence refusée'); refresh() } })
+  const review = useMutation({
+    mutationFn: ({ id, approved, reason }: { id: number; approved: boolean; reason?: string }) => api(`/absences/${id}/review`, { method: 'POST', body: { approved, ...(reason ? { reason } : {}) } }),
+    onSuccess: (_, v) => { toast.success(v.approved ? 'Absence validée' : 'Absence refusée, le membre est prévenu'); setRefusing(null); setRefuseReason(''); refresh() },
+  })
+  const [refusing, setRefusing] = useState<Absence | null>(null)
+  const [refuseReason, setRefuseReason] = useState('')
   const end = useMutation({ mutationFn: (id: number) => api(`/absences/${id}/end`, { method: 'POST' }), onSuccess: () => { toast.success('Absence terminée'); refresh() } })
   const list = data?.absences.filter((a) => filter === 'all' || ['pending', 'approved', 'active'].includes(a.status)) ?? []
   const mine = (a: Absence) => a.userId === me?.user.id
+  const { confirm, dialog } = useConfirm()
   return (
     <Page
       title='Absences'
@@ -94,13 +104,18 @@ function AbsencesPage() {
                       {a.status === 'pending' && manage && !mine(a) && (
                         <>
                           <Button size='sm' variant='success-outline' onClick={() => review.mutate({ id: a.id, approved: true })}><Check /> Valider</Button>
-                          <Button size='sm' variant='danger-outline' onClick={() => review.mutate({ id: a.id, approved: false })}><X /> Refuser</Button>
+                          <Button size='sm' variant='danger-outline' onClick={() => setRefusing(a)}><X /> Refuser</Button>
                         </>
                       )}
                       {['pending', 'approved', 'active'].includes(a.status) && (manage || mine(a)) && (
                         <>
                           <Button size='sm' variant='outline' onClick={() => setExtending(a)}>Prolonger</Button>
-                          <Button size='sm' variant='ghost' onClick={() => end.mutate(a.id)}>{a.status === 'active' ? 'Signaler le retour' : 'Annuler'}</Button>
+                          <Button size='sm' variant='ghost' onClick={async () => {
+                            const back = a.status === 'active'
+                            if (await confirm(back
+                              ? { title: 'Signaler le retour ?', desc: 'L’absence se termine maintenant et le staff est prévenu.', confirmText: 'Signaler le retour' }
+                              : { title: 'Annuler cette absence ?', desc: 'Elle ne sera plus prise en compte. Pour une nouvelle absence, il faudra la redéclarer.', confirmText: 'Annuler l’absence', cancelText: 'Garder', destructive: true })) end.mutate(a.id)
+                          }}>{a.status === 'active' ? 'Signaler le retour' : 'Annuler'}</Button>
                         </>
                       )}
                     </div>
@@ -114,6 +129,19 @@ function AbsencesPage() {
       )}
       {declaring && <DeclareDialog canForOthers={manage} onClose={() => { setDeclaring(false); refresh() }} />}
       {extending && <ExtendDialog absence={extending} onClose={() => { setExtending(null); refresh() }} />}
+      {dialog}
+      <ConfirmDialog
+        open={Boolean(refusing)}
+        onOpenChange={(o) => { if (!o) { setRefusing(null); setRefuseReason('') } }}
+        title='Refuser cette absence ?'
+        desc='Le membre est prévenu en message privé. Tu peux ajouter une raison.'
+        confirmText='Refuser'
+        destructive
+        isLoading={review.isPending}
+        handleConfirm={() => refusing && review.mutate({ id: refusing.id, approved: false, reason: refuseReason.trim() || undefined })}
+      >
+        <Textarea value={refuseReason} onChange={(e) => setRefuseReason(e.target.value)} placeholder='Raison (facultatif, envoyée au membre)' maxLength={500} rows={2} aria-label='Raison du refus' />
+      </ConfirmDialog>
     </Page>
   )
 }
@@ -169,11 +197,14 @@ function ExtendDialog({ absence, onClose }: { absence: Absence; onClose: () => v
 function Settings({ data }: { data: Payload }) {
   const qc = useQueryClient()
   const [c, setC] = useState(data.config)
-  const save = useMutation({ mutationFn: () => api('/absences/config', { method: 'PUT', body: c }), onSuccess: () => { toast.success('Réglages enregistrés'); qc.invalidateQueries({ queryKey: ['absences'] }) } })
+  const [base, setBase] = useState(c)
+  const dirty = JSON.stringify(c) !== JSON.stringify(base)
+  const save = useMutation({ mutationFn: () => api('/absences/config', { method: 'PUT', body: c }), onSuccess: () => { toast.success('Réglages enregistrés'); setBase(c); qc.invalidateQueries({ queryKey: ['absences'] }) } })
   const [announceGuild, setAnnounceGuild] = useState(c.announce?.guildId ?? data.guilds[0]?.id)
   const [reviewGuild, setReviewGuild] = useState(c.review?.guildId ?? data.guilds[0]?.id)
   return (
-    <Section title='Réglages' actions={<Button size='sm' onClick={() => save.mutate()} disabled={save.isPending}><Save /> Enregistrer</Button>}>
+    <>
+    <Section title='Réglages'>
       <div className='grid gap-5 p-4'>
         <div className='flex flex-wrap gap-6'>
           <label className='flex items-center gap-2 text-sm'><Switch checked={c.requireApproval} onCheckedChange={(v) => setC({ ...c, requireApproval: v })} /> Les absences doivent être validées</label>
@@ -226,5 +257,7 @@ function Settings({ data }: { data: Payload }) {
         </div>
       </div>
     </Section>
+    <SaveBar dirty={dirty} saving={save.isPending} onSave={() => save.mutate()} onCancel={() => setC(base)} />
+    </>
   )
 }

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, RefreshCw, Save, Send, Trash2, X } from 'lucide-react'
@@ -10,6 +10,9 @@ import { cn } from '@/lib/utils'
 import { useMe } from '@/hooks/use-me'
 import { Page, Section, EmptyState, Pill } from '@/components/app/ui'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { SeeAlso, useConfirm, useDiscardGuard } from '@/components/app/confirm'
+import { MESSAGES_SEE_ALSO, others } from '@/features/navigation/see-also'
+import { publishConfirm } from '@/features/announcements/test-confirm'
 import { EmbedFields, EMPTY_EMBED, cleanEmbed } from '@/features/announcements/embed-editor'
 import { DiscordPreview } from '@/features/announcements/discord-preview'
 import { ChannelTargets, type ChannelTarget } from '@/features/messages/channel-targets'
@@ -73,21 +76,25 @@ function MessagesPage() {
   const { data: list } = useQuery({ queryKey: ['live-messages'], queryFn: () => api<LiveMessage[]>('/messages'), refetchInterval: 30_000 })
   const guilds = useQuery({ queryKey: ['messages-targets'], queryFn: () => api<AnnouncementTargetsPayload>('/messages/targets') })
   const [selected, setSelected] = useState<number | 'new' | null>(null)
+  const [dirty, setDirty] = useState(false)
+  const { guard, dialog } = useDiscardGuard(dirty)
+  const select = (id: number | 'new' | null) => { if (id !== selected) void guard(() => { setDirty(false); setSelected(id) }) }
   const current = selected === 'new' ? null : list?.find((m) => m.id === selected) ?? null
 
   return (
     <Page
       title='Messages dynamiques'
       description='Un message posté dans un ou plusieurs salons du réseau et modifiable d’ici sans le renvoyer. Avec des variables, il se met à jour tout seul : membres, vocal, joueurs FiveM, date…'
-      actions={can('messages.manage') && <Button onClick={() => setSelected('new')}><Plus /> Nouveau message</Button>}
+      actions={can('messages.manage') && <Button onClick={() => select('new')}><Plus /> Nouveau message</Button>}
     >
+      <SeeAlso links={others(MESSAGES_SEE_ALSO, '/messages')}>Ici : un message qui reste en place et se met à jour tout seul (compteurs, variables).</SeeAlso>
       <div className='grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]'>
         <Section title='Messages'>
           {!list ? <Skeleton className='m-4 h-24' /> : !list.length ? <EmptyState title='Aucun message'>Crée par exemple un tableau « Infos du serveur » avec le nombre de membres en direct.</EmptyState> : (
             <ul className='divide-y'>
               {list.map((m) => (
                 <li key={m.id}>
-                  <button type='button' onClick={() => setSelected(m.id)} className={cn('w-full px-4 py-3 text-start transition-colors hover:bg-accent/40', selected === m.id && 'bg-primary/10')}>
+                  <button type='button' onClick={() => select(m.id)} className={cn('w-full px-4 py-3 text-start transition-colors hover:bg-accent/40', selected === m.id && 'bg-primary/10')}>
                     <div className='flex items-center gap-2 font-medium'>
                       {m.name}
                       {m.refreshMinutes > 0 && <RefreshCw className='size-3 text-success' aria-label='dynamique' />}
@@ -101,18 +108,23 @@ function MessagesPage() {
           )}
         </Section>
         {selected !== null && guilds.data
-          ? <Editor key={`${selected}-${current?.updatedAt ?? 0}`} message={current} guilds={guilds.data} onSaved={setSelected} onDeleted={() => setSelected(null)} />
+          ? <Editor key={`${selected}-${current?.updatedAt ?? 0}`} message={current} guilds={guilds.data} onDirty={setDirty} onSaved={(id) => { setDirty(false); setSelected(id) }} onDeleted={() => { setDirty(false); setSelected(null) }} />
           : <div className='grid place-items-center rounded-lg border border-dashed p-12 text-sm text-muted-foreground'>Choisis un message ou crées-en un.</div>}
       </div>
+      {dialog}
     </Page>
   )
 }
 
-function Editor({ message, guilds, onSaved, onDeleted }: { message: LiveMessage | null; guilds: AnnouncementTargetsPayload; onSaved: (id: number) => void; onDeleted: () => void }) {
+function Editor({ message, guilds, onSaved, onDeleted, onDirty }: { message: LiveMessage | null; guilds: AnnouncementTargetsPayload; onSaved: (id: number) => void; onDeleted: () => void; onDirty: (dirty: boolean) => void }) {
   const { can } = useMe()
   const manage = can('messages.manage')
   const qc = useQueryClient()
-  const [d, setD] = useState<Draft>(() => toDraft(message))
+  const [initial] = useState<Draft>(() => toDraft(message))
+  const [d, setD] = useState<Draft>(initial)
+  const dirty = JSON.stringify(d) !== JSON.stringify(initial)
+  useEffect(() => { onDirty(dirty) }, [dirty, onDirty])
+  const { confirm, dialog } = useConfirm()
   const [deleting, setDeleting] = useState(false)
   const set = (patch: Partial<Draft>) => setD((prev) => ({ ...prev, ...patch }))
   const body = () => ({
@@ -163,7 +175,9 @@ function Editor({ message, guilds, onSaved, onDeleted }: { message: LiveMessage 
       <div className='grid content-start gap-6' ref={varsBox}>
         <Section title={message ? message.name : 'Nouveau message'} actions={message && manage && (
           <div className='flex gap-2'>
-            <Button size='sm' variant='outline' onClick={() => republish.mutate()} disabled={republish.isPending}><Send /> Renvoyer</Button>
+            <Button size='sm' variant='outline' disabled={republish.isPending} onClick={async () => {
+              if (await confirm(publishConfirm(message.targets, guilds, { title: 'Renvoyer ce message ?', what: 'Le bot poste une nouvelle fois la version enregistrée du message (les changements non enregistrés ne sont pas pris en compte)', confirmText: 'Renvoyer' }))) republish.mutate()
+            }}><Send /> Renvoyer</Button>
             <DuplicateButton text loading={duplicate.isPending} onClick={() => duplicate.mutate()} />
             <Button size='sm' variant='danger-ghost' onClick={() => setDeleting(true)}><Trash2 /> Supprimer</Button>
           </div>
@@ -231,7 +245,9 @@ function Editor({ message, guilds, onSaved, onDeleted }: { message: LiveMessage 
         </Section>
         {manage && (
           <div className='flex justify-end'>
-            <Button onClick={() => save.mutate()} disabled={!d.name.trim() || !d.targets.length || save.isPending}>
+            <Button disabled={!d.name.trim() || !d.targets.length || save.isPending} onClick={async () => {
+              if (message || await confirm(publishConfirm(d.targets, guilds, { title: 'Publier ce message ?', what: `Le bot publie « ${d.name} »` }))) save.mutate()
+            }}>
               {message ? <><Save /> Enregistrer et mettre à jour partout</> : <><Send /> Publier</>}
             </Button>
           </div>
@@ -242,6 +258,7 @@ function Editor({ message, guilds, onSaved, onDeleted }: { message: LiveMessage 
         <DiscordPreview content={fill(d.content)} embed={{ ...d.embed, title: fill(d.embed.title), description: fill(d.embed.description), fields: d.embed.fields.map((f) => ({ ...f, name: fill(f.name), value: fill(f.value) })) }} roles={new Map()} />
       </div>
       <ConfirmDialog open={deleting} onOpenChange={setDeleting} title='Supprimer ce message ?' desc='Il est aussi supprimé de chaque salon Discord.' confirmText='Supprimer' destructive isLoading={remove.isPending} handleConfirm={() => remove.mutate()} />
+      {dialog}
     </div>
   )
 }

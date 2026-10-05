@@ -92,7 +92,7 @@ export function TicketStatsPanel({ guildId, config }: { guildId: string; config?
               { label: 'Tickets ouverts', value: t.opened, icon: Inbox, hint: `${t.closed} fermé${t.closed > 1 ? 's' : ''}` },
               { label: 'Première réponse moyenne', value: duration(t.firstResponseAvg), icon: Timer, hint: `médiane ${duration(t.firstResponseMedian)}` },
               { label: 'Résolution moyenne', value: duration(t.resolutionAvg), icon: TimerReset, hint: `médiane ${duration(t.resolutionMedian)}` },
-              { label: 'Délais (SLA) dépassés', value: t.slaBreaches, icon: AlarmClock, tone: t.slaBreaches ? 'warning' : 'neutral', hint: slaRate === null ? 'aucun SLA réglé' : `${slaRate} % dans les temps` },
+              { label: 'Délais de première réponse dépassés', value: t.slaBreaches, icon: AlarmClock, tone: t.slaBreaches ? 'warning' : 'neutral', hint: slaRate === null ? 'aucun délai réglé' : `${slaRate} % dans les temps` },
               { label: 'Satisfaction', value: stars(t.ratingAvg), icon: Star, tone: 'accent', hint: `${t.ratings} note${t.ratings > 1 ? 's' : ''}` },
               { label: 'Tickets avec réponse du staff', value: t.answered, icon: CheckCircle2, tone: 'success', hint: t.opened ? `${Math.round((t.answered / t.opened) * 100)} %` : undefined },
             ]}
@@ -160,7 +160,7 @@ export function TicketStatsPanel({ guildId, config }: { guildId: string; config?
                       <TableHead>Type</TableHead>
                       <TableHead className='text-end'>Ouverts</TableHead>
                       <TableHead className='text-end'>1re réponse moyenne</TableHead>
-                      <TableHead className='text-end'>SLA dépassés</TableHead>
+                      <TableHead className='text-end'>Délais dépassés</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

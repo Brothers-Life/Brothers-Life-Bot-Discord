@@ -65,10 +65,10 @@ function SanctionsPage() {
               <SelectTrigger className='w-36' aria-label='Type'><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value='all'>Tous les types</SelectItem>
-                <SelectItem value='ban'>Bans</SelectItem>
-                <SelectItem value='timeout'>Timeouts</SelectItem>
-                <SelectItem value='kick'>Kicks</SelectItem>
-                <SelectItem value='warn'>Warns</SelectItem>
+                <SelectItem value='ban'>Bannissements</SelectItem>
+                <SelectItem value='timeout'>Exclusions temporaires</SelectItem>
+                <SelectItem value='kick'>Expulsions</SelectItem>
+                <SelectItem value='warn'>Avertissements</SelectItem>
                 <SelectItem value='restrict'>Restrictions</SelectItem>
               </SelectContent>
             </Select>

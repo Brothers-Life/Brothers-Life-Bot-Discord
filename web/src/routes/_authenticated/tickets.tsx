@@ -141,7 +141,13 @@ function TicketList({ guildId }: { guildId: string }) {
         </div>
       }
     >
-      {!tickets.length ? <EmptyState title={status === 'open' ? 'Aucun ticket ouvert' : 'Aucun ticket'}>Publie un panneau depuis l’onglet Configuration.</EmptyState> : (
+      {!tickets.length ? (
+        statusKey !== ALL || categoryId !== ALL || priority !== ALL
+          ? <EmptyState title='Aucun ticket avec ces filtres'>Change le statut, le type ou la priorité, ou <button type='button' className='text-primary hover:underline' onClick={() => { setStatusKey(ALL); setCategoryId(ALL); setPriority(ALL) }}>retire les filtres</button>.</EmptyState>
+          : status === 'open' ? <EmptyState title='Aucun ticket ouvert'>Tout est traité. Les nouveaux tickets apparaîtront ici en direct.</EmptyState>
+            : status === 'closed' ? <EmptyState title='Aucun ticket fermé'>Les tickets fermés et leurs conversations s’afficheront ici.</EmptyState>
+              : <EmptyState title='Aucun ticket pour l’instant'>Publie un panneau depuis l’onglet Configuration pour que les membres puissent en ouvrir.</EmptyState>
+      ) : (
         <ul className='divide-y'>
           {tickets.map((t) => {
             const s = statuses.find((x) => x.key === t.statusKey)

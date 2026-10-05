@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import type { PublicConfig, PublicConfigPayload } from '@/features/public-page/types'
+import { SaveBar } from '@/components/app/confirm'
 
 export const Route = createFileRoute('/_authenticated/public-page')({
   component: PublicPageSettings,
@@ -89,12 +90,16 @@ function PublicPageSettings() {
     >
       {!data || !config ? <Skeleton className='h-96 w-full' /> : (
         <div className='grid grid-cols-[minmax(0,1fr)] gap-6'>
-          <div className={cn('flex flex-wrap items-center gap-4 rounded-lg border p-4', config.enabled ? 'border-success/40 bg-success/8' : 'bg-card')}>
+          {/* The banner shows what is live (saved), the switch what will be saved */}
+          <div className={cn('flex flex-wrap items-center gap-4 rounded-lg border p-4', data.config.enabled ? 'border-success/40 bg-success/8' : 'bg-card')}>
             <div className='min-w-56 flex-1'>
-              <div className='font-semibold'>{config.enabled ? 'Page publiée' : 'Page désactivée'}</div>
+              <div className='font-semibold'>{data.config.enabled ? 'Page publiée' : 'Page désactivée'}</div>
               <div className='text-sm text-muted-foreground'>
-                {config.enabled ? <>Visible par tout le monde à l’adresse <code className='rounded bg-muted px-1'>{window.location.origin}/public</code>.</> : 'L’adresse /public répond « page introuvable » tant qu’elle est désactivée.'}
+                {data.config.enabled ? <>Visible par tout le monde à l’adresse <code className='rounded bg-muted px-1'>{window.location.origin}/public</code>.</> : 'L’adresse /public répond « page introuvable » tant qu’elle est désactivée.'}
               </div>
+              {config.enabled !== data.config.enabled && (
+                <div className='mt-1 text-sm font-medium text-warning'>{config.enabled ? 'Sera publiée quand tu enregistreras.' : 'Sera désactivée quand tu enregistreras.'}</div>
+              )}
             </div>
             <Switch checked={config.enabled} onCheckedChange={(v) => set({ enabled: v })} aria-label='Publier la page' />
           </div>
@@ -188,6 +193,7 @@ function PublicPageSettings() {
           </Section>
         </div>
       )}
+      <SaveBar dirty={Boolean(draft)} saving={save.isPending} onSave={() => draft && save.mutate(draft)} onCancel={() => setDraft(null)} />
     </Page>
   )
 }

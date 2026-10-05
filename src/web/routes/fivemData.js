@@ -14,7 +14,12 @@ export function registerFivemDataRoutes(app, { core }) {
 		config: { permission: 'fivemdata.manage' },
 		schema: { body: { type: 'object', properties: { enabled: { type: 'boolean' }, host: { type: 'string', maxLength: 200 }, port: { type: 'integer' }, database: { type: 'string', maxLength: 64 }, user: { type: 'string', maxLength: 80 }, password: { type: 'string', maxLength: 200 } } } },
 	}, async (request) => fivemData.setConfig(request.actor, request.body));
-	app.post('/api/fivem-data/test', { config: { permission: 'fivemdata.manage' } }, async (request) => fivemData.test(request.actor));
+	// Body (optional): the settings typed in the panel, tested without saving them
+	// (no body schema: the body is optional, normalizeDbConfig checks every field)
+	app.post('/api/fivem-data/test', { config: { permission: 'fivemdata.manage' } }, async (request) => {
+		const b = request.body && typeof request.body === 'object' ? request.body : null;
+		return fivemData.test(request.actor, b?.host ? { host: b.host, port: b.port, database: b.database, user: b.user, password: b.password } : null);
+	});
 
 	app.get('/api/fivem-data/overview', { config: { permission: 'fivemdata.view' } }, async (request) => fivemData.overview(request.actor));
 	app.get('/api/fivem-data/players', {

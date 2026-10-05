@@ -39,7 +39,7 @@ function OnboardingPage() {
 
   return (
     <Page
-      title='Accueil'
+      title='Bienvenue et arrivées'
       description='Messages de bienvenue, de départ et de boost avec leur carte image, rôles donnés automatiquement et règlement à accepter. Chaque serveur a ses propres réglages.'
       actions={current && (
         <div className='flex items-center gap-2'>

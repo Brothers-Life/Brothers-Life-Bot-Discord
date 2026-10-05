@@ -10,6 +10,8 @@ import { useMe } from '@/hooks/use-me'
 import { Page, Section, EmptyState, Notice, Pill, StatCards, type Tone } from '@/components/app/ui'
 import { VariableButton, type VariableGroup } from '@/components/app/variable-picker'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { AutoSaved, useConfirm } from '@/components/app/confirm'
+import { TEST_LABEL, testConfirm } from '@/features/announcements/test-confirm'
 import { DiscordPreview } from '@/features/announcements/discord-preview'
 import { EMPTY_EMBED, EmbedFields, cleanEmbed } from '@/features/announcements/embed-editor'
 import { TargetsEditor } from '@/features/announcements/targets-editor'
@@ -75,7 +77,7 @@ function FivemEventsPage() {
   const { data } = useQuery({ queryKey: ['fivem-events'], queryFn: () => api<Data>('/fivem-events'), refetchInterval: 15_000 })
   return (
     <Page
-      title='Annonces FiveM'
+      title='FiveM · txAdmin et maintenance'
       description='Le pont txAdmin (ressource brl-bridge sur le serveur FiveM) envoie au bot les redémarrages, annonces, arrêts et sanctions du jeu. Choisis ce qui est annoncé sur Discord, où, avec quel message, et gère la maintenance.'
     >
       {!data ? <Skeleton className='h-96 w-full' /> : (
@@ -124,7 +126,7 @@ function MaintenanceSection({ data }: { data: Data }) {
   return (
     <Section
       title='Maintenance'
-      description='Annonce le début et la fin d’une maintenance, et affiche « Maintenance » dans les messages de statut FiveM. Aussi avec /fivem maintenance.'
+      description='Annonce le début et la fin d’une maintenance, et affiche « Maintenance » dans les messages de statut FiveM. Aussi avec /maintenance.'
       actions={manage && <Button size='sm' variant='outline' onClick={() => setEditing(true)}><Pencil /> Messages et salons</Button>}
     >
       <div className='grid gap-4 p-4'>
@@ -197,6 +199,7 @@ function EventsSection({ data, manage }: { data: Data; manage: boolean }) {
   const save = useSaveConfig()
   const qc = useQueryClient()
   const [editing, setEditing] = useState<{ type: EventType; enable: boolean } | null>(null)
+  const { confirm, dialog } = useConfirm()
   const test = useMutation({
     mutationFn: (type: string) => api<{ status: string; detail: string | null }>('/fivem-events/test', { method: 'POST', body: { type } }),
     onSuccess: (r) => {
@@ -206,6 +209,11 @@ function EventsSection({ data, manage }: { data: Data; manage: boolean }) {
       qc.invalidateQueries({ queryKey: ['fivem-events'] })
     },
   })
+  const runTest = async (t: EventType) => {
+    const e = data.config.events[t.key]
+    if (isPublic(e) && e.enabled && !(await confirm(testConfirm(e.targets, data.guilds, `le message « ${t.label} » avec des données d’exemple`)))) return
+    test.mutate(t.key)
+  }
   const toggle = (type: EventType, enabled: boolean) => {
     const e = data.config.events[type.key]
     if (enabled && isPublic(e) && !e.targets.length) return setEditing({ type, enable: true })
@@ -213,16 +221,16 @@ function EventsSection({ data, manage }: { data: Data; manage: boolean }) {
   }
   const groups: { kind: EventType['kind']; title: string; hint: string }[] = [
     { kind: 'public', title: 'Annoncés sur Discord', hint: 'Publiés dans les salons choisis, avec le message et les pings réglés.' },
-    { kind: 'staff', title: 'Logs du staff', hint: 'Envoyés dans la catégorie de logs « Événements FiveM » (page Logs), jamais en public.' },
+    { kind: 'staff', title: 'Logs du staff', hint: 'Envoyés dans la catégorie de logs « Événements FiveM », jamais en public.' },
   ]
   return (
-    <Section title='Événements txAdmin' description='Les événements reçus du serveur FiveM et ce que le bot en fait.'>
+    <Section title='Événements txAdmin' description={<>Les événements reçus du serveur FiveM et ce que le bot en fait. Interrupteurs : <AutoSaved className='inline-flex' /></>}>
       <div className='grid gap-4 p-4'>
         {groups.map((g) => (
           <div key={g.kind} className='grid gap-2'>
             <div>
               <h3 className='text-sm font-medium'>{g.title}</h3>
-              <p className='text-xs text-muted-foreground'>{g.hint}</p>
+              <p className='text-xs text-muted-foreground'>{g.hint}{g.kind === 'staff' && <> Salon réglé sur la page <Link to='/logs' className='text-primary hover:underline'>Salons de logs</Link>.</>}</p>
             </div>
             <ul className='divide-y rounded-md border'>
               {data.types.filter((t) => t.kind === g.kind).map((t) => {
@@ -240,7 +248,7 @@ function EventsSection({ data, manage }: { data: Data; manage: boolean }) {
                     </div>
                     {manage && (
                       <div className='flex gap-1'>
-                        <Button size='sm' variant='ghost' onClick={() => test.mutate(t.key)} disabled={test.isPending}><FlaskConical /> Tester</Button>
+                        <Button size='sm' variant='ghost' onClick={() => void runTest(t)} disabled={test.isPending}><FlaskConical /> {t.kind === 'staff' ? 'Envoyer un essai en log' : TEST_LABEL}</Button>
                         {isPublic(e) && <Button size='icon' variant='ghost' aria-label={`Modifier : ${t.label}`} onClick={() => setEditing({ type: t, enable: false })}><Pencil /></Button>}
                       </div>
                     )}
@@ -252,6 +260,7 @@ function EventsSection({ data, manage }: { data: Data; manage: boolean }) {
         ))}
       </div>
       {editing && <EventDialog type={editing.type} enable={editing.enable} data={data} onClose={() => setEditing(null)} />}
+      {dialog}
     </Section>
   )
 }

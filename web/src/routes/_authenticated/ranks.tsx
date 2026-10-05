@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils'
 import { useMe } from '@/hooks/use-me'
 import { Page, Section, EmptyState, Pill, RankBadge } from '@/components/app/ui'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { SeeAlso, useConfirm } from '@/components/app/confirm'
+import { RANKS_SEE_ALSO, others } from '@/features/navigation/see-also'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -43,6 +45,7 @@ function RanksPage() {
   const [draft, setDraft] = useState<Draft | null>(null)
   const [toDelete, setToDelete] = useState<Rank | null>(null)
   const [importing, setImporting] = useState(false)
+  const { confirm, dialog } = useConfirm()
 
   const myLevel = me?.isOwner ? Infinity : (me?.level ?? 0)
   const editable = (rank: { level: number }) => manage && rank.level < myLevel
@@ -123,6 +126,7 @@ function RanksPage() {
         </>
       )}
     >
+      <SeeAlso links={others(RANKS_SEE_ALSO, '/ranks')}>Les rangs donnent des permissions dans le panel et dans les commandes du bot.</SeeAlso>
       {isLoading && <Skeleton className='h-48 w-full' />}
       {data && (
         <Section title='Hiérarchie' description='Du plus haut au plus bas. Les flèches échangent la place de deux rangs voisins.'>
@@ -157,7 +161,13 @@ function RanksPage() {
                         <Button size='sm' variant='outline' onClick={() => setDraft(toDraft(rank))}><Pencil /> Modifier</Button>
                         <Button size='icon' variant='ghost' className='size-8' aria-label={`Dupliquer ${rank.name}`} title='Dupliquer' loading={duplicate.isPending && duplicate.variables?.id === rank.id} onClick={() => duplicate.mutate(rank)}><Copy /></Button>
                         {mainRoles.length > 0 && rank.syncRoles && (
-                          <Button size='icon' variant='ghost' className='size-8' aria-label={`Copier le rôle de ${rank.name} sur les serveurs`} title='Copier le rôle sur tous les serveurs' loading={copyRole.isPending && copyRole.variables?.id === rank.id} onClick={() => copyRole.mutate(rank)}><Share2 /></Button>
+                          <Button size='sm' variant='ghost' title='Créer ou relier ce rôle sur tous les serveurs du réseau' loading={copyRole.isPending && copyRole.variables?.id === rank.id} onClick={async () => {
+                            if (await confirm({
+                              title: `Copier le rôle de ${rank.name} sur tous les serveurs ?`,
+                              desc: `Sur chaque serveur du réseau où ce rang n’a pas encore de rôle, le bot relie le rôle du même nom (${mainRoles.map((r) => `@${roleName(r.roleId)}`).join(', ')}) ou le crée. Les membres de ce rang le recevront ensuite.`,
+                              confirmText: 'Copier le rôle',
+                            })) copyRole.mutate(rank)
+                          }}><Share2 /> Copier le rôle</Button>
                         )}
                         <Button size='icon' variant='danger-ghost' className='size-8' aria-label={`Supprimer ${rank.name}`} onClick={() => setToDelete(rank)}><Trash2 /></Button>
                       </div>
@@ -194,6 +204,7 @@ function RanksPage() {
         isLoading={remove.isPending}
         handleConfirm={() => toDelete && remove.mutate(toDelete)}
       />
+      {dialog}
     </Page>
   )
 }
@@ -210,6 +221,18 @@ function RankDialog({ draft, payload, maxLevel, canGrant, saving, onClose, onSav
   const [d, setD] = useState(draft)
   const [search, setSearch] = useState('')
   const [closed, setClosed] = useState<Set<string>>(new Set())
+  const { confirm, dialog } = useConfirm()
+  // A preset or a copy replaces what is checked: ask first when something was already chosen
+  const replacePerms = async (keys: string[], what: string) => {
+    const current = d.permissions.filter((k) => k !== 'panel.access')
+    if (current.length && !(await confirm({
+      title: 'Remplacer les permissions cochées ?',
+      desc: `${current.length} permission${current.length > 1 ? 's' : ''} déjà cochée${current.length > 1 ? 's' : ''} ser${current.length > 1 ? 'ont' : 'a'} remplacée${current.length > 1 ? 's' : ''} par ${what} (${keys.length}).`,
+      confirmText: 'Remplacer',
+    }))) return
+    setPerms(keys)
+    toast.info(`Permissions remplacées par ${what}`)
+  }
   const byCategory = useMemo(() => {
     const map = new Map<string, typeof payload.permissions>()
     for (const p of payload.permissions) map.set(p.category, [...(map.get(p.category) ?? []), p])
@@ -284,11 +307,11 @@ function RankDialog({ draft, payload, maxLevel, canGrant, saving, onClose, onSav
                 <Search className='pointer-events-none absolute start-2.5 top-2.5 size-4 text-muted-foreground' />
                 <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder='Chercher une permission' className='ps-8' aria-label='Chercher une permission' />
               </div>
-              <Select value='' onValueChange={(label) => { const preset = PRESETS.find((p) => p.label === label); if (preset) { setPerms(grantable(allKeys.filter(preset.match))); toast.info(`Modèle « ${preset.label} » appliqué`) } }}>
-                <SelectTrigger className='w-44' aria-label='Appliquer un modèle'><SelectValue placeholder='Modèle…' /></SelectTrigger>
+              <Select value='' onValueChange={(label) => { const preset = PRESETS.find((p) => p.label === label); if (preset) void replacePerms(grantable(allKeys.filter(preset.match)), `le préréglage « ${preset.label} »`) }}>
+                <SelectTrigger className='w-44' aria-label='Appliquer un préréglage de permissions'><SelectValue placeholder='Préréglage…' /></SelectTrigger>
                 <SelectContent>{PRESETS.map((p) => <SelectItem key={p.label} value={p.label}>{p.label} · {p.hint}</SelectItem>)}</SelectContent>
               </Select>
-              <Select value='' onValueChange={(id) => { const r = payload.ranks.find((x) => String(x.id) === id); if (r) { setPerms(grantable(r.permissions)); toast.info(`Permissions de ${r.name} copiées`) } }}>
+              <Select value='' onValueChange={(id) => { const r = payload.ranks.find((x) => String(x.id) === id); if (r) void replacePerms(grantable(r.permissions), `les permissions de ${r.name}`) }}>
                 <SelectTrigger className='w-48' aria-label='Copier les permissions d’un rang'><SelectValue placeholder='Copier depuis un rang…' /></SelectTrigger>
                 <SelectContent>{payload.ranks.filter((r) => r.id !== d.id).map((r) => <SelectItem key={r.id} value={String(r.id)}>{r.name} ({r.permissions.length})</SelectItem>)}</SelectContent>
               </Select>
@@ -383,6 +406,7 @@ function RankDialog({ draft, payload, maxLevel, canGrant, saving, onClose, onSav
             {d.id ? 'Enregistrer' : 'Créer le rang'}
           </Button>
         </DialogFooter>
+        {dialog}
       </DialogContent>
     </Dialog>
   )

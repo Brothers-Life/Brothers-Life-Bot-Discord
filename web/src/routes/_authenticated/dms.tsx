@@ -11,7 +11,7 @@ import { useMe } from '@/hooks/use-me'
 import { useLive } from '@/hooks/use-live'
 import { Page, Section, EmptyState, Pill, StatCards, UserAvatar } from '@/components/app/ui'
 import { ChannelSelect } from '@/components/app/pickers'
-import { UserPicker } from '@/components/app/user-picker'
+import { UserLabel, UserPicker } from '@/components/app/user-picker'
 import { UploadButton } from '@/features/uploads/image-input'
 import { imageUrl } from '@/features/uploads/upload'
 import { Button } from '@/components/ui/button'
@@ -25,6 +25,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+
+import { AutoSaved, SaveBar, useConfirm } from '@/components/app/confirm'
 
 export const Route = createFileRoute('/_authenticated/dms')({
   component: DmsPage,
@@ -298,15 +300,18 @@ function Settings({ data }: { data: Inbox }) {
   const [snippet, setSnippet] = useState<{ id: number | null; name: string; content: string } | null>(null)
   const [blockUser, setBlockUser] = useState('')
   const [blockReason, setBlockReason] = useState('')
-  const save = useMutation({ mutationFn: () => api('/dms/config', { method: 'PUT', body: c }), onSuccess: () => { toast.success('Réglages enregistrés'); refresh() } })
+  const [base, setBase] = useState<Config>(c)
+  const dirty = JSON.stringify(c) !== JSON.stringify(base)
+  const save = useMutation({ mutationFn: () => api('/dms/config', { method: 'PUT', body: c }), onSuccess: () => { toast.success('Réglages enregistrés'); setBase(c); refresh() } })
   const saveSnippet = useMutation({ mutationFn: () => api('/dms/snippets', { method: 'POST', body: snippet }), onSuccess: () => { toast.success('Réponse rapide enregistrée'); setSnippet(null); refresh() } })
-  const dropSnippet = useMutation({ mutationFn: (id: number) => api(`/dms/snippets/${id}`, { method: 'DELETE' }), onSuccess: refresh })
+  const dropSnippet = useMutation({ mutationFn: (id: number) => api(`/dms/snippets/${id}`, { method: 'DELETE' }), onSuccess: () => { toast.success('Réponse rapide supprimée'); refresh() } })
+  const { confirm, dialog } = useConfirm()
   const block = useMutation({ mutationFn: () => api('/dms/blocklist', { method: 'POST', body: { userId: blockUser, reason: blockReason } }), onSuccess: () => { toast.success('Membre bloqué'); setBlockUser(''); setBlockReason(''); refresh() } })
   const unblock = useMutation({ mutationFn: (userId: string) => api(`/dms/blocklist/${userId}`, { method: 'DELETE' }), onSuccess: () => { toast.success('Membre débloqué'); refresh() } })
 
   return (
     <div className='grid gap-6'>
-      <Section title='Premier contact' description='Quand un membre écrit au bot sans conversation ouverte : conversation créée, message d’accueil automatique et alerte au staff.' actions={<Button size='sm' onClick={() => save.mutate()} disabled={save.isPending}><Save /> Enregistrer</Button>}>
+      <Section title='Premier contact' description='Quand un membre écrit au bot sans conversation ouverte : conversation créée, message d’accueil automatique et alerte au staff.'>
         <div className='grid gap-4 p-4'>
           <label className='flex items-center gap-2 text-sm'><Switch checked={c.modmail} onCheckedChange={(v) => setC({ ...c, modmail: v })} /> Les membres peuvent écrire au bot en premier</label>
           <div className='grid gap-1.5'><Label htmlFor='dm-greeting'>Message d’accueil</Label><Textarea id='dm-greeting' rows={3} maxLength={1500} value={c.greeting} onChange={(e) => setC({ ...c, greeting: e.target.value })} /></div>
@@ -326,30 +331,35 @@ function Settings({ data }: { data: Inbox }) {
         </div>
       </Section>
 
-      <Section title='Réponses rapides' actions={<Button size='sm' variant='outline' onClick={() => setSnippet({ id: null, name: '', content: '' })}><Zap /> Ajouter</Button>}>
+      <SaveBar dirty={dirty} saving={save.isPending} onSave={() => save.mutate()} onCancel={() => { setC(base); setNotifyGuild(base.notify?.guildId ?? data.guilds[0]?.id ?? '') }} />
+      {dialog}
+      <Section title='Réponses rapides' description={<AutoSaved />} actions={<Button size='sm' variant='outline' onClick={() => setSnippet({ id: null, name: '', content: '' })}><Zap /> Ajouter</Button>}>
         {!data.snippets.length ? <EmptyState title='Aucune réponse rapide'>Des textes prêts à insérer dans une réponse.</EmptyState> : (
           <ul className='divide-y'>
             {data.snippets.map((s) => (
               <li key={s.id} className='flex items-center gap-3 px-4 py-2.5'>
                 <div className='min-w-0 flex-1'><div className='font-medium'>{s.name}</div><div className='truncate text-xs text-muted-foreground'>{s.content}</div></div>
                 <Button size='sm' variant='ghost' onClick={() => setSnippet(s)}>Modifier</Button>
-                <Button size='icon' variant='danger-ghost' aria-label={`Supprimer ${s.name}`} onClick={() => dropSnippet.mutate(s.id)}><Trash2 /></Button>
+                <Button size='icon' variant='danger-ghost' aria-label={`Supprimer ${s.name}`} onClick={async () => {
+                  if (await confirm({ title: `Supprimer « ${s.name} » ?`, desc: 'Cette réponse rapide ne sera plus proposée. Les messages déjà envoyés ne changent pas.', confirmText: 'Supprimer', destructive: true })) dropSnippet.mutate(s.id)
+                }}><Trash2 /></Button>
               </li>
             ))}
           </ul>
         )}
       </Section>
 
-      <Section title='Liste noire' description='Les MP de ces membres au bot sont ignorés. Aussi avec /dm bloquer sur Discord.'>
+      <Section title='Liste noire' description={<>Les MP de ces membres au bot sont ignorés. Aussi avec /dm bloquer sur Discord. <AutoSaved /></>}>
         <div className='grid gap-3 p-4'>
           <div className='flex flex-wrap gap-2'>
             <UserPicker value={blockUser} onChange={(id) => setBlockUser(id)} className='w-64' />
             <Input value={blockReason} maxLength={300} onChange={(e) => setBlockReason(e.target.value)} placeholder='Raison (facultatif)' className='w-64' aria-label='Raison du blocage' />
             <Button variant='danger-outline' onClick={() => block.mutate()} disabled={!/^\d{17,20}$/.test(blockUser)}><Ban /> Bloquer</Button>
           </div>
+          {!data.blocklist.length && <p className='text-sm text-muted-foreground'>Personne n’est bloqué : tous les membres peuvent écrire au bot.</p>}
           {data.blocklist.map((b) => (
-            <div key={b.userId} className='flex items-center gap-2 text-sm'>
-              <span className='flex-1'><code className='text-xs'>{b.userId}</code>{b.reason ? ` · ${b.reason}` : ''} · {ago(b.at)}</span>
+            <div key={b.userId} className='flex flex-wrap items-center gap-2 text-sm'>
+              <span className='flex min-w-0 flex-1 flex-wrap items-center gap-x-2'><UserLabel userId={b.userId} /><span className='text-muted-foreground'>{b.reason ? `${b.reason} · ` : ''}bloqué {ago(b.at)}</span></span>
               <Button size='sm' variant='ghost' onClick={() => unblock.mutate(b.userId)}>Débloquer</Button>
             </div>
           ))}

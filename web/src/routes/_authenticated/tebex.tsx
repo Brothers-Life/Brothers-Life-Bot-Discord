@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Link2, Plus, RefreshCw, Save, ShoppingCart, Trash2, Undo2, Unlink, Wallet, Wand2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -21,6 +21,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+
+import { useConfirm } from '@/components/app/confirm'
 
 export const Route = createFileRoute('/_authenticated/tebex')({
   component: TebexPage,
@@ -336,6 +338,7 @@ function Connection({ data }: { data: Data }) {
     mutationFn: (value: string | null) => api('/tebex/secret', { method: 'PUT', body: { secret: value } }),
     onSuccess: (_, value) => { toast.success(value ? 'Clé enregistrée' : 'Clé retirée'); setSecret(''); setInfo(null); refresh() },
   })
+  const { confirm, dialog } = useConfirm()
   const test = useMutation({
     mutationFn: () => api<NonNullable<typeof info>>('/tebex/test', { method: 'POST' }),
     onSuccess: (r) => { setInfo(r); toast.success('Connexion à Tebex réussie') },
@@ -354,7 +357,10 @@ function Connection({ data }: { data: Data }) {
           </div>
           <Button type='submit' disabled={!secret.trim()} loading={save.isPending && save.variables !== null}><Save /> Enregistrer</Button>
           {data.hasSecret && <Button type='button' variant='outline' loading={test.isPending} onClick={() => test.mutate()}>Tester</Button>}
-          {data.hasSecret && <Button type='button' variant='danger-ghost' loading={save.isPending && save.variables === null} onClick={() => save.mutate(null)}><Trash2 /> Retirer</Button>}
+          {data.hasSecret && <Button type='button' variant='danger-ghost' loading={save.isPending && save.variables === null} onClick={async () => {
+            if (await confirm({ title: 'Retirer la clé Tebex ?', desc: 'Les nouveaux achats ne seront plus reçus ni annoncés, et les rôles des acheteurs ne seront plus donnés, jusqu’à ce qu’une clé soit recollée.', confirmText: 'Retirer la clé', destructive: true })) save.mutate(null)
+          }}><Trash2 /> Retirer</Button>}
+          {dialog}
         </form>
         {info && (
           <Notice tone='success' title={info.store ?? 'Boutique Tebex'}>
@@ -386,7 +392,7 @@ function Options({ data }: { data: Data }) {
   return (
     <Section
       title='Options'
-      description='Les achats sont aussi envoyés dans les logs, catégorie « Boutique » (à router vers un salon dans la page Logs).'
+      description={<>Les achats sont aussi envoyés dans les logs, catégorie « Boutique » (choisis son salon sur la page <Link to='/logs' className='text-primary hover:underline'>Salons de logs</Link>).</>}
       actions={<Button size='sm' loading={save.isPending} disabled={cfg.thanks.enabled && !cfg.thanks.channelId} onClick={() => save.mutate()}><Save /> Enregistrer</Button>}
     >
       <div className='grid gap-5 p-4'>

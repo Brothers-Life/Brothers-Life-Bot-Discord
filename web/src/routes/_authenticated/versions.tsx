@@ -105,7 +105,7 @@ function VersionsPage() {
 
           <Section title='Versions publiées'>
             {data.error && <p className='px-4 py-3 text-sm text-destructive'>{data.error.message}</p>}
-            {!data.error && !data.releases.length && <EmptyState title='Aucune version publiée'>Crée un tag vX.Y.Z sur GitHub : la CI publiera la version.</EmptyState>}
+            {!data.error && !data.releases.length && <EmptyState title='Aucune version publiée'>Les nouvelles versions du bot apparaîtront ici dès qu’elles seront publiées par ses développeurs.<details className='mt-2 text-xs'><summary className='cursor-pointer'>Détails techniques</summary>Une version est publiée en créant un tag vX.Y.Z sur le dépôt GitHub : la CI construit alors l’archive installable.</details></EmptyState>}
             <ul className='divide-y'>
               {data.releases.map((r) => (
                 <li key={r.version} className='px-4 py-3'>
@@ -115,7 +115,7 @@ function VersionsPage() {
                         <span className='font-semibold tabular-nums'>{r.version}</span>
                         {r.isCurrent && <Pill tone='success'>En cours</Pill>}
                         {r.prerelease && <Pill tone='warning'>Pré-version</Pill>}
-                        {!r.compatible && <Pill tone='danger'>Base plus ancienne</Pill>}
+                        {!r.compatible && <Pill tone='danger'>Données à restaurer</Pill>}
                       </span>
                       <span className='text-xs text-muted-foreground'>Publiée le {dateTime(r.publishedAt)} · {open === r.version ? 'masquer' : 'voir'} les changements</span>
                     </button>
@@ -133,14 +133,13 @@ function VersionsPage() {
             </ul>
           </Section>
 
-          <Section title='Sauvegardes de la base' description='Une sauvegarde est faite avant chaque installation. Les 10 dernières sont gardées.'>
+          <Section title='Sauvegardes des données du bot' description='Avant chaque installation, le bot copie toutes ses données (réglages, sanctions, tickets…) pour pouvoir revenir en arrière. Les 10 dernières copies sont gardées.'>
             {!data.backups.length ? <EmptyState title='Aucune sauvegarde pour le moment' /> : (
               <ul className='divide-y'>
                 {data.backups.map((b) => (
                   <li key={b.file} className='flex flex-wrap items-center gap-3 px-4 py-2.5 text-sm'>
-                    <span className='min-w-0 flex-1 truncate font-mono text-xs'>{b.file}</span>
-                    <span className='text-muted-foreground'>{dateTime(b.at)}</span>
-                    <span className='text-muted-foreground'>schéma v{b.schemaVersion ?? '?'}</span>
+                    <span className='min-w-0 flex-1 font-medium'>Copie du {dateTime(b.at)}</span>
+                    <span className='truncate font-mono text-xs text-muted-foreground' title={`Fichier ${b.file}, format des données n° ${b.schemaVersion ?? '?'}`}>{b.file}</span>
                     <span className='text-muted-foreground tabular-nums'>{bytes(b.size)}</span>
                   </li>
                 ))}
@@ -155,8 +154,8 @@ function VersionsPage() {
         onOpenChange={(o) => !o && setPending(null)}
         title={pending?.acceptDataLoss ? `Restaurer une ancienne base pour ${pending.release.version} ?` : `Installer ${pending?.release.version} ?`}
         desc={pending?.acceptDataLoss
-          ? `${pending.lossMessage} Cette version ne connaît pas la base actuelle, il faut revenir à une sauvegarde.`
-          : 'Le bot redémarre sur la nouvelle version (environ une minute). La base est sauvegardée avant ; en cas d’échec, retour automatique.'}
+          ? `${pending.lossMessage} Cette version est trop ancienne pour lire les données actuelles du bot : il faut revenir à une copie faite à son époque, et ce qui a changé depuis sera perdu.`
+          : 'Le bot redémarre sur cette version (environ une minute). Ses données sont copiées avant ; en cas de problème, il revient tout seul à la version actuelle.'}
         confirmText={pending?.acceptDataLoss ? 'Restaurer et installer' : 'Installer'}
         destructive={pending?.acceptDataLoss}
         isLoading={doInstall.isPending}

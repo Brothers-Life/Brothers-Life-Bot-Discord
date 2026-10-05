@@ -23,10 +23,10 @@ export type SanctionTemplate = {
 
 export const TEMPLATE_TYPES: Record<SanctionType, { label: string; tone: 'danger' | 'warning' | 'info' | 'accent' }> = {
   warn: { label: 'Avertissement', tone: 'warning' },
-  timeout: { label: 'Timeout', tone: 'warning' },
+  timeout: { label: 'Exclusion temporaire', tone: 'warning' },
   restrict: { label: 'Restriction', tone: 'accent' },
   kick: { label: 'Expulsion', tone: 'danger' },
-  ban: { label: 'Ban', tone: 'danger' },
+  ban: { label: 'Bannissement', tone: 'danger' },
 }
 
 // 90 000 000 -> "1j1h": what the duration fields understand
@@ -66,7 +66,7 @@ export function SanctionTemplates() {
   return (
     <Section
       title='Modèles de sanctions'
-      description='Des bases toutes prêtes (type, raison, durée, portée). Elles remplissent le formulaire « Nouvelle sanction » et la commande /sanctionner, et restent modifiables à chaque fois.'
+      description='Des bases toutes prêtes (type, raison, durée, portée). Elles remplissent le formulaire « Nouvelle sanction » et la commande /sanction modele, et restent modifiables à chaque fois.'
       actions={manage && <Button size='sm' onClick={() => setEditing({ type: 'warn', scope: 'network', deleteMessageSeconds: 0 })}><Plus /> Nouveau modèle</Button>}
     >
       {!data.length ? <EmptyState title='Aucun modèle' icon={FileText}>Crée par exemple « Insultes » (timeout 1 h), « Pub » (avertissement) ou « Triche » (ban définitif).</EmptyState> : (

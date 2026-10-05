@@ -71,7 +71,7 @@ function SchedulesPage() {
               ))}
             </nav>
           )}
-          {!list.length ? <Section title='Horaires'><EmptyState title='Aucun horaire' icon={CalendarClock}>Par exemple : salon « events » ouvert le vendredi et le samedi de 20 h à 2 h, et fermé du 24 au 26 décembre.</EmptyState></Section> : (
+          {!list.length ? <Section title='Horaires'><EmptyState title='Aucun horaire' icon={CalendarClock}>Un horaire ouvre et ferme un salon tout seul : par exemple ouvert certains soirs de la semaine, ou fermé pendant une période précise (vacances, maintenance). Crée-en un avec « Nouvel horaire ».</EmptyState></Section> : (
             <div className='stagger grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2'>
               {list.map((s) => <ScheduleCard key={s.id} schedule={s} guild={guild} manage={manage} onEdit={() => setEditing({ ...s })} onDuplicate={() => setEditing(copyOf(s, 'name'))} />)}
             </div>

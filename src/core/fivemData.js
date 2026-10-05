@@ -249,6 +249,30 @@ export function createFivemData({ audit, settings, logger = console, now = Date.
 		};
 	}
 
+	const WANTED_TABLES = ['users', 'players', 'bl_mc_sessions', 'admindash_sanctions', 'bans', 'player_vehicles', 'management_groups', 'admindash_reports', 'admindash_staff_sessions', 'premium_points'];
+
+	// Settings typed in the panel, before saving. The saved password is reused only for the same host and user,
+	// so it can never be sent to another server.
+	async function testDraft(input) {
+		const saved = settings.get('fivemdb.config', {});
+		const sameServer = String(input.host ?? '').trim() === saved.host && String(input.user ?? '').trim() === saved.user;
+		const cfg = normalizeDbConfig({ ...input, enabled: true }, sameServer ? saved : {});
+		const draft = createPool({ host: cfg.host, port: cfg.port, user: cfg.user, password: cfg.password, database: cfg.database, connectionLimit: 1, connectTimeout: 8000, charset: 'utf8mb4' });
+		try {
+			const [[version]] = await draft.query({ sql: 'SELECT VERSION() AS v', timeout: 10_000 });
+			const [rows] = await draft.query({ sql: 'SELECT TABLE_NAME AS t FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()', timeout: 10_000 });
+			const found = new Set(rows.map(r => r.t));
+			return { version: version?.v ?? '?', tables: found.size, features: Object.fromEntries(WANTED_TABLES.map(t => [t, found.has(t)])) };
+		}
+		catch (error) {
+			logger.warn('FiveM database test:', error.message);
+			throw new ValidationError(`Base FiveM injoignable : ${error.code ?? error.message}`);
+		}
+		finally {
+			draft.end().catch(() => undefined);
+		}
+	}
+
 	const service = {
 		// What the panel shows of the settings (never the password)
 		settingsView() {
@@ -266,14 +290,15 @@ export function createFivemData({ audit, settings, logger = console, now = Date.
 			return service.settingsView();
 		},
 
-		// Connection test: tables found and what can be shown
-		async test(actor) {
+		// Connection test: tables found and what can be shown.
+		// input (the form being typed): tested on a throwaway pool, without saving it
+		async test(actor, input = null) {
 			need(actor, 'fivemdata.manage');
+			if (input) return testDraft(input);
 			tables = null;
 			const [version] = await query('SELECT VERSION() AS v');
 			await has('players');
-			const wanted = ['users', 'players', 'bl_mc_sessions', 'admindash_sanctions', 'bans', 'player_vehicles', 'management_groups', 'admindash_reports', 'admindash_staff_sessions', 'premium_points'];
-			return { version: version.v, tables: tables.size, features: Object.fromEntries(wanted.map(t => [t, tables.has(t)])) };
+			return { version: version.v, tables: tables.size, features: Object.fromEntries(WANTED_TABLES.map(t => [t, tables.has(t)])) };
 		},
 
 		// Players by name (account or character), citizen ID, license, phone, plate or Discord ID; empty = latest seen

@@ -10,6 +10,8 @@ import { useMe } from '@/hooks/use-me'
 import { Page, Section, EmptyState, Pill, StatCards } from '@/components/app/ui'
 import { UserPicker } from '@/components/app/user-picker'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { useConfirm } from '@/components/app/confirm'
+import { TEST_LABEL, testConfirm } from '@/features/announcements/test-confirm'
 import { DiscordPreview } from '@/features/announcements/discord-preview'
 import { EMPTY_EMBED, EmbedFields, cleanEmbed } from '@/features/announcements/embed-editor'
 import { TargetsEditor } from '@/features/announcements/targets-editor'
@@ -68,22 +70,27 @@ function StreamsPage() {
   const { data, dataUpdatedAt } = useQuery({ queryKey: ['streams'], queryFn: () => api<Data>('/streams'), refetchInterval: 30_000 })
   const [editing, setEditing] = useState<Partial<Subscription> | null>(null)
   const [deleting, setDeleting] = useState<Subscription | null>(null)
+  const [tab, setTab] = useState('channels')
+  const { confirm, dialog } = useConfirm()
   const refresh = () => qc.invalidateQueries({ queryKey: ['streams'] })
   const toggle = useMutation({ mutationFn: (s: Subscription) => api(`/streams/${s.id}`, { method: 'PUT', body: { enabled: !s.enabled } }), onSuccess: refresh })
   const test = useMutation({
     mutationFn: (s: Subscription) => api<{ sent: number; total: number }>(`/streams/${s.id}/test`, { method: 'POST' }),
-    onSuccess: (r) => { if (r.sent === r.total) toast.success('Exemple envoyé'); else toast.warning(`Exemple envoyé dans ${r.sent} salon(s) sur ${r.total}`); refresh() },
+    onSuccess: (r) => { if (r.sent === r.total) toast.success('Essai envoyé, sans mention'); else toast.warning(`Essai envoyé dans ${r.sent} salon(s) sur ${r.total}`); refresh() },
   })
+  const runTest = async (s: Subscription) => {
+    if (await confirm(testConfirm(s.targets, data?.guilds ?? [], `un exemple d’annonce de live de ${s.displayName}`))) test.mutate(s)
+  }
   const remove = useMutation({ mutationFn: (s: Subscription) => api(`/streams/${s.id}`, { method: 'DELETE', body: { confirm: true } }), onSuccess: () => { toast.success('Abonnement supprimé'); setDeleting(null); refresh() } })
 
   return (
     <Page
-      title='Streams et vidéos'
+      title='Streams, vidéos et flux'
       description='Le bot annonce les lives Twitch, Kick et YouTube, les nouvelles vidéos et Shorts YouTube, les vidéos TikTok et les nouveautés de n’importe quel flux RSS dans les salons que tu choisis. Un live n’est annoncé qu’une fois, et le message est mis à jour à la fin.'
-      actions={manage && <Button onClick={() => setEditing({})}><Plus /> Ajouter une chaîne</Button>}
+      actions={manage && tab === 'channels' && <Button onClick={() => setEditing({})}><Plus /> Ajouter une chaîne</Button>}
     >
       {!data ? <Skeleton className='h-96 w-full' /> : (
-        <Tabs defaultValue='channels'>
+        <Tabs value={tab} onValueChange={setTab}>
           <TabsList className='h-auto flex-wrap [&>button]:h-8 [&>button]:flex-none'>
             <TabsTrigger value='channels'><Tv /> Chaînes (Twitch, Kick, YouTube)</TabsTrigger>
             <TabsTrigger value='feeds'><Rss /> Flux RSS et TikTok</TabsTrigger>
@@ -124,7 +131,7 @@ function StreamsPage() {
                         {manage && (
                           <div className='flex items-center gap-2'>
                             <Switch checked={s.enabled} onCheckedChange={() => toggle.mutate(s)} aria-label={`Activer ${s.displayName}`} />
-                            <Button size='sm' variant='outline' onClick={() => test.mutate(s)} disabled={test.isPending}><FlaskConical /> Tester</Button>
+                            <Button size='sm' variant='outline' onClick={() => void runTest(s)} disabled={test.isPending || !s.targets.length}><FlaskConical /> {TEST_LABEL}</Button>
                             <Button size='icon' variant='ghost' aria-label={`Modifier ${s.displayName}`} onClick={() => setEditing(s)}><Pencil /></Button>
                             <DuplicateButton name={s.displayName} onClick={() => setEditing(copyOf(s))} />
                             <Button size='icon' variant='danger-ghost' aria-label={`Supprimer ${s.displayName}`} onClick={() => setDeleting(s)}><Trash2 /></Button>
@@ -159,6 +166,7 @@ function StreamsPage() {
       )}
       {editing && data && <SubscriptionDialog initial={editing} guilds={data.guilds} onClose={() => { setEditing(null); refresh() }} />}
       <ConfirmDialog open={Boolean(deleting)} onOpenChange={(o) => !o && setDeleting(null)} title={`Ne plus suivre ${deleting?.displayName} ?`} desc='Les messages déjà envoyés restent sur Discord.' confirmText='Supprimer' destructive isLoading={remove.isPending} handleConfirm={() => deleting && remove.mutate(deleting)} />
+      {dialog}
     </Page>
   )
 }

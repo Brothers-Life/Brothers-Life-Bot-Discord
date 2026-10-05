@@ -16,6 +16,9 @@ import { STATUS } from '@/features/announcements/status'
 import { AnnouncementsCalendar } from '@/features/announcements/calendar'
 import { describeRecurrence } from '@/features/announcements/schedule-editor'
 
+import { SeeAlso } from '@/components/app/confirm'
+import { MESSAGES_SEE_ALSO, others } from '@/features/navigation/see-also'
+
 export const Route = createFileRoute('/_authenticated/announcements/')({
   component: AnnouncementsPage,
 })
@@ -34,6 +37,7 @@ function AnnouncementsPage() {
         </Button>
       )}
     >
+      <SeeAlso links={others(MESSAGES_SEE_ALSO, '/announcements')}>Ici : un message envoyé une fois (ou de façon récurrente), avec des pings, programmable.</SeeAlso>
       <Tabs defaultValue='list'>
         <TabsList>
           <TabsTrigger value='list'>Annonces</TabsTrigger>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, Gamepad2, MessageSquarePlus, Pencil, Plus, Save, Server, Trash2, Users, X } from 'lucide-react'
@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Channel } from '@/lib/types'
 import { ago } from '@/lib/format'
-import { cn, copyOf } from '@/lib/utils'
+import { cn, copyOf, typeInto } from '@/lib/utils'
 import { useMe } from '@/hooks/use-me'
 import { Page, Section, EmptyState, Pill, StatCards } from '@/components/app/ui'
 import { ChannelSelect } from '@/components/app/pickers'
@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { ColorPicker } from '@/components/app/color-picker'
+import { VariablePicker } from '@/components/app/variable-picker'
 import { DuplicateButton } from '@/components/app/duplicate-button'
 
 export const Route = createFileRoute('/_authenticated/fivem')({
@@ -41,7 +42,7 @@ function FivemPage() {
   const qc = useQueryClient()
   return (
     <Page
-      title='FiveM'
+      title='FiveM · Statut'
       description='État en direct des serveurs FiveM, vérifié chaque minute. Le bot peut tenir un message de statut à jour dans des salons, afficher les joueurs dans son statut et répondre à /fivem.'
       actions={manage && <Button onClick={() => setEditing({})}><Plus /> Ajouter un serveur</Button>}
     >
@@ -195,11 +196,14 @@ function ServerDialog({ initial, onClose }: { initial: Partial<Server>; onClose:
 function PresenceSection({ data }: { data: Data }) {
   const qc = useQueryClient()
   const [p, setP] = useState(data.presence)
+  const onRef = useRef<HTMLInputElement>(null)
+  const offRef = useRef<HTMLInputElement>(null)
+  const lastField = useRef<HTMLInputElement | null>(null)
   const save = useMutation({ mutationFn: () => api('/fivem/presence', { method: 'PUT', body: p }), onSuccess: () => { toast.success('Statut du bot enregistré'); qc.invalidateQueries({ queryKey: ['fivem'] }) } })
   return (
     <Section
       title='Statut du bot'
-      description='Texte affiché sous le nom du bot. Avec plusieurs serveurs, il change toutes les 30 secondes. Variables : {players}, {max}, {name}.'
+      description='Texte affiché sous le nom du bot. Avec plusieurs serveurs, il change toutes les 30 secondes.'
       actions={<Button size='sm' onClick={() => save.mutate()} disabled={save.isPending}><Save /> Enregistrer</Button>}
     >
       <div className='grid gap-4 p-4'>
@@ -216,8 +220,15 @@ function PresenceSection({ data }: { data: Data }) {
           })}
         </div>
         <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
-          <div className='grid gap-1.5'><Label htmlFor='pr-on'>En ligne</Label><Input id='pr-on' value={p.text} maxLength={120} onChange={(e) => setP({ ...p, text: e.target.value })} /></div>
-          <div className='grid gap-1.5'><Label htmlFor='pr-off'>Hors ligne</Label><Input id='pr-off' value={p.offlineText} maxLength={120} onChange={(e) => setP({ ...p, offlineText: e.target.value })} /></div>
+          <div className='grid gap-1.5'><Label htmlFor='pr-on'>En ligne</Label><Input id='pr-on' ref={onRef} onFocus={() => { lastField.current = onRef.current }} value={p.text} maxLength={120} onChange={(e) => setP({ ...p, text: e.target.value })} /></div>
+          <div className='grid gap-1.5'><Label htmlFor='pr-off'>Hors ligne</Label><Input id='pr-off' ref={offRef} onFocus={() => { lastField.current = offRef.current }} value={p.offlineText} maxLength={120} onChange={(e) => setP({ ...p, offlineText: e.target.value })} /></div>
+        </div>
+        <div className='flex flex-wrap items-center gap-2'>
+          <VariablePicker
+            groups={[{ title: 'Serveur FiveM', items: [{ key: 'players', label: 'Joueurs connectés' }, { key: 'max', label: 'Places du serveur' }, { key: 'name', label: 'Nom du serveur' }] }]}
+            onPick={(token) => typeInto(lastField.current ?? onRef.current!, token)}
+          />
+          <span className='text-xs text-muted-foreground'>Insérée dans le dernier champ cliqué.</span>
         </div>
       </div>
     </Section>

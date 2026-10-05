@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { durationInput, useSanctionTemplates } from './templates'
 
-export const TYPE_LABELS: Record<SanctionType, string> = { ban: 'Bannir', kick: 'Expulser', timeout: 'Timeout', warn: 'Avertir', restrict: 'Restreindre' }
+export const TYPE_LABELS: Record<SanctionType, string> = { ban: 'Bannir', kick: 'Expulser', timeout: 'Exclure temporairement', warn: 'Avertir', restrict: 'Restreindre' }
 
 export function SanctionDialog({ userId: initialUserId = '', onClose }: { userId?: string; onClose: () => void }) {
   const { can } = useMe()

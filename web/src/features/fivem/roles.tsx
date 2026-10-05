@@ -6,6 +6,7 @@ import { api, errorMessage } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useMe } from '@/hooks/use-me'
 import { EmptyState, Notice, Pill, Section, StatCards, UserAvatar } from '@/components/app/ui'
+import { useConfirm } from '@/components/app/confirm'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -139,6 +140,7 @@ function Report({ onOpen }: { onOpen: (userId: number) => void }) {
   const qc = useQueryClient()
   const check = useQuery({ queryKey: ['fivem-roles-check'], queryFn: () => api<Check>('/fivem-data/roles/check'), retry: false })
   const [picked, setPicked] = useState<Set<string>>(new Set())
+  const { confirm, dialog } = useConfirm()
   const fix = useMutation({
     mutationFn: (keys: string[]) => api<{ done: number; failed: { key: string; error: string }[] }>('/fivem-data/roles/fix', { method: 'POST', body: { keys } }),
     onSuccess: (r) => {
@@ -160,6 +162,20 @@ function Report({ onOpen }: { onOpen: (userId: number) => void }) {
   const remove = c.issues.filter((i) => i.action === 'remove')
   const toggle = (key: string) => setPicked((p) => { const n = new Set(p); if (n.has(key)) n.delete(key); else n.add(key); return n })
   const multiGuild = c.guilds.length > 1
+  // Several roles at once: say how many are given and taken before doing it
+  const fixMany = async (keys: string[]) => {
+    const list = c.issues.filter((i) => keys.includes(i.key))
+    const adds = list.filter((i) => i.action === 'add').length
+    const removes = list.length - adds
+    const members = new Set(list.map((i) => i.userId)).size
+    const ok = await confirm({
+      title: `Corriger ${list.length} rôle${list.length > 1 ? 's' : ''} ?`,
+      desc: `Le bot va ajouter ${adds} rôle${adds > 1 ? 's' : ''} et en retirer ${removes} sur Discord, pour ${members} membre${members > 1 ? 's' : ''}.`,
+      confirmText: 'Corriger',
+      destructive: removes > 0,
+    })
+    if (ok) fix.mutate(keys)
+  }
 
   const rows = (list: Issue[]) => (
     <ul className='divide-y'>
@@ -202,8 +218,8 @@ function Report({ onOpen }: { onOpen: (userId: number) => void }) {
         actions={
           <div className='flex flex-wrap gap-2'>
             <Button variant='outline' size='sm' loading={check.isFetching} onClick={() => check.refetch()}><RefreshCw /> Revérifier</Button>
-            {picked.size > 0 && <Button size='sm' variant='outline' loading={fix.isPending} onClick={() => fix.mutate([...picked])}>Corriger la sélection ({picked.size})</Button>}
-            {fixable.length > 0 && <Button size='sm' loading={fix.isPending} onClick={() => fix.mutate(fixable.map((i) => i.key))}><Wand2 /> Tout corriger ({fixable.length})</Button>}
+            {picked.size > 0 && <Button size='sm' variant='outline' loading={fix.isPending} onClick={() => void fixMany([...picked])}>Corriger la sélection ({picked.size})</Button>}
+            {fixable.length > 0 && <Button size='sm' loading={fix.isPending} onClick={() => void fixMany(fixable.map((i) => i.key))}><Wand2 /> Tout corriger ({fixable.length})</Button>}
           </div>
         }
       >
@@ -229,6 +245,7 @@ function Report({ onOpen }: { onOpen: (userId: number) => void }) {
           </ul>
         </Section>
       )}
+      {dialog}
     </>
   )
 }
