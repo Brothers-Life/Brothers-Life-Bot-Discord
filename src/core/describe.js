@@ -202,6 +202,7 @@ const TITLES = {
 	'absences.reject': 'Absence refusée',
 	'absences.end': 'Fin d’absence',
 	'absences.extend': 'Absence prolongée',
+	'absences.cancel': 'Absence annulée',
 	'rpevents.create': 'Événement RP créé',
 	'rpevents.update': 'Événement RP modifié',
 	'rpevents.cancel': 'Événement RP annulé',

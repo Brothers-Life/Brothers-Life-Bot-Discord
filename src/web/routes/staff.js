@@ -94,8 +94,8 @@ export function registerStaffRoutes(app, { core }) {
 	});
 	app.post('/api/absences/:id/review', {
 		config: { permission: 'absences.manage' },
-		schema: { params: idParam, body: { type: 'object', required: ['approved'], properties: { approved: { type: 'boolean' } } } },
-	}, async (request) => absences.review(request.actor, request.params.id, request.body.approved));
+		schema: { params: idParam, body: { type: 'object', required: ['approved'], properties: { approved: { type: 'boolean' }, reason: { type: 'string', maxLength: 500 } } } },
+	}, async (request) => absences.review(request.actor, request.params.id, request.body.approved, request.body.reason ?? ''));
 	app.post('/api/absences/:id/end', { config: { permission: null }, schema: { params: idParam } }, async (request) => absences.end(request.actor, request.params.id));
 	app.post('/api/absences/:id/extend', {
 		config: { permission: null },
