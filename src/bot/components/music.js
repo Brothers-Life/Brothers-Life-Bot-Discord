@@ -2,6 +2,7 @@ import { MessageFlags } from 'discord.js';
 import { AppError } from '../../core/errors.js';
 import { parseSearch } from '../../core/music/platforms.js';
 import { addModal, pickPayload, queuePayload, saveModal } from '../musicUi.js';
+import { errorContent } from '../userError.js';
 
 // customId: mu:<action>[:<extra>] (now-playing message, search results, forms)
 export const prefix = 'mu';
@@ -78,7 +79,7 @@ export async function execute(interaction) {
 	}
 	catch (error) {
 		if (!(error instanceof AppError)) throw error;
-		if (interaction.deferred || interaction.replied) await interaction.editReply({ content: error.message, components: [] }).catch(() => undefined);
-		else await privately({ content: error.message });
+		if (interaction.deferred || interaction.replied) await interaction.editReply({ content: errorContent(error, ''), components: [] }).catch(() => undefined);
+		else await privately({ content: errorContent(error, '') });
 	}
 }

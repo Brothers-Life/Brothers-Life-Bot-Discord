@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parsePosition } from '../../src/bot/commands/community/musique.js';
-import { clock, musicPayload, queuePayload, setPanelUrl, watchUrl } from '../../src/bot/musicUi.js';
+import { nowPlaying, parsePosition } from '../../src/bot/commands/community/musique.js';
+import { clock, musicPanelUrl, musicPayload, queuePayload, setPanelUrl, watchUrl } from '../../src/bot/musicUi.js';
 
 const track = { id: 1, title: 'One More Time', author: 'Daft Punk', url: 'https://www.youtube.com/watch?v=FGBhQbmPwH8', durationMs: 320_000, thumbnail: null, source: 'youtube', live: false, requestedBy: '100000000000000002' };
 
-test('positions typed in /musique aller', () => {
+test('positions typed in /musique position', () => {
 	assert.equal(parsePosition('1:30', 0), 90_000);
 	assert.equal(parsePosition('90', 0), 90_000);
 	assert.equal(parsePosition('1:02:03', 0), 3_723_000);
@@ -29,12 +29,17 @@ test('now-playing message: controls, clip link at the current time, queue pages'
 	assert.match(queuePayload(view).toJSON().description, /Aerodynamic/);
 });
 
-test('now-playing message: button to manage the music from the panel, on the right server', () => {
+test('now-playing message: no panel link on the public player, the link is built for private replies', () => {
 	const view = { guildId: '900000000000000001', connected: true, current: track, position: 0, paused: false, volume: 80, speed: 1, loop: 'off', filters: [], index: 0, queue: [track], upcoming: [] };
-	setPanelUrl('');
-	assert.equal(musicPayload(view).components.flatMap(r => r.toJSON().components).some(b => b.label === 'Gérer sur le panel'), false);
 	setPanelUrl('https://panel.example.com:3001/');
-	const button = musicPayload(view).components.flatMap(r => r.toJSON().components).find(b => b.label === 'Gérer sur le panel');
-	assert.equal(button.url, 'https://panel.example.com:3001/music?guild=900000000000000001');
+	assert.equal(musicPayload(view).components.flatMap(r => r.toJSON().components).some(b => b.url?.includes('panel.example.com')), false);
+	assert.equal(musicPanelUrl('900000000000000001'), 'https://panel.example.com:3001/music?guild=900000000000000001');
+	setPanelUrl('');
+	assert.equal(musicPanelUrl('900000000000000001'), null);
 	setPanelUrl(null);
+});
+
+test('replies after a skip say what plays now', () => {
+	assert.equal(nowPlaying({ current: track }), 'Au tour de « One More Time ».');
+	assert.equal(nowPlaying({ current: null }), 'La file est terminée.');
 });

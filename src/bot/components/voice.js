@@ -1,6 +1,7 @@
 import { MessageFlags } from 'discord.js';
 import { AppError } from '../../core/errors.js';
-import { limitModal, qualityMenus, renameModal, userPicker } from '../voiceUi.js';
+import { limitModal, qualityMenus, renameModal, userPicker, withRoomState } from '../voiceUi.js';
+import { errorContent } from '../userError.js';
 
 // customId: voice:<action>:<channelId>
 export const prefix = 'voice';
@@ -12,6 +13,12 @@ export async function execute(interaction) {
 	const ephemeral = content => (interaction.deferred || interaction.replied
 		? interaction.followUp({ content, flags: MessageFlags.Ephemeral })
 		: interaction.reply({ content, flags: MessageFlags.Ephemeral }));
+	// The buttons of the control panel say what the next click does (Verrouiller / Déverrouiller…)
+	const refreshPanel = async (state) => {
+		if (!interaction.message?.components?.length) return;
+		const components = withRoomState(interaction.message.components.map(row => row.toJSON?.() ?? row), state);
+		await interaction.update({ components }).catch(() => undefined);
+	};
 
 	try {
 		const room = voiceRooms.getRoom(channelId);
@@ -32,15 +39,19 @@ export async function execute(interaction) {
 		}
 		case 'lock': {
 			const updated = await voiceRooms.setLocked(me, channelId, !room.state.locked);
+			await refreshPanel(updated.state);
 			return await ephemeral(updated.state.locked ? '🔒 Salon verrouillé : seuls les membres autorisés peuvent entrer.' : '🔓 Salon ouvert à tous.');
 		}
 		case 'hide': {
 			const updated = await voiceRooms.setHidden(me, channelId, !room.state.hidden);
-			return await ephemeral(updated.state.hidden ? '👁️ Salon caché.' : 'Salon visible.');
+			await refreshPanel(updated.state);
+			return await ephemeral(updated.state.hidden ? '👁️ Salon caché.' : '👀 Salon visible.');
 		}
-		case 'reset':
-			await voiceRooms.reset(me, channelId);
+		case 'reset': {
+			const updated = await voiceRooms.reset(me, channelId);
+			await refreshPanel(updated?.state ?? voiceRooms.getRoom(channelId).state);
 			return await ephemeral('Réglages remis par défaut.');
+		}
 		case 'permit':
 			await voiceRooms.permit(me, channelId, interaction.values);
 			return await interaction.reply({ content: `✅ Autorisé : ${interaction.values.map(u => `<@${u}>`).join(', ')}`, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
@@ -80,6 +91,6 @@ export async function execute(interaction) {
 	}
 	catch (error) {
 		if (!(error instanceof AppError)) throw error;
-		await ephemeral(`Impossible : ${error.message}`);
+		await ephemeral(errorContent(error));
 	}
 }

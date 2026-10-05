@@ -1,7 +1,7 @@
 import { moderationCommand, runModeration, sanctionEmbed } from '../../moderation.js';
 import { ValidationError } from '../../../core/errors.js';
 
-export const data = moderationCommand('unwarn', 'Retirer un avertissement')
+export const data = moderationCommand('unwarn', 'Retirer un avertissement d’un membre')
 	.addIntegerOption(o => o.setName('id').setDescription('Numéro de l’avertissement (voir /historique)').setRequired(true).setMinValue(1))
 	.addStringOption(o => o.setName('raison').setDescription('Raison').setMaxLength(500));
 

@@ -1,6 +1,7 @@
 import { InteractionContextType, MessageFlags, SlashCommandBuilder } from 'discord.js';
 import { AppError } from '../../../core/errors.js';
 import { startApplication } from '../../components/recruitment.js';
+import { errorContent } from '../../userError.js';
 
 export const data = new SlashCommandBuilder()
 	.setName('candidature')
@@ -20,6 +21,6 @@ export async function execute(interaction) {
 	}
 	catch (error) {
 		if (!(error instanceof AppError)) throw error;
-		await interaction.reply({ content: `Impossible : ${error.message}`, flags: MessageFlags.Ephemeral });
+		await interaction.reply({ content: errorContent(error), flags: MessageFlags.Ephemeral });
 	}
 }

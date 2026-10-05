@@ -7,14 +7,20 @@ const REGION_LABELS = {
 	'singapore': 'Singapour', 'southafrica': 'Afrique du Sud', 'sydney': 'Sydney',
 };
 
+// The lock / hide buttons say what a click will do, from the current state of the room
+const LOCK = { false: { label: 'Verrouiller', emoji: '🔒' }, true: { label: 'Déverrouiller', emoji: '🔓' } };
+const HIDE = { false: { label: 'Cacher', emoji: '👁️' }, true: { label: 'Rendre visible', emoji: '👀' } };
+
 // Control panel posted in the text chat of a personal voice channel
-export function roomPanel(channelId, { ownerId, options }) {
+export function roomPanel(channelId, { ownerId, options, state = {} }) {
 	const id = action => `voice:${action}:${channelId}`;
+	const lock = LOCK[Boolean(state.locked)];
+	const hide = HIDE[Boolean(state.hidden)];
 	const buttons = [
 		options.rename && new ButtonBuilder().setCustomId(id('rename')).setLabel('Renommer').setEmoji('✏️').setStyle(ButtonStyle.Secondary),
 		options.limit && new ButtonBuilder().setCustomId(id('limit')).setLabel('Limite').setEmoji('👥').setStyle(ButtonStyle.Secondary),
-		options.lock && new ButtonBuilder().setCustomId(id('lock')).setLabel('Verrouiller').setEmoji('🔒').setStyle(ButtonStyle.Secondary),
-		options.hide && new ButtonBuilder().setCustomId(id('hide')).setLabel('Cacher').setEmoji('👁️').setStyle(ButtonStyle.Secondary),
+		options.lock && new ButtonBuilder().setCustomId(id('lock')).setLabel(lock.label).setEmoji(lock.emoji).setStyle(ButtonStyle.Secondary),
+		options.hide && new ButtonBuilder().setCustomId(id('hide')).setLabel(hide.label).setEmoji(hide.emoji).setStyle(ButtonStyle.Secondary),
 		new ButtonBuilder().setCustomId(id('reset')).setLabel('Réinitialiser').setEmoji('♻️').setStyle(ButtonStyle.Secondary),
 	].filter(Boolean);
 	const moreButtons = [
@@ -34,6 +40,16 @@ export function roomPanel(channelId, { ownerId, options }) {
 		components: rows,
 		allowedMentions: { users: [ownerId] },
 	};
+}
+
+// Components of a posted control panel (JSON), with the lock / hide buttons matching the new state
+export function withRoomState(components, state) {
+	const swap = (button) => {
+		const action = String(button.custom_id ?? '').split(':')[1];
+		const look = action === 'lock' ? LOCK[Boolean(state.locked)] : action === 'hide' ? HIDE[Boolean(state.hidden)] : null;
+		return look ? { ...button, label: look.label, emoji: { name: look.emoji } } : button;
+	};
+	return components.map(row => ({ ...row, components: (row.components ?? []).map(swap) }));
 }
 
 export function renameModal(channelId, current) {

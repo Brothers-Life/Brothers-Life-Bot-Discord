@@ -1,6 +1,7 @@
 import { EmbedBuilder, InteractionContextType, MessageFlags, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import { AppError } from '../core/errors.js';
 import { formatDuration, parseDuration } from '../core/duration.js';
+import { errorContent } from './userError.js';
 
 const COLORS = { ban: 0xed4245, kick: 0xed4245, timeout: 0xfee75c, warn: 0xfee75c, restrict: 0xf0883e, revoke: 0x57f287 };
 const TITLES = { ban: 'Bannissement', kick: 'Expulsion', timeout: 'Timeout', warn: 'Avertissement', restrict: 'Restriction' };
@@ -78,7 +79,7 @@ export async function runModeration(interaction, action) {
 	}
 	catch (error) {
 		if (!(error instanceof AppError)) throw error;
-		await interaction.editReply({ content: `Impossible : ${error.message}` });
+		await interaction.editReply({ content: errorContent(error) });
 	}
 }
 

@@ -14,6 +14,7 @@ export function pollPayload({ poll, results, showResults }, { target } = {}) {
 	});
 	const closed = poll.status === 'closed';
 	const footer = [
+		`Sondage #${poll.id}`,
 		`${results.voters} votant${results.voters > 1 ? 's' : ''}`,
 		poll.settings.multiple ? `jusqu’à ${poll.settings.maxChoices} choix` : null,
 		poll.settings.anonymous ? 'anonyme' : null,

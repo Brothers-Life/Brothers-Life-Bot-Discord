@@ -1,7 +1,12 @@
+import fs from 'node:fs';
 import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
-import { AppError } from '../../core/errors.js';
+import { AppError, ForbiddenError } from '../../core/errors.js';
 import { showFormModal, readModal, fromEphemeralMessage } from '../forms.js';
-import { addMemberMenu, closeModal, nextStepPayload, ratingCommentModal } from '../ticketsUi.js';
+import { addMemberMenu, closeModal, deleteConfirmPayload, nextStepPayload, ratingCommentModal } from '../ticketsUi.js';
+import { errorContent } from '../userError.js';
+
+// Discord refuses big files for bots (10 Mo without boosts): past that, the plain text is sent
+const HTML_TRANSCRIPT_MAX = 9 * 1024 * 1024;
 
 // customId: ticket:<action>:<id>[:<extra>]
 export const prefix = 'ticket';
@@ -126,16 +131,28 @@ export async function execute(interaction) {
 			await tickets.reopen(interaction.user.id, id);
 			return await interaction.editReply('Ticket rouvert.');
 		}
-		case 'delete': {
-			await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+		case 'delete':
+			// Asked first, privately: deleting the channel cannot be undone
+			return await interaction.reply({ ...deleteConfirmPayload(tickets.get(id)), flags: MessageFlags.Ephemeral });
+		case 'delcancel':
+			return await interaction.update({ content: 'Suppression annulée.', components: [] });
+		case 'delconfirm': {
+			await interaction.update({ content: 'Suppression du salon…', components: [] });
 			await tickets.deleteArchived(interaction.user.id, id);
-			return await interaction.editReply('Suppression du salon…');
+			return;
 		}
 		case 'transcript': {
-			const ticket = tickets.get(id, { withTranscript: true });
 			if (!await interaction.client.core.ranks.resolve(interaction.user.id).then(p => p.can('tickets.view'))) {
-				throw new AppError('FORBIDDEN', 'il te faut la permission de voir les tickets.');
+				throw new ForbiddenError('Permission manquante : tickets.view');
 			}
+			// The web page of the conversation (Discord look) when it was saved, else the plain text
+			const html = tickets.transcriptFile(id);
+			const size = html ? fs.statSync(html.file).size : 0;
+			if (html && size <= HTML_TRANSCRIPT_MAX) {
+				const name = `ticket-${String(html.ticket.number).padStart(4, '0')}.html`;
+				return await interaction.reply({ content: 'Conversation du ticket : ouvre le fichier dans ton navigateur.', files: [new AttachmentBuilder(html.file, { name })], flags: MessageFlags.Ephemeral });
+			}
+			const ticket = tickets.get(id, { withTranscript: true });
 			const file = new AttachmentBuilder(Buffer.from(ticket.transcript ?? '(vide)', 'utf8'), { name: `ticket-${ticket.number}.txt` });
 			return await interaction.reply({ files: [file], flags: MessageFlags.Ephemeral });
 		}
@@ -158,7 +175,7 @@ export async function execute(interaction) {
 	}
 	catch (error) {
 		if (!(error instanceof AppError)) throw error;
-		const content = `Impossible : ${error.message}`;
+		const content = errorContent(error);
 		if (interaction.deferred || interaction.replied) await interaction.editReply({ content, components: [] });
 		else await interaction.reply({ content, flags: MessageFlags.Ephemeral });
 	}

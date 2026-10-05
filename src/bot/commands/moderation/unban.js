@@ -1,6 +1,6 @@
 import { moderationCommand, runModeration, scopeOf, sanctionEmbed, resultsLine } from '../../moderation.js';
 
-export const data = moderationCommand('unban', 'Débannir un utilisateur du réseau')
+export const data = moderationCommand('unban', 'Débannir un membre du réseau (ou de ce serveur)')
 	.addStringOption(o => o.setName('id').setDescription('ID Discord de l’utilisateur').setRequired(true))
 	.addStringOption(o => o.setName('raison').setDescription('Raison').setMaxLength(500))
 	.addBooleanOption(o => o.setName('local').setDescription('Seulement sur ce serveur'));
