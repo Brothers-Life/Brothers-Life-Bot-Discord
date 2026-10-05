@@ -9,6 +9,8 @@ definePermission('staffactivity.manage', { label: 'Régler le rapport mensuel du
 const DAY = 86_400_000;
 const SNOWFLAKE = /^\d{17,20}$/;
 const TIME_ZONE = 'Europe/Paris';
+// Field added by the audit to the details of an action done with an API key (see audit.js)
+const API_KEY_FIELD = 'Clé d’API';
 
 // Weight of each activity in the score (shown in the panel, so the ranking is explained)
 export const WEIGHTS = { ticketsClosed: 5, ticketReplies: 1, sanctions: 3, dmReplies: 1, panelActions: 0.5, voiceHours: 2, messages: 0.05 };
@@ -66,12 +68,20 @@ export function createStaffActivity({ db, network, ranks, audit, executor, setti
 		if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) throw new ValidationError('Période invalide.');
 		if (to - from > 400 * DAY) throw new ValidationError('Période trop longue (400 jours au maximum).');
 		const staff = await listStaff({ ranks, network, executor });
-		const closed = count('SELECT closed_by AS user_id, COUNT(*) AS n, AVG(rating) AS rating FROM tickets WHERE closed_by IS NOT NULL AND closed_at BETWEEN ? AND ? GROUP BY closed_by', from, to);
+		// A closed ticket (and its rating) counts for whoever handled it: the claimer, else the staff member whose close
+		// request was accepted or expired, else the closer (never the bot, nor the opener closing their own ticket)
+		const closed = count(`
+			SELECT user_id, COUNT(*) AS n, AVG(rating) AS rating FROM (
+				SELECT COALESCE(claimed_by, close_request_by, CASE WHEN closed_by NOT IN ('system', 'unknown') AND closed_by != opener_id THEN closed_by END) AS user_id, rating
+				FROM tickets WHERE closed_at BETWEEN ? AND ?
+			) WHERE user_id IS NOT NULL GROUP BY user_id`, from, to);
 		const claimed = count('SELECT claimed_by AS user_id, COUNT(*) AS n FROM tickets WHERE claimed_by IS NOT NULL AND created_at BETWEEN ? AND ? GROUP BY claimed_by', from, to);
 		const replies = count('SELECT COALESCE(panel_user, author_id) AS user_id, COUNT(*) AS n FROM ticket_messages WHERE is_bot = 0 AND created_at BETWEEN ? AND ? GROUP BY COALESCE(panel_user, author_id)', from, to);
-		const sanctions = count('SELECT moderator_id AS user_id, COUNT(*) AS n, SUM(type = \'ban\') AS bans, SUM(type = \'warn\') AS warns, SUM(type = \'timeout\') AS timeouts FROM sanctions WHERE created_at BETWEEN ? AND ? GROUP BY moderator_id', from, to);
+		const sanctions = count('SELECT moderator_id AS user_id, COUNT(*) AS n, SUM(type = \'ban\') AS bans, SUM(type = \'warn\') AS warns, SUM(type = \'timeout\') AS timeouts FROM sanctions WHERE revoked_at IS NULL AND created_at BETWEEN ? AND ? GROUP BY moderator_id', from, to);
 		const dms = count('SELECT author_id AS user_id, COUNT(*) AS n FROM dm_messages WHERE direction = \'out\' AND at BETWEEN ? AND ? GROUP BY author_id', from, to);
-		const panel = count('SELECT actor_id AS user_id, COUNT(*) AS n FROM audit_log WHERE source = \'panel\' AND at BETWEEN ? AND ? GROUP BY actor_id', from, to);
+		// Actions done through an API key (scripts, bots) are not panel work
+		const panel = count(`SELECT actor_id AS user_id, COUNT(*) AS n FROM audit_log WHERE source = 'panel' AND at BETWEEN ? AND ?
+			AND (details IS NULL OR instr(details, '"${API_KEY_FIELD}":') = 0) GROUP BY actor_id`, from, to);
 		const activity = count('SELECT user_id, SUM(messages) AS messages, SUM(voice_seconds) AS voice FROM stats_activity WHERE day BETWEEN ? AND ? GROUP BY user_id', dayOf(from), dayOf(to));
 		const absences = db.prepare('SELECT user_id, start_at, end_at FROM absences WHERE status IN (\'approved\', \'active\', \'ended\') AND start_at < ? AND end_at > ?').all(to, from);
 
@@ -90,6 +100,8 @@ export function createStaffActivity({ db, network, ranks, audit, executor, setti
 				messages: activity.get(s.id)?.messages ?? 0,
 				voiceHours: Math.round(((activity.get(s.id)?.voice ?? 0) / 3600) * 10) / 10,
 				absentDays: Math.round((absent / DAY) * 10) / 10,
+				// A validated absence overlaps the period: the score is to be read with that in mind
+				absent: absent > 0,
 			};
 			return { ...m, score: scoreOf(m) };
 		}).sort((a, b) => b.score - a.score);

@@ -121,9 +121,16 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 		addGrant: db.prepare('INSERT INTO tebex_grants (payment_id, guild_id, user_id, role_id, temp_role_id, granted_at) VALUES (?, ?, ?, ?, ?, ?)'),
 		closeGrant: db.prepare('UPDATE tebex_grants SET removed_at = ? WHERE id = ?'),
 		// The same role still owed by another payment that was not refunded: it stays
+		// (grants of an ended temporary role, given as the last parameter, owe nothing anymore)
 		otherGrant: db.prepare(`
 			SELECT 1 FROM tebex_grants g JOIN tebex_payments p ON p.id = g.payment_id
-			WHERE g.payment_id != ? AND g.guild_id = ? AND g.user_id = ? AND g.role_id = ? AND g.removed_at IS NULL AND p.revoked_at IS NULL LIMIT 1
+			WHERE g.payment_id != ? AND g.guild_id = ? AND g.user_id = ? AND g.role_id = ? AND g.removed_at IS NULL AND p.revoked_at IS NULL
+				AND (g.temp_role_id IS NULL OR g.temp_role_id != ?) LIMIT 1
+		`),
+		// Another valid purchase sharing the same temporary role (its days were added on top)
+		sharedTemp: db.prepare(`
+			SELECT 1 FROM tebex_grants g JOIN tebex_payments p ON p.id = g.payment_id
+			WHERE g.temp_role_id = ? AND g.id != ? AND g.removed_at IS NULL AND p.revoked_at IS NULL LIMIT 1
 		`),
 		knownLink: db.prepare('SELECT discord_id FROM tebex_links WHERE player_uuid = ?'),
 		remember: db.prepare(`
@@ -132,6 +139,7 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 		`),
 		// Temporary roles share the table of /role: moderation.expireTempRoles takes them off when due
 		activeTemp: db.prepare('SELECT * FROM temp_roles WHERE guild_id = ? AND user_id = ? AND role_id = ? AND removed_at IS NULL'),
+		tempById: db.prepare('SELECT * FROM temp_roles WHERE id = ?'),
 		insertTemp: db.prepare('INSERT INTO temp_roles (guild_id, user_id, role_id, role_name, expires_at, reason, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'),
 		extendTemp: db.prepare('UPDATE temp_roles SET expires_at = ? WHERE id = ? AND removed_at IS NULL'),
 		closeTemp: db.prepare('UPDATE temp_roles SET removed_at = ?, removed_by = ? WHERE id = ? AND removed_at IS NULL'),
@@ -235,10 +243,30 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 	// Takes back the roles of a refunded payment (kept when another valid purchase still gives them)
 	async function revokeGrants(row) {
 		const removed = [];
+		const packageIds = new Set(packagesOf(row).map(p => p.id));
 		for (const grant of q.grantsOf.all(row.id).filter(g => !g.removed_at)) {
 			q.closeGrant.run(now(), grant.id);
-			if (grant.temp_role_id) q.closeTemp.run(now(), 'system', grant.temp_role_id);
-			if (q.otherGrant.get(row.id, grant.guild_id, grant.user_id, grant.role_id)) continue;
+			// Temporary role ended by this refund: the other purchases cumulated on it are spent too
+			let endedTemp = -1;
+			const temp = grant.temp_role_id ? q.tempById.get(grant.temp_role_id) : null;
+			if (temp && !temp.removed_at) {
+				if (q.sharedTemp.get(temp.id, grant.id)) {
+					// Cumulated with another purchase: only the days of this one are taken off
+					const days = config().mappings.find(m => packageIds.has(m.packageId) && m.guildId === grant.guild_id && m.roleId === grant.role_id && m.days)?.days ?? 0;
+					const left = temp.expires_at - days * DAY;
+					if (left > now()) {
+						q.extendTemp.run(left, temp.id);
+					}
+					else {
+						q.closeTemp.run(now(), 'system', temp.id);
+						endedTemp = temp.id;
+					}
+				}
+				else {
+					q.closeTemp.run(now(), 'system', temp.id);
+				}
+			}
+			if (q.otherGrant.get(row.id, grant.guild_id, grant.user_id, grant.role_id, endedTemp)) continue;
 			try {
 				await executor.removeRole(grant.guild_id, grant.user_id, grant.role_id, `Boutique Tebex : paiement #${row.id} remboursé`);
 				removed.push(grant.role_id);

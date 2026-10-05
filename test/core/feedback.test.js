@@ -38,11 +38,12 @@ test('suggestion: form, publication with a thread, votes, status with reason, DM
 	const { item: voted } = await feedback.vote(item.id, '300000000000000009', -1);
 	assert.deepEqual([voted.up, voted.down], [2, 1]);
 	assert.equal((await feedback.vote(item.id, BOB, 1)).removed, true, 'the same vote twice removes it');
+	await assert.rejects(feedback.vote(item.id, MEMBER, 1), /ta propre proposition/);
 
 	await assert.rejects(feedback.setStatus(MEMBER, item.id, 'accepted'), ForbiddenError);
 	const accepted = await feedback.setStatus(ALICE, item.id, 'accepted', { reason: 'Prévu pour la v2' });
 	assert.equal(accepted.statusReason, 'Prévu pour la v2');
-	assert.match(executor.dms.at(-1)[1], /Acceptée[\s\S]*Prévu pour la v2/);
+	assert.match(executor.dms.at(-1)[1], /sur \*\*Main\*\*[\s\S]*Acceptée[\s\S]*Prévu pour la v2/);
 	assert.deepEqual(executor.lockedThreads, ['770000000000000001']);
 	await assert.rejects(feedback.vote(item.id, ALICE, 1), /close/);
 });
@@ -56,8 +57,11 @@ test('review before publication, anonymous posts', async () => {
 	assert.equal(executor.reviews.length, 1);
 	const published = await feedback.review(ALICE, item.id, true);
 	assert.equal(published.channelId, C_PUBLIC);
+	assert.deepEqual(executor.dms.at(-1)[0], MEMBER);
+	assert.match(executor.dms.at(-1)[1], /« Idée »[\s\S]*sur \*\*Main\*\* a été validée/);
 	const other = await submit(box, BOB, { title: 'Mauvaise idée' });
 	assert.equal(await feedback.review(ALICE, other.id, false), null);
+	assert.match(executor.dms.at(-1)[1], /sur \*\*Main\*\* n’a pas été retenue/);
 	assert.equal(feedback.list(owner, { boxId: box.id }).length, 1);
 });
 
