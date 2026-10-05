@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Activity, Radiation, RotateCcw, Save, ShieldAlert, ShieldCheck, Undo2, UserX, X } from 'lucide-react'
+import { Activity, Archive, Radiation, Save, ShieldAlert, ShieldCheck, Undo2, UserX, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { dateTime } from '@/lib/format'
@@ -10,6 +10,8 @@ import { useMe } from '@/hooks/use-me'
 import { EmptyState, GuildIcon, Page, Pill, Section, StatCards, UserAvatar } from '@/components/app/ui'
 import { UserPicker } from '@/components/app/user-picker'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { SeeAlso } from '@/components/app/confirm'
+import { PROTECTION_SEE_ALSO, others } from '@/features/navigation/see-also'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -109,6 +111,7 @@ function AntinukePage() {
       title='Anti-nuke'
       description='Protège le réseau contre un compte du staff piraté ou malveillant : les actions destructrices (suppressions de salons et de rôles, bans en masse, permissions dangereuses, bots ajoutés…) sont comptées par auteur sur tous les serveurs. Au-delà de la limite, le compte perd ses rôles dangereux partout, en attendant qu’on les lui rende.'
     >
+      <SeeAlso links={others(PROTECTION_SEE_ALSO, '/antinuke')}>L’anti-nuke surveille le staff. Les autres protections :</SeeAlso>
       <div className={cn(
         'flex flex-wrap items-center gap-4 rounded-lg border p-4 transition-colors',
         open.length ? 'border-destructive/50 bg-destructive/10' : config.enabled ? 'border-success/40 bg-success/8' : 'bg-card',
@@ -285,7 +288,7 @@ function AntinukePage() {
                     {manage && incident.status === 'open' && (
                       <div className='flex flex-wrap gap-2'>
                         <Button size='sm' onClick={() => setConfirm({ kind: 'restore', incident })}><Undo2 /> Rendre les rôles</Button>
-                        <Button size='sm' variant='outline' onClick={() => setConfirm({ kind: 'dismiss', incident })}><RotateCcw /> Classer</Button>
+                        <Button size='sm' variant='outline' onClick={() => setConfirm({ kind: 'dismiss', incident })}><Archive /> Classer sans rendre</Button>
                       </div>
                     )}
                   </div>

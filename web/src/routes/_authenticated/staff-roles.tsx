@@ -1,4 +1,5 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { useState } from 'react'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Crown, RefreshCw, Wand2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -6,6 +7,8 @@ import { api } from '@/lib/api'
 import type { StaffRolesPayload } from '@/lib/types'
 import { useMe } from '@/hooks/use-me'
 import { Page, Section, EmptyState, RankBadge } from '@/components/app/ui'
+import { SaveBar, SeeAlso, useConfirm } from '@/components/app/confirm'
+import { RANKS_SEE_ALSO, others } from '@/features/navigation/see-also'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -21,12 +24,23 @@ function StaffRolesPage() {
   const myLevel = me?.isOwner ? Infinity : (me?.level ?? 0)
   const qc = useQueryClient()
   const { data, isLoading } = useQuery({ queryKey: ['staff-roles'], queryFn: () => api<StaffRolesPayload>('/staff-roles') })
+  // Unsaved choices, by "rankId:guildId"
+  const [draft, setDraft] = useState<Record<string, string[]>>({})
+  const dirty = Object.keys(draft).length > 0
+  const { confirm, dialog } = useConfirm()
 
   const save = useMutation({
-    mutationFn: ({ rankId, guildId, roleIds }: { rankId: number; guildId: string; roleIds: string[] }) =>
-      api(`/staff-roles/${rankId}/${guildId}`, { method: 'PUT', body: { roleIds } }),
+    mutationFn: async () => {
+      for (const [cell, roleIds] of Object.entries(draft)) {
+        const [rankId, guildId] = cell.split(':')
+        await api(`/staff-roles/${rankId}/${guildId}`, { method: 'PUT', body: { roleIds } })
+      }
+    },
     onSuccess: () => {
-      toast.success('Liaison enregistrée. Les rôles seront synchronisés dans quelques secondes.')
+      toast.success('Liaisons enregistrées. Les rôles seront synchronisés dans quelques secondes.')
+      setDraft({})
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: ['staff-roles'] })
       qc.invalidateQueries({ queryKey: ['ranks'] })
     },
@@ -55,14 +69,21 @@ function StaffRolesPage() {
           <Button variant='outline' onClick={() => linkByName.mutate()} disabled={linkByName.isPending}>
             <Wand2 /> Associer par nom
           </Button>
-          <Button variant='outline' onClick={() => sync.mutate()} disabled={sync.isPending}>
+          <Button variant='outline' disabled={sync.isPending} onClick={async () => {
+            if (await confirm({
+              title: 'Tout resynchroniser ?',
+              desc: `Le bot vérifie chaque membre du staff sur ${data?.guilds.length ?? 0} serveur(s) et donne ou retire les rôles liés selon son rang. Ça peut modifier les rôles de nombreux membres.`,
+              confirmText: 'Resynchroniser',
+            })) sync.mutate()
+          }}>
             <RefreshCw className={sync.isPending ? 'animate-spin' : undefined} /> Tout resynchroniser
           </Button>
         </>
       )}
     >
       {isLoading && <Skeleton className='h-64 w-full' />}
-      {data && !data.ranks.length && <Section title='Aucun rang'><EmptyState title='Crée d’abord des rangs'>Page « Rangs ».</EmptyState></Section>}
+      <SeeAlso links={others(RANKS_SEE_ALSO, '/staff-roles')}>Relie chaque rang à un rôle Discord sur chaque serveur.</SeeAlso>
+      {data && !data.ranks.length && <Section title='Aucun rang'><EmptyState title='Crée d’abord des rangs'>Sur la page <Link to='/ranks' className='text-primary hover:underline'>Rangs</Link>.</EmptyState></Section>}
       {data && data.ranks.length > 0 && (
         <Section title={`${data.ranks.length} rang${data.ranks.length > 1 ? 's' : ''} × ${data.guilds.length} serveur${data.guilds.length > 1 ? 's' : ''}`}>
           <div className='overflow-x-auto'>
@@ -84,13 +105,15 @@ function StaffRolesPage() {
                     <tr key={rank.id}>
                       <th scope='row' className='px-4 py-2 text-start font-normal'><RankBadge name={rank.name} color={rank.color} /></th>
                       {data.guilds.map((guild) => {
-                        const selected = guild.links[rank.id] ?? []
+                        const cell = `${rank.id}:${guild.id}`
+                        const selected = draft[cell] ?? guild.links[rank.id] ?? []
+                        const changed = cell in draft
                         const names = selected.map((id) => guild.roles.find((r) => r.id === id)?.name ?? '?')
                         return (
                           <td key={guild.id} className='px-4 py-2'>
                             <Popover>
                               <PopoverTrigger asChild disabled={!editable}>
-                                <Button variant='ghost' size='sm' className='h-auto max-w-56 justify-start px-2 py-1 text-start whitespace-normal'>
+                                <Button variant='ghost' size='sm' className={`h-auto max-w-56 justify-start px-2 py-1 text-start whitespace-normal ${changed ? 'ring-1 ring-primary' : ''}`}>
                                   {names.length ? names.map((n) => `@${n}`).join(', ') : <span className='text-muted-foreground'>{editable ? 'Choisir…' : '—'}</span>}
                                 </Button>
                               </PopoverTrigger>
@@ -102,10 +125,9 @@ function StaffRolesPage() {
                                       <Checkbox
                                         checked={checked}
                                         disabled={!role.editable || (role.dangerous && !me?.isOwner) || save.isPending}
-                                        onCheckedChange={() => save.mutate({
-                                          rankId: rank.id,
-                                          guildId: guild.id,
-                                          roleIds: checked ? selected.filter((id) => id !== role.id) : [...selected, role.id],
+                                        onCheckedChange={() => setDraft({
+                                          ...draft,
+                                          [cell]: checked ? selected.filter((id) => id !== role.id) : [...selected, role.id],
                                         })}
                                       />
                                       <span aria-hidden className='size-2 rounded-full' style={{ background: role.color === '#000000' ? 'var(--muted-foreground)' : role.color }} />
@@ -128,6 +150,8 @@ function StaffRolesPage() {
           </div>
         </Section>
       )}
+      {manage && <SaveBar dirty={dirty} saving={save.isPending} onSave={() => save.mutate()} onCancel={() => setDraft({})} message={`${Object.keys(draft).length} liaison(s) modifiée(s), pas encore enregistrée(s).`} />}
+      {dialog}
     </Page>
   )
 }

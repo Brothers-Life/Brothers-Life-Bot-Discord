@@ -8,6 +8,8 @@ import { ago, dateTime } from '@/lib/format'
 import { EmptyState, Notice, Pill, Section, StatCards } from '@/components/app/ui'
 import { VariableButton, type VariableGroup } from '@/components/app/variable-picker'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { useConfirm } from '@/components/app/confirm'
+import { TEST_LABEL, testConfirm } from '@/features/announcements/test-confirm'
 import { DuplicateButton } from '@/components/app/duplicate-button'
 import { DiscordPreview } from '@/features/announcements/discord-preview'
 import { EMPTY_EMBED, EmbedFields, cleanEmbed } from '@/features/announcements/embed-editor'
@@ -66,8 +68,12 @@ export function FeedsSection({ guilds, manage }: { guilds: AnnouncementTargetsPa
   const toggle = useMutation({ mutationFn: (f: Feed) => api(`/feeds/${f.id}`, { method: 'PUT', body: { enabled: !f.enabled } }), onSuccess: refresh })
   const test = useMutation({
     mutationFn: (f: Feed) => api<{ sent: number; total: number }>(`/feeds/${f.id}/test`, { method: 'POST' }),
-    onSuccess: (r) => { if (r.sent === r.total) toast.success('Exemple envoyé'); else toast.warning(`Exemple envoyé dans ${r.sent} salon(s) sur ${r.total}`); refresh() },
+    onSuccess: (r) => { if (r.sent === r.total) toast.success('Essai envoyé, sans mention'); else toast.warning(`Essai envoyé dans ${r.sent} salon(s) sur ${r.total}`); refresh() },
   })
+  const { confirm, dialog } = useConfirm()
+  const runTest = async (f: Feed) => {
+    if (await confirm(testConfirm(f.targets, guilds, `un exemple de publication de ${f.displayName}`))) test.mutate(f)
+  }
   const remove = useMutation({ mutationFn: (f: Feed) => api(`/feeds/${f.id}`, { method: 'DELETE', body: { confirm: true } }), onSuccess: () => { toast.success('Flux supprimé'); setDeleting(null); refresh() } })
 
   if (!data) return <Skeleton className='h-96 w-full' />
@@ -111,7 +117,7 @@ export function FeedsSection({ guilds, manage }: { guilds: AnnouncementTargetsPa
                 {manage && (
                   <div className='flex items-center gap-2'>
                     <Switch checked={f.enabled} onCheckedChange={() => toggle.mutate(f)} aria-label={`Activer ${f.displayName}`} />
-                    <Button size='sm' variant='outline' onClick={() => test.mutate(f)} disabled={test.isPending}><FlaskConical /> Tester</Button>
+                    <Button size='sm' variant='outline' onClick={() => void runTest(f)} disabled={test.isPending || !f.targets.length}><FlaskConical /> {TEST_LABEL}</Button>
                     <Button size='icon' variant='ghost' aria-label={`Modifier ${f.displayName}`} onClick={() => setEditing(f)}><Pencil /></Button>
                     <DuplicateButton name={f.displayName} onClick={() => setEditing(copyOf(f))} />
                     <Button size='icon' variant='danger-ghost' aria-label={`Supprimer ${f.displayName}`} onClick={() => setDeleting(f)}><Trash2 /></Button>
@@ -140,6 +146,7 @@ export function FeedsSection({ guilds, manage }: { guilds: AnnouncementTargetsPa
       </Section>
       {editing && <FeedDialog initial={editing} guilds={guilds} variables={data.variables} onClose={() => { setEditing(null); refresh() }} />}
       <ConfirmDialog open={Boolean(deleting)} onOpenChange={(o) => !o && setDeleting(null)} title={`Ne plus suivre ${deleting?.displayName} ?`} desc='Les messages déjà envoyés restent sur Discord.' confirmText='Supprimer' destructive isLoading={remove.isPending} handleConfirm={() => deleting && remove.mutate(deleting)} />
+      {dialog}
     </div>
   )
 }

@@ -102,8 +102,8 @@ function TicketPage() {
         <div className='flex flex-wrap items-center gap-2'>
           <Button asChild variant='ghost'><Link to='/tickets'><ArrowLeft /> Tickets</Link></Button>
           {live ? <Pill tone='accent'><span className='live-dot !size-1.5' aria-hidden /> En direct</Pill> : <Pill tone='warning'>Reconnexion…</Pill>}
-          {ticket.htmlTranscript && <Button asChild><a href={`/api/tickets/${ticket.id}/transcript`} target='_blank' rel='noreferrer'><ExternalLink /> Transcript web</a></Button>}
-          {ticket.hasTranscript && <Button variant='outline' onClick={() => setTranscript(true)}><FileText /> {ticket.htmlTranscript ? 'Texte' : 'Transcript'}</Button>}
+          {ticket.htmlTranscript && <Button asChild><a href={`/api/tickets/${ticket.id}/transcript`} target='_blank' rel='noreferrer'><ExternalLink /> Conversation (page web)</a></Button>}
+          {ticket.hasTranscript && <Button variant='outline' onClick={() => setTranscript(true)}><FileText /> Conversation (texte)</Button>}
         </div>
       }
     >
@@ -204,7 +204,7 @@ function TicketPage() {
                   </div>
                   <div className='flex flex-wrap gap-2'>
                     {!ticket.claimedBy && <Button size='sm' onClick={() => action.mutate({ path: 'claim' })}>Prendre en charge</Button>}
-                    <Button size='sm' variant='outline' onClick={() => setAdding(true)}><UserPlus /> Ajouter</Button>
+                    <Button size='sm' variant='outline' onClick={() => setAdding(true)}><UserPlus /> Ajouter un membre</Button>
                     <Button size='sm' variant='outline' onClick={() => setAsking(true)}><HelpCircle /> Demander la fermeture</Button>
                     <Button size='sm' variant='danger-outline' onClick={() => setClosing(true)}><Lock /> Fermer</Button>
                   </div>
@@ -271,7 +271,7 @@ function TicketPage() {
       </ConfirmDialog>
       <Dialog open={adding} onOpenChange={setAdding}>
         <DialogContent className='sm:max-w-md'>
-          <DialogHeader><DialogTitle>Ajouter quelqu’un au ticket</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Ajouter un membre au ticket</DialogTitle></DialogHeader>
           <UserPicker value='' onChange={(userId) => userId && action.mutate({ path: 'members', body: { userId } })} placeholder='Pseudo ou ID Discord' autoFocus />
         </DialogContent>
       </Dialog>

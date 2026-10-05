@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, FolderPlus, Search, Send } from 'lucide-react'
@@ -8,10 +8,11 @@ import type { Channel, LogRoute, LogsPayload } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { Page, Section, EmptyState, Pill } from '@/components/app/ui'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { SeeAlso } from '@/components/app/confirm'
+import { HISTORY_SEE_ALSO, others } from '@/features/navigation/see-also'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
@@ -49,7 +50,7 @@ function LogsPage() {
           <EmptyState title='Aucun serveur à configurer'>Ajoute d’abord des serveurs au réseau.</EmptyState>
         </Section>
       )}
-      <RetentionSetting />
+      <SeeAlso links={others(HISTORY_SEE_ALSO, '/logs')}>Ici : dans quel salon Discord part chaque log. Chaque changement est enregistré automatiquement. La durée de conservation de l’historique se règle sur la page Historique Discord.</SeeAlso>
       {current && data && (
         <div className='grid grid-cols-1 gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]'>
           <nav aria-label='Serveurs' className='flex gap-1 overflow-x-auto lg:flex-col'>
@@ -87,10 +88,19 @@ function Target({ guildId, title, channelsOf, routes, data }: { guildId: string;
   const [all, setAll] = useState<string | null>(null)
   const refresh = () => qc.invalidateQueries({ queryKey: ['logs'] })
 
+  // Several quick changes give one toast (same id, updated count) instead of one per line
+  const batch = useRef({ count: 0, timer: 0 })
   const save = useMutation({
     mutationFn: ({ category, channelId, enabled }: { category: string; channelId: string | null; enabled: boolean }) =>
       api(`/logs/${encodeURIComponent(guildId)}/${encodeURIComponent(category)}`, { method: 'PUT', body: { channelId, enabled } }),
-    onSuccess: () => { toast.success('Logs enregistrés'); refresh() },
+    onSuccess: () => {
+      const b = batch.current
+      b.count += 1
+      window.clearTimeout(b.timer)
+      b.timer = window.setTimeout(() => { b.count = 0 }, 4000)
+      toast.success(b.count > 1 ? `${b.count} réglages de logs enregistrés` : 'Réglage de logs enregistré', { id: `logs-saved-${guildId}` })
+      refresh()
+    },
   })
   const routeAll = useMutation({
     mutationFn: (channelId: string) => api(`/logs/${encodeURIComponent(guildId)}/all`, { method: 'POST', body: { channelId } }),
@@ -284,35 +294,5 @@ function Packs({ guildId, packs, onDone }: { guildId: string; packs: LogsPayload
         </div>
       </ConfirmDialog>
     </Section>
-  )
-}
-
-function RetentionSetting() {
-  const qc = useQueryClient()
-  const { data } = useQuery({ queryKey: ['events-settings'], queryFn: () => api<{ retentionDays: number }>('/events/settings') })
-  const [days, setDays] = useState<string>('')
-  const save = useMutation({
-    mutationFn: (retentionDays: number) => api('/events/settings', { method: 'PUT', body: { retentionDays } }),
-    onSuccess: () => {
-      toast.success('Durée de conservation enregistrée')
-      qc.invalidateQueries({ queryKey: ['events-settings'] })
-      setDays('')
-    },
-  })
-  if (!data) return null
-  const value = days === '' ? String(data.retentionDays) : days
-  return (
-    <form
-      className='flex flex-wrap items-center gap-2 text-sm'
-      onSubmit={(e) => {
-        e.preventDefault()
-        save.mutate(Number(value))
-      }}
-    >
-      <label htmlFor='retention'>Conserver les événements</label>
-      <Input id='retention' type='number' min={1} max={365} value={value} onChange={(e) => setDays(e.target.value)} className='h-8 w-20' />
-      <span>jours dans la base</span>
-      {days !== '' && Number(days) !== data.retentionDays && <Button loading={save.isPending} size='sm' type='submit' disabled={save.isPending}>Enregistrer</Button>}
-    </form>
   )
 }

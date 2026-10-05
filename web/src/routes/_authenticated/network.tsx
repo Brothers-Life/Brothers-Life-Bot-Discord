@@ -80,7 +80,7 @@ function NetworkPage() {
       {isLoading && <Skeleton className='h-48 w-full' />}
       {guilds && !guilds.length && (
         <Section title='Aucun serveur'>
-          <EmptyState title='Le bot n’est sur aucun serveur'>Invite-le sur tes serveurs depuis le Developer Portal, ils apparaîtront ici.</EmptyState>
+          <EmptyState title='Le bot n’est sur aucun serveur'>Invite-le sur tes serveurs depuis le portail développeur de Discord (discord.com/developers, page de l’application du bot, onglet « Installation »), ils apparaîtront ici.</EmptyState>
         </Section>
       )}
       {groups.map((group) => group.items.length > 0 && (

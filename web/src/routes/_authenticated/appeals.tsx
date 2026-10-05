@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Inbox, Plus, Save, Scale, Trash2, X } from 'lucide-react'
+import { Check, Inbox, Plus, Scale, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Channel, Role } from '@/lib/types'
@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { SaveBar } from '@/components/app/confirm'
 
 export const Route = createFileRoute('/_authenticated/appeals')({
   component: AppealsPage,
@@ -25,7 +26,7 @@ export const Route = createFileRoute('/_authenticated/appeals')({
 
 type Person = { name: string | null; avatar: string | null } | null
 type Appeal = {
-  id: number; sanctionId: number; userId: string; status: 'pending' | 'accepted' | 'rejected'; answers: { question: string; answer: string }[]
+  id: number; sanctionId: number; userId: string; status: 'pending' | 'accepted' | 'rejected'; moot?: boolean; answers: { question: string; answer: string }[]
   decidedBy: string | null; decisionReason: string | null; createdAt: number; decidedAt: number | null
   sanction: { id: number; type: string; reason: string | null; createdAt: number; expiresAt: number | null; revokedAt: number | null; moderatorId: string }
   user: Person; decider: Person; moderator: Person
@@ -52,7 +53,7 @@ function AppealsPage() {
           <StatCards items={[
             { label: 'En attente', value: count('pending'), icon: Inbox, tone: 'warning' },
             { label: 'Acceptés', value: count('accepted'), icon: Check, tone: 'success' },
-            { label: 'Refusés', value: count('rejected'), icon: X, tone: 'danger' },
+            { label: 'Refusés', value: data?.appeals.filter((a) => a.status === 'rejected' && !a.moot).length ?? 0, icon: X, tone: 'danger' },
           ]} />
           <Section
             title='Appels'
@@ -71,7 +72,7 @@ function AppealsPage() {
                       <UserAvatar src={a.user?.avatar} name={a.user?.name ?? '?'} className='size-8' />
                       <Link to='/people' search={{ id: a.userId }} className='font-medium hover:underline'>{a.user?.name ?? a.userId}</Link>
                       <Pill tone='neutral'>{TYPES[a.sanction.type] ?? a.sanction.type} #{a.sanctionId}</Pill>
-                      <Pill tone={STATUS[a.status].tone}>{STATUS[a.status].label}</Pill>
+                      {a.moot ? <Pill tone='neutral'>Sans objet</Pill> : <Pill tone={STATUS[a.status].tone}>{STATUS[a.status].label}</Pill>}
                       <span className='text-xs text-muted-foreground'>déposé le {dateTime(a.createdAt)}</span>
                     </div>
                     <p className='text-sm text-muted-foreground'>Sanction du {dateTime(a.sanction.createdAt)} par {a.moderator?.name ?? a.sanction.moderatorId}{a.sanction.reason ? ` · « ${a.sanction.reason} »` : ''}</p>
@@ -80,7 +81,7 @@ function AppealsPage() {
                         <div key={i}><dt className='text-xs font-medium text-muted-foreground'>{x.question}</dt><dd className='text-sm whitespace-pre-line [overflow-wrap:anywhere]'>{x.answer || '—'}</dd></div>
                       ))}
                     </dl>
-                    {a.status !== 'pending' && <p className='text-sm'>{a.status === 'accepted' ? 'Accepté' : 'Refusé'} par {a.decider?.name ?? a.decidedBy} le {dateTime(a.decidedAt)}{a.decisionReason ? ` · ${a.decisionReason}` : ''}</p>}
+                    {a.status !== 'pending' && <p className='text-sm'>{a.moot ? 'Clos sans objet (sanction déjà terminée)' : a.status === 'accepted' ? 'Accepté' : 'Refusé'} par {a.decider?.name ?? a.decidedBy} le {dateTime(a.decidedAt)}{a.decisionReason ? ` · ${a.decisionReason}` : ''}</p>}
                     {a.status === 'pending' && can('sanctions.revoke') && (
                       <div className='flex flex-wrap gap-2'>
                         <Button size='sm' variant='success' onClick={() => setDeciding({ appeal: a, accepted: true })}><Check /> Accepter et lever</Button>
@@ -131,9 +132,12 @@ function Settings({ data }: { data: Payload }) {
   const qc = useQueryClient()
   const [c, setC] = useState<Config>({ ...data.config, guildId: data.config.guildId ?? data.guilds[0]?.id ?? null })
   const guild = data.guilds.find((g) => g.id === c.guildId)
-  const save = useMutation({ mutationFn: () => api('/appeals/config', { method: 'PUT', body: c }), onSuccess: () => { toast.success('Réglages enregistrés'); qc.invalidateQueries({ queryKey: ['appeals'] }) } })
+  const [base, setBase] = useState<Config>(c)
+  const dirty = JSON.stringify(c) !== JSON.stringify(base)
+  const save = useMutation({ mutationFn: () => api('/appeals/config', { method: 'PUT', body: c }), onSuccess: () => { toast.success('Réglages enregistrés'); setBase(c); qc.invalidateQueries({ queryKey: ['appeals'] }) } })
   return (
-    <Section title='Réglages' actions={<Button size='sm' loading={save.isPending} onClick={() => save.mutate()}><Save /> Enregistrer</Button>}>
+    <>
+    <Section title='Réglages'>
       <div className='grid gap-5 p-4'>
         <label className='flex items-center gap-2 text-sm font-medium'><Switch checked={c.enabled} onCheckedChange={(enabled) => setC({ ...c, enabled })} /> Appels ouverts</label>
         <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
@@ -180,5 +184,7 @@ function Settings({ data }: { data: Payload }) {
         </div>
       </div>
     </Section>
+    <SaveBar dirty={dirty} saving={save.isPending} onSave={() => save.mutate()} onCancel={() => setC(base)} />
+    </>
   )
 }

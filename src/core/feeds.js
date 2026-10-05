@@ -269,7 +269,8 @@ export function createFeeds({ db, network, audit, executor, logs, fetchImpl = fe
 			try {
 				if (!servers.has(target.guildId)) servers.set(target.guildId, await vars.server(target.guildId).catch(() => ({})));
 				const payload = fitPayload(fillPayload(s.payload, { ...servers.get(target.guildId), ...own }));
-				await executor.sendAnnouncement(target.channelId, payload, target);
+				// A test pings nobody and is not crossposted
+				await executor.sendAnnouncement(target.channelId, payload, kind === 'test' ? { ...target, ping: 'none', roleIds: [], publish: false } : target);
 				sent++;
 			}
 			catch (error) {

@@ -175,6 +175,8 @@ function RestoreDialog({ backup, guild, onClose, onStarted }: { backup: Backup; 
 function Settings({ data }: { data: Data }) {
   const qc = useQueryClient()
   const [c, setC] = useState(data.config)
+  // "Some servers" stays chosen even when every box is unchecked (saved as "all", said explicitly below)
+  const [some, setSome] = useState(data.config.guildIds.length > 0)
   const save = useMutation({ mutationFn: () => api('/backups/config', { method: 'PUT', body: c }), onSuccess: () => { toast.success('Réglages enregistrés'); qc.invalidateQueries({ queryKey: ['backups'] }) } })
   return (
     <Section title='Sauvegardes automatiques' actions={<Button size='sm' loading={save.isPending} onClick={() => save.mutate()}><Save /> Enregistrer</Button>}>
@@ -193,13 +195,14 @@ function Settings({ data }: { data: Data }) {
         </div>
         <div className='grid gap-1.5'>
           <Label>Serveurs</Label>
-          <Select value={c.guildIds.length ? 'some' : 'all'} onValueChange={(v) => setC({ ...c, guildIds: v === 'all' ? [] : data.guilds.map((g) => g.id) })}>
+          <Select value={some ? 'some' : 'all'} onValueChange={(v) => { setSome(v === 'some'); setC({ ...c, guildIds: v === 'all' ? [] : data.guilds.map((g) => g.id) }) }}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent><SelectItem value='all'>Tous les serveurs du réseau</SelectItem><SelectItem value='some'>Certains serveurs</SelectItem></SelectContent>
           </Select>
         </div>
-        {c.guildIds.length > 0 && (
+        {some && (
           <div className='flex flex-wrap gap-3 sm:col-span-3'>
+            {!c.guildIds.length && <Notice tone='warning' className='w-full'>Aucun serveur coché : la sauvegarde automatique se fera sur <strong>tous les serveurs</strong> du réseau. Coche au moins un serveur pour limiter.</Notice>}
             {data.guilds.map((g) => (
               <label key={g.id} className='flex items-center gap-2 text-sm'>
                 <Checkbox checked={c.guildIds.includes(g.id)} onCheckedChange={(v) => setC({ ...c, guildIds: v === true ? [...c.guildIds, g.id] : c.guildIds.filter((x) => x !== g.id) })} /> {g.name}

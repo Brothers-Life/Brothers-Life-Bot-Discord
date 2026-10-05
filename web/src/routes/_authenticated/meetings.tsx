@@ -27,6 +27,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { toLocalInput } from '@/features/announcements/schedule-editor'
 import { DuplicateButton } from '@/components/app/duplicate-button'
 
+import { useConfirm } from '@/components/app/confirm'
+
 export const Route = createFileRoute('/_authenticated/meetings')({
   component: MeetingsPage,
 })
@@ -192,6 +194,7 @@ function MeetingDialog({ meeting: m, data, onClose, onEdit }: { meeting: Meeting
   const guild = data.guilds.find((g) => g.id === m.guildId)
   const people = m.report?.people ?? m.invitees.map((i) => ({ ...i, invited: true, status: null, minutes: 0, firstJoin: null, inVoice: false }))
   const dirty = notes !== m.notes || JSON.stringify(agenda) !== JSON.stringify(m.agenda)
+  const { confirm, dialog } = useConfirm()
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -206,7 +209,15 @@ function MeetingDialog({ meeting: m, data, onClose, onEdit }: { meeting: Meeting
         {manage && (
           <div className='flex flex-wrap gap-2'>
             {m.status === 'scheduled' && <Button size='sm' loading={act.isPending} onClick={() => act.mutate('start')}><Play /> Démarrer maintenant</Button>}
-            {m.status === 'live' && <Button size='sm' variant='destructive' loading={act.isPending} onClick={() => act.mutate('end')}><CircleStop /> Terminer et publier le compte rendu</Button>}
+            {m.status === 'live' && <Button size='sm' variant='destructive' loading={act.isPending} onClick={async () => {
+              if (await confirm({
+                title: 'Terminer la réunion ?',
+                desc: `La présence vocale s’arrête et le compte rendu est publié sur Discord.${dirty ? ' Attention : tes notes non enregistrées ne seront pas dans le compte rendu, enregistre-les d’abord.' : ''}`,
+                confirmText: 'Terminer et publier',
+                destructive: true,
+              })) act.mutate('end')
+            }}><CircleStop /> Terminer et publier le compte rendu</Button>}
+            {dialog}
             {m.status === 'scheduled' && <Button size='sm' variant='outline' onClick={onEdit}><Pencil /> Modifier</Button>}
             {(m.status === 'scheduled' || m.status === 'live') && <Button size='sm' variant='danger-ghost' onClick={() => setCancelling(true)}><X /> Annuler la réunion</Button>}
           </div>
@@ -222,6 +233,7 @@ function MeetingDialog({ meeting: m, data, onClose, onEdit }: { meeting: Meeting
                   <span className={cn('size-2 shrink-0 rounded-full', p.inVoice ? 'live-dot bg-success' : 'bg-transparent')} aria-label={p.inVoice ? 'en vocal' : undefined} />
                   <UserAvatar src={p.user?.avatar} name={p.user?.name ?? '?'} className='size-6' />
                   <Link to='/people' search={{ id: p.userId }} className='min-w-0 flex-1 truncate hover:underline'>{p.user?.name ?? p.userId}</Link>
+                  {(p as { onLeave?: boolean }).onLeave && <Pill tone='info'>en absence</Pill>}
                   {p.rsvp && <span title='Réponse'>{RSVP[p.rsvp]}</span>}
                   {m.report && p.status && <Pill tone={PRESENCE[p.status].tone}>{PRESENCE[p.status].label}</Pill>}
                   {m.report && <span className='w-14 text-end text-xs text-muted-foreground tabular-nums'>{p.minutes} min</span>}

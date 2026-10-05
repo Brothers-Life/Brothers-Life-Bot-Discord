@@ -121,6 +121,10 @@ test('test message and permissions', async () => {
 	const sub = await streams.save(owner, { platform: 'kick', channel: 'brl', targets: [target] });
 	assert.deepEqual(await streams.test(owner, sub.id), { sent: 1, total: 1 });
 	assert.match(executor.announcements.at(-1).payload.embed.title, /test/);
+	// A test pings nobody and is not crossposted
+	assert.equal(executor.announcements.at(-1).target.ping, 'none');
+	assert.deepEqual(executor.announcements.at(-1).target.roleIds, []);
+	assert.equal(executor.announcements.at(-1).target.publish, false);
 	const nobody = { id: '1', can: () => false };
 	await assert.rejects(streams.save(nobody, { platform: 'kick', channel: 'x2', targets: [target] }), /notifications.manage/);
 	await streams.remove(owner, sub.id);

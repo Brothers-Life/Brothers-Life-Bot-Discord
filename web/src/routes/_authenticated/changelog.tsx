@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, Plus, Save, Send, Trash2, X } from 'lucide-react'
@@ -10,6 +10,9 @@ import { cn } from '@/lib/utils'
 import { useMe } from '@/hooks/use-me'
 import { Page, Section, EmptyState, Pill } from '@/components/app/ui'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { SeeAlso, useConfirm, useDiscardGuard } from '@/components/app/confirm'
+import { MESSAGES_SEE_ALSO, others } from '@/features/navigation/see-also'
+import { publishConfirm } from '@/features/announcements/test-confirm'
 import { DiscordPreview } from '@/features/announcements/discord-preview'
 import { EMPTY_EMBED } from '@/features/announcements/embed-editor'
 import { ChannelTargets, type ChannelTarget } from '@/features/messages/channel-targets'
@@ -51,20 +54,24 @@ function ChangelogPage() {
   const { data: list } = useQuery({ queryKey: ['changelog'], queryFn: () => api<Entry[]>('/changelog') })
   const guilds = useQuery({ queryKey: ['changelog-targets'], queryFn: () => api<AnnouncementTargetsPayload>('/changelog/targets') })
   const [selected, setSelected] = useState<number | 'new' | null>(null)
+  const [dirty, setDirty] = useState(false)
+  const { guard, dialog } = useDiscardGuard(dirty)
+  const select = (id: number | 'new' | null) => { if (id !== selected) void guard(() => { setDirty(false); setSelected(id) }) }
   const current = selected === 'new' ? null : list?.find((e) => e.id === selected) ?? null
   return (
     <Page
       title='Changelog'
       description='Les nouveautés de tes serveurs, rangées par type et publiées dans les salons choisis. Une entrée modifiée après publication est mise à jour partout. Les membres la retrouvent avec /changelog.'
-      actions={can('changelog.manage') && <Button onClick={() => setSelected('new')}><Plus /> Nouvelle entrée</Button>}
+      actions={can('changelog.manage') && <Button onClick={() => select('new')}><Plus /> Nouvelle entrée</Button>}
     >
+      <SeeAlso links={others(MESSAGES_SEE_ALSO, '/changelog')}>Ici : les notes de mise à jour, rangées par type et retrouvables avec /changelog.</SeeAlso>
       <div className='grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]'>
         <Section title='Entrées'>
           {!list ? <Skeleton className='m-4 h-24' /> : !list.length ? <EmptyState title='Aucune entrée'>Écris ta première mise à jour.</EmptyState> : (
             <ul className='divide-y'>
               {list.map((e) => (
                 <li key={e.id}>
-                  <button type='button' onClick={() => setSelected(e.id)} className={cn('w-full px-4 py-3 text-start transition-colors hover:bg-accent/40', selected === e.id && 'bg-primary/10')}>
+                  <button type='button' onClick={() => select(e.id)} className={cn('w-full px-4 py-3 text-start transition-colors hover:bg-accent/40', selected === e.id && 'bg-primary/10')}>
                     <div className='flex items-center gap-2 font-medium'>
                       {e.version && <Pill tone='accent'>{e.version}</Pill>}
                       <span className='truncate'>{e.title}</span>
@@ -77,21 +84,26 @@ function ChangelogPage() {
           )}
         </Section>
         {selected !== null && guilds.data
-          ? <EntryEditor key={`${selected}-${current?.updatedAt ?? 0}`} entry={current} guilds={guilds.data} onSaved={setSelected} onDeleted={() => setSelected(null)} />
+          ? <EntryEditor key={`${selected}-${current?.updatedAt ?? 0}`} entry={current} guilds={guilds.data} onDirty={setDirty} onSaved={(id) => { setDirty(false); setSelected(id) }} onDeleted={() => { setDirty(false); setSelected(null) }} />
           : <div className='grid place-items-center rounded-lg border border-dashed p-12 text-sm text-muted-foreground'>Choisis une entrée ou crées-en une.</div>}
       </div>
+      {dialog}
     </Page>
   )
 }
 
-function EntryEditor({ entry, guilds, onSaved, onDeleted }: { entry: Entry | null; guilds: AnnouncementTargetsPayload; onSaved: (id: number) => void; onDeleted: () => void }) {
+function EntryEditor({ entry, guilds, onSaved, onDeleted, onDirty }: { entry: Entry | null; guilds: AnnouncementTargetsPayload; onSaved: (id: number) => void; onDeleted: () => void; onDirty: (dirty: boolean) => void }) {
   const { can } = useMe()
   const manage = can('changelog.manage')
   const qc = useQueryClient()
-  const [e, setE] = useState({
+  const [initial] = useState(() => ({
     version: entry?.version ?? '', title: entry?.title ?? '', intro: entry?.intro ?? '', items: entry?.items ?? [{ type: 'added' as ItemType, text: '' }],
-    image: entry?.image ?? '', color: entry?.color ?? '#d6a249', targets: entry?.targets ?? [],
-  })
+    image: entry?.image ?? '', color: entry?.color ?? '#ff9628', targets: entry?.targets ?? [],
+  }))
+  const [e, setE] = useState(initial)
+  const dirty = JSON.stringify(e) !== JSON.stringify(initial)
+  useEffect(() => { onDirty(dirty) }, [dirty, onDirty])
+  const { confirm, dialog } = useConfirm()
   const [deleting, setDeleting] = useState(false)
   const body = () => ({ ...e, version: e.version || null, image: e.image || null, items: e.items.filter((i) => i.text.trim()) })
   const refresh = (saved: Entry) => { qc.invalidateQueries({ queryKey: ['changelog'] }); onSaved(saved.id) }
@@ -164,7 +176,9 @@ function EntryEditor({ entry, guilds, onSaved, onDeleted }: { entry: Entry | nul
         {manage && (
           <div className='flex flex-wrap justify-end gap-2'>
             <Button variant='outline' onClick={() => save.mutate()} disabled={!e.title.trim() || save.isPending}><Save /> {entry?.status === 'published' ? 'Enregistrer et mettre à jour' : 'Enregistrer le brouillon'}</Button>
-            {entry?.status !== 'published' && <Button onClick={() => publish.mutate()} disabled={!e.title.trim() || !e.targets.length || publish.isPending}><Send /> Publier</Button>}
+            {entry?.status !== 'published' && <Button onClick={async () => {
+              if (await confirm(publishConfirm(e.targets, guilds, { title: 'Publier ce changelog ?', what: `Le bot publie « ${e.version ? `${e.version} · ` : ''}${e.title} »` }))) publish.mutate()
+            }} disabled={!e.title.trim() || !e.targets.length || publish.isPending}><Send /> Publier</Button>}
           </div>
         )}
       </div>
@@ -173,6 +187,7 @@ function EntryEditor({ entry, guilds, onSaved, onDeleted }: { entry: Entry | nul
         <DiscordPreview content='' embed={toEmbed({ ...e, version: e.version || null, image: e.image || null })} roles={new Map()} />
       </div>
       <ConfirmDialog open={deleting} onOpenChange={setDeleting} title='Supprimer cette entrée ?' desc='Elle est aussi supprimée des salons où elle a été publiée.' confirmText='Supprimer' destructive isLoading={remove.isPending} handleConfirm={() => remove.mutate()} />
+      {dialog}
     </div>
   )
 }

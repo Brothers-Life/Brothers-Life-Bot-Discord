@@ -19,6 +19,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { EMPTY_EMBED, EmbedFields, cleanEmbed } from '@/features/announcements/embed-editor'
 import { DuplicateButton } from '@/components/app/duplicate-button'
 
+import { useConfirm } from '@/components/app/confirm'
+
 export const Route = createFileRoute('/_authenticated/channel-features')({
   component: ChannelFeaturesPage,
 })
@@ -96,6 +98,7 @@ function FeatureRow({ feature: f, guild, label, manage, onEdit, onDuplicate }: {
   const [count, setCount] = useState('')
   const refresh = () => qc.invalidateQueries({ queryKey: ['channel-features'] })
   const remove = useMutation({ mutationFn: () => api(`/channel-features/${f.channelId}/${f.kind}`, { method: 'DELETE' }), onSuccess: () => { toast.success('Réglage retiré'); setRemoving(false); refresh() } })
+  const { confirm, dialog } = useConfirm()
   const setCountM = useMutation({ mutationFn: (value: number) => api(`/channel-features/${f.channelId}/count`, { method: 'POST', body: { count: value } }), onSuccess: () => { toast.success('Compteur modifié'); setCount(''); refresh() } })
   const Icon = KIND_INFO[f.kind].icon
   const channel = guild.channels.find((c) => c.id === f.channelId)
@@ -117,9 +120,14 @@ function FeatureRow({ feature: f, guild, label, manage, onEdit, onDuplicate }: {
       {manage && (
         <div className='flex flex-wrap items-center gap-1'>
           {f.kind === 'counting' && (
-            <form className='flex items-center gap-1' onSubmit={(e) => { e.preventDefault(); if (count !== '') setCountM.mutate(Number(count)) }}>
+            <form className='flex items-center gap-1' onSubmit={async (e) => {
+              e.preventDefault()
+              if (count === '') return
+              if (await confirm({ title: `Remettre le compteur à ${count} ?`, desc: `Le prochain nombre attendu dans ce salon sera ${Number(count) + 1}. Le compte actuel est perdu.`, confirmText: 'Remettre le compteur', destructive: true })) setCountM.mutate(Number(count))
+            }}>
               <Input type='number' min={0} value={count} onChange={(e) => setCount(e.target.value)} placeholder='Remettre à…' aria-label='Remettre le compteur à' className='h-8 w-28' />
               <Button size='icon' variant='ghost' type='submit' aria-label='Remettre le compteur' disabled={count === '' || setCountM.isPending}><RotateCcw /></Button>
+              {dialog}
             </form>
           )}
           <Button size='icon' variant='ghost' aria-label={`Modifier ${label}`} onClick={onEdit}><Pencil /></Button>

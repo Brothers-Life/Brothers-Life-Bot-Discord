@@ -40,7 +40,7 @@ export function SavedReplies({ guildId, config }: { guildId: string; config: Tic
   return (
     <Section
       title='Réponses enregistrées'
-      description='Des textes tout prêts pour le staff : depuis la réponse d’un ticket dans le panel, ou avec /ticket reponse sur Discord. Les variables sont remplies à l’envoi.'
+      description='Des textes tout prêts pour le staff : depuis la réponse d’un ticket dans le panel, ou avec /ticket-staff reponse sur Discord. Les variables sont remplies à l’envoi.'
       actions={manage && <Button size='sm' onClick={() => setEditing({ name: '', content: '', categoryId: null })}><Plus /> Réponse</Button>}
     >
       {!replies.length ? <EmptyState title='Aucune réponse enregistrée'>Par exemple « Bienvenue », « Besoin de preuves » ou « Ticket résolu ».</EmptyState> : (

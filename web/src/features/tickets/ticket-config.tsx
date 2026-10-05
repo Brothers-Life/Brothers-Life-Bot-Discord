@@ -28,6 +28,7 @@ import { insertAtCursor, copyOf } from '@/lib/utils'
 import { ButtonStylePicker, ColorPicker } from '@/components/app/color-picker'
 import { DuplicateButton } from '@/components/app/duplicate-button'
 import { SavedReplies } from './saved-replies'
+import { SaveBar } from '@/components/app/confirm'
 
 // Variables of the ticket texts: the shared ones (member, server, FiveM), the ticket's, the form answers of this type
 function variableGroups(config: TicketConfig, cfg: TicketCategoryConfig): VariableGroup[] {
@@ -264,10 +265,10 @@ function StatusesEditor({ guildId, config, disabled }: { guildId: string; config
       actions={!disabled && (
         <div className='flex gap-2'>
           <Button size='sm' variant='outline' onClick={addStatus} disabled={statuses.length >= 20}><Plus /> Statut</Button>
-          {dirty && <Button size='sm' onClick={() => save.mutate()} disabled={save.isPending}>Enregistrer</Button>}
         </div>
       )}
     >
+      {!disabled && <div className='px-4 pt-3 empty:hidden'><SaveBar dirty={dirty} saving={save.isPending} onSave={() => save.mutate()} onCancel={() => setStatuses(config.statuses)} message='Statuts modifiés, pas encore enregistrés.' /></div>}
       <ul className='divide-y'>
         {statuses.map((s, i) => (
           <li key={i} className='grid grid-cols-[minmax(0,1fr)] gap-2 px-4 py-3 md:grid-cols-[auto_1fr_7rem_14rem_auto] md:items-center'>
@@ -576,12 +577,12 @@ function CategoryDialog({ guildId, config, initial, onClose }: { guildId: string
               <fieldset className='grid gap-3 rounded-lg border p-3'>
                 <legend className='px-1 text-sm font-semibold'>Demande de fermeture</legend>
                 <p className='text-xs text-muted-foreground'>
-                  Le staff demande au membre si son ticket peut être fermé (<code>/ticket demande-fermeture</code> ou le panel). Le membre répond avec deux boutons.
+                  Le staff demande au membre si son ticket peut être fermé (<code>/ticket-staff demande-fermeture</code> ou le panel). Le membre répond avec deux boutons.
                 </p>
                 <NumberField id='creq-hours' label='Fermeture automatique sans réponse après' value={cfg.closeRequest?.autoCloseHours ?? 24} max={720} suffix='heures' onChange={(n) => patch('closeRequest', { autoCloseHours: n })} hint='0 = jamais' />
               </fieldset>
               <fieldset className='grid gap-3 rounded-lg border p-3'>
-                <legend className='px-1 text-sm font-semibold'>Délai de première réponse (SLA)</legend>
+                <legend className='px-1 text-sm font-semibold'>Délai de première réponse</legend>
                 <NumberField
                   id='sla-minutes' label='Le staff doit répondre en moins de' value={cfg.sla?.firstResponseMinutes ?? 0} max={10080} suffix='minutes'
                   onChange={(n) => patch('sla', { firstResponseMinutes: n })}

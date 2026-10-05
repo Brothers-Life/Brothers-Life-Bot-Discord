@@ -8,6 +8,10 @@ import { ago, dateTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { UserPicker } from '@/components/app/user-picker'
 import { Page, Section, EmptyState, Pill } from '@/components/app/ui'
+import { SeeAlso } from '@/components/app/confirm'
+import { HISTORY_SEE_ALSO, others } from '@/features/navigation/see-also'
+import { RetentionSetting } from '@/features/events/retention-setting'
+import { useMe } from '@/hooks/use-me'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -60,6 +64,7 @@ function EventsPage() {
   const [userId, setUserId] = useState('')
   const [text, setText] = useState('')
   const [open, setOpen] = useState<number | null>(null)
+  const { can } = useMe()
   const q = useDebounced(text.trim())
   const userFilter = /^\d{17,20}$/.test(userId.trim()) ? userId.trim() : ''
 
@@ -85,9 +90,11 @@ function EventsPage() {
 
   return (
     <Page
-      title='Événements'
+      title='Historique Discord'
       description={`Tout ce qui se passe sur les serveurs du réseau : messages modifiés ou supprimés, arrivées, rôles, salons, vocal, invitations. Conservé ${settings.data?.retentionDays ?? 30} jours.`}
     >
+      <SeeAlso links={others(HISTORY_SEE_ALSO, '/events')}>Ici : ce que font les membres sur Discord, enregistré par le bot.</SeeAlso>
+      {can('logs.manage') && <RetentionSetting />}
       <div className='flex flex-wrap gap-2'>
         <div className='relative min-w-56 flex-1'>
           <Search className='pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground' />

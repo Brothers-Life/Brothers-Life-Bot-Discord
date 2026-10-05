@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bug, Check, Download, History, Lightbulb, Plus, Save, Send, ShieldAlert, ThumbsDown, ThumbsUp, Trash2, UserCheck, X } from 'lucide-react'
+import { Bug, Check, Download, History, Lightbulb, Plus, Send, ShieldAlert, ThumbsDown, ThumbsUp, Trash2, UserCheck, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Channel, FormDef, Guild, Role } from '@/lib/types'
@@ -10,6 +10,7 @@ import { useMe } from '@/hooks/use-me'
 import { Page, Section, EmptyState, Pill, UserAvatar, GuildIcon } from '@/components/app/ui'
 import { ChannelSelect, RolesPicker } from '@/components/app/pickers'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { SaveBar } from '@/components/app/confirm'
 import { FormBuilder } from '@/features/forms/form-builder'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -80,9 +81,10 @@ function Boxes({ guildId }: { guildId: string }) {
   const qc = useQueryClient()
   const { data } = useQuery({ queryKey: ['feedback', guildId], queryFn: () => api<Payload>(`/feedback/${guildId}`) })
   const [selected, setSelected] = useState<number | null>(null)
+  const [creating, setCreating] = useState(false)
   const create = useMutation({
     mutationFn: (preset: string) => api<Box>(`/feedback/${guildId}/boxes`, { method: 'POST', body: { preset } }),
-    onSuccess: (box) => { toast.success('Boîte créée : règle son salon dans « Réglages »'); qc.invalidateQueries({ queryKey: ['feedback', guildId] }); setSelected(box.id) },
+    onSuccess: (box) => { toast.success('Boîte créée : règle son salon dans « Réglages »'); setCreating(false); qc.invalidateQueries({ queryKey: ['feedback', guildId] }); setSelected(box.id) },
   })
   if (!data) return <Skeleton className='h-96 w-full' />
   const box = data.boxes.find((b) => b.id === selected) ?? data.boxes[0]
@@ -98,12 +100,28 @@ function Boxes({ guildId }: { guildId: string }) {
           )
         })}
         {can('feedback.manage') && (
-          <Select onValueChange={(v) => create.mutate(v)} value=''>
-            <SelectTrigger className='w-56'><span className='flex items-center gap-2'><Plus className='size-4' /> Nouvelle boîte</span></SelectTrigger>
-            <SelectContent>{data.presets.map((p) => <SelectItem key={p.key} value={p.key}>{p.name}</SelectItem>)}</SelectContent>
-          </Select>
+          <Button variant='outline' onClick={() => setCreating(true)}><Plus /> Nouvelle boîte</Button>
         )}
       </div>
+      <Dialog open={creating} onOpenChange={setCreating}>
+        <DialogContent className='sm:max-w-md'>
+          <DialogHeader><DialogTitle>Nouvelle boîte</DialogTitle></DialogHeader>
+          <p className='text-sm text-muted-foreground'>Choisis un modèle de départ : tu pourras tout changer ensuite dans « Réglages ».</p>
+          <div className='grid gap-2'>
+            {data.presets.map((p) => {
+              const key = p.key
+              const Icon = key === 'bugs' ? Bug : ICONS[p.kind as keyof typeof ICONS] ?? Lightbulb
+              const hint = key === 'bugs' ? 'Les membres signalent les bugs du serveur.' : p.kind === 'staff' ? 'Visible par le staff seulement.' : 'Les membres proposent des idées et votent.'
+              return (
+                <button key={key} type='button' disabled={create.isPending} onClick={() => create.mutate(key)} className='flex items-start gap-3 rounded-lg border p-3 text-start transition-colors hover:border-primary/60 hover:bg-primary/5 disabled:opacity-50'>
+                  <Icon className='mt-0.5 size-5 shrink-0 text-brand' aria-hidden />
+                  <span className='grid gap-0.5'><span className='font-medium'>{p.name}</span><span className='text-xs text-muted-foreground'>{hint}</span></span>
+                </button>
+              )
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
       {!box ? <EmptyState title='Aucune boîte'>Crée une boîte « Suggestions », « Reports de bug » ou « Bugs internes du staff ».</EmptyState> : (
         <Tabs key={box.id} defaultValue={box.config.channelId ? 'items' : 'settings'}>
           <TabsList>
@@ -202,7 +220,7 @@ function Items({ box }: { box: Box }) {
         </ul>
       )}
       {editing && <StatusDialog box={box} item={editing} onClose={() => { setEditing(null); refresh() }} />}
-      <ConfirmDialog open={Boolean(deleting)} onOpenChange={(o) => !o && setDeleting(null)} title='Supprimer cet élément ?' desc='Le message Discord est supprimé aussi.' confirmText='Supprimer' destructive isLoading={remove.isPending} handleConfirm={() => deleting && remove.mutate(deleting)} />
+      <ConfirmDialog open={Boolean(deleting)} onOpenChange={(o) => !o && setDeleting(null)} title='Supprimer cet élément ?' desc='Il est supprimé du panel, et son message Discord est supprimé aussi.' confirmText='Supprimer' destructive isLoading={remove.isPending} handleConfirm={() => deleting && remove.mutate(deleting)} />
     </Section>
   )
 }
@@ -325,7 +343,9 @@ function BoxSettings({ box, data, guildId, onDeleted, onDuplicated }: { box: Box
   const [deleting, setDeleting] = useState(false)
   const set = (patch: Partial<BoxConfig>) => setC((prev) => ({ ...prev, ...patch }))
   const refresh = () => qc.invalidateQueries({ queryKey: ['feedback', guildId] })
-  const save = useMutation({ mutationFn: () => api(`/feedback/boxes/${box.id}`, { method: 'PUT', body: { name, config: c, panelChannelId } }), onSuccess: () => { toast.success('Réglages enregistrés'); refresh() } })
+  const [base, setBase] = useState(() => ({ name, c, panelChannelId }))
+  const dirty = JSON.stringify({ name, c, panelChannelId }) !== JSON.stringify(base)
+  const save = useMutation({ mutationFn: () => api(`/feedback/boxes/${box.id}`, { method: 'PUT', body: { name, config: c, panelChannelId } }), onSuccess: () => { toast.success('Réglages enregistrés'); setBase({ name, c, panelChannelId }); refresh() } })
   const panel = useMutation({
     mutationFn: async () => {
       await api(`/feedback/boxes/${box.id}`, { method: 'PUT', body: { name, config: c, panelChannelId } })
@@ -413,8 +433,8 @@ function BoxSettings({ box, data, guildId, onDeleted, onDuplicated }: { box: Box
         <div className='p-4'><FormBuilder value={c.form} disabled={!manage} allowEmpty={false} onChange={(form) => set({ form })} /></div>
       </Section>
 
-      {manage && <div className='flex justify-end'><Button onClick={() => save.mutate()} disabled={save.isPending}><Save /> Enregistrer</Button></div>}
-      <ConfirmDialog open={deleting} onOpenChange={setDeleting} title={`Supprimer « ${box.name} » ?`} desc='Toutes ses propositions sont supprimées du panel (les messages Discord restent).' confirmText='Supprimer' destructive isLoading={remove.isPending} handleConfirm={() => remove.mutate()} />
+      {manage && <SaveBar dirty={dirty} saving={save.isPending} onSave={() => save.mutate()} onCancel={() => { setName(base.name); setC(base.c); setPanelChannelId(base.panelChannelId) }} />}
+      <ConfirmDialog open={deleting} onOpenChange={setDeleting} title={`Supprimer « ${box.name} » ?`} desc='La boîte et tous ses éléments sont supprimés du panel. Les messages déjà postés sur Discord restent en place (supprime-les à la main si besoin).' confirmText='Supprimer' destructive isLoading={remove.isPending} handleConfirm={() => remove.mutate()} />
     </div>
   )
 }

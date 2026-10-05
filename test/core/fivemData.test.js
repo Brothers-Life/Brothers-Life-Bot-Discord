@@ -196,3 +196,17 @@ test('discordVars: template variables of a linked account, no IP, token nor mone
 	store.set('fivemdb.config', { enabled: false });
 	assert.equal(await data.discordVars(DISCORD), null);
 });
+
+test('fivem data: the typed settings are tested on a throwaway pool, saved password only for the same server', async () => {
+	const { data, pools, actor, store } = setup();
+	const admin = actor(['fivemdata.manage']);
+	const r = await data.test(admin, { host: 'db', port: 3307, database: 'other', user: 'bot', password: '' });
+	assert.equal(r.tables, TABLES.length);
+	assert.equal(pools.at(-1).opts.password, 'secret');
+	assert.equal(pools.at(-1).opts.port, 3307);
+	assert.equal(pools.at(-1).ended, true);
+	await data.test(admin, { host: 'evil.example', port: 3306, database: 'x', user: 'bot', password: '' });
+	assert.equal(pools.at(-1).opts.password, '');
+	assert.equal(store.get('fivemdb.config').database, 's10_qbox');
+	await assert.rejects(data.test(actor(['fivemdata.view']), { host: 'db', database: 'x', user: 'bot' }), ForbiddenError);
+});

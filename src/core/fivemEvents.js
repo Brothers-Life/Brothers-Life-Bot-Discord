@@ -285,7 +285,8 @@ export function createFivemEvents({ db, settings, audit, logs, executor, network
 	}
 
 	// One message to each target; returns how many were sent
-	async function announce(targets, payload, vars) {
+	// test: no ping, no crosspost (a trial must not notify anyone)
+	async function announce(targets, payload, vars, { test = false } = {}) {
 		let ok = 0;
 		const errors = [];
 		for (const target of targets) {
@@ -295,7 +296,7 @@ export function createFivemEvents({ db, settings, audit, logs, executor, network
 			}
 			try {
 				const filled = fillPayload(payload, { ...await variables.server(target.guildId), ...vars });
-				await executor.sendAnnouncement(target.channelId, filled, target);
+				await executor.sendAnnouncement(target.channelId, filled, test ? { ...target, ping: 'none', roleIds: [], publish: false } : target);
 				ok += 1;
 			}
 			catch (error) {
@@ -352,7 +353,7 @@ export function createFivemEvents({ db, settings, audit, logs, executor, network
 			if (!test) countdown.push({ server, minutes, restartAt });
 		}
 
-		const { ok, errors } = await announce(eventConf.targets, eventConf.payload, eventVariables(data, { server, at }));
+		const { ok, errors } = await announce(eventConf.targets, eventConf.payload, eventVariables(data, { server, at }), { test });
 		if (!ok) return store(type, server, data, 'failed', errors[0] ?? 'Aucun salon', test);
 		return store(type, server, data, 'posted', errors.length ? `${ok}/${eventConf.targets.length} salons` : null, test);
 	}

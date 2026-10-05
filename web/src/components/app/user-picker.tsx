@@ -153,3 +153,21 @@ export function UserPicker({
     </div>
   )
 }
+
+// Avatar + name of a Discord user from their ID (the ID alone if they cannot be found)
+export function UserLabel({ userId, className }: { userId: string; className?: string }) {
+  const { data } = useQuery({
+    queryKey: ['people-search', userId],
+    queryFn: () => api<PickedUser[]>(`/people/search?q=${userId}`),
+    enabled: ID.test(userId),
+    staleTime: 60_000,
+    retry: false,
+  })
+  const user = data?.find((u) => u.id === userId) ?? data?.[0]
+  return (
+    <span className={cn('inline-flex min-w-0 items-center gap-2', className)}>
+      <UserAvatar src={user?.avatar} name={user ? displayName(user) : userId} className='size-6' />
+      <span className='truncate'>{user ? displayName(user) : <code className='text-xs'>{userId}</code>}</span>
+    </span>
+  )
+}

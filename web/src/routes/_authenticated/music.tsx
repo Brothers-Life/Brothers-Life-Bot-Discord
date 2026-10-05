@@ -22,6 +22,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Playlists, usePlaylists } from '@/features/music/playlists'
 
+import { useConfirm } from '@/components/app/confirm'
+
 export const Route = createFileRoute('/_authenticated/music')({
   // ?guild= opens that server's player (link of the Discord control message)
   validateSearch: (search: Record<string, unknown>): { guild?: string } => ({ guild: typeof search.guild === 'string' && /^\d{17,20}$/.test(search.guild) ? search.guild : undefined }),
@@ -430,6 +432,7 @@ function Queue({ state, act, busy }: { state: State; act: (action: string, value
   const index = state.index ?? 0
   const upcoming = state.upcoming ?? []
   const history = state.history ?? []
+  const { confirm, dialog } = useConfirm()
   const remaining = upcoming.reduce((n, t) => n + (t.durationMs ?? 0), 0)
   const row = (t: Track, i: number, kind: 'past' | 'next') => (
     <li key={t.id} className={cn('group flex items-center gap-3 px-4 py-2', kind === 'past' && 'opacity-60')}>
@@ -452,7 +455,12 @@ function Queue({ state, act, busy }: { state: State; act: (action: string, value
     <Section
       title={`À suivre (${upcoming.length})`}
       description={upcoming.length ? `Reste ${clock(remaining)}` : undefined}
-      actions={upcoming.length > 0 && <Button size='sm' variant='danger-ghost' onClick={() => act('clear')} disabled={busy}><Trash2 /> Vider</Button>}
+      actions={upcoming.length > 0 && <>
+        <Button size='sm' variant='danger-ghost' disabled={busy} onClick={async () => {
+          if (await confirm({ title: 'Vider la file ?', desc: `${upcoming.length} titre${upcoming.length > 1 ? 's' : ''} à suivre ser${upcoming.length > 1 ? 'ont' : 'a'} retiré${upcoming.length > 1 ? 's' : ''}. Le titre en cours continue.`, confirmText: 'Vider la file', destructive: true })) act('clear')
+        }}><Trash2 /> Vider</Button>
+        {dialog}
+      </>}
     >
       {!upcoming.length && !history.length ? <EmptyState title='File vide' icon={ListMusic}>Ajoute des titres : ils passeront à la suite.</EmptyState> : (
         <ul className='max-h-[32rem] divide-y overflow-y-auto'>
@@ -475,6 +483,7 @@ function Settings({ data }: { data: Payload }) {
   const [cookies, setCookies] = useState('')
   const refresh = () => qc.invalidateQueries({ queryKey: ['music'] })
   const save = useMutation({ mutationFn: () => api('/music/config', { method: 'PUT', body: c }), onSuccess: () => { toast.success('Réglages enregistrés'); refresh() } })
+  const { confirm: confirmCookies, dialog: cookiesDialog } = useConfirm()
   const upload = useMutation({ mutationFn: () => api('/music/cookies', { method: 'PUT', body: { content: cookies } }), onSuccess: () => { toast.success('Cookies enregistrés'); setCookies(''); refresh() } })
   const removeCookies = useMutation({ mutationFn: () => api('/music/cookies', { method: 'DELETE' }), onSuccess: () => { toast.success('Cookies retirés'); refresh() } })
   const number = (key: keyof Config, label: string, min: number, max: number, hint?: string) => (
@@ -519,7 +528,10 @@ function Settings({ data }: { data: Payload }) {
           <div className='flex flex-wrap items-center gap-2'>
             <Label>Cookies YouTube</Label>
             {data.cookies ? <Pill tone='success'>Installés</Pill> : <Pill tone='neutral'>Aucun</Pill>}
-            {data.cookies && <Button size='sm' variant='danger-ghost' onClick={() => removeCookies.mutate()} disabled={removeCookies.isPending}><Trash2 /> Retirer</Button>}
+            {data.cookies && <Button size='sm' variant='danger-ghost' disabled={removeCookies.isPending} onClick={async () => {
+              if (await confirmCookies({ title: 'Retirer les cookies YouTube ?', desc: 'Le bot lira YouTube sans compte : certaines vidéos peuvent de nouveau être refusées (« Sign in to confirm you’re not a bot »). Il faudra recoller le fichier pour les remettre.', confirmText: 'Retirer', destructive: true })) removeCookies.mutate()
+            }}><Trash2 /> Retirer</Button>}
+            {cookiesDialog}
           </div>
           <p className='text-xs text-muted-foreground'>
             Si YouTube refuse avec « Sign in to confirm you’re not a bot » (fréquent sur les serveurs hébergés), exporte les cookies d’un compte YouTube secondaire au format <code>cookies.txt</code> (extension « Get cookies.txt LOCALLY ») et colle-les ici. Ils restent sur le serveur du bot.
@@ -537,6 +549,7 @@ function SpotifyKeys({ spotify, onSaved }: { spotify: Payload['spotify']; onSave
   const [clientId, setClientId] = useState(spotify.clientId)
   const [secret, setSecret] = useState('')
   const configured = Boolean(spotify.clientId && spotify.hasSecret)
+  const { confirm, dialog } = useConfirm()
   const save = useMutation({
     mutationFn: () => api('/music/spotify', { method: 'PUT', body: { clientId: clientId.trim(), clientSecret: secret.trim() } }),
     onSuccess: () => { toast.success('Clés Spotify enregistrées'); setSecret(''); onSaved() },
@@ -550,7 +563,10 @@ function SpotifyKeys({ spotify, onSaved }: { spotify: Payload['spotify']; onSave
       <div className='flex flex-wrap items-center gap-2'>
         <Label>Recherche Spotify</Label>
         {configured ? <Pill tone='success'>Configurée</Pill> : <Pill tone='neutral'>Non configurée</Pill>}
-        {configured && <Button size='sm' variant='danger-ghost' onClick={() => remove.mutate()} disabled={remove.isPending}><Trash2 /> Retirer</Button>}
+        {configured && <Button size='sm' variant='danger-ghost' disabled={remove.isPending} onClick={async () => {
+          if (await confirm({ title: 'Retirer les clés Spotify ?', desc: 'La recherche Spotify ne marchera plus et le secret est effacé : il faudra le recoller depuis developer.spotify.com.', confirmText: 'Retirer', destructive: true })) remove.mutate()
+        }}><Trash2 /> Retirer</Button>}
+        {dialog}
       </div>
       <p className='text-xs text-muted-foreground'>
         Crée une appli sur <a className='text-brand underline-offset-4 hover:underline' href='https://developer.spotify.com/dashboard' target='_blank' rel='noreferrer'>developer.spotify.com</a> (Web API, une URL de redirection quelconque comme <code>http://127.0.0.1</code>), puis colle son Client ID et son Client Secret. Spotify ne fournit pas le son : les titres trouvés sont joués depuis YouTube.
@@ -560,11 +576,11 @@ function SpotifyKeys({ spotify, onSaved }: { spotify: Payload['spotify']; onSave
         onSubmit={(e) => { e.preventDefault(); save.mutate() }}
       >
         <div className='grid gap-1.5'>
-          <Label htmlFor='spotify-id'>Client ID</Label>
+          <Label htmlFor='spotify-id'>ID client</Label>
           <Input id='spotify-id' value={clientId} onChange={(e) => setClientId(e.target.value)} autoComplete='off' spellCheck={false} className='font-mono' />
         </div>
         <div className='grid gap-1.5'>
-          <Label htmlFor='spotify-secret'>Client Secret</Label>
+          <Label htmlFor='spotify-secret'>Secret client</Label>
           <Input id='spotify-secret' type='password' value={secret} onChange={(e) => setSecret(e.target.value)} autoComplete='new-password' placeholder={spotify.hasSecret ? '•••••••• (inchangé)' : ''} className='font-mono' />
         </div>
         <Button type='submit' loading={save.isPending} disabled={!clientId.trim() || (!secret.trim() && !spotify.hasSecret)}><Save /> Enregistrer</Button>

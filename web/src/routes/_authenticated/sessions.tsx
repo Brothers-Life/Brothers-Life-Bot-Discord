@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 
+import { useConfirm } from '@/components/app/confirm'
+
 export const Route = createFileRoute('/_authenticated/sessions')({
   component: SessionsPage,
 })
@@ -28,6 +30,7 @@ function SessionsPage() {
   const [all, setAll] = useState(false)
   const { data } = useQuery({ queryKey: ['sessions', all], queryFn: () => api<Session[]>(`/sessions${all ? '?all=true' : ''}`) })
 
+  const { confirm, dialog } = useConfirm()
   const revoke = useMutation({
     mutationFn: (s: Session) => api(`/sessions/${s.key}`, { method: 'DELETE' }),
     onSuccess: () => {
@@ -66,13 +69,16 @@ function SessionsPage() {
                   </div>
                 </div>
                 {!s.current && (
-                  <Button size='sm' variant='outline' onClick={() => revoke.mutate(s)} disabled={revoke.isPending}>Révoquer</Button>
+                  <Button size='sm' variant='outline' disabled={revoke.isPending} onClick={async () => {
+                    if (await confirm({ title: 'Révoquer cette session ?', desc: `${all ? `${s.username ?? s.discordId} sera` : 'Cet appareil sera'} déconnecté du panel (${device(s.userAgent)}${s.ip ? `, ${s.ip}` : ''}) et devra se reconnecter avec Discord.`, confirmText: 'Révoquer', destructive: true })) revoke.mutate(s)
+                  }}>Révoquer</Button>
                 )}
               </li>
             ))}
           </ul>
         )}
       </Section>
+      {dialog}
     </Page>
   )
 }

@@ -29,7 +29,7 @@ export const Route = createFileRoute('/_authenticated/giveaways')({
 type Settings = {
   requiredRoleIds: string[]; requiredMode: 'any' | 'all'; blockedRoleIds: string[]; minAccountAgeDays: number; minMemberDays: number
   minMessages: number; minVoiceHours: number; activityDays: number; requiredGuildIds: string[]; noActiveSanction: boolean; noWarnDays: number
-  excludeStaff: boolean; excludeRecentWinnersDays: number; bonusRoles: { roleId: string; entries: number }[]; bonusMode: 'sum' | 'max'; maxEntries: number
+  excludeStaff: boolean; excludeHost?: boolean; excludeRecentWinnersDays: number; bonusRoles: { roleId: string; entries: number }[]; bonusMode: 'sum' | 'max'; maxEntries: number
   winnerRoleId: string | null; winnerRoleDays: number; claimMinutes: number; dmWinners: boolean; winnerMessage: string; color: string; image: string | null
 }
 type Giveaway = {
@@ -47,7 +47,7 @@ const STATUS = {
 } as const
 const DEFAULT_SETTINGS: Settings = {
   requiredRoleIds: [], requiredMode: 'any', blockedRoleIds: [], minAccountAgeDays: 0, minMemberDays: 0, minMessages: 0, minVoiceHours: 0, activityDays: 30,
-  requiredGuildIds: [], noActiveSanction: true, noWarnDays: 0, excludeStaff: false, excludeRecentWinnersDays: 0, bonusRoles: [], bonusMode: 'sum', maxEntries: 10,
+  requiredGuildIds: [], noActiveSanction: true, noWarnDays: 0, excludeStaff: false, excludeHost: true, excludeRecentWinnersDays: 0, bonusRoles: [], bonusMode: 'sum', maxEntries: 10,
   winnerRoleId: null, winnerRoleDays: 0, claimMinutes: 0, dmWinners: true, winnerMessage: 'Bravo {winners} ! Vous gagnez **{prize}** 🎉', color: '#e5484d', image: null,
 }
 const toLocal = (at: number | null) => (at ? new Date(at - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 16) : '')
@@ -279,6 +279,7 @@ function Form({ giveaway, guilds, onSaved, onDeleted }: { giveaway: Giveaway | n
           <div className='grid gap-2 text-sm'>
             <label className='flex items-center gap-2'><Checkbox checked={s.noActiveSanction} disabled={!editable} onCheckedChange={(v) => set({ noActiveSanction: v === true })} /> Aucune sanction en cours</label>
             <label className='flex items-center gap-2'><Checkbox checked={s.excludeStaff} disabled={!editable} onCheckedChange={(v) => set({ excludeStaff: v === true })} /> Le staff ne participe pas</label>
+              <label className='flex items-center gap-2'><Checkbox checked={s.excludeHost ?? true} disabled={!editable} onCheckedChange={(v) => set({ excludeHost: v === true })} /> L’organisateur ne peut pas gagner</label>
           </div>
           {guilds.length > 1 && (
             <fieldset>

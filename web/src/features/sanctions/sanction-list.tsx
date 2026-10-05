@@ -11,14 +11,14 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 
 const TYPE: Record<SanctionType, { label: string; tone: 'danger' | 'warning' }> = {
-  ban: { label: 'Ban', tone: 'danger' },
-  kick: { label: 'Kick', tone: 'danger' },
-  timeout: { label: 'Timeout', tone: 'warning' },
-  warn: { label: 'Warn', tone: 'warning' },
+  ban: { label: 'Bannissement', tone: 'danger' },
+  kick: { label: 'Expulsion', tone: 'danger' },
+  timeout: { label: 'Exclusion temporaire', tone: 'warning' },
+  warn: { label: 'Avertissement', tone: 'warning' },
   restrict: { label: 'Restriction', tone: 'warning' },
 }
 const SOURCE: Record<Sanction['source'], string> = { bot: 'commande', panel: 'panel', native: 'Discord', automod: 'automod', system: 'système' }
-const REVOKE_LABEL: Record<SanctionType, string> = { ban: 'Débannir', timeout: 'Lever le timeout', warn: 'Retirer', kick: '', restrict: 'Lever la restriction' }
+const REVOKE_LABEL: Record<SanctionType, string> = { ban: 'Débannir', timeout: 'Lever l’exclusion', warn: 'Retirer', kick: 'Retirer de l’historique', restrict: 'Lever la restriction' }
 
 function results(s: Sanction) {
   const values = Object.values(s.results)
@@ -71,8 +71,9 @@ export function SanctionList({ sanctions, showUser = true }: { sanctions: Sancti
                   <Pill tone={s.revokedAt ? 'neutral' : TYPE[s.type].tone}>{TYPE[s.type].label}{s.profileLabel ? ` · ${s.profileLabel}` : ''}</Pill>
                   {showUser && <span className='font-medium'>{name}</span>}
                   {s.active && <Pill tone='accent'>En cours</Pill>}
-                  {s.revokedAt && <Pill>Levée</Pill>}
+                  {s.revokedAt && <Pill>{s.type === 'kick' ? 'Retirée' : 'Levée'}</Pill>}
                   {s.scope === 'local' && <Pill>Local</Pill>}
+                  {(s as Sanction & { automatic?: boolean }).automatic && <Pill tone='info' className='text-[11px]'>automatique</Pill>}
                   <span className='text-xs text-muted-foreground'>#{s.id}</span>
                 </div>
                 <p className='mt-1 text-sm'>{s.reason || <span className='text-muted-foreground'>Sans raison</span>}</p>
@@ -88,7 +89,7 @@ export function SanctionList({ sanctions, showUser = true }: { sanctions: Sancti
                 {can('sanctions.edit') && (
                   <Button size='sm' variant='ghost' onClick={() => { setEditing(s); setNewReason(s.reason ?? '') }}>Modifier la raison</Button>
                 )}
-                {can('sanctions.revoke') && !s.revokedAt && s.type !== 'kick' && (s.type === 'warn' || s.active) && (
+                {can('sanctions.revoke') && !s.revokedAt && (s.type === 'warn' || s.type === 'kick' || s.active) && (
                   <Button size='sm' variant='outline' onClick={() => setRevoking(s)}>{REVOKE_LABEL[s.type]}</Button>
                 )}
               </div>
@@ -100,7 +101,9 @@ export function SanctionList({ sanctions, showUser = true }: { sanctions: Sancti
         open={Boolean(revoking)}
         onOpenChange={(open) => !open && setRevoking(null)}
         title={revoking ? `${REVOKE_LABEL[revoking.type]} — sanction #${revoking.id}` : ''}
-        desc={revoking?.scope === 'network' && revoking.type !== 'warn' ? 'La sanction est levée sur tous les serveurs du réseau.' : 'La sanction reste dans l’historique, marquée comme levée.'}
+        desc={revoking?.type === 'kick'
+          ? 'L’expulsion est retirée de l’historique du membre. Rien ne change sur Discord (il peut déjà revenir avec une invitation).'
+          : revoking?.scope === 'network' && revoking.type !== 'warn' ? 'La sanction est levée sur tous les serveurs du réseau.' : 'La sanction reste dans l’historique, marquée comme levée.'}
         confirmText={revoking ? REVOKE_LABEL[revoking.type] : ''}
         isLoading={revoke.isPending}
         handleConfirm={() => revoking && revoke.mutate(revoking)}

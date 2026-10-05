@@ -9,6 +9,9 @@ import { AuditList } from '@/features/audit/audit-list'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
+import { SeeAlso } from '@/components/app/confirm'
+import { HISTORY_SEE_ALSO, others } from '@/features/navigation/see-also'
+
 export const Route = createFileRoute('/_authenticated/audit')({
   component: AuditPage,
 })
@@ -49,7 +52,8 @@ function AuditPage() {
   const entries = query.data?.pages.flat() ?? []
 
   return (
-    <Page title='Journal' description='Tout ce qui a été fait sur le réseau, les rangs et le panel, du plus récent au plus ancien.'>
+    <Page title='Actions du staff' description='Tout ce que le staff a fait avec le bot et le panel (sanctions, réglages, rangs…), du plus récent au plus ancien.'>
+      <SeeAlso links={others(HISTORY_SEE_ALSO, '/audit')}>Ici : qui a fait quoi, via le bot ou le panel.</SeeAlso>
       <Section
         title={`${entries.length}${query.hasNextPage ? '+' : ''} action${entries.length > 1 ? 's' : ''}`}
         actions={

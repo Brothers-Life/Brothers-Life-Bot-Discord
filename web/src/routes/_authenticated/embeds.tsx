@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, Braces, Copy, FilePlus2, Link2, Plus, Save, Send, Trash2, X } from 'lucide-react'
@@ -11,6 +11,8 @@ import { useMe } from '@/hooks/use-me'
 import { Page, Section, EmptyState, Pill } from '@/components/app/ui'
 import { ChannelSelect } from '@/components/app/pickers'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { SeeAlso, useConfirm, useDiscardGuard } from '@/components/app/confirm'
+import { MESSAGES_SEE_ALSO, others } from '@/features/navigation/see-also'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -78,6 +80,9 @@ function fromDiscord(text: string): Built {
 function EmbedsPage() {
   const { data, isLoading } = useQuery({ queryKey: ['embeds'], queryFn: () => api<Payload>('/embeds') })
   const [open, setOpen] = useState<number | 'new' | null>(null)
+  const [dirty, setDirty] = useState(false)
+  const { guard, dialog } = useDiscardGuard(dirty)
+  const select = (id: number | 'new' | null) => { if (id !== open) void guard(() => { setDirty(false); setOpen(id) }) }
   const current = typeof open === 'number' ? data?.messages.find((m) => m.id === open) : undefined
   const where = (m: Saved) => {
     const guild = data?.guilds.find((g) => g.id === m.guildId)
@@ -87,15 +92,16 @@ function EmbedsPage() {
 
   return (
     <Page title='Créateur d’embeds' description='Compose des messages avec plusieurs embeds et des boutons-liens, poste-les dans n’importe quel salon, puis modifie-les quand tu veux : le message posté se met à jour. Aussi avec /embed sur Discord.'>
+      <SeeAlso links={others(MESSAGES_SEE_ALSO, '/embeds')}>Ici : un message soigné (plusieurs embeds, boutons-liens) posté une fois et modifiable ensuite.</SeeAlso>
       {isLoading && <Skeleton className='h-96 w-full' />}
       {data && (
         <div className='grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]'>
-          <Section title='Messages' actions={<Button size='sm' onClick={() => setOpen('new')}><FilePlus2 /> Nouveau</Button>}>
+          <Section title='Messages' actions={<Button size='sm' onClick={() => select('new')}><FilePlus2 /> Nouveau</Button>}>
             {!data.messages.length ? <EmptyState title='Aucun message' icon={Braces}>Crée ton premier embed : règlement, infos, liens utiles…</EmptyState> : (
               <ul className='divide-y'>
                 {data.messages.map((m) => (
                   <li key={m.id}>
-                    <button type='button' onClick={() => setOpen(m.id)} aria-current={open === m.id ? 'page' : undefined} className='grid w-full gap-0.5 px-4 py-2.5 text-start transition-colors hover:bg-accent/40 aria-[current=page]:bg-primary/10'>
+                    <button type='button' onClick={() => select(m.id)} aria-current={open === m.id ? 'page' : undefined} className='grid w-full gap-0.5 px-4 py-2.5 text-start transition-colors hover:bg-accent/40 aria-[current=page]:bg-primary/10'>
                       <span className='flex items-center gap-2 truncate font-medium'>
                         <span className='size-2.5 shrink-0 rounded-full' style={{ background: m.payload.embeds[0]?.color ?? 'var(--muted-foreground)' }} aria-hidden />{m.name}
                       </span>
@@ -106,16 +112,17 @@ function EmbedsPage() {
               </ul>
             )}
           </Section>
-          {open === null ? <EmptyState title='Choisis un message ou crée-en un' icon={Braces} /> : (
-            <Editor key={String(open)} saved={current} guilds={data.guilds} onSaved={(id) => setOpen(id)} onDeleted={() => setOpen(null)} />
+          {open === null ? <EmptyState title='Choisis un message ou crées-en un' icon={Braces} /> : (
+            <Editor key={`${open}-${current?.updatedAt ?? 0}`} saved={current} guilds={data.guilds} onDirty={setDirty} onSaved={(id) => { setDirty(false); setOpen(id) }} onDeleted={() => { setDirty(false); setOpen(null) }} />
           )}
         </div>
       )}
+      {dialog}
     </Page>
   )
 }
 
-function Editor({ saved, guilds, onSaved, onDeleted }: { saved?: Saved; guilds: Payload['guilds']; onSaved: (id: number) => void; onDeleted: () => void }) {
+function Editor({ saved, guilds, onSaved, onDeleted, onDirty }: { saved?: Saved; guilds: Payload['guilds']; onSaved: (id: number) => void; onDeleted: () => void; onDirty: (dirty: boolean) => void }) {
   const { can } = useMe()
   const manage = can('embeds.manage')
   const qc = useQueryClient()
@@ -130,6 +137,10 @@ function Editor({ saved, guilds, onSaved, onDeleted }: { saved?: Saved; guilds: 
   const embed = b.embeds[tab]
   const refresh = () => qc.invalidateQueries({ queryKey: ['embeds'] })
   const body = () => ({ ...(saved ? { id: saved.id } : {}), name, payload: { ...b, embeds: b.embeds.map(cleanEmbed) } })
+  const [initial] = useState(() => JSON.stringify({ name, b }))
+  const dirty = JSON.stringify({ name, b }) !== initial
+  useEffect(() => { onDirty(dirty) }, [dirty, onDirty])
+  const { confirm, dialog } = useConfirm()
 
   const save = useMutation({
     mutationFn: () => api<Saved>('/embeds', { method: 'POST', body: body() }),
@@ -168,7 +179,7 @@ function Editor({ saved, guilds, onSaved, onDeleted }: { saved?: Saved; guilds: 
             <Button size='sm' variant='ghost' onClick={() => setJson(JSON.stringify(toDiscord(b), null, 2))}><Braces /> JSON</Button>
             {saved && manage && <DuplicateButton name={name} loading={duplicate.isPending} onClick={() => duplicate.mutate()} />}
             {saved && <Button size='sm' variant='danger-ghost' onClick={() => setDeleting(true)}><Trash2 /></Button>}
-            <Button size='sm' variant='outline' loading={save.isPending} onClick={() => save.mutate()}><Save /> Enregistrer</Button>
+            <Button size='sm' variant='outline' loading={save.isPending} onClick={() => save.mutate()}><Save /> {saved?.messageId ? 'Enregistrer et mettre à jour sur Discord' : 'Enregistrer'}</Button>
           </div>
         )}
       >
@@ -229,7 +240,18 @@ function Editor({ saved, guilds, onSaved, onDeleted }: { saved?: Saved; guilds: 
                 <Label>Salon</Label>
                 <ChannelSelect channels={guilds.find((g) => g.id === guildId)?.channels ?? []} value={channelId} onChange={setChannelId} label='Salon' noneLabel='Choisir un salon' />
               </div>
-              <Button loading={post.isPending} disabled={!channelId} onClick={() => post.mutate()}><Send /> {sameChannel ? 'Mettre à jour' : saved?.messageId ? 'Déplacer ici' : 'Poster'}</Button>
+              <Button loading={post.isPending} disabled={!channelId} onClick={async () => {
+                const guild = guilds.find((g) => g.id === guildId)
+                const target = `#${guild?.channels.find((c) => c.id === channelId)?.name ?? 'salon'} (${guild?.name ?? ''})`
+                const oldGuild = guilds.find((g) => g.id === saved?.guildId)
+                const old = `#${oldGuild?.channels.find((c) => c.id === saved?.channelId)?.name ?? 'salon'} (${oldGuild?.name ?? ''})`
+                const ok = await confirm(sameChannel
+                  ? { title: 'Mettre à jour le message ?', desc: `Le message posté dans ${target} est modifié avec le contenu actuel.`, confirmText: 'Mettre à jour' }
+                  : saved?.messageId
+                    ? { title: 'Déplacer le message ?', desc: `Le message est posté dans ${target}, et l’ancien, dans ${old}, est supprimé de Discord.`, confirmText: 'Déplacer' }
+                    : { title: 'Poster le message ?', desc: `Le bot poste « ${name || 'ce message'} » dans ${target}, visible par tous ceux qui voient ce salon.`, confirmText: 'Poster' })
+                if (ok) post.mutate()
+              }}><Send /> {sameChannel ? 'Mettre à jour' : saved?.messageId ? 'Déplacer ici' : 'Poster'}</Button>
             </div>
           )}
           {saved?.messageId && <p className='text-xs text-muted-foreground'>Posté · dernière modification le {dateTime(saved.updatedAt)}. Enregistrer met aussi à jour le message sur Discord.</p>}
@@ -270,6 +292,7 @@ function Editor({ saved, guilds, onSaved, onDeleted }: { saved?: Saved; guilds: 
         </Dialog>
       )}
       <ConfirmDialog open={deleting} onOpenChange={setDeleting} title={`Supprimer « ${saved?.name ?? ''} » ?`} desc='Le message posté sur Discord est supprimé aussi.' confirmText='Supprimer' destructive isLoading={remove.isPending} handleConfirm={() => remove.mutate()} />
+      {dialog}
     </div>
   )
 }

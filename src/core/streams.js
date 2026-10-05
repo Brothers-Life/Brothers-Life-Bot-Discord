@@ -136,7 +136,9 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 					if (!servers.has(target.guildId)) servers.set(target.guildId, await variables.server(target.guildId).catch(() => ({})));
 					payload = fillPayload(template, { ...servers.get(target.guildId), ...own });
 				}
-				messages.push({ channelId: target.channelId, messageId: await executor.sendAnnouncement(target.channelId, payload, target) });
+				// A test pings nobody and is not crossposted
+				const sendTo = logAs === 'test' ? { ...target, ping: 'none', roleIds: [], publish: false } : target;
+				messages.push({ channelId: target.channelId, messageId: await executor.sendAnnouncement(target.channelId, payload, sendTo) });
 			}
 			catch (error) {
 				logger.warn(`Stream notification #${s.id} not sent to ${target.channelId}:`, error.message);

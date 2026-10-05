@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -7,6 +7,8 @@ import type { AutomodAction, AutomodConfig, AutomodPayload, Channel, Role } from
 import { useMe } from '@/hooks/use-me'
 import { Page, Section, Pill } from '@/components/app/ui'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { SaveBar, SeeAlso, useDiscardGuard } from '@/components/app/confirm'
+import { PROTECTION_SEE_ALSO, others } from '@/features/navigation/see-also'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -24,7 +26,7 @@ const NETWORK = '*'
 const ACTIONS: { value: AutomodAction; label: string }[] = [
   { value: 'delete', label: 'Supprimer le message' },
   { value: 'warn', label: 'Supprimer + avertir' },
-  { value: 'timeout', label: 'Supprimer + timeout' },
+  { value: 'timeout', label: 'Supprimer + exclure temporairement (timeout)' },
   { value: 'kick', label: 'Supprimer + expulser' },
   { value: 'ban', label: 'Supprimer + bannir du serveur' },
   { value: 'network_ban', label: 'Supprimer + bannir du réseau' },
@@ -35,6 +37,8 @@ function AutomodPage() {
   const editable = can('automod.manage')
   const { data, isLoading } = useQuery({ queryKey: ['automod'], queryFn: () => api<AutomodPayload>('/automod') })
   const [target, setTarget] = useState(NETWORK)
+  const [dirty, setDirty] = useState(false)
+  const { guard, dialog } = useDiscardGuard(dirty)
 
   const targets = data ? [{ id: NETWORK, name: 'Réglage du réseau', custom: true }, ...data.guilds] : []
   const selectedGuild = data?.guilds.find((g) => g.id === target)
@@ -45,6 +49,7 @@ function AutomodPage() {
       title='Automod'
       description='Le réglage du réseau s’applique à tous les serveurs, sauf à ceux que tu personnalises. Le staff qui a la permission « Ignoré par l’automod » n’est jamais touché.'
     >
+      <SeeAlso links={others(PROTECTION_SEE_ALSO, '/automod')}>L’automod surveille les messages. Les autres protections :</SeeAlso>
       {isLoading && <Skeleton className='h-96 w-full' />}
       {data && config && (
         <div className='grid grid-cols-1 gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]'>
@@ -53,7 +58,7 @@ function AutomodPage() {
               <button
                 key={t.id}
                 type='button'
-                onClick={() => setTarget(t.id)}
+                onClick={() => { if (t.id !== target) void guard(() => { setDirty(false); setTarget(t.id) }) }}
                 aria-current={t.id === target ? 'page' : undefined}
                 className='flex shrink-0 items-center justify-between gap-2 rounded-md px-3 py-2 text-start text-sm hover:bg-accent aria-[current=page]:bg-accent aria-[current=page]:font-medium'
               >
@@ -68,9 +73,11 @@ function AutomodPage() {
             initial={config}
             inherited={target !== NETWORK && !selectedGuild?.custom}
             editable={editable}
+            onDirty={setDirty}
           />
         </div>
       )}
+      {dialog}
     </Page>
   )
 }
@@ -103,7 +110,7 @@ function ActionField({ id, section, onChange, disabled }: {
         </Select>
       </div>
       {section.action === 'timeout' && section.timeoutMinutes !== undefined && (
-        <NumberField id={`${id}-minutes`} label='Durée du timeout' value={section.timeoutMinutes} onChange={(v) => onChange({ timeoutMinutes: v })} disabled={disabled} suffix='minutes' />
+        <NumberField id={`${id}-minutes`} label='Durée de l’exclusion temporaire' value={section.timeoutMinutes} onChange={(v) => onChange({ timeoutMinutes: v })} disabled={disabled} suffix='minutes' />
       )}
     </div>
   )
@@ -127,7 +134,7 @@ function Block({ title, description, enabled, onToggle, disabled, children }: {
 const lines = (list: string[]) => list.join('\n')
 const toList = (text: string) => text.split('\n').map((l) => l.trim()).filter(Boolean)
 
-function AutomodForm({ target, initial, inherited, editable }: { target: string; initial: AutomodConfig; inherited: boolean; editable: boolean }) {
+function AutomodForm({ target, initial, inherited, editable, onDirty }: { target: string; initial: AutomodConfig; inherited: boolean; editable: boolean; onDirty: (dirty: boolean) => void }) {
   const qc = useQueryClient()
   const [config, setConfig] = useState(initial)
   const [confirmReset, setConfirmReset] = useState(false)
@@ -140,6 +147,7 @@ function AutomodForm({ target, initial, inherited, editable }: { target: string;
   })
 
   const dirty = JSON.stringify(config) !== JSON.stringify(initial)
+  useEffect(() => { onDirty(dirty) }, [dirty, onDirty])
 
   const update = <K extends keyof AutomodConfig>(key: K, value: AutomodConfig[K]) => setConfig((c) => ({ ...c, [key]: value }))
   const patch = <K extends 'spam' | 'uploads' | 'scam' | 'invites'>(key: K, value: Partial<AutomodConfig[K]>) =>
@@ -179,7 +187,7 @@ function AutomodForm({ target, initial, inherited, editable }: { target: string;
         {editable && (
           <div className='flex gap-2'>
             {target !== NETWORK && !inherited && <Button variant='ghost' onClick={() => setConfirmReset(true)}>Revenir au réglage du réseau</Button>}
-            <Button onClick={() => save.mutate()} disabled={(!dirty && !inherited) || save.isPending}>Enregistrer</Button>
+            {inherited && !dirty && <Button onClick={() => save.mutate()} disabled={save.isPending}>Personnaliser ce serveur</Button>}
           </div>
         )}
       </div>
@@ -262,6 +270,8 @@ function AutomodForm({ target, initial, inherited, editable }: { target: string;
           </div>
         </Section>
       )}
+
+      {editable && <SaveBar dirty={dirty} saving={save.isPending} onSave={() => save.mutate()} onCancel={() => setConfig(initial)} message={inherited ? 'Enregistrer crée un réglage propre à ce serveur.' : undefined} />}
 
       <ConfirmDialog
         open={confirmReset}
