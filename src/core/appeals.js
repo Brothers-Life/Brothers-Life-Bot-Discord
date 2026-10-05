@@ -7,6 +7,8 @@ definePermission('appeals.manage', { label: 'Régler les appels de sanction (sal
 const SNOWFLAKE = /^\d{17,20}$/;
 const TYPES = ['ban', 'timeout', 'warn', 'restrict'];
 const DAY = 86_400_000;
+// Decision reason of an appeal closed because its sanction had already ended (no extra status in the table)
+export const MOOT = 'Sans objet : la sanction était déjà terminée.';
 export const DEFAULT_QUESTIONS = [
 	'Pourquoi as-tu été sanctionné, selon toi ?',
 	'Pourquoi devrions-nous lever ta sanction ?',
@@ -29,7 +31,7 @@ export function normalizeAppealsConfig(input = {}) {
 // Appeals: the sanctioned person explains themselves from the DM of the sanction; the staff accepts
 // (the sanction is lifted) or refuses, from Discord or the panel. The person is told by DM.
 export function createAppeals({ db, audit, settings, sanctions, executor, logs, logger = console, now = Date.now }) {
-	logs.registerCategory('appeals', 'Appels de sanction', { submitted: 'Appel déposé', accepted: 'Appel accepté', rejected: 'Appel refusé' });
+	logs.registerCategory('appeals', 'Appels de sanction', { submitted: 'Appel déposé', accepted: 'Appel accepté', rejected: 'Appel refusé', moot: 'Appel clos sans objet' });
 	const q = {
 		insert: db.prepare('INSERT INTO sanction_appeals (sanction_id, user_id, answers, created_at) VALUES (?, ?, ?, ?)'),
 		get: db.prepare('SELECT * FROM sanction_appeals WHERE id = ?'),
@@ -43,6 +45,8 @@ export function createAppeals({ db, audit, settings, sanctions, executor, logs, 
 		id: row.id, sanctionId: row.sanction_id, userId: row.user_id, answers: JSON.parse(row.answers), status: row.status,
 		decidedBy: row.decided_by, decisionReason: row.decision_reason, reviewChannelId: row.review_channel_id, reviewMessageId: row.review_message_id,
 		createdAt: row.created_at, decidedAt: row.decided_at,
+		// Closed without a decision: the sanction was already over (stored as rejected, see MOOT)
+		moot: row.status === 'rejected' && row.decision_reason === MOOT,
 	});
 	const config = () => normalizeAppealsConfig(settings.get('appeals.config', {}));
 	// Appeals whose decision is being applied
@@ -83,6 +87,16 @@ export function createAppeals({ db, audit, settings, sanctions, executor, logs, 
 			throw new ValidationError(`Ton appel a été refusé. Tu pourras en refaire un à partir du <t:${Math.round((last.decidedAt + cfg.cooldownDays * DAY) / 1000)}:D>.`);
 		}
 		return { sanction, questions: cfg.questions };
+	}
+
+	async function closeMoot(actor, appeal) {
+		q.decide.run('rejected', actor.id, MOOT, now(), appeal.id);
+		await executor.sendDM(appeal.userId, `Ta sanction #${appeal.sanctionId} est déjà terminée, ton appel est clos.`).catch(() => null);
+		const done = getOrThrow(appeal.id);
+		await refreshReview(done);
+		logs.log(config().guildId, 'appeals', { title: 'Appel clos (sans objet)', description: `<@${appeal.userId}> · sanction #${appeal.sanctionId} déjà terminée · par <@${actor.id}>`, color: 'neutral' }, 'moot');
+		audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'appeals.moot', target: String(appeal.sanctionId), details: { member: `<@${appeal.userId}>` } });
+		return done;
 	}
 
 	const service = {
@@ -126,10 +140,13 @@ export function createAppeals({ db, audit, settings, sanctions, executor, logs, 
 			const appeal = getOrThrow(id);
 			if (appeal.status !== 'pending' || deciding.has(appeal.id)) throw new ValidationError('Cet appel a déjà été traité.');
 			const text = String(reason ?? '').trim().slice(0, 500);
+			// The sanction ended (expired, lifted) while the appeal waited: nothing left to decide
+			const sanction = sanctions.get(appeal.sanctionId);
+			if (sanction.revokedAt || (sanction.type !== 'warn' && !sanction.active)) return closeMoot(actor, appeal);
 			// Accepting waits for the sanction to be lifted: a second decision (double click, two staff members) must not slip in
 			deciding.add(appeal.id);
 			try {
-				if (accepted) await sanctions.revoke(actor, appeal.sanctionId, `Appel accepté${text ? ` : ${text}` : ''}`);
+				if (accepted) await sanctions.revoke(actor, appeal.sanctionId, `Appel accepté${text ? ` : ${text}` : ''}`, { notify: false });
 				q.decide.run(accepted ? 'accepted' : 'rejected', actor.id, text || null, now(), id);
 			}
 			finally {

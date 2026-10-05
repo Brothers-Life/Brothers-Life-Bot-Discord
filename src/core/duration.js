@@ -11,8 +11,9 @@ export function parseDuration(input) {
 	return Number.isSafeInteger(total) && total > 0 ? total : null;
 }
 
-export function formatDuration(ms) {
-	if (!ms) return 'définitif';
+// `none`: what "no duration" means (a ban is permanent, a restriction lasts until lifted)
+export function formatDuration(ms, none = 'définitif') {
+	if (!ms) return none;
 	const units = [['j', 86_400_000], ['h', 3_600_000], ['min', 60_000], ['s', 1000]];
 	const out = [];
 	let rest = ms;

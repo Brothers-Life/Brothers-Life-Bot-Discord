@@ -123,7 +123,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const memberInsights = createMemberInsights({ db, stats, events });
 	const channelFeatures = createChannelFeatures({ db, network, audit, executor, logger });
 	logs.registerCategory('channelfeatures', 'Salons automatiques (compteur, un mot, message en bas…)');
-	const verification = createVerification({ db, network, audit, settings, executor, logs, logger });
+	const verification = createVerification({ db, network, audit, settings, executor, logs, onboarding, logger });
 	const embedBuilder = createEmbedBuilder({ db, network, audit, executor });
 	logs.registerCategory('embeds', 'Créateur d’embeds (messages postés, modifiés)');
 	const appeals = createAppeals({ db, audit, settings, sanctions, executor, logs, logger });

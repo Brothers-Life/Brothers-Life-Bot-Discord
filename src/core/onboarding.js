@@ -183,8 +183,26 @@ export function createOnboarding({ db, network, audit, executor, uploads, logger
 		await executor.sendMessage(section.channelId, { payload, files, mentionUserIds: [member.id] });
 	}
 
+	const rulesGiveAutoroles = config => config.rules.enabled && config.rules.autorolesOnAccept && config.rules.acceptRoleIds.length > 0;
+	// Set by the verification service: whether newcomers must pass it before getting the automatic roles
+	let verifying = () => false;
+
 	const service = {
 		get: configOf,
+
+		setVerificationCheck(check) {
+			verifying = check;
+		},
+
+		// Verification passed: the automatic roles held back on arrival (unless the rules acceptance gives them)
+		async verified(guildId, userId) {
+			if (!active(guildId)) return;
+			const config = configOf(guildId);
+			if (rulesGiveAutoroles(config)) return;
+			for (const roleId of config.autoroles.humanRoleIds) {
+				await executor.addRole(guildId, userId, roleId, 'Rôle automatique (vérifié)').catch(error => logger.warn(`Auto role ${roleId} on ${guildId} failed:`, error.message));
+			}
+		},
 
 		save(actor, guildId, input) {
 			if (!actor.can('onboarding.manage')) throw new ForbiddenError('Permission manquante : onboarding.manage');
@@ -222,9 +240,8 @@ export function createOnboarding({ db, network, audit, executor, uploads, logger
 		async memberJoined(guildId, member, { inviterId = null } = {}) {
 			if (!active(guildId)) return;
 			const config = configOf(guildId);
-			const roles = member.bot
-				? config.autoroles.botRoleIds
-				: config.rules.enabled && config.rules.autorolesOnAccept && config.rules.acceptRoleIds.length ? [] : config.autoroles.humanRoleIds;
+			// Humans wait for the rules acceptance or the verification when the server asks for one
+			const roles = member.bot ? config.autoroles.botRoleIds : rulesGiveAutoroles(config) || verifying(guildId) ? [] : config.autoroles.humanRoleIds;
 			for (const roleId of roles) {
 				await executor.addRole(guildId, member.id, roleId, 'Rôle automatique').catch(error => logger.warn(`Auto role ${roleId} on ${guildId} failed:`, error.message));
 			}

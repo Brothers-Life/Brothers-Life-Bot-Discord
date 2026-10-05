@@ -28,8 +28,14 @@ export function durationOption(interaction, name) {
 	return ms;
 }
 
+// A kick only removes someone from this server unless the network is asked explicitly
+// (`reseau: true`, or `local: false`); the other sanctions default to the whole network
 export function scopeOf(interaction) {
-	return interaction.options.getBoolean('local') ? 'local' : 'network';
+	const local = interaction.options.getBoolean('local');
+	if (interaction.commandName === 'kick') {
+		return interaction.options.getBoolean('reseau') === true || local === false ? 'network' : 'local';
+	}
+	return local ? 'local' : 'network';
 }
 
 export function resultsLine(results) {

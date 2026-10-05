@@ -17,6 +17,9 @@ export const MAX_TIMEOUT_MS = 28 * 86_400_000;
 const SNOWFLAKE = /^\d{17,20}$/;
 
 const LABELS = { ban: 'banni', kick: 'expulsé', timeout: 'mis en timeout', warn: 'averti', restrict: 'restreint' };
+const NAMES = { ban: 'bannissement', kick: 'expulsion', timeout: 'timeout', warn: 'avertissement', restrict: 'restriction' };
+// Author of the automatic anti-raid sanctions (src/core/antiraid.js)
+export const ANTIRAID_ID = 'antiraid';
 
 // Network sanctions: one row per sanction, applied server by server with a result for each.
 export function createSanctions({ db, audit, network, ranks, executor, restrictions, logger = console, now = Date.now }) {
@@ -65,6 +68,8 @@ export function createSanctions({ db, audit, network, ranks, executor, restricti
 			revokeReason: row.revoke_reason,
 			results: row.results ? JSON.parse(row.results) : {},
 			profile: row.profile ?? null,
+			// Done by the anti-raid on its own: a protection, not a judgement on the person
+			automatic: row.moderator_id === ANTIRAID_ID,
 			active: !row.revoked_at && DURABLE.has(row.type) && (!row.expires_at || row.expires_at > at),
 		};
 	}
@@ -116,13 +121,21 @@ export function createSanctions({ db, audit, network, ranks, executor, restricti
 	// Set by the appeals service: whether this kind of sanction can be appealed (a button in the DM)
 	let appealable = () => false;
 
-	async function dm(userId, type, reason, durationMs, profile, sanctionId) {
+	// "sur **Serveur**" for a local sanction, "sur le réseau Brothers Life" otherwise
+	function placeOf(scope, guildId, networkLabel = 'le réseau Brothers Life') {
+		if (scope !== 'local') return networkLabel;
+		const name = network.find(guildId)?.name;
+		return name ? `**${name}**` : 'ce serveur';
+	}
+
+	async function dm(userId, type, reason, durationMs, profile, sanctionId, { scope = 'network', guildId = null, notice } = {}) {
+		if (notice === false) return;
 		const what = type === 'restrict' && profile ? `${LABELS[type]} (${restrictions.getProfile(profile).label.toLowerCase()})` : LABELS[type];
-		const lines = [`Tu as été **${what}** sur le réseau Brothers Life.`];
-		if (reason) lines.push(`Raison : ${reason}`);
-		if (DURABLE.has(type)) lines.push(`Durée : ${formatDuration(durationMs)}`);
+		const lines = notice ? [notice] : [`Tu as été **${what}** sur ${placeOf(scope, guildId)}.`];
+		if (!notice && reason) lines.push(`Raison : ${reason}`);
+		if (!notice && DURABLE.has(type)) lines.push(`Durée : ${formatDuration(durationMs, type === 'restrict' ? 'jusqu’à levée' : 'définitif')}`);
 		try {
-			if (appealable(type)) {
+			if (!notice && appealable(type)) {
 				lines.push('', 'Tu penses que c’est une erreur ? Tu peux faire appel avec le bouton ci-dessous.');
 				await executor.sendSanctionDM(userId, lines.join('\n'), sanctionId);
 			}
@@ -170,7 +183,7 @@ export function createSanctions({ db, audit, network, ranks, executor, restricti
 		if (originGuildId && network.find(originGuildId)?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
 	}
 
-	async function insertAndApply({ type, userId, moderatorId, source, originGuildId, scope, reason, durationMs, skipGuild = null, deleteMessageSeconds = 0, profile = null }) {
+	async function insertAndApply({ type, userId, moderatorId, source, originGuildId, scope, reason, durationMs, skipGuild = null, deleteMessageSeconds = 0, profile = null, notice }) {
 		const user = await executor.getUser(userId).catch(() => null);
 		const createdAt = now();
 		const expiresAt = durationMs ? createdAt + durationMs : null;
@@ -181,7 +194,7 @@ export function createSanctions({ db, audit, network, ranks, executor, restricti
 		const id = Number(lastInsertRowid);
 
 		// DM first: after a ban or kick we may no longer share a server with them
-		if (source !== 'native') await dm(userId, type, reason, durationMs, profile, id);
+		if (source !== 'native') await dm(userId, type, reason, durationMs, profile, id, { scope, guildId: originGuildId, notice });
 
 		const guilds = targetGuilds(scope, originGuildId).filter(g => g !== skipGuild);
 		const auditReason = `${reason || 'Sans raison'} (sanction #${id})`.slice(0, 500);
@@ -243,7 +256,8 @@ export function createSanctions({ db, audit, network, ranks, executor, restricti
 			return q.activeBansOf.all(String(userId), now()).length > 0;
 		},
 
-		async create(actor, { type, userId, reason = '', durationMs = null, scope = 'network', originGuildId = null, deleteMessageSeconds = 0, profile = null }) {
+		// `notice`: a text sent instead of the sanction DM (false: no DM), for automatic protections
+		async create(actor, { type, userId, reason = '', durationMs = null, scope = 'network', originGuildId = null, deleteMessageSeconds = 0, profile = null, notice }) {
 			userId = String(userId);
 			if (!actor.can(`sanctions.${type}`)) throw new ForbiddenError(`Permission manquante : sanctions.${type}`);
 			validate({ type, userId, reason, durationMs, scope, originGuildId, profile });
@@ -252,20 +266,20 @@ export function createSanctions({ db, audit, network, ranks, executor, restricti
 
 			const sanction = await insertAndApply({
 				type, userId, moderatorId: actor.id, source: actor.source ?? 'panel', originGuildId, scope, reason, durationMs, deleteMessageSeconds,
-				profile: type === 'restrict' ? profile : null,
+				profile: type === 'restrict' ? profile : null, notice,
 			});
 			record(actor, `sanctions.${type}`, sanction, durationMs ? { duration: formatDuration(durationMs) } : {});
 			return sanction;
 		},
 
-		// Lifts a ban / timeout, or cancels a warn
-		async revoke(actor, id, reason = '') {
+		// Lifts a ban / timeout, cancels a warn, or removes a kick from the history (nothing to undo on Discord).
+		// `notify: false` when the caller tells the person itself (an accepted appeal)
+		async revoke(actor, id, reason = '', { notify = true } = {}) {
 			needRevoke(actor);
 			const sanction = getOrThrow(id);
 			notSelf(actor, sanction.userId);
-			if (sanction.revokedAt) throw new ValidationError('Cette sanction est déjà levée.');
-			if (sanction.type === 'kick') throw new ValidationError('Une expulsion ne peut pas être annulée.');
-			return revokeSanction(actor, sanction, reason);
+			if (sanction.revokedAt) throw new ValidationError(sanction.type === 'kick' ? 'Cette expulsion est déjà retirée de l’historique.' : 'Cette sanction est déjà levée.');
+			return revokeSanction(actor, sanction, reason, null, { notify });
 		},
 
 		// Unban a user everywhere (also lifts bans done outside the bot)
@@ -396,7 +410,15 @@ export function createSanctions({ db, audit, network, ranks, executor, restricti
 		},
 	};
 
-	async function revokeSanction(actor, sanction, reason, skipGuild = null) {
+	// "Ta sanction #12 (bannissement) sur **Serveur** a été levée." (a kick removed from the history is not news to them)
+	async function liftedDM(sanction) {
+		if (sanction.type === 'kick') return;
+		const lines = [`✅ Ta sanction #${sanction.id} (${NAMES[sanction.type]}) sur ${placeOf(sanction.scope, sanction.originGuildId, 'le réseau')} a été levée.`];
+		if (sanction.type === 'ban') lines.push(sanction.scope === 'local' ? 'Tu peux de nouveau rejoindre ce serveur.' : 'Tu peux de nouveau rejoindre les serveurs du réseau.');
+		await executor.sendDM(sanction.userId, lines.join('\n')).catch(() => null);
+	}
+
+	async function revokeSanction(actor, sanction, reason, skipGuild = null, { notify = true } = {}) {
 		const changed = q.revoke.run(now(), actor.id, reason || null, sanction.id).changes;
 		if (!changed) return getOrThrow(sanction.id);
 
@@ -407,7 +429,8 @@ export function createSanctions({ db, audit, network, ranks, executor, restricti
 		if (sanction.type === 'restrict') results = await applyEach(guilds, g => restrictions.lift(g, sanction.userId, sanction.profile, reason || `Fin de la sanction #${sanction.id}`));
 
 		const revoked = getOrThrow(sanction.id);
-		const action = { ban: 'sanctions.unban', timeout: 'sanctions.untimeout', warn: 'sanctions.unwarn', restrict: 'sanctions.unrestrict' }[sanction.type];
+		if (notify) await liftedDM(sanction);
+		const action = { ban: 'sanctions.unban', kick: 'sanctions.unkick', timeout: 'sanctions.untimeout', warn: 'sanctions.unwarn', restrict: 'sanctions.unrestrict' }[sanction.type];
 		audit.record({
 			actorId: actor.id,
 			source: actor.source ?? 'panel',

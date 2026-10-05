@@ -137,7 +137,7 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 			const roles = await executor.getMemberRoleIds(guildId, userId) ?? [];
 			if (!r.requiredRoleIds.some(id => roles.includes(id))) reasons.push('Il te manque un rôle requis pour ce poste.');
 		}
-		if (r.noSanctionDays && sanctions.list({ userId, limit: 50 }).some(s => !s.revokedAt && s.createdAt >= now() - r.noSanctionDays * DAY_MS)) {
+		if (r.noSanctionDays && sanctions.list({ userId, limit: 50 }).some(s => !s.revokedAt && !s.automatic && s.createdAt >= now() - r.noSanctionDays * DAY_MS)) {
 			reasons.push(`Aucune sanction ces ${r.noSanctionDays} derniers jours.`);
 		}
 		if (r.minMessages) {

@@ -2,6 +2,7 @@ import { randomInt } from 'node:crypto';
 import { definePermission } from './permissions.js';
 import { ForbiddenError, ValidationError } from './errors.js';
 import { normalizePayload } from './announcements.js';
+import { accountCreatedAt as createdAtOf } from './ticketConfig.js';
 
 definePermission('verification.view', { label: 'Voir la vérification des nouveaux', category: 'Accueil' });
 definePermission('verification.manage', { label: 'Configurer la vérification des nouveaux (bouton, captcha)', category: 'Accueil' });
@@ -11,6 +12,8 @@ const SNOWFLAKE = /^\d{17,20}$/;
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const CODE_TTL = 5 * 60_000;
 const MAX_ATTEMPTS = 3;
+// After MAX_ATTEMPTS wrong codes: no new captcha before this delay
+const LOCK_MS = 10 * 60_000;
 const DAY = 86_400_000;
 
 const DEFAULT_PAYLOAD = {
@@ -42,7 +45,7 @@ export function normalizeVerification(input = {}) {
 }
 
 // Verification of newcomers: a button (or a captcha to type) before getting access to the server.
-export function createVerification({ db, network, audit, settings, executor, logs, logger = console, now = Date.now }) {
+export function createVerification({ db, network, audit, settings, executor, logs, onboarding = null, logger = console, now = Date.now }) {
 	logs.registerCategory('verification', 'Vérification des nouveaux', {
 		passed: 'Vérification réussie',
 		failed: 'Captcha raté',
@@ -59,6 +62,8 @@ export function createVerification({ db, network, audit, settings, executor, log
 	};
 	// `${guildId}:${userId}` -> { code, expiresAt, attempts }
 	const codes = new Map();
+	// `${guildId}:${userId}` -> time when a new captcha can be asked (after too many wrong codes)
+	const locks = new Map();
 
 	const all = () => settings.get('verification.config', {});
 	function config(guildId) {
@@ -75,11 +80,15 @@ export function createVerification({ db, network, audit, settings, executor, log
 		if (cfg.unverifiedRoleId) await executor.removeRole(guildId, userId, cfg.unverifiedRoleId, 'Vérification réussie').catch(() => undefined);
 		q.done.run(guildId, userId);
 		codes.delete(`${guildId}:${userId}`);
+		locks.delete(`${guildId}:${userId}`);
 		log(guildId, 'passed', 'Vérification réussie', `<@${userId}>`, 'success');
+		await onboarding?.verified(guildId, userId);
 	}
 
 	const service = {
 		config,
+		// Whether newcomers of this server must verify before getting access (and the automatic roles)
+		active: guildId => config(guildId).enabled && network.find(guildId)?.status === 'active',
 		pending: guildId => q.count.get(guildId).n,
 
 		setConfig(actor, guildId, input) {
@@ -123,9 +132,14 @@ export function createVerification({ db, network, audit, settings, executor, log
 			const cfg = config(guildId);
 			if (!cfg.enabled) throw new ValidationError('La vérification n’est pas active sur ce serveur.');
 			if (cfg.minAccountAgeDays && accountCreatedAt && now() - accountCreatedAt < cfg.minAccountAgeDays * DAY) {
+				// Not their fault: never kicked for being too slow to verify (the account age is the only reason)
+				q.done.run(guildId, userId);
 				log(guildId, 'refused', 'Compte trop récent', `<@${userId}> : compte créé <t:${Math.round(accountCreatedAt / 1000)}:R>`, 'warning');
-				throw new ValidationError(`Ton compte Discord doit avoir au moins ${cfg.minAccountAgeDays} jour${cfg.minAccountAgeDays > 1 ? 's' : ''}. Réessaie plus tard ou contacte le staff.`);
+				const from = Math.round((accountCreatedAt + cfg.minAccountAgeDays * DAY) / 1000);
+				throw new ValidationError(`Ton compte Discord doit avoir au moins ${cfg.minAccountAgeDays} jour${cfg.minAccountAgeDays > 1 ? 's' : ''} pour accéder au serveur. Tu n’es pas expulsé : reviens cliquer sur ce bouton à partir du <t:${from}:f>.`);
 			}
+			const lockedUntil = locks.get(`${guildId}:${userId}`);
+			if (lockedUntil > now()) throw new ValidationError(`Trop d’essais ratés : tu pourras demander un nouveau code <t:${Math.round(lockedUntil / 1000)}:R>.`);
 			if (cfg.mode === 'button') {
 				await grant(guildId, userId);
 				return { verified: true };
@@ -152,7 +166,8 @@ export function createVerification({ db, network, audit, settings, executor, log
 			log(guildId, 'failed', 'Captcha raté', `<@${userId}> (essai ${pending.attempts}/${MAX_ATTEMPTS})`, 'warning');
 			if (pending.attempts >= MAX_ATTEMPTS) {
 				codes.delete(key);
-				throw new ValidationError('Code faux trois fois : reclique sur le bouton pour une nouvelle image.');
+				locks.set(key, now() + LOCK_MS);
+				throw new ValidationError(`Code faux ${MAX_ATTEMPTS} fois : attends ${LOCK_MS / 60_000} minutes avant de redemander un code.`);
 			}
 			throw new ValidationError(`Code faux, il te reste ${MAX_ATTEMPTS - pending.attempts} essai${MAX_ATTEMPTS - pending.attempts > 1 ? 's' : ''}.`);
 		},
@@ -164,11 +179,14 @@ export function createVerification({ db, network, audit, settings, executor, log
 				if (!cfg.enabled || !cfg.kickAfterMinutes) continue;
 				for (const row of q.overdue.all(guildId, now() - cfg.kickAfterMinutes * 60_000)) {
 					q.done.run(guildId, row.user_id);
+					// An account too young could not have verified anyway: it stays, the button tells it when to come back
+					if (cfg.minAccountAgeDays && now() - createdAtOf(row.user_id) < cfg.minAccountAgeDays * DAY) continue;
 					const result = await executor.kick(guildId, row.user_id, 'Pas de vérification à temps').catch(error => logger.warn('Verification kick failed:', error.message));
 					if (result !== 'not_member') log(guildId, 'kicked', 'Expulsé faute de vérification', `<@${row.user_id}> (${cfg.kickAfterMinutes} min)`, 'danger');
 				}
 			}
 		},
 	};
+	onboarding?.setVerificationCheck(service.active);
 	return service;
 }

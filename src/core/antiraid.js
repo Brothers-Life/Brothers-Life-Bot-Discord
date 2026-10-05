@@ -1,6 +1,7 @@
 import { definePermission } from './permissions.js';
 import { ForbiddenError, ValidationError } from './errors.js';
 import { accountCreatedAt } from './ticketConfig.js';
+import { ANTIRAID_ID } from './sanctions.js';
 
 definePermission('antiraid.view', { label: 'Voir l’anti-raid', category: 'Anti-raid' });
 definePermission('antiraid.manage', { label: 'Configurer l’anti-raid, déclencher ou arrêter un raid (/raid)', category: 'Anti-raid' });
@@ -10,7 +11,7 @@ const JOIN_ACTIONS = ['none', 'kick', 'ban', 'network_ban'];
 const NEW_ACCOUNT_ACTIONS = ['none', 'kick', 'role'];
 
 // Author of the automatic sanctions
-const ANTIRAID = Object.freeze({ id: 'antiraid', source: 'system', isOwner: true, level: Infinity, permissions: [], ranks: [], can: () => true });
+const ANTIRAID = Object.freeze({ id: ANTIRAID_ID, source: 'system', isOwner: true, level: Infinity, permissions: [], ranks: [], can: () => true });
 
 const int = (value, min, max, fallback) => (Number.isInteger(value) ? Math.min(Math.max(value, min), max) : fallback);
 
@@ -97,10 +98,11 @@ export function createAntiraid({ db, network, audit, executor, sanctions, logs, 
 		}
 	}
 
-	async function act(guildId, userId, action, reason) {
+	// `notice`: the neutral DM of a kick (a protection, not a sanction the person deserved)
+	async function act(guildId, userId, action, reason, notice) {
 		const base = { userId, reason, originGuildId: guildId };
 		try {
-			if (action === 'kick') await sanctions.create(ANTIRAID, { ...base, type: 'kick', scope: 'local' });
+			if (action === 'kick') await sanctions.create(ANTIRAID, { ...base, type: 'kick', scope: 'local', notice });
 			if (action === 'ban') await sanctions.create(ANTIRAID, { ...base, type: 'ban', scope: 'local', deleteMessageSeconds: 3600 });
 			if (action === 'network_ban') await sanctions.create(ANTIRAID, { ...base, type: 'ban', scope: 'network', deleteMessageSeconds: 3600 });
 		}
@@ -108,6 +110,10 @@ export function createAntiraid({ db, network, audit, executor, sanctions, logs, 
 			logger.warn(`Anti-raid ${action} of ${userId} on ${guildId} failed:`, error.message);
 		}
 	}
+
+	const serverName = guildId => network.find(guildId)?.name ?? 'ce serveur';
+	const raidNotice = guildId => `**${serverName(guildId)}** n’accepte pas de nouvelles arrivées pour le moment (protection contre les raids). Réessaie un peu plus tard.`;
+	const youngNotice = (guildId, days) => `Ton compte est trop récent pour rejoindre **${serverName(guildId)}** pour le moment. Tu pourras revenir quand il aura au moins ${days} jour${days > 1 ? 's' : ''}.`;
 
 	async function startRaid(guildId, by, config) {
 		// Known before the locks are set: joins arriving meanwhile must not start (and lock) a second time,
@@ -191,7 +197,7 @@ export function createAntiraid({ db, network, audit, executor, sanctions, logs, 
 				raid = await startRaid(guildId, 'auto', config);
 				if (config.includeWindow && config.actionOnJoin !== 'none') {
 					for (const join of window.filter(j => j.userId !== member.id)) {
-						await act(guildId, join.userId, config.actionOnJoin, 'Anti-raid : arrivé pendant le raid');
+						await act(guildId, join.userId, config.actionOnJoin, 'Anti-raid : arrivé pendant le raid', raidNotice(guildId));
 						raid.actioned++;
 					}
 				}
@@ -200,7 +206,7 @@ export function createAntiraid({ db, network, audit, executor, sanctions, logs, 
 				raid.until = Math.max(raid.until, now() + config.raidMinutes * 60_000);
 				if (raids.get(guildId) === raid) persist(guildId);
 				if (config.actionOnJoin !== 'none') {
-					await act(guildId, member.id, config.actionOnJoin, 'Anti-raid : arrivé pendant le raid');
+					await act(guildId, member.id, config.actionOnJoin, 'Anti-raid : arrivé pendant le raid', raidNotice(guildId));
 					raid.actioned++;
 					return { blocked: true };
 				}
@@ -213,7 +219,7 @@ export function createAntiraid({ db, network, audit, executor, sanctions, logs, 
 				const days = Math.floor((now() - created) / 86_400_000);
 				const reason = `Anti-raid : compte créé il y a ${days} jour(s), minimum ${newAccount.minAgeDays}`;
 				if (newAccount.action === 'kick') {
-					await act(guildId, member.id, 'kick', reason);
+					await act(guildId, member.id, 'kick', reason, youngNotice(guildId, newAccount.minAgeDays));
 				}
 				else if (newAccount.action === 'role') {
 					await executor.addRole(guildId, member.id, newAccount.roleId, reason).catch(error => logger.warn('Quarantine role failed:', error.message));
