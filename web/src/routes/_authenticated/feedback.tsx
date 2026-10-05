@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bug, Check, Download, Lightbulb, Plus, Save, Send, ShieldAlert, ThumbsDown, ThumbsUp, Trash2, UserCheck, X } from 'lucide-react'
+import { Bug, Check, Download, History, Lightbulb, Plus, Save, Send, ShieldAlert, ThumbsDown, ThumbsUp, Trash2, UserCheck, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Channel, FormDef, Guild, Role } from '@/lib/types'
@@ -31,7 +31,7 @@ export const Route = createFileRoute('/_authenticated/feedback')({
 type Status = { key: string; label: string; emoji: string; color: string; final: boolean }
 type Urgency = { key: string; label: string; color: string; pingRoleIds: string[]; slaMinutes: number }
 type BoxConfig = {
-  channelId: string | null; reviewChannelId: string | null; acceptedChannelId: string | null; rejectedChannelId: string | null; form: FormDef; statuses: Status[]
+  type: 'suggestion' | 'bug'; channelId: string | null; reviewChannelId: string | null; acceptedChannelId: string | null; rejectedChannelId: string | null; form: FormDef; statuses: Status[]
   votes: boolean; anonymousAllowed: boolean; allowedRoleIds: string[]; cooldownMinutes: number; thread: boolean; dmAuthor: boolean; urgencies: Urgency[]
 }
 type Box = { id: number; guildId: string; name: string; kind: 'public' | 'staff'; config: BoxConfig; panelChannelId: string | null; panelMessageId: string | null }
@@ -39,6 +39,12 @@ type Item = {
   id: number; number: number; title: string; answers: { id: string; label: string; value: string }[]; status: string; statusReason: string | null; urgency: string | null
   approved: boolean; anonymous: boolean; up: number; down: number; createdAt: number; duplicateOf: number | null
   author: { name: string | null; avatar: string | null } | null; assignee: { name: string | null; avatar: string | null } | null
+  approver: { name: string | null; avatar: string | null } | null; approvedAt: number | null
+}
+type Person = { name: string | null; avatar: string | null }
+type Details = {
+  history: { status: Status; at: number; reason: string | null; by: Person | null }[]
+  voters: { value: number; at: number; user: Person }[] | null
 }
 type Payload = { boxes: Box[]; channels: Channel[]; roles: Role[]; presets: { key: string; name: string; kind: string }[] }
 
@@ -101,7 +107,7 @@ function Boxes({ guildId }: { guildId: string }) {
       {!box ? <EmptyState title='Aucune boîte'>Crée une boîte « Suggestions », « Reports de bug » ou « Bugs internes du staff ».</EmptyState> : (
         <Tabs key={box.id} defaultValue={box.config.channelId ? 'items' : 'settings'}>
           <TabsList>
-            <TabsTrigger value='items'>{box.kind === 'staff' ? 'Bugs' : 'Propositions'}</TabsTrigger>
+            <TabsTrigger value='items'>{box.config.type === 'bug' ? 'Bugs' : 'Propositions'}</TabsTrigger>
             <TabsTrigger value='settings'>Réglages</TabsTrigger>
           </TabsList>
           <TabsContent value='items' className='mt-4'><Items box={box} /></TabsContent>
@@ -150,7 +156,7 @@ function Items({ box }: { box: Box }) {
         </div>
       }
     >
-      {!data ? <Skeleton className='m-4 h-40' /> : !data.length ? <EmptyState title='Rien pour l’instant'>Publie le panneau de la boîte, ou utilise /proposer dans Discord.</EmptyState> : (
+      {!data ? <Skeleton className='m-4 h-40' /> : !data.length ? <EmptyState title='Rien pour l’instant'>Publie le panneau de la boîte, ou utilise {box.config.type === 'bug' ? '/bug' : '/proposer'} dans Discord.</EmptyState> : (
         <ul className='divide-y'>
           {data.map((i) => {
             const s = statusOf(i.status)
@@ -167,12 +173,17 @@ function Items({ box }: { box: Box }) {
                   </div>
                   {i.answers.length > 0 && <Answers answers={i.answers} />}
                   <div className='mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground'>
-                    <span className='flex items-center gap-1'>{i.author ? <><UserAvatar src={i.author.avatar} name={i.author.name ?? '?'} className='size-4' />{i.author.name}</> : 'anonyme'}</span>
-                    <span>{ago(i.createdAt)}</span>
+                    <span className='flex items-center gap-1'>
+                      {i.author ? <><UserAvatar src={i.author.avatar} name={i.author.name ?? '?'} className='size-4' />{box.config.type === 'bug' ? 'signalé par' : 'proposé par'} <span className='text-foreground/80'>{i.author.name}</span></> : 'anonyme'}
+                      {i.anonymous && i.author && <Pill tone='warning'>anonyme pour le public</Pill>}
+                    </span>
+                    <span title={new Date(i.createdAt).toLocaleString('fr-FR')}>{ago(i.createdAt)}</span>
                     {box.config.votes && <span className='flex items-center gap-2'><ThumbsUp className='size-3 text-success' />{i.up}<ThumbsDown className='size-3 text-destructive' />{i.down}</span>}
                     {i.assignee && <span>pris par {i.assignee.name}</span>}
+                    {i.approver && <span title={i.approvedAt ? new Date(i.approvedAt).toLocaleString('fr-FR') : undefined}>validé par {i.approver.name}</span>}
                     {i.statusReason && <span className='min-w-0 italic [overflow-wrap:anywhere]'>« {i.statusReason} »</span>}
                   </div>
+                  <ItemDetails item={i} />
                 </div>
                 {handle && (
                   <div className='flex flex-wrap gap-1'>
@@ -215,6 +226,59 @@ function Answers({ answers }: { answers: Item['answers'] }) {
         <p className='line-clamp-2 [overflow-wrap:anywhere]'>{answers.map((a) => a.value).join(' · ')}</p>
       )}
       {long && <button type='button' className='mt-0.5 text-xs text-primary hover:underline' aria-expanded={open} onClick={() => setOpen(!open)}>{open ? 'Réduire' : 'Tout afficher'}</button>}
+    </div>
+  )
+}
+
+// Who changed the status (when, why) and who voted what (for the people handling the box)
+function ItemDetails({ item }: { item: Item }) {
+  const [open, setOpen] = useState(false)
+  const { data, isLoading } = useQuery({
+    queryKey: ['feedback-details', item.id, item.status, item.up, item.down],
+    queryFn: () => api<Details>(`/feedback/items/${item.id}/details`),
+    enabled: open,
+  })
+  return (
+    <div className='mt-1'>
+      <button type='button' className='flex items-center gap-1 text-xs text-primary hover:underline' aria-expanded={open} onClick={() => setOpen(!open)}>
+        <History className='size-3' /> {open ? 'Masquer l’historique' : 'Historique et votes'}
+      </button>
+      {open && (
+        <div className='mt-2 grid grid-cols-[minmax(0,1fr)] gap-3 rounded-md border bg-muted/30 p-3 text-xs sm:grid-cols-2'>
+          {isLoading || !data ? <Skeleton className='h-16' /> : <>
+            <div className='min-w-0'>
+              <p className='mb-1 font-medium text-foreground/80'>Historique du statut</p>
+              <ol className='grid gap-1.5'>
+                {data.history.map((h, n) => (
+                  <li key={n} className='flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-muted-foreground'>
+                    <span style={{ color: h.status.color }}>{h.status.emoji} {h.status.label}</span>
+                    {h.by && <span className='flex items-center gap-1'>· <UserAvatar src={h.by.avatar} name={h.by.name ?? '?'} className='size-4' />{n === 0 ? 'créé par' : 'par'} {h.by.name}</span>}
+                    <span title={new Date(h.at).toLocaleString('fr-FR')}>· {ago(h.at)}</span>
+                    {h.reason && <span className='basis-full italic [overflow-wrap:anywhere]'>« {h.reason} »</span>}
+                  </li>
+                ))}
+              </ol>
+            </div>
+            {data.voters && (
+              <div className='min-w-0'>
+                <p className='mb-1 font-medium text-foreground/80'>Votes ({data.voters.length})</p>
+                {!data.voters.length ? <p className='text-muted-foreground'>Aucun vote.</p> : (
+                  <ul className='grid gap-1'>
+                    {data.voters.map((v, n) => (
+                      <li key={n} className='flex min-w-0 items-center gap-1.5 text-muted-foreground'>
+                        {v.value > 0 ? <ThumbsUp className='size-3 shrink-0 text-success' /> : <ThumbsDown className='size-3 shrink-0 text-destructive' />}
+                        <UserAvatar src={v.user.avatar} name={v.user.name ?? '?'} className='size-4' />
+                        <span className='truncate'>{v.user.name}</span>
+                        <span className='shrink-0' title={new Date(v.at).toLocaleString('fr-FR')}>· {ago(v.at)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </>}
+        </div>
+      )}
     </div>
   )
 }
@@ -284,6 +348,16 @@ function BoxSettings({ box, data, guildId, onDeleted, onDuplicated }: { box: Box
         <div className='grid gap-4 p-4'>
           <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
             <div className='grid gap-1.5'><Label htmlFor='b-name'>Nom</Label><Input id='b-name' value={name} maxLength={60} disabled={!manage} onChange={(e) => setName(e.target.value)} /></div>
+            <div className='grid gap-1.5'>
+              <Label>Type de boîte</Label>
+              <Select value={c.type} disabled={!manage || box.kind === 'staff'} onValueChange={(v) => set({ type: v as BoxConfig['type'] })}>
+                <SelectTrigger aria-label='Type de boîte'><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='suggestion'>💡 Suggestions (commande /proposer)</SelectItem>
+                  <SelectItem value='bug'>🐞 Reports de bug (commande /bug)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className='grid gap-1.5'><Label>Salon de publication</Label><ChannelSelect channels={data.channels} value={c.channelId} disabled={!manage} onChange={(v) => set({ channelId: v })} label='Salon de publication' /></div>
             <div className='grid gap-1.5'><Label>Validation par le staff avant publication</Label><ChannelSelect channels={data.channels} value={c.reviewChannelId} disabled={!manage} onChange={(v) => set({ reviewChannelId: v })} noneLabel='Non, publier directement' label='Salon de validation' /></div>
             <div className='grid gap-1.5'><Label>Rôles autorisés à poster</Label><RolesPicker roles={data.roles} value={c.allowedRoleIds} disabled={!manage} onChange={(ids) => set({ allowedRoleIds: ids })} placeholder='Tout le monde' label='Rôles autorisés' /></div>

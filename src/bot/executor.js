@@ -117,6 +117,13 @@ function notInGuild(guildId) {
 
 // The only piece of code that talks to Discord on behalf of src/core
 export function createExecutor(client) {
+	// Display name and avatar of the author of a suggestion / bug
+	async function feedbackAuthor(item) {
+		if (!item.authorId) return null;
+		const user = await client.users.fetch(item.authorId).catch(() => null);
+		return user ? { name: user.globalName ?? user.username, avatar: user.displayAvatarURL({ size: 64 }) } : null;
+	}
+
 	// channelId -> webhook used to answer tickets from the panel
 	const ticketWebhooks = new Map();
 	// guildId -> full member fetch in progress or done (one at a time per server: Discord rate-limits it)
@@ -563,7 +570,7 @@ export function createExecutor(client) {
 		// --- Suggestions and bugs ------------------------------------------------------------
 		async upsertFeedbackMessage(channelId, messageId, view, { thread = false, pingRoleIds = [] } = {}) {
 			const channel = await client.channels.fetch(channelId);
-			const payload = feedbackPayload(view);
+			const payload = feedbackPayload({ ...view, author: await feedbackAuthor(view.item) });
 			if (messageId) {
 				const existing = await channel.messages.fetch(messageId).catch(() => null);
 				if (existing) await existing.edit(payload);
@@ -579,7 +586,7 @@ export function createExecutor(client) {
 
 		async sendFeedbackReview(channelId, view) {
 			const channel = await client.channels.fetch(channelId);
-			return (await channel.send(reviewPayload(view))).id;
+			return (await channel.send(reviewPayload({ ...view, author: await feedbackAuthor(view.item) }))).id;
 		},
 
 		async publishFeedbackPanel(channelId, messageId, box) {

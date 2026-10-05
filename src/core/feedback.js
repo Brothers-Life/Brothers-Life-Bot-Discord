@@ -14,7 +14,7 @@ const snowflakeOrNull = value => (SNOWFLAKE.test(value) ? value : null);
 
 export const PRESETS = {
 	suggestions: {
-		name: 'Suggestions', kind: 'public',
+		name: 'Suggestions', kind: 'public', type: 'suggestion',
 		form: { steps: [{ title: 'Ta suggestion', questions: [
 			{ id: 'title', type: 'short', label: 'Ta suggestion en une phrase', maxLength: 150 },
 			{ id: 'details', type: 'paragraph', label: 'Explique en détail', required: false, maxLength: 1500 },
@@ -29,7 +29,7 @@ export const PRESETS = {
 		],
 	},
 	bugs: {
-		name: 'Reports de bug', kind: 'public',
+		name: 'Reports de bug', kind: 'public', type: 'bug',
 		form: { steps: [{ title: 'Signaler un bug', questions: [
 			{ id: 'title', type: 'short', label: 'Le bug en une phrase', maxLength: 150 },
 			{ id: 'steps', type: 'paragraph', label: 'Comment le reproduire ?', maxLength: 1500 },
@@ -45,7 +45,7 @@ export const PRESETS = {
 		],
 	},
 	staff: {
-		name: 'Bugs internes du staff', kind: 'staff',
+		name: 'Bugs internes du staff', kind: 'staff', type: 'bug',
 		form: { steps: [{ title: 'Bug interne', questions: [
 			{ id: 'title', type: 'short', label: 'Le problème', maxLength: 150 },
 			{ id: 'details', type: 'paragraph', label: 'Détails', maxLength: 1500 },
@@ -69,6 +69,20 @@ export const URGENCIES = [
 	{ key: 'critical', label: 'Critique', color: '#e5484d', slaMinutes: 30 },
 ];
 
+export const BOX_TYPES = ['suggestion', 'bug'];
+
+// Preset whose defaults fill what a stored config lacks
+function presetOf(kind, type) {
+	if (kind === 'staff') return PRESETS.staff;
+	return type === 'bug' ? PRESETS.bugs : PRESETS.suggestions;
+}
+
+// Boxes made before the type existed: a name speaking of bugs (or a staff box) is a bug box
+function typeOf(row, config) {
+	if (BOX_TYPES.includes(config.type)) return config.type;
+	return row.kind === 'staff' || /bug|beug|report/i.test(row.name) ? 'bug' : 'suggestion';
+}
+
 export function normalizeBoxConfig(input = {}, preset = PRESETS.suggestions) {
 	const seen = new Set();
 	const statuses = (Array.isArray(input.statuses) && input.statuses.length ? input.statuses : preset.statuses).slice(0, 15).map((s) => {
@@ -86,6 +100,8 @@ export function normalizeBoxConfig(input = {}, preset = PRESETS.suggestions) {
 		slaMinutes: int(u?.slaMinutes, 0, 10_080, 0),
 	}));
 	return {
+		// What the box collects: /proposer lists the suggestion boxes, /bug the bug ones
+		type: preset.kind === 'staff' ? 'bug' : BOX_TYPES.includes(input.type) ? input.type : preset.type ?? 'suggestion',
 		channelId: snowflakeOrNull(input.channelId),
 		reviewChannelId: snowflakeOrNull(input.reviewChannelId),
 		acceptedChannelId: snowflakeOrNull(input.acceptedChannelId),
@@ -121,13 +137,14 @@ export function createFeedback({ db, network, ranks, audit, executor, logger = c
 		setMessage: db.prepare('UPDATE feedback_items SET channel_id = ?, message_id = ?, thread_id = COALESCE(?, thread_id) WHERE id = ?'),
 		setStatus: db.prepare('UPDATE feedback_items SET status = ?, status_reason = ?, status_history = ?, duplicate_of = ?, updated_at = ? WHERE id = ?'),
 		setAssignee: db.prepare('UPDATE feedback_items SET assignee_id = ?, updated_at = ? WHERE id = ?'),
-		approve: db.prepare('UPDATE feedback_items SET approved = 1, updated_at = ? WHERE id = ? AND approved = 0'),
+		approve: db.prepare('UPDATE feedback_items SET approved = 1, approved_by = ?, approved_at = ?, updated_at = ? WHERE id = ? AND approved = 0'),
 		removePending: db.prepare('DELETE FROM feedback_items WHERE id = ? AND approved = 0'),
 		remove: db.prepare('DELETE FROM feedback_items WHERE id = ?'),
 		reminded: db.prepare('UPDATE feedback_items SET reminded_at = ? WHERE id = ?'),
 		vote: db.prepare('INSERT INTO feedback_votes (item_id, user_id, value, at) VALUES (?, ?, ?, ?) ON CONFLICT(item_id, user_id) DO UPDATE SET value = excluded.value, at = excluded.at'),
 		myVote: db.prepare('SELECT value FROM feedback_votes WHERE item_id = ? AND user_id = ?'),
 		unvote: db.prepare('DELETE FROM feedback_votes WHERE item_id = ? AND user_id = ?'),
+		voters: db.prepare('SELECT user_id, value, at FROM feedback_votes WHERE item_id = ? ORDER BY at'),
 		score: db.prepare('SELECT SUM(value = 1) AS up, SUM(value = -1) AS down FROM feedback_votes WHERE item_id = ?'),
 		pendingStaff: db.prepare(`
 			SELECT i.*, b.config FROM feedback_items i JOIN feedback_boxes b ON b.id = i.box_id
@@ -137,14 +154,19 @@ export function createFeedback({ db, network, ranks, audit, executor, logger = c
 	// `${boxId}:${userId}` -> answers of a multi-step form in progress
 	const forms = new Map();
 
-	const toBox = row => row && ({ id: row.id, guildId: row.guild_id, name: row.name, kind: row.kind, config: normalizeBoxConfig(JSON.parse(row.config), PRESETS[row.kind === 'staff' ? 'staff' : 'suggestions']), panelChannelId: row.panel_channel_id, panelMessageId: row.panel_message_id });
+	function toBox(row) {
+		if (!row) return null;
+		const raw = JSON.parse(row.config);
+		const type = typeOf(row, raw);
+		return { id: row.id, guildId: row.guild_id, name: row.name, kind: row.kind, config: normalizeBoxConfig({ ...raw, type }, presetOf(row.kind, type)), panelChannelId: row.panel_channel_id, panelMessageId: row.panel_message_id };
+	}
 	function toItem(row) {
 		if (!row) return null;
 		const score = q.score.get(row.id);
 		return {
 			id: row.id, boxId: row.box_id, guildId: row.guild_id, number: row.number, authorId: row.author_id, authorName: row.author_name, anonymous: Boolean(row.anonymous),
 			title: row.title, answers: JSON.parse(row.answers), status: row.status, statusReason: row.status_reason, statusHistory: JSON.parse(row.status_history),
-			urgency: row.urgency, assigneeId: row.assignee_id, duplicateOf: row.duplicate_of, approved: Boolean(row.approved),
+			urgency: row.urgency, assigneeId: row.assignee_id, duplicateOf: row.duplicate_of, approved: Boolean(row.approved), approvedBy: row.approved_by ?? null, approvedAt: row.approved_at ?? null,
 			channelId: row.channel_id, messageId: row.message_id, threadId: row.thread_id, createdAt: row.created_at, updatedAt: row.updated_at,
 			up: score.up ?? 0, down: score.down ?? 0,
 		};
@@ -199,6 +221,12 @@ export function createFeedback({ db, network, ranks, audit, executor, logger = c
 	const service = {
 		presets: PRESETS,
 		boxes: guildId => (guildId ? q.boxes.all(guildId) : q.allBoxes.all()).map(toBox),
+
+		// Boxes of one type (suggestion / bug) a member may post in, for /proposer and /bug
+		async boxesFor(guildId, type, userId) {
+			const staff = (await ranks.resolve(userId)).can('feedback.staff');
+			return service.boxes(guildId).filter(b => b.config.type === type && (b.kind !== 'staff' || staff));
+		},
 		getBox,
 
 		createBox(actor, guildId, { preset = 'suggestions', name = null, config = {} } = {}) {
@@ -213,7 +241,7 @@ export function createFeedback({ db, network, ranks, audit, executor, logger = c
 		updateBox(actor, id, { name, config, panelChannelId = null }) {
 			if (!actor.can('feedback.manage')) throw new ForbiddenError('Permission manquante : feedback.manage');
 			const box = getBox(id);
-			q.updateBox.run(String(name ?? box.name).slice(0, 60) || box.name, JSON.stringify(normalizeBoxConfig(config ?? box.config, PRESETS[box.kind === 'staff' ? 'staff' : 'suggestions'])), snowflakeOrNull(panelChannelId), id);
+			q.updateBox.run(String(name ?? box.name).slice(0, 60) || box.name, JSON.stringify(normalizeBoxConfig(config ?? box.config, presetOf(box.kind, (config ?? box.config).type ?? box.config.type))), snowflakeOrNull(panelChannelId), id);
 			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'feedback.box_update', guildId: box.guildId, target: String(id), details: { name: name ?? box.name } });
 			return getBox(id);
 		},
@@ -299,7 +327,7 @@ export function createFeedback({ db, network, ranks, audit, executor, logger = c
 			if (!await isHandler(userId, box)) throw new ForbiddenError('Réservé au staff.');
 			if (item.approved) throw new ValidationError('Déjà validé.');
 			// Decided before any await: a double click (or two staff members) acts only once
-			if (!(approved ? q.approve.run(now(), itemId) : q.removePending.run(itemId)).changes) throw new ValidationError('Déjà traité.');
+			if (!(approved ? q.approve.run(userId, now(), now(), itemId) : q.removePending.run(itemId)).changes) throw new ValidationError('Déjà traité.');
 			if (item.messageId) await executor.deleteMessage(item.channelId, item.messageId).catch(() => null);
 			if (!approved) {
 				if (box.config.dmAuthor) await executor.sendDM(item.authorId, `Ta proposition « ${item.title} » n’a pas été retenue par le staff.`).catch(() => null);
@@ -371,6 +399,17 @@ export function createFeedback({ db, network, ranks, audit, executor, logger = c
 			if (item.messageId) await executor.deleteMessage(item.channelId, item.messageId).catch(() => null);
 			q.remove.run(itemId);
 			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'feedback.delete', guildId: item.guildId, target: String(itemId), details: { title: item.title } });
+		},
+
+		// Who did what on an item: status changes for everyone who sees the box, voters for its handlers only
+		details(actor, itemId) {
+			const item = getItem(itemId);
+			const box = getBox(item.boxId);
+			if (!canSee(actor, box)) throw new ForbiddenError('Tu ne peux pas voir cette boîte.');
+			const handler = actor.can('feedback.manage') || (box.kind === 'staff' && actor.can('feedback.staff'));
+			const history = item.statusHistory.map(h => ({ ...h, status: statusOf(box, h.key) }));
+			const voters = handler ? q.voters.all(itemId).map(v => ({ userId: v.user_id, value: v.value, at: v.at })) : null;
+			return { history, voters };
 		},
 
 		list(actor, { boxId, status, sort = 'recent', limit = 100 } = {}) {

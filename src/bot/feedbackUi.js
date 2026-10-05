@@ -1,20 +1,33 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } from 'discord.js';
 import { emojiOf } from './messages.js';
 
-// A suggestion / bug as posted in its channel
-export function feedbackPayload({ box, item, status, urgency }) {
+const ts = (ms, style = 'f') => `<t:${Math.floor(ms / 1000)}:${style}>`;
+
+// A suggestion / bug as posted in its channel. author: { name, avatar } resolved by the executor;
+// reveal: the staff review copy shows the author of an anonymous item
+export function feedbackPayload({ box, item, status, urgency, author = null, reveal = false }) {
+	const hidden = item.anonymous && !reveal;
+	const name = author?.name ?? item.authorName ?? 'membre';
 	const color = urgency && !status.final ? urgency.color : status.color;
 	const embed = new EmbedBuilder()
 		.setColor(Number.parseInt(color.slice(1), 16))
-		.setAuthor({ name: item.anonymous ? `${box.name} · anonyme` : `${box.name} · ${item.authorName ?? 'membre'}` })
+		.setAuthor({ name: hidden ? `${box.name} · anonyme` : `${box.name} · ${name}`.slice(0, 256), iconURL: hidden ? undefined : author?.avatar ?? undefined })
 		.setTitle(`#${item.number} · ${item.title}`.slice(0, 256))
 		.setDescription(item.answers.map(a => `**${a.label}**\n${a.value}`).join('\n\n').slice(0, 4000) || null)
-		.addFields({ name: 'Statut', value: `${status.emoji} ${status.label}`, inline: true })
+		.addFields(
+			{ name: box.config.type === 'bug' ? 'Signalé par' : 'Proposé par', value: hidden ? '🕶️ Anonyme' : `<@${item.authorId}>${item.anonymous ? ' (anonyme pour le public)' : ''}`, inline: true },
+			{ name: 'Le', value: ts(item.createdAt), inline: true },
+			{ name: 'Statut', value: `${status.emoji} ${status.label}`, inline: true },
+		)
 		.setFooter({ text: `${box.name} #${item.number}` })
 		.setTimestamp(new Date(item.createdAt));
 	if (box.config.votes) embed.addFields({ name: 'Votes', value: `👍 ${item.up} · 👎 ${item.down}`, inline: true });
 	if (urgency) embed.addFields({ name: 'Urgence', value: urgency.label, inline: true });
 	if (item.assigneeId) embed.addFields({ name: 'Pris par', value: `<@${item.assigneeId}>`, inline: true });
+	// Last status change made by someone (the first entry is the creation)
+	const last = item.statusHistory?.length > 1 ? item.statusHistory.at(-1) : null;
+	if (last?.by) embed.addFields({ name: 'Dernier changement', value: `${status.emoji} par <@${last.by}> · ${ts(last.at, 'R')}`, inline: true });
+	if (item.approvedBy) embed.addFields({ name: 'Validé par', value: `<@${item.approvedBy}> · ${ts(item.approvedAt, 'R')}`, inline: true });
 	if (item.statusReason) embed.addFields({ name: 'Réponse du staff', value: item.statusReason.slice(0, 1024) });
 	if (item.duplicateOf) embed.addFields({ name: 'Doublon de', value: `#${item.duplicateOf}`, inline: true });
 
@@ -43,7 +56,7 @@ export function feedbackPayload({ box, item, status, urgency }) {
 }
 
 export function reviewPayload(view) {
-	const { embeds } = feedbackPayload(view);
+	const { embeds } = feedbackPayload({ ...view, reveal: true });
 	return {
 		content: '📝 À valider avant publication',
 		embeds,
@@ -55,12 +68,15 @@ export function reviewPayload(view) {
 }
 
 export function boxPanelPayload(box) {
-	const buttons = [new ButtonBuilder().setCustomId(`fb:open:${box.id}`).setLabel(box.kind === 'staff' ? 'Signaler un bug' : 'Proposer').setEmoji(box.kind === 'staff' ? '🐞' : '💡').setStyle(ButtonStyle.Primary)];
+	const bug = box.config.type === 'bug';
+	const buttons = [new ButtonBuilder().setCustomId(`fb:open:${box.id}`).setLabel(bug ? 'Signaler un bug' : 'Proposer').setEmoji(bug ? '🐞' : '💡').setStyle(ButtonStyle.Primary)];
 	if (box.config.anonymousAllowed) buttons.push(new ButtonBuilder().setCustomId(`fb:openanon:${box.id}`).setLabel('Anonymement').setEmoji('🕶️').setStyle(ButtonStyle.Secondary));
 	return {
 		embeds: [new EmbedBuilder().setColor(0xd6a249).setTitle(box.name).setDescription(box.kind === 'staff'
 			? 'Un problème dans le fonctionnement du staff ou du serveur ? Signale-le ici, avec son niveau d’urgence.'
-			: 'Une idée, un souci ? Clique sur le bouton, remplis le formulaire : ta proposition sera publiée et la communauté pourra voter.')],
+			: bug
+				? 'Un bug en jeu ou sur le Discord ? Clique sur le bouton et décris-le : le staff le suit et te tient au courant. (Commande : /bug)'
+				: 'Une idée pour le serveur ? Clique sur le bouton, remplis le formulaire : ta proposition sera publiée et la communauté pourra voter. (Commande : /proposer)')],
 		components: [new ActionRowBuilder().addComponents(buttons)],
 	};
 }

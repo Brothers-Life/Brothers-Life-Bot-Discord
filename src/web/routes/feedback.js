@@ -7,9 +7,23 @@ const guildParam = { type: 'object', properties: { guildId: snowflake }, require
 export function registerFeedbackRoutes(app, { core }) {
 	const { feedback, executor, network } = core;
 
-	async function withNames(items) {
-		const names = await resolveNames(executor, items.flatMap(i => [i.authorId, i.assigneeId]));
-		return items.map(i => ({ ...i, author: i.anonymous ? null : names.get(i.authorId) ?? { name: i.authorName, avatar: null }, assignee: i.assigneeId ? names.get(i.assigneeId) ?? null : null }));
+	// The author of an anonymous item is shown to the people who handle its box only (as the box settings promise)
+	const handles = (actor, boxKind) => actor.can('feedback.manage') || (boxKind === 'staff' && actor.can('feedback.staff'));
+	async function withNames(actor, items) {
+		const kinds = new Map();
+		const kindOf = boxId => kinds.get(boxId) ?? kinds.set(boxId, feedback.getBox(boxId).kind).get(boxId);
+		const names = await resolveNames(executor, items.flatMap(i => [i.authorId, i.assigneeId, i.approvedBy]));
+		return items.map((i) => {
+			const hidden = i.anonymous && !handles(actor, kindOf(i.boxId));
+			return {
+				...i,
+				authorId: hidden ? null : i.authorId,
+				authorName: hidden ? null : i.authorName,
+				author: hidden ? null : names.get(i.authorId) ?? { name: i.authorName, avatar: null },
+				assignee: i.assigneeId ? names.get(i.assigneeId) ?? null : null,
+				approver: i.approvedBy ? names.get(i.approvedBy) ?? null : null,
+			};
+		});
 	}
 
 	// The service only gets the user id and checks their whole rank: an API key limited
@@ -47,11 +61,11 @@ export function registerFeedbackRoutes(app, { core }) {
 	app.get('/api/feedback/boxes/:id/items', {
 		config: { permission: null },
 		schema: { params: idParam, querystring: { type: 'object', properties: { status: { type: 'string', maxLength: 20 }, sort: { type: 'string', enum: ['recent', 'score', 'urgency'] } } } },
-	}, async (request) => withNames(feedback.list(request.actor, { boxId: request.params.id, ...request.query })));
+	}, async (request) => withNames(request.actor, feedback.list(request.actor, { boxId: request.params.id, ...request.query })));
 
 	app.get('/api/feedback/boxes/:id/export', { config: { permission: null }, schema: { params: idParam } }, async (request, reply) => {
 		const box = feedback.getBox(request.params.id);
-		const items = await withNames(feedback.list(request.actor, { boxId: box.id, limit: 500 }));
+		const items = await withNames(request.actor, feedback.list(request.actor, { boxId: box.id, limit: 500 }));
 		const rows = [['N°', 'Titre', 'Statut', 'Pour', 'Contre', 'Auteur', 'Urgence', 'Créé le'], ...items.map(i => [
 			i.number, i.title, box.config.statuses.find(s => s.key === i.status)?.label ?? i.status, i.up, i.down, i.author?.name ?? 'anonyme', i.urgency ?? '', new Date(i.createdAt).toLocaleString('fr-FR'),
 		])];
@@ -59,17 +73,27 @@ export function registerFeedbackRoutes(app, { core }) {
 			.send(`${String.fromCharCode(0xfeff)}${rows.map(r => r.map(csvCell).join(';')).join('\n')}\n`);
 	});
 
+	// Status history (who, when, why) and, for the people handling the box, who voted what
+	app.get('/api/feedback/items/:id/details', { config: { permission: null }, schema: { params: idParam } }, async (request) => {
+		const { history, voters } = feedback.details(request.actor, request.params.id);
+		const names = await resolveNames(executor, [...history.map(h => h.by), ...(voters ?? []).map(v => v.userId)]);
+		return {
+			history: history.map(h => ({ status: h.status, at: h.at, reason: h.reason ?? null, by: h.by ? names.get(h.by) ?? { name: h.by, avatar: null } : null })),
+			voters: voters?.map(v => ({ value: v.value, at: v.at, user: names.get(v.userId) ?? { name: v.userId, avatar: null } })) ?? null,
+		};
+	});
+
 	app.post('/api/feedback/items/:id/status', {
 		config: { permission: null },
 		preHandler: requireHandler,
 		schema: { params: idParam, body: { type: 'object', required: ['status'], properties: { status: { type: 'string', maxLength: 20 }, reason: { type: 'string', maxLength: 500 }, duplicateOf: { type: ['integer', 'null'] } } } },
-	}, async (request) => (await withNames([await feedback.setStatus(request.actor.id, request.params.id, request.body.status, { reason: request.body.reason ?? '', duplicateOf: request.body.duplicateOf ?? null, source: 'panel' })]))[0]);
+	}, async (request) => (await withNames(request.actor, [await feedback.setStatus(request.actor.id, request.params.id, request.body.status, { reason: request.body.reason ?? '', duplicateOf: request.body.duplicateOf ?? null, source: 'panel' })]))[0]);
 
 	app.post('/api/feedback/items/:id/assign', {
 		config: { permission: null },
 		preHandler: requireHandler,
 		schema: { params: idParam, body: { type: 'object', properties: { userId: { anyOf: [{ type: 'null' }, snowflake] } } } },
-	}, async (request) => (await withNames([await feedback.assign(request.actor.id, request.params.id, request.body.userId ?? request.actor.id, 'panel')]))[0]);
+	}, async (request) => (await withNames(request.actor, [await feedback.assign(request.actor.id, request.params.id, request.body.userId ?? request.actor.id, 'panel')]))[0]);
 
 	app.post('/api/feedback/items/:id/review', {
 		config: { permission: null },
