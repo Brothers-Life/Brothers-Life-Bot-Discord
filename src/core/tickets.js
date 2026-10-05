@@ -97,11 +97,12 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 		close: db.prepare(`
 			UPDATE tickets SET status = 'closed', status_key = 'closed', status_history = @history, closed_at = @at, closed_by = @by, close_reason = @reason,
 				transcript = @transcript, archived = @archived,
-				close_request_at = NULL, close_request_by = NULL, close_request_reason = NULL WHERE id = @id AND status = 'open'
+				close_request_at = NULL, close_request_by = @requestBy, close_request_reason = NULL WHERE id = @id AND status = 'open'
 		`),
 		reopen: db.prepare(`
 			UPDATE tickets SET status = 'open', status_key = @key, status_history = @history, closed_at = NULL, closed_by = NULL, close_reason = NULL,
-				archived = 0, last_activity_at = @at, reminded_at = NULL WHERE id = @id AND status = 'closed' AND archived = 1
+				archived = 0, last_activity_at = @at, reminded_at = NULL, rating = NULL, rating_comment = NULL, close_request_by = NULL
+				WHERE id = @id AND status = 'closed' AND archived = 1
 		`),
 		unarchive: db.prepare('UPDATE tickets SET archived = 0 WHERE id = ? AND archived = 1'),
 		rate: db.prepare('UPDATE tickets SET rating = ? WHERE id = ? AND rating IS NULL'),
@@ -128,6 +129,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 		setCloseRequest: db.prepare('UPDATE tickets SET close_request_at = ?, close_request_by = ?, close_request_reason = ? WHERE id = ?'),
 		clearCloseRequest: db.prepare('UPDATE tickets SET close_request_at = NULL, close_request_by = NULL, close_request_reason = NULL WHERE id = ?'),
 		closeRequests: db.prepare('SELECT * FROM tickets WHERE status = \'open\' AND close_request_at IS NOT NULL'),
+		lastHumanMessage: db.prepare('SELECT author_id, panel_user FROM ticket_messages WHERE ticket_id = ? AND is_bot = 0 AND internal = 0 AND deleted_at IS NULL ORDER BY created_at DESC, rowid DESC LIMIT 1'),
 		replies: db.prepare('SELECT * FROM ticket_replies WHERE guild_id = ? ORDER BY name COLLATE NOCASE'),
 		reply: db.prepare('SELECT * FROM ticket_replies WHERE id = ?'),
 		insertReply: db.prepare(`
@@ -472,6 +474,23 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 		// Answered late: counted as a breach, no alert any more (someone is on it)
 		if (minutes && at - ticket.createdAt > minutes * 60_000) q.markSla.run(at, ticketId);
 		emit({ type: 'ticket', ticket: getTicket(ticketId), action: 'tickets.first_response' });
+	}
+
+	// The opener wrote in the channel while a close request was pending: the request is cancelled
+	function cancelCloseRequestOnAnswer(ticketId, authorId) {
+		const ticket = getTicket(ticketId);
+		if (ticket.status !== 'open' || !ticket.closeRequest || authorId !== ticket.openerId) return;
+		q.clearCloseRequest.run(ticketId);
+		executor.sendTicketNotice(ticket.channelId, { kind: 'close_refused', ticket, by: ticket.closeRequest.by, answered: true })
+			.catch(error => logger.warn(`Cancel of the close request of ticket #${ticket.number} not sent:`, error.message));
+		record(authorId, 'bot', 'tickets.close_refused', ticket, { 'Demandée par': `<@${ticket.closeRequest.by}>`, Raison: `Demande de fermeture annulée : <@${authorId}> a répondu.` });
+	}
+
+	// The last public human message of the ticket comes from someone else than the opener (the staff)
+	function waitingForOpener(ticket) {
+		const last = q.lastHumanMessage.get(ticket.id);
+		if (!last) return false;
+		return (last.panel_user ?? last.author_id) !== ticket.openerId;
 	}
 
 	function closeRequestHours(ticket) {
@@ -927,7 +946,8 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 
 		// The transcript is saved, logged and sent to the opener; the channel is deleted or archived
 		// accepted: the opener said yes to a close request of the staff (allowed even if members cannot close)
-		async close(userId, ticketId, reason = '', source = 'bot', { accepted = false } = {}) {
+		// requestBy: the staff member whose close request led to this close (accepted or expired), kept for the staff activity
+		async close(userId, ticketId, reason = '', source = 'bot', { accepted = false, requestBy = null } = {}) {
 			const ticket = getTicket(ticketId);
 			if (ticket.status !== 'open') throw new ValidationError('Ce ticket est déjà fermé.');
 			const category = categoryOf(ticket);
@@ -955,7 +975,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			].join('\n');
 			const text = `${header}${transcript ?? '(transcript indisponible)'}`;
 			const archive = config.close.mode === 'archive';
-			const changed = q.close.run({ history: pushHistory(ticket, 'closed', userId), at: now(), by: userId, reason: reason || null, transcript: text, archived: archive ? 1 : 0, id: ticketId }).changes;
+			const changed = q.close.run({ history: pushHistory(ticket, 'closed', userId), at: now(), by: userId, reason: reason || null, transcript: text, archived: archive ? 1 : 0, requestBy, id: ticketId }).changes;
 			if (!changed) throw new ValidationError('Ce ticket est déjà fermé.');
 			openChannels.delete(ticket.channelId);
 
@@ -985,10 +1005,12 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 				executor.sendLog(transcriptChannelId, summary).catch(error => logger.warn(`Transcript of ticket #${ticket.number} not sent:`, error.message));
 			}
 			logs.log(ticket.guildId, 'tickets', summary);
+			const guildName = network.find(ticket.guildId)?.name ?? null;
+			const where = guildName ? ` sur **${guildName}**` : '';
 			if (config.transcriptDm) {
-				executor.sendDM(ticket.openerId, `Ton ticket #${ticket.number} a été fermé${reason ? ` : ${reason}` : ''}. Voici la conversation : ouvre le fichier dans ton navigateur.`, [memberFile]).catch(() => null);
+				executor.sendDM(ticket.openerId, `Ton ticket #${ticket.number}${where} a été fermé${reason ? ` : ${reason}` : ''}. Voici la conversation : ouvre le fichier dans ton navigateur.`, [memberFile]).catch(() => null);
 			}
-			if (config.rating.enabled) executor.sendTicketRating(ticket.openerId, getTicket(ticketId)).catch(() => null);
+			if (config.rating.enabled) executor.sendTicketRating(ticket.openerId, { ...getTicket(ticketId), guildName }).catch(() => null);
 			record(userId, source, 'tickets.close', ticket, { reason: reason || null });
 
 			if (ticket.channelId) {
@@ -1056,7 +1078,10 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			if (!ticketId) return null;
 			if (!message.bot && openChannels.has(channelId)) q.touch.run(now(), channelId);
 			const saved = insertMessage(ticketId, message);
-			if (!message.bot && !message.internal) markFirstResponse(ticketId, message.authorId, message.createdAt ?? now());
+			if (!message.bot && !message.internal) {
+				markFirstResponse(ticketId, message.authorId, message.createdAt ?? now());
+				cancelCloseRequestOnAnswer(ticketId, message.authorId);
+			}
 			return saved;
 		},
 
@@ -1145,7 +1170,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			if (userId !== ticket.openerId) throw new ForbiddenError('Seule la personne qui a ouvert le ticket peut répondre à cette demande.');
 			if (!ticket.closeRequest) throw new ValidationError('Il n’y a plus de demande de fermeture en cours.');
 			q.clearCloseRequest.run(ticketId);
-			if (accept) return service.close(userId, ticketId, ticket.closeRequest.reason || 'Fermeture acceptée par le membre', 'bot', { accepted: true });
+			if (accept) return service.close(userId, ticketId, ticket.closeRequest.reason || 'Fermeture acceptée par le membre', 'bot', { accepted: true, requestBy: ticket.closeRequest.by });
 			if (openChannels.has(ticket.channelId)) q.touch.run(now(), ticket.channelId);
 			await executor.sendTicketNotice(ticket.channelId, { kind: 'close_refused', ticket, by: ticket.closeRequest.by })
 				.catch(error => logger.warn(`Refusal of ticket #${ticket.number} not sent:`, error.message));
@@ -1260,6 +1285,8 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 				const category = categoryOf(ticket);
 				if (!category) continue;
 				const { reminderHours, closeHours } = category.config.inactivity;
+				// Only a ticket waiting for its opener: when the opener spoke last (or nobody did), the staff owes an answer
+				if (!waitingForOpener(ticket)) continue;
 				const idle = now() - ticket.lastActivityAt;
 				if (closeHours && idle >= closeHours * 3600_000) {
 					await service.close('system', ticket.id, `Inactif depuis ${closeHours} h`, 'bot').catch(error => logger.warn(`Auto-close of ticket #${ticket.number} failed:`, error.message));
@@ -1275,7 +1302,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 				const ticket = toTicket(row);
 				const hours = closeRequestHours(ticket);
 				if (!hours || now() - ticket.closeRequest.at < hours * 3600_000) continue;
-				await service.close('system', ticket.id, 'Pas de réponse à la demande de fermeture', 'bot')
+				await service.close('system', ticket.id, 'Pas de réponse à la demande de fermeture', 'bot', { requestBy: ticket.closeRequest.by })
 					.catch(error => logger.warn(`Close request of ticket #${ticket.number} not applied:`, error.message));
 			}
 			// First response delay (SLA) exceeded: one alert in the "tickets" logs
@@ -1303,7 +1330,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			openChannels.delete(channelId);
 			liveChannels.delete(channelId);
 			if (row.status === 'open') {
-				q.close.run({ history: row.status_history, at: now(), by: 'unknown', reason: 'Salon supprimé', transcript: null, archived: 0, id: row.id });
+				q.close.run({ history: row.status_history, at: now(), by: 'unknown', reason: 'Salon supprimé', transcript: null, archived: 0, requestBy: null, id: row.id });
 			}
 			else if (row.archived) {
 				q.unarchive.run(row.id);

@@ -196,6 +196,12 @@ export function createFeedback({ db, network, ranks, audit, executor, logger = c
 		return box.config.statuses.find(s => s.key === key) ?? box.config.statuses[0];
 	}
 
+	// " sur **Server**" for the DMs: the author may be on several servers of the network
+	function onServer(guildId) {
+		const name = network.find(guildId)?.name;
+		return name ? ` sur **${name}**` : '';
+	}
+
 	function view(box, item) {
 		return { box, item, status: statusOf(box, item.status), urgency: box.config.urgencies.find(u => u.key === item.urgency) ?? null };
 	}
@@ -330,11 +336,14 @@ export function createFeedback({ db, network, ranks, audit, executor, logger = c
 			if (!(approved ? q.approve.run(userId, now(), now(), itemId) : q.removePending.run(itemId)).changes) throw new ValidationError('Déjà traité.');
 			if (item.messageId) await executor.deleteMessage(item.channelId, item.messageId).catch(() => null);
 			if (!approved) {
-				if (box.config.dmAuthor) await executor.sendDM(item.authorId, `Ta proposition « ${item.title} » n’a pas été retenue par le staff.`).catch(() => null);
+				if (box.config.dmAuthor) await executor.sendDM(item.authorId, `Ta proposition « ${item.title} » (${box.name})${onServer(item.guildId)} n’a pas été retenue par le staff.`).catch(() => null);
 				audit.record({ actorId: userId, source, action: 'feedback.reject_review', guildId: item.guildId, target: String(itemId), details: { title: item.title } });
 				return null;
 			}
 			const published = await publish(box, getItem(itemId));
+			if (box.config.dmAuthor && item.authorId !== userId) {
+				await executor.sendDM(item.authorId, `✅ Ta proposition « ${item.title} » (${box.name} #${item.number})${onServer(item.guildId)} a été validée par le staff et publiée.`).catch(() => null);
+			}
 			audit.record({ actorId: userId, source, action: 'feedback.approve', guildId: item.guildId, target: String(itemId), details: { title: item.title } });
 			return published;
 		},
@@ -344,6 +353,7 @@ export function createFeedback({ db, network, ranks, audit, executor, logger = c
 			const box = getBox(item.boxId);
 			if (!box.config.votes) throw new ValidationError('Les votes sont désactivés ici.');
 			if (statusOf(box, item.status).final) throw new ValidationError('Cette proposition est close.');
+			if (item.authorId === userId) throw new ValidationError('Tu ne peux pas voter pour ta propre proposition.');
 			const current = q.myVote.get(itemId, userId)?.value;
 			if (current === value) q.unvote.run(itemId, userId);
 			else q.vote.run(itemId, userId, value, now());
@@ -375,7 +385,7 @@ export function createFeedback({ db, network, ranks, audit, executor, logger = c
 			}
 			if (status.final && updated.threadId) await executor.lockThread(updated.threadId).catch(() => null);
 			if (box.config.dmAuthor && updated.authorId !== userId) {
-				await executor.sendDM(updated.authorId, `${status.emoji} Ta proposition « ${updated.title} » (${box.name} #${updated.number}) est maintenant **${status.label}**.${reason ? `\nRaison : ${reason}` : ''}`).catch(() => null);
+				await executor.sendDM(updated.authorId, `${status.emoji} Ta proposition « ${updated.title} » (${box.name} #${updated.number})${onServer(updated.guildId)} est maintenant **${status.label}**.${reason ? `\nRaison : ${reason}` : ''}`).catch(() => null);
 			}
 			audit.record({ actorId: userId, source, action: 'feedback.status', guildId: item.guildId, target: String(itemId), details: { box: box.name, number: item.number, status: status.label, reason: reason || null } });
 			return updated;

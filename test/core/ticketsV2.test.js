@@ -138,6 +138,7 @@ test('close rules: required reason, opener not allowed, archive then reopen', as
 	assert.ok(executor.ticketChannels.get(ticket.channelId).members.includes(MEMBER));
 	await core.tickets.close(ALICE, ticket.id, 'Encore résolu');
 	await core.tickets.deleteArchived(owner.id, ticket.id);
+	assert.equal(executor.ratings.length, 2);
 	assert.equal(executor.ticketChannels.has(ticket.channelId), false);
 });
 
@@ -162,6 +163,14 @@ test('inactivity: reminder then automatic close', async () => {
 	const tickets = createTickets({ db: core.db, network: core.network, ranks: core.ranks, audit: core.audit, executor, logs: core.logs, logger: { warn: () => undefined, error: () => undefined }, now: () => clock });
 	const category = await tickets.saveCategory(owner, MAIN, { name: 'Support', config: { inactivity: { reminderHours: 2, closeHours: 5 } } });
 	const ticket = await tickets.open({ guildId: MAIN, userId: MEMBER, userName: 'bob', categoryId: category.id });
+	// The member is waiting for the staff: never reminded nor closed
+	tickets.recordMessage(ticket.channelId, { id: 'w1', authorId: MEMBER, content: 'Bonjour ?', createdAt: clock });
+	clock += 6 * 3600_000;
+	await tickets.sweep();
+	assert.equal(executor.notices.length, 0);
+	assert.equal(tickets.get(ticket.id).status, 'open');
+	// The staff answered last: now the member is reminded, then the ticket closes
+	tickets.recordMessage(ticket.channelId, { id: 'w2', authorId: ALICE, content: 'Toujours besoin ?', createdAt: clock });
 	clock += 3 * 3600_000;
 	await tickets.sweep();
 	assert.deepEqual(executor.notices.map(n => n.kind), ['reminder']);

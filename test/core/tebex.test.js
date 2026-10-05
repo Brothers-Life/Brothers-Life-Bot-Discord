@@ -179,6 +179,30 @@ test('roles of the articles: several mappings, limited durations in the temporar
 	assert.equal(db.prepare('SELECT COUNT(*) AS n FROM temp_roles WHERE removed_at IS NULL').get().n, 1);
 });
 
+test('refunding one of two cumulated temporary purchases only takes its days off', async () => {
+	const { tebex, owner, store, executor, db } = await setup();
+	tebex.setConfig(owner, { mappings: [{ packageId: '11', guildId: MAIN, roleId: ROLE_GOLD, days: 30 }] });
+	await tebex.poll();
+	const gold = id => payment(id, { packages: [{ id: 11, name: 'Gold 30 j' }] });
+	store.payments = [gold(2), gold(1)];
+	await tebex.poll();
+	const temp = db.prepare('SELECT * FROM temp_roles WHERE user_id = ? AND removed_at IS NULL').get(ALICE);
+	assert.ok(temp.expires_at > Date.now() + 59 * 86_400_000);
+
+	store.payments = [payment(2, { status: 'Refund', packages: [{ id: 11, name: 'Gold 30 j' }] }), gold(1)];
+	await tebex.poll();
+	const left = db.prepare('SELECT * FROM temp_roles WHERE id = ?').get(temp.id);
+	assert.equal(left.removed_at, null, 'the temporary role stays for the other purchase');
+	assert.ok(left.expires_at > Date.now() + 29 * 86_400_000 && left.expires_at < Date.now() + 31 * 86_400_000);
+	assert.equal(roleCalls(executor).filter(c => c[0] === 'removeRole').length, 0);
+
+	// The last one refunded: nothing remains, the role goes
+	store.payments = [payment(2, { status: 'Refund', packages: [{ id: 11, name: 'Gold 30 j' }] }), payment(1, { status: 'Refund', packages: [{ id: 11, name: 'Gold 30 j' }] })];
+	await tebex.poll();
+	assert.notEqual(db.prepare('SELECT removed_at FROM temp_roles WHERE id = ?').get(temp.id).removed_at, null);
+	assert.deepEqual(roleCalls(executor).filter(c => c[0] === 'removeRole'), [['removeRole', MAIN, ALICE, ROLE_GOLD]]);
+});
+
 test('a refund or chargeback takes the roles back, unless another purchase still gives them', async () => {
 	const { tebex, owner, store, executor, logged } = await setup();
 	tebex.setConfig(owner, { mappings: [{ packageId: '10', guildId: MAIN, roleId: ROLE_VIP }] });

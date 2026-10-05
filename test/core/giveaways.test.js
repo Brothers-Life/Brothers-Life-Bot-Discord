@@ -72,6 +72,15 @@ test('draw at the end: winners announced, rewarded, ineligible skipped, reroll a
 	const after = giveaways.get(g.id).winners;
 	assert.equal(after.find(w => w.userId === winners[1]).status, 'expired');
 	assert.equal(after.filter(w => w.status === 'winner').length, 2);
+	// The winner who did not claim loses the winner role and is told why
+	assert.ok(!executor.memberRoles.get(`${MAIN}:${winners[1]}`).includes('800000000000000051'));
+	assert.equal(core.moderation.listTempRoles({ userId: winners[1] }).length, 0);
+	assert.ok(executor.dms.some(([u, text]) => u === winners[1] && /pas réclamé ton lot à temps sur \*\*Main\*\*/.test(text)));
+	// Winner DM: server name and link to the giveaway message
+	const message = giveaways.get(g.id).messages[0];
+	const won = executor.dms.find(([u, text]) => u === winners[0] && /Tu as gagné/.test(text))[1];
+	assert.match(won, /sur \*\*Main\*\*/);
+	assert.ok(won.includes(`https://discord.com/channels/${MAIN}/${message.channelId}/${message.messageId}`));
 
 	const alice = await core.ranks.resolve(ALICE);
 	await assert.rejects(giveaways.reroll(alice, g.id), ForbiddenError);
@@ -85,6 +94,16 @@ test('staff exclusion and recent winners', async () => {
 	await core.ranks.assignDirect(owner, ALICE, modo.id);
 	executor.memberRoles.set(`${MAIN}:${ALICE}`, []);
 	await assert.rejects(giveaways.toggleEntry(g.id, ALICE, MAIN), /staff/);
+});
+
+test('the organizer cannot enter their own giveaway, unless allowed', async () => {
+	const { giveaways, g, owner, executor } = await setup();
+	executor.memberRoles.set(`${MAIN}:${owner.id}`, []);
+	assert.equal(g.settings.excludeHost, true);
+	await assert.rejects(giveaways.toggleEntry(g.id, owner.id, MAIN), /organises ce giveaway/);
+	const open = giveaways.create(owner, { prize: 'Ouvert', endsAt: Date.now() + 3600_000, settings: { excludeHost: false }, targets: [{ guildId: MAIN, channelId: C_MAIN, ping: 'none' }] });
+	await giveaways.publish(owner, open.id);
+	assert.equal((await giveaways.toggleEntry(open.id, owner.id, MAIN)).joined, true);
 });
 
 test('a giveaway ended twice at once (tick + panel) draws and announces only once', async () => {

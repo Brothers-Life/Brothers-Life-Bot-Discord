@@ -10,6 +10,13 @@ const SNOWFLAKE = /^\d{17,20}$/;
 const COLOR = /^#[0-9a-f]{6}$/i;
 const int = (value, min, max, fallback) => (Number.isInteger(value) ? Math.min(Math.max(value, min), max) : fallback);
 
+// Buttons vote one choice at a time: a poll needing several choices at once (a minimum above 1, or several
+// choices without changing one's vote afterwards) can only be answered with a menu
+export function withVotableStyle(settings) {
+	const needsMenu = settings.minChoices > 1 || (settings.maxChoices > 1 && !settings.allowChange);
+	return needsMenu && settings.style !== 'select' ? { ...settings, style: 'select' } : settings;
+}
+
 export function normalizePoll(input) {
 	const question = String(input.question ?? '').trim();
 	if (!question || question.length > 250) throw new ValidationError('La question fait 1 à 250 caractères.');
@@ -29,7 +36,7 @@ export function normalizePoll(input) {
 		question,
 		description: String(input.description ?? '').slice(0, 2000),
 		options,
-		settings: {
+		settings: withVotableStyle({
 			multiple,
 			minChoices: multiple ? Math.min(int(s.minChoices, 1, options.length, 1), maxChoices) : 1,
 			maxChoices,
@@ -47,7 +54,7 @@ export function normalizePoll(input) {
 			color: COLOR.test(s.color ?? '') ? s.color : '#d6a249',
 			image: typeof s.image === 'string' && /^https:\/\/\S+$/.test(s.image) ? s.image : null,
 			resultsMessage: s.resultsMessage !== false,
-		},
+		}),
 		targets: input.targets?.length ? normalizePingTargets(input.targets) : [],
 	};
 }
@@ -93,7 +100,7 @@ export function createPolls({ db, network, audit, executor, logger = console, no
 			question: row.question,
 			description: row.description,
 			options: JSON.parse(row.options),
-			settings: JSON.parse(row.settings),
+			settings: withVotableStyle(JSON.parse(row.settings)),
 			targets: JSON.parse(row.targets),
 			messages: JSON.parse(row.messages),
 			status: row.status,

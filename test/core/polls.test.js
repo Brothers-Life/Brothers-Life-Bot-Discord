@@ -110,3 +110,15 @@ test('a vote arriving while the poll closes is refused', async () => {
 	await assert.rejects(voting, /fermé/);
 	assert.equal(polls.results(poll.id).total, 0);
 });
+
+test('a poll needing several choices at once is shown with a menu, never with buttons', async () => {
+	const { polls, make, core } = await setup();
+	assert.equal(make({ multiple: true, minChoices: 2, style: 'buttons' }).settings.style, 'select');
+	assert.equal(make({ multiple: true, maxChoices: 2, allowChange: false, style: 'buttons' }).settings.style, 'select');
+	assert.equal(make({ multiple: true, maxChoices: 2, style: 'buttons' }).settings.style, 'buttons');
+	assert.equal(make({ multiple: false, allowChange: false, style: 'buttons' }).settings.style, 'buttons');
+	// A poll saved before the fix is shown with a menu too
+	const old = make({ multiple: true, maxChoices: 3, style: 'buttons' });
+	core.db.prepare('UPDATE polls SET settings = ? WHERE id = ?').run(JSON.stringify({ ...old.settings, minChoices: 2 }), old.id);
+	assert.equal(polls.get(old.id).settings.style, 'select');
+});

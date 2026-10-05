@@ -232,3 +232,54 @@ test('stats from the service: filters by type and refuses an empty period', asyn
 	assert.equal(core.tickets.stats({ guildId: MAIN }).staff[0].userId, ALICE);
 	assert.throws(() => core.tickets.stats({ from: Date.now() + 10 * HOUR }), ValidationError);
 });
+
+test('close request: the opener writing in the ticket cancels it, no auto close afterwards', async () => {
+	const { core, executor, open, db } = await setup({ closeRequest: { autoCloseHours: 2 } });
+	const ticket = await open();
+	await core.tickets.requestClose(ALICE, ticket.id);
+	// Someone else writing does not cancel it
+	core.tickets.recordMessage(ticket.channelId, { id: 'x1', authorId: ALICE, content: 'Alors ?' });
+	assert.ok(core.tickets.get(ticket.id).closeRequest);
+	core.tickets.recordMessage(ticket.channelId, { id: 'x2', authorId: MEMBER, content: 'Non, toujours pas réglé' });
+	assert.equal(core.tickets.get(ticket.id).closeRequest, null);
+	assert.ok(executor.notices.some(n => n.kind === 'close_refused'));
+	age(db, ticket.id, 'created_at', 48 * HOUR);
+	await core.tickets.sweep();
+	assert.equal(core.tickets.get(ticket.id).status, 'open');
+});
+
+test('close request accepted: the requester is kept for the staff activity, cleared when reopened', async () => {
+	const { core, open, db } = await setup({ close: { mode: 'archive' } });
+	const ticket = await open();
+	await core.tickets.requestClose(ALICE, ticket.id);
+	await core.tickets.answerCloseRequest(MEMBER, ticket.id, true);
+	assert.equal(db.prepare('SELECT close_request_by FROM tickets WHERE id = ?').get(ticket.id).close_request_by, ALICE);
+	assert.equal(core.tickets.get(ticket.id).closeRequest, null);
+	await core.tickets.reopen(ALICE, ticket.id);
+	assert.equal(db.prepare('SELECT close_request_by FROM tickets WHERE id = ?').get(ticket.id).close_request_by, null);
+});
+
+test('reopened ticket: the rating is reset so it can be rated again', async () => {
+	const { core, open } = await setup({ close: { mode: 'archive' }, rating: { enabled: true } });
+	const ticket = await open();
+	await core.tickets.close(ALICE, ticket.id);
+	core.tickets.rate(MEMBER, ticket.id, 2);
+	core.tickets.rateComment(MEMBER, ticket.id, 'Lent');
+	const reopened = await core.tickets.reopen(ALICE, ticket.id);
+	assert.equal(reopened.rating, null);
+	assert.equal(reopened.ratingComment, null);
+	await core.tickets.close(ALICE, ticket.id);
+	assert.equal(core.tickets.rate(MEMBER, ticket.id, 5).rating, 5);
+});
+
+test('closing DMs name the server', async () => {
+	const { core, executor, open } = await setup({ rating: { enabled: true } });
+	const sent = [];
+	executor.sendTicketRating = async (userId, data) => sent.push(data);
+	const ticket = await open();
+	await core.tickets.close(ALICE, ticket.id);
+	await new Promise(r => setImmediate(r));
+	const dm = executor.dms.find(d => d[0] === MEMBER && /a été fermé/.test(d[1]));
+	assert.match(dm[1], /sur \*\*Main\*\*/);
+	assert.equal(sent[0].guildName, 'Main');
+});

@@ -37,6 +37,8 @@ export function normalizeGiveaway(input) {
 			noActiveSanction: s.noActiveSanction !== false,
 			noWarnDays: int(s.noWarnDays, 0, 365, 0),
 			excludeStaff: Boolean(s.excludeStaff),
+			// The organizer does not take part in their own giveaway (unless allowed)
+			excludeHost: s.excludeHost !== false,
 			excludeRecentWinnersDays: int(s.excludeRecentWinnersDays, 0, 365, 0),
 			bonusRoles: (Array.isArray(s.bonusRoles) ? s.bonusRoles : []).filter(b => SNOWFLAKE.test(b?.roleId)).slice(0, 10).map(b => ({ roleId: b.roleId, entries: int(b.entries, 1, 50, 2) })),
 			bonusMode: s.bonusMode === 'max' ? 'max' : 'sum',
@@ -205,6 +207,7 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 			const principal = await ranks.resolve(userId);
 			if (principal.isOwner || principal.can('giveaways.join_exempt') || principal.level > 0) reasons.push('Le staff ne participe pas à ce giveaway.');
 		}
+		if (s.excludeHost !== false && g.createdBy && userId === g.createdBy) reasons.push('Tu organises ce giveaway : tu ne peux pas y participer.');
 		if (s.excludeRecentWinnersDays && q.recentWin.get(userId, now() - s.excludeRecentWinnersDays * DAY_MS)) reasons.push(`Tu as déjà gagné un giveaway ces ${s.excludeRecentWinnersDays} derniers jours.`);
 		const bonuses = s.bonusRoles.filter(b => roles.includes(b.roleId)).map(b => b.entries);
 		const bonus = !bonuses.length ? 0 : s.bonusMode === 'max' ? Math.max(...bonuses) - 1 : bonuses.reduce((a, b) => a + b - 1, 0);
@@ -253,11 +256,37 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 		return { chosen, pool: pool.length, skipped };
 	}
 
+	// Server of a winner's entry, its name and the link to the giveaway message there
+	function placeOf(g, userId) {
+		const guildId = q.entry.get(g.id, userId)?.guild_id ?? null;
+		const message = g.messages.find(m => m.guildId === guildId) ?? g.messages[0] ?? null;
+		const serverId = guildId ?? message?.guildId ?? null;
+		return {
+			guildId,
+			serverName: (serverId && network.find(serverId)?.name) || null,
+			link: message ? `https://discord.com/channels/${message.guildId}/${message.channelId}/${message.messageId}` : null,
+		};
+	}
+
+	// A winner who lost the prize (not claimed in time, or replaced by a reroll): the winner role goes away
+	async function unreward(g, userId, reason) {
+		const s = g.settings;
+		const { guildId, serverName } = placeOf(g, userId);
+		if (s.winnerRoleId && guildId) {
+			await moderation.takeRole(GIVEAWAY, { guildId, userId, roleId: s.winnerRoleId, reason: `Lot du giveaway #${g.id} perdu` })
+				.catch(error => logger.warn(`Winner role of giveaway #${g.id} not removed:`, error.message));
+		}
+		if (reason === 'expired' && s.dmWinners) {
+			const where = serverName ? ` sur **${serverName}**` : '';
+			await executor.sendDM(userId, `⌛ Tu n’as pas réclamé ton lot à temps${where} : **${g.prize}** (giveaway #${g.id}) a été remis en jeu.`).catch(() => null);
+		}
+	}
+
 	async function reward(g, userIds) {
 		const s = g.settings;
 		for (const userId of userIds) {
+			const { guildId, serverName, link } = placeOf(g, userId);
 			if (s.winnerRoleId) {
-				const guildId = q.entry.get(g.id, userId)?.guild_id;
 				if (guildId) {
 					await moderation.giveRole(GIVEAWAY, { guildId, userId, roleId: s.winnerRoleId, durationMs: s.winnerRoleDays ? s.winnerRoleDays * DAY_MS : null, reason: `Gagnant du giveaway #${g.id}` })
 						.catch(error => logger.warn(`Winner role of giveaway #${g.id} failed:`, error.message));
@@ -265,7 +294,8 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 			}
 			if (s.dmWinners) {
 				const claim = s.claimMinutes ? ` Réclame ton lot dans les ${s.claimMinutes} minutes avec le bouton « Je réclame » sous l’annonce.` : '';
-				await executor.sendDM(userId, `🎉 Tu as gagné **${g.prize}** au giveaway #${g.id} !${claim}`).catch(() => null);
+				const where = serverName ? ` sur **${serverName}**` : '';
+				await executor.sendDM(userId, `🎉 Tu as gagné **${g.prize}** au giveaway #${g.id}${where} !${claim}${link ? `\n${link}` : ''}`).catch(() => null);
 			}
 		}
 	}
@@ -306,6 +336,7 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 		const replaced = userId ? current.filter(w => w.user_id === userId && w.status === 'winner') : [];
 		if (userId && !replaced.length) throw new ValidationError('Cette personne n’est pas gagnante de ce giveaway.');
 		for (const w of replaced) q.setWinnerStatus.run(reason === 'expired' ? 'expired' : 'rerolled', w.id);
+		for (const w of replaced) await unreward(g, w.user_id, reason);
 		const exclude = new Set(current.map(w => w.user_id));
 		const result = await drawWinners(g, userId ? replaced.length : count, exclude);
 		const winners = result.chosen.map(c => c.userId);
