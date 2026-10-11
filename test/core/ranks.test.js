@@ -1,6 +1,6 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { openDb } from '../../src/db/index.js';
+import { openTestDb } from '../db.js';
 import { createAudit } from '../../src/core/audit.js';
 import { createRankService } from '../../src/core/ranks.js';
 import { ForbiddenError, ValidationError } from '../../src/core/errors.js';
@@ -13,8 +13,8 @@ const MAIN = '900000000000000001';
 
 let db, audit, ranks, memberRoles;
 
-beforeEach(() => {
-	db = openDb(':memory:');
+beforeEach(async () => {
+	db = await openTestDb();
 	audit = createAudit({ db });
 	memberRoles = new Map();
 	ranks = createRankService({
@@ -27,7 +27,7 @@ beforeEach(() => {
 });
 
 async function owner() {
-	return ranks.resolve(OWNER);
+	return await ranks.resolve(OWNER);
 }
 
 test('the owner has every permission, even unknown ones', async () => {
@@ -45,9 +45,9 @@ test('a user without rank has no permission', async () => {
 });
 
 test('permissions are the union of role ranks and direct ranks', async () => {
-	const modo = ranks.create(await owner(), { name: 'Modo', level: 20, permissions: ['panel.access', 'audit.view'] });
-	const logs = ranks.create(await owner(), { name: 'Logs', level: 10, permissions: ['logs.manage'] });
-	ranks.setRoleLinks(await owner(), modo.id, ['role-modo']);
+	const modo = await ranks.create(await owner(), { name: 'Modo', level: 20, permissions: ['panel.access', 'audit.view'] });
+	const logs = await ranks.create(await owner(), { name: 'Logs', level: 10, permissions: ['logs.manage'] });
+	await ranks.setRoleLinks(await owner(), modo.id, ['role-modo']);
 	memberRoles.set(ALICE, ['role-modo', 'other-role']);
 	await ranks.assignDirect(await owner(), ALICE, logs.id);
 
@@ -58,16 +58,16 @@ test('permissions are the union of role ranks and direct ranks', async () => {
 });
 
 test('role ranks only count on the main server', async () => {
-	const modo = ranks.create(await owner(), { name: 'Modo', level: 20, permissions: ['panel.access'] });
-	ranks.setRoleLinks(await owner(), modo.id, ['role-modo']);
+	const modo = await ranks.create(await owner(), { name: 'Modo', level: 20, permissions: ['panel.access'] });
+	await ranks.setRoleLinks(await owner(), modo.id, ['role-modo']);
 	// Not a member of the main server
 	const principal = await ranks.resolve(BOB);
 	assert.equal(principal.can('panel.access'), false);
 });
 
 test('cache is invalidated when roles change', async () => {
-	const modo = ranks.create(await owner(), { name: 'Modo', level: 20, permissions: ['panel.access'] });
-	ranks.setRoleLinks(await owner(), modo.id, ['role-modo']);
+	const modo = await ranks.create(await owner(), { name: 'Modo', level: 20, permissions: ['panel.access'] });
+	await ranks.setRoleLinks(await owner(), modo.id, ['role-modo']);
 	memberRoles.set(ALICE, ['role-modo']);
 	assert.ok((await ranks.resolve(ALICE)).can('panel.access'));
 
@@ -78,14 +78,14 @@ test('cache is invalidated when roles change', async () => {
 });
 
 test('rejects unknown permissions and invalid levels', async () => {
-	assert.throws(() => ranks.create(ranks.system, { name: 'X', level: 10, permissions: ['nope.nope'] }), ValidationError);
-	assert.throws(() => ranks.create(ranks.system, { name: 'X', level: 101, permissions: [] }), ValidationError);
-	assert.throws(() => ranks.create(ranks.system, { name: '', level: 1, permissions: [] }), ValidationError);
+	await assert.rejects(async () => ranks.create(ranks.system, { name: 'X', level: 10, permissions: ['nope.nope'] }), ValidationError);
+	await assert.rejects(async () => ranks.create(ranks.system, { name: 'X', level: 101, permissions: [] }), ValidationError);
+	await assert.rejects(async () => ranks.create(ranks.system, { name: '', level: 1, permissions: [] }), ValidationError);
 });
 
 async function setupAdmin() {
 	// Alice: Admin (level 50) with ranks.manage + members.assign + panel.access
-	const admin = ranks.create(await owner(), {
+	const admin = await ranks.create(await owner(), {
 		name: 'Admin', level: 50, permissions: ['panel.access', 'ranks.manage', 'members.assign', 'audit.view'],
 	});
 	await ranks.assignDirect(await owner(), ALICE, admin.id);
@@ -94,32 +94,32 @@ async function setupAdmin() {
 
 test('cannot grant a permission you do not have', async () => {
 	const { alice } = await setupAdmin();
-	assert.throws(() => ranks.create(alice, { name: 'Sneaky', level: 10, permissions: ['versions.install'] }), ForbiddenError);
-	const ok = ranks.create(alice, { name: 'Helper', level: 10, permissions: ['audit.view'] });
-	assert.throws(() => ranks.update(alice, ok.id, { permissions: ['audit.view', 'console.control'] }), ForbiddenError);
+	await assert.rejects(async () => ranks.create(alice, { name: 'Sneaky', level: 10, permissions: ['versions.install'] }), ForbiddenError);
+	const ok = await ranks.create(alice, { name: 'Helper', level: 10, permissions: ['audit.view'] });
+	await assert.rejects(async () => ranks.update(alice, ok.id, { permissions: ['audit.view', 'console.control'] }), ForbiddenError);
 });
 
 test('cannot touch a rank of equal or higher level', async () => {
 	const { admin, alice } = await setupAdmin();
-	const boss = ranks.create(await owner(), { name: 'Boss', level: 80, permissions: [] });
-	assert.throws(() => ranks.update(alice, boss.id, { name: 'Pwned' }), ForbiddenError);
-	assert.throws(() => ranks.remove(alice, boss.id), ForbiddenError);
-	assert.throws(() => ranks.update(alice, admin.id, { name: 'Same level' }), ForbiddenError);
-	assert.throws(() => ranks.create(alice, { name: 'Equal', level: 50, permissions: [] }), ForbiddenError);
-	const low = ranks.create(alice, { name: 'Low', level: 10, permissions: [] });
-	assert.throws(() => ranks.update(alice, low.id, { level: 60 }), ForbiddenError);
+	const boss = await ranks.create(await owner(), { name: 'Boss', level: 80, permissions: [] });
+	await assert.rejects(async () => ranks.update(alice, boss.id, { name: 'Pwned' }), ForbiddenError);
+	await assert.rejects(async () => ranks.remove(alice, boss.id), ForbiddenError);
+	await assert.rejects(async () => ranks.update(alice, admin.id, { name: 'Same level' }), ForbiddenError);
+	await assert.rejects(async () => ranks.create(alice, { name: 'Equal', level: 50, permissions: [] }), ForbiddenError);
+	const low = await ranks.create(alice, { name: 'Low', level: 10, permissions: [] });
+	await assert.rejects(async () => ranks.update(alice, low.id, { level: 60 }), ForbiddenError);
 });
 
 test('cannot change your own ranks', async () => {
 	const { alice } = await setupAdmin();
-	const low = ranks.create(alice, { name: 'Low', level: 10, permissions: [] });
+	const low = await ranks.create(alice, { name: 'Low', level: 10, permissions: [] });
 	await assert.rejects(ranks.assignDirect(alice, ALICE, low.id), ForbiddenError);
 });
 
 test('cannot change ranks of someone at or above your level', async () => {
 	const { alice } = await setupAdmin();
-	const low = ranks.create(alice, { name: 'Low', level: 10, permissions: [] });
-	const peer = ranks.create(await owner(), { name: 'Peer', level: 50, permissions: [] });
+	const low = await ranks.create(alice, { name: 'Low', level: 10, permissions: [] });
+	const peer = await ranks.create(await owner(), { name: 'Peer', level: 50, permissions: [] });
 	await ranks.assignDirect(await owner(), CAROL, peer.id);
 	await assert.rejects(ranks.assignDirect(alice, CAROL, low.id), ForbiddenError);
 	await ranks.assignDirect(alice, BOB, low.id);
@@ -129,39 +129,39 @@ test('cannot change ranks of someone at or above your level', async () => {
 });
 
 test('needs the matching permission', async () => {
-	const helper = ranks.create(await owner(), { name: 'Helper', level: 30, permissions: ['panel.access'] });
+	const helper = await ranks.create(await owner(), { name: 'Helper', level: 30, permissions: ['panel.access'] });
 	await ranks.assignDirect(await owner(), BOB, helper.id);
 	const bob = await ranks.resolve(BOB);
-	assert.throws(() => ranks.create(bob, { name: 'X', level: 1, permissions: [] }), ForbiddenError);
+	await assert.rejects(async () => ranks.create(bob, { name: 'X', level: 1, permissions: [] }), ForbiddenError);
 	await assert.rejects(ranks.assignDirect(bob, CAROL, helper.id), ForbiddenError);
 });
 
 test('changes are audited', async () => {
-	const rank = ranks.create(await owner(), { name: 'Modo', level: 20, permissions: ['panel.access'] });
-	ranks.update(await owner(), rank.id, { name: 'Modérateur' });
-	ranks.remove(await owner(), rank.id);
-	const actions = audit.query().map(e => e.action);
+	const rank = await ranks.create(await owner(), { name: 'Modo', level: 20, permissions: ['panel.access'] });
+	await ranks.update(await owner(), rank.id, { name: 'Modérateur' });
+	await ranks.remove(await owner(), rank.id);
+	const actions = (await audit.query()).map(e => e.action);
 	assert.deepEqual(actions, ['ranks.delete', 'ranks.update', 'ranks.create']);
 });
 
 test('lists panel members with the origin of their ranks', async () => {
-	const modo = ranks.create(await owner(), { name: 'Modo', level: 20, permissions: ['panel.access'] });
+	const modo = await ranks.create(await owner(), { name: 'Modo', level: 20, permissions: ['panel.access'] });
 	await ranks.assignDirect(await owner(), ALICE, modo.id);
-	const members = ranks.listDirectAssignments();
+	const members = await ranks.listDirectAssignments();
 	assert.deepEqual(members.map(m => [m.discordId, m.rankId]), [[ALICE, modo.id]]);
 });
 
 test('@everyone cannot grant a rank', async () => {
-	const rank = ranks.create(await owner(), { name: 'Modo', level: 20, permissions: ['panel.access'] });
-	assert.throws(() => ranks.setRoleLinks(ranks.system, rank.id, [MAIN]), ValidationError);
+	const rank = await ranks.create(await owner(), { name: 'Modo', level: 20, permissions: ['panel.access'] });
+	await assert.rejects(async () => ranks.setRoleLinks(ranks.system, rank.id, [MAIN]), ValidationError);
 });
 
 test('linking or assigning a rank cannot hand out permissions you do not hold', async () => {
 	const { alice } = await setupAdmin();
-	const powerful = ranks.create(await owner(), { name: 'Technique', level: 10, permissions: ['versions.install'] });
-	assert.throws(() => ranks.setRoleLinks(alice, powerful.id, ['role-membre']), ForbiddenError);
+	const powerful = await ranks.create(await owner(), { name: 'Technique', level: 10, permissions: ['versions.install'] });
+	await assert.rejects(async () => ranks.setRoleLinks(alice, powerful.id, ['role-membre']), ForbiddenError);
 	await assert.rejects(ranks.assignDirect(alice, BOB, powerful.id), ForbiddenError);
-	const harmless = ranks.create(alice, { name: 'Helper', level: 10, permissions: ['audit.view'] });
-	ranks.setRoleLinks(alice, harmless.id, ['role-helper']);
+	const harmless = await ranks.create(alice, { name: 'Helper', level: 10, permissions: ['audit.view'] });
+	await ranks.setRoleLinks(alice, harmless.id, ['role-helper']);
 	await ranks.assignDirect(alice, BOB, harmless.id);
 });

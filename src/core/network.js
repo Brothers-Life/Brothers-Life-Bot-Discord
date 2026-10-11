@@ -34,8 +34,8 @@ export function createNetwork({ db, audit, now = Date.now }) {
 		};
 	}
 
-	function getOrThrow(id) {
-		const guild = toGuild(q.get.get(String(id)));
+	async function getOrThrow(id) {
+		const guild = toGuild(await q.get.get(String(id)));
 		if (!guild) throw new NotFoundError('Serveur introuvable.');
 		return guild;
 	}
@@ -45,108 +45,121 @@ export function createNetwork({ db, audit, now = Date.now }) {
 	}
 
 	function emit(event, payload) {
-		for (const listener of listeners[event]) listener(payload);
+		for (const listener of listeners[event]) {
+			try {
+				Promise.resolve(listener(payload)).catch(() => undefined);
+			}
+			catch {
+				// A listener never breaks the change itself
+			}
+		}
 	}
 
 	function record(actor, action, guild, details = null) {
-		audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action, guildId: guild.id, target: guild.id, details: { name: guild.name, ...details } });
+		return audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action, guildId: guild.id, target: guild.id, details: { name: guild.name, ...details } });
 	}
 
 	return {
-		list() {
-			return q.all.all().map(toGuild);
+		async list() {
+			return (await q.all.all()).map(toGuild);
 		},
 
 		get: getOrThrow,
 
-		find(id) {
-			return toGuild(q.get.get(String(id)));
+		async find(id) {
+			return toGuild(await q.get.get(String(id)));
 		},
 
-		getMain() {
-			if (mainCache === undefined) mainCache = toGuild(q.main.get());
+		async getMain() {
+			if (mainCache === undefined) mainCache = toGuild(await q.main.get());
 			return mainCache;
 		},
 
-		getMainId() {
-			return this.getMain()?.id ?? null;
+		async getMainId() {
+			return (await this.getMain())?.id ?? null;
 		},
 
-		activeIds() {
-			return q.all.all().filter(r => r.status === 'active' && r.bot_present === 1).map(r => r.id);
+		// Another process (bot or API) changed the servers
+		invalidate() {
+			mainCache = undefined;
+		},
+
+		async activeIds() {
+			return (await q.all.all()).filter(r => r.status === 'active' && r.bot_present === 1).map(r => r.id);
 		},
 
 		// Called by the bot for every server it is in (startup and guildCreate)
-		upsertSeen({ id, name, icon = null }) {
+		async upsertSeen({ id, name, icon = null }) {
 			const at = now();
-			const existing = q.get.get(id);
+			const existing = await q.get.get(id);
 			if (existing) {
-				q.seen.run({ id, name, icon, at });
+				await q.seen.run({ id, name, icon, at });
 				if (existing.bot_present === 0) {
-					audit.record({ actorId: 'system', source: 'system', action: 'network.bot_joined', guildId: id, target: id, details: { name } });
+					await audit.record({ actorId: 'system', source: 'system', action: 'network.bot_joined', guildId: id, target: id, details: { name } });
 				}
 			}
 			else {
-				q.insert.run({ id, name, icon, at });
-				audit.record({ actorId: 'system', source: 'system', action: 'network.bot_joined', guildId: id, target: id, details: { name } });
+				await q.insert.run({ id, name, icon, at });
+				await audit.record({ actorId: 'system', source: 'system', action: 'network.bot_joined', guildId: id, target: id, details: { name } });
 			}
 			mainCache = undefined;
 			return getOrThrow(id);
 		},
 
 		// The bot was kicked or the server was deleted
-		markLeft(id) {
-			const guild = toGuild(q.get.get(String(id)));
+		async markLeft(id) {
+			const guild = toGuild(await q.get.get(String(id)));
 			if (!guild) return null;
-			q.left.run(now(), guild.id);
+			await q.left.run(now(), guild.id);
 			mainCache = undefined;
-			audit.record({ actorId: 'system', source: 'system', action: 'network.bot_left', guildId: guild.id, target: guild.id, details: { name: guild.name, wasMain: guild.isMain } });
+			await audit.record({ actorId: 'system', source: 'system', action: 'network.bot_left', guildId: guild.id, target: guild.id, details: { name: guild.name, wasMain: guild.isMain } });
 			if (guild.status === 'active') emit('removed', guild);
 			return getOrThrow(guild.id);
 		},
 
-		activate(actor, id) {
+		async activate(actor, id) {
 			requireManage(actor);
-			const guild = getOrThrow(id);
+			const guild = await getOrThrow(id);
 			if (!guild.botPresent) throw new ValidationError('Le bot n’est plus sur ce serveur.');
 			if (guild.status === 'active') return guild;
-			q.status.run('active', now(), now(), guild.id);
+			await q.status.run('active', now(), now(), guild.id);
 			mainCache = undefined;
-			record(actor, 'network.add', guild);
-			const activated = getOrThrow(guild.id);
+			await record(actor, 'network.add', guild);
+			const activated = await getOrThrow(guild.id);
 			emit('activated', activated);
 			return activated;
 		},
 
-		remove(actor, id) {
+		async remove(actor, id) {
 			requireManage(actor);
-			const guild = getOrThrow(id);
+			const guild = await getOrThrow(id);
 			if (guild.isMain) throw new ValidationError('Le serveur principal ne peut pas être retiré. Choisis d’abord un autre serveur principal.');
 			if (guild.status === 'removed') return guild;
 			const wasActive = guild.status === 'active';
-			q.status.run('removed', guild.joinedNetworkAt, now(), guild.id);
-			record(actor, 'network.remove', guild);
-			const removed = getOrThrow(guild.id);
+			await q.status.run('removed', guild.joinedNetworkAt, now(), guild.id);
+			mainCache = undefined;
+			await record(actor, 'network.remove', guild);
+			const removed = await getOrThrow(guild.id);
 			if (wasActive) emit('removed', removed);
 			return removed;
 		},
 
 		// The main server is always active; staff roles and permissions are managed from it
-		setMain(actor, id) {
+		async setMain(actor, id) {
 			requireManage(actor);
-			const guild = getOrThrow(id);
+			const guild = await getOrThrow(id);
 			if (!guild.botPresent) throw new ValidationError('Le bot n’est plus sur ce serveur.');
-			const previous = this.getMain();
+			const previous = await this.getMain();
 			if (previous?.id === guild.id) return guild;
 
-			db.transaction(() => {
-				q.clearMain.run();
-				q.setMain.run(now(), guild.id);
-				if (guild.status !== 'active') q.status.run('active', now(), now(), guild.id);
+			await db.transaction(async () => {
+				await q.clearMain.run();
+				await q.setMain.run(now(), guild.id);
+				if (guild.status !== 'active') await q.status.run('active', now(), now(), guild.id);
 			})();
 			mainCache = undefined;
-			record(actor, 'network.main', guild, previous ? { previous: { id: previous.id, name: previous.name } } : null);
-			const main = getOrThrow(guild.id);
+			await record(actor, 'network.main', guild, previous ? { previous: { id: previous.id, name: previous.name } } : null);
+			const main = await getOrThrow(guild.id);
 			emit('mainChanged', { main, previous });
 			if (guild.status !== 'active') emit('activated', main);
 			return main;

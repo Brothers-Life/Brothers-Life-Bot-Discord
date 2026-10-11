@@ -25,7 +25,7 @@ export function createAudit({ db, now = Date.now }) {
 
 	return {
 		// action is "<category>.<verb>", e.g. "ranks.create": the category drives log routing
-		record({ actorId, source, action, guildId = null, target = null, details = null, results = null }) {
+		async record({ actorId, source, action, guildId = null, target = null, details = null, results = null }) {
 			// Automod actions are system actions whose author is "automod"
 			if (source === 'automod') source = 'system';
 			if (!SOURCES.has(source)) throw new Error(`Unknown audit source: ${source}`);
@@ -33,25 +33,26 @@ export function createAudit({ db, now = Date.now }) {
 			const apiKey = requestContext.get()?.apiKey;
 			if (apiKey && source === 'panel') details = { ...details, 'Clé d’API': apiKey.name };
 			const entry = { at: now(), actorId: String(actorId), source, action, guildId, target, details, results };
-			const { lastInsertRowid } = insert.run({
+			const { lastInsertRowid } = await insert.run({
 				...entry,
 				details: details === null ? null : JSON.stringify(details),
 				results: results === null ? null : JSON.stringify(results),
 			});
 			const saved = { id: Number(lastInsertRowid), ...entry };
 			for (const listener of listeners) {
+				// A failing listener (e.g. Discord log) must never break the action itself
 				try {
-					listener(saved);
+					Promise.resolve(listener(saved)).catch(() => undefined);
 				}
 				catch {
-					// A failing listener (e.g. Discord log) must never break the action itself
+					// Synchronous throw: same thing
 				}
 			}
 			return saved.id;
 		},
 
 		// Newest first, paginated with `before` (an id)
-		query({ actorId, action, guildId, from, to, before, limit = 50 } = {}) {
+		async query({ actorId, action, guildId, from, to, before, limit = 50 } = {}) {
 			const filters = {
 				actorId: ['actor_id = @actorId', actorId],
 				action: ['(action = @action OR action LIKE @actionPrefix)', action],
@@ -71,7 +72,7 @@ export function createAudit({ db, now = Date.now }) {
 			params.limit = Math.min(Math.max(Number(limit) || 50, 1), 200);
 
 			const sql = `SELECT * FROM audit_log ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY id DESC LIMIT @limit`;
-			return db.prepare(sql).all(params).map(toEntry);
+			return (await db.prepare(sql).all(params)).map(toEntry);
 		},
 
 		onRecord(listener) {

@@ -37,52 +37,52 @@ export function createSessions({ db, ttlMs = 12 * 3600_000, idleMs = 2 * 3600_00
 	}
 
 	return {
-		create({ discordId, username = null, avatar = null, ip = null, userAgent = null }) {
+		async create({ discordId, username = null, avatar = null, ip = null, userAgent = null }) {
 			const id = crypto.randomBytes(32).toString('base64url');
 			const at = now();
-			q.insert.run({ id, discordId: String(discordId), username, avatar, at, expiresAt: at + ttlMs, ip, userAgent: userAgent?.slice(0, 300) ?? null });
+			await q.insert.run({ id, discordId: String(discordId), username, avatar, at, expiresAt: at + ttlMs, ip, userAgent: userAgent?.slice(0, 300) ?? null });
 			return id;
 		},
 
 		// Returns the session if still valid and refreshes its activity, otherwise deletes it
-		touch(id) {
+		async touch(id) {
 			if (typeof id !== 'string' || !id) return null;
-			const row = q.get.get(id);
+			const row = await q.get.get(id);
 			if (!row) return null;
 			const at = now();
 			if (isExpired(row, at)) {
-				q.delete.run(id);
+				await q.delete.run(id);
 				return null;
 			}
 			if (at - row.last_seen_at > TOUCH_THROTTLE_MS) {
-				q.touch.run(at, id);
+				await q.touch.run(at, id);
 				row.last_seen_at = at;
 			}
 			return toSession(row);
 		},
 
-		get(id) {
-			const row = q.get.get(id);
+		async get(id) {
+			const row = await q.get.get(id);
 			return row ? toSession(row) : null;
 		},
 
-		revoke(id) {
-			return q.delete.run(id).changes > 0;
+		async revoke(id) {
+			return (await q.delete.run(id)).changes > 0;
 		},
 
-		revokeAllFor(discordId) {
-			return q.deleteUser.run(String(discordId)).changes;
+		async revokeAllFor(discordId) {
+			return (await q.deleteUser.run(String(discordId))).changes;
 		},
 
-		list(discordId) {
+		async list(discordId) {
 			const at = now();
-			const rows = discordId ? q.byUser.all(String(discordId)) : q.all.all();
+			const rows = discordId ? await q.byUser.all(String(discordId)) : await q.all.all();
 			return rows.filter(row => !isExpired(row, at)).map(toSession);
 		},
 
-		purgeExpired() {
+		async purgeExpired() {
 			const at = now();
-			return q.purge.run(at, at - idleMs).changes;
+			return (await q.purge.run(at, at - idleMs)).changes;
 		},
 	};
 }

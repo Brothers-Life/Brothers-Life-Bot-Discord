@@ -141,10 +141,16 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 		usedReply: db.prepare('UPDATE ticket_replies SET uses = uses + 1 WHERE id = ?'),
 	};
 
-	// Channels of open tickets: lets the message handler skip the database for every other channel
-	const openChannels = new Set(q.openChannels.all().map(r => r.channel_id));
+	// Channels of open tickets: lets the message handler skip the database for every other channel (loaded by init)
+	const openChannels = new Set();
 	// channelId -> ticketId of every ticket whose conversation is recorded (open or archived)
-	const liveChannels = new Map(q.liveChannels.all().map(r => [r.channel_id, r.id]));
+	const liveChannels = new Map();
+	async function init() {
+		openChannels.clear();
+		for (const r of await q.openChannels.all()) openChannels.add(r.channel_id);
+		liveChannels.clear();
+		for (const r of await q.liveChannels.all()) liveChannels.set(r.channel_id, r.id);
+	}
 	// Panel listeners (WebSocket): { type: 'ticket' | 'message' | 'message_update' | 'message_delete', ... }
 	const listeners = new Set();
 	function emit(event) {
@@ -554,6 +560,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 	}
 
 	const service = {
+		init,
 		settings: settingsOf,
 		statuses: statusesOf,
 		priorities: () => PRIORITIES.map(key => ({ key, label: PRIORITY_LABELS[key] })),

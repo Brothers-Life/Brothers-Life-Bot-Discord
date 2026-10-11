@@ -56,16 +56,19 @@ export function createAntiraid({ db, network, audit, executor, sanctions, logs, 
 	// Raids are kept in the settings table: after a restart, the locks are still lifted at the end
 	const RAID_KEY = 'antiraid.raid.';
 	const stored = {
-		all: db.prepare('SELECT key, value FROM settings WHERE key LIKE \'antiraid.raid.%\''),
-		set: db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'),
-		delete: db.prepare('DELETE FROM settings WHERE key = ?'),
+		all: db.prepare('SELECT `key`, value FROM settings WHERE `key` LIKE \'antiraid.raid.%\''),
+		set: db.prepare('INSERT INTO settings (`key`, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)'),
+		delete: db.prepare('DELETE FROM settings WHERE `key` = ?'),
 	};
-	for (const row of stored.all.all()) {
-		try {
-			raids.set(row.key.slice(RAID_KEY.length), JSON.parse(row.value));
-		}
-		catch {
-			stored.delete.run(row.key);
+	async function init() {
+		raids.clear();
+		for (const row of await stored.all.all()) {
+			try {
+				raids.set(row.key.slice(RAID_KEY.length), JSON.parse(row.value));
+			}
+			catch {
+				await stored.delete.run(row.key);
+			}
 		}
 	}
 
@@ -158,6 +161,7 @@ export function createAntiraid({ db, network, audit, executor, sanctions, logs, 
 	}
 
 	const service = {
+		init,
 		get: configOf,
 
 		save(actor, guildId, input) {

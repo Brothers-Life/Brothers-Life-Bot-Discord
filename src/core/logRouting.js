@@ -15,13 +15,14 @@ export const OFF = '0';
 export function createLogRouting({ db, executor, network, audit, logger = console }) {
 	const categories = new Map();
 	const queues = new Map();
+	const inflight = new Set();
 
 	const q = {
 		routes: db.prepare('SELECT category, channel_id, enabled FROM log_routes WHERE guild_id = ? ORDER BY category'),
 		route: db.prepare('SELECT channel_id, enabled FROM log_routes WHERE guild_id = ? AND category = ?'),
 		upsert: db.prepare(`
 			INSERT INTO log_routes (guild_id, category, channel_id, enabled) VALUES (?, ?, ?, ?)
-			ON CONFLICT(guild_id, category) DO UPDATE SET channel_id = excluded.channel_id, enabled = excluded.enabled
+			ON DUPLICATE KEY UPDATE channel_id = VALUES(channel_id), enabled = VALUES(enabled)
 		`),
 		delete: db.prepare('DELETE FROM log_routes WHERE guild_id = ? AND category = ?'),
 		disableChannel: db.prepare('UPDATE log_routes SET enabled = 0 WHERE channel_id = ?'),
@@ -63,10 +64,10 @@ export function createLogRouting({ db, executor, network, audit, logger = consol
 				logger.warn(`Unable to send a "${category}" log to channel ${channelId}:`, error?.message ?? error);
 				return;
 			}
-			q.disableChannel.run(channelId);
+			await q.disableChannel.run(channelId);
 			logger.warn(`Log channel ${channelId} is not reachable anymore (${error.code}), its routes were disabled.`);
 			if (category !== 'system') {
-				log(null, 'system', {
+				await log(null, 'system', {
 					title: 'Salon de logs désactivé',
 					description: `Le salon <#${channelId}> n'est plus accessible (code ${error.code}). Ses routes de logs ont été désactivées.`,
 					color: 'warning',
@@ -81,29 +82,40 @@ export function createLogRouting({ db, executor, network, audit, logger = consol
 	}
 
 	// The type route wins over the category route (a disabled type route = that type is not logged)
-	function activeRoute(guildId, category, type = null) {
-		const row = (type && q.route.get(guildId, `${category}:${type}`)) || q.route.get(guildId, category);
+	async function activeRoute(guildId, category, type = null) {
+		const row = (type && await q.route.get(guildId, `${category}:${type}`)) || await q.route.get(guildId, category);
 		return row && row.enabled === 1 && row.channel_id !== OFF ? row.channel_id : null;
 	}
 
-	// guildId null = network-level event, logged on the main server
+	// guildId null = network-level event, logged on the main server. Never rejects: a log must not break an action.
 	function log(guildId, category, message, type = null) {
-		const mainId = network.getMainId();
+		const routing = route(guildId, category, message, type).catch((error) => {
+			logger.warn(`Unable to route a "${category}" log:`, error?.message ?? error);
+			return [];
+		});
+		// flush() also waits for logs still looking up their channel
+		inflight.add(routing);
+		routing.finally(() => inflight.delete(routing));
+		return routing;
+	}
+
+	async function route(guildId, category, message, type) {
+		const mainId = await network.getMainId();
 		const target = guildId ?? mainId;
 		const sent = [];
 		if (!target) return sent;
 		// The category (emoji, footer) travels with the message
 		message = { categoryLabel: shortLabel(category), ...message, category, type };
 
-		const channelId = activeRoute(target, category, type);
+		const channelId = await activeRoute(target, category, type);
 		if (channelId) {
 			sent.push(channelId);
 			enqueue(channelId, () => send(channelId, category, message));
 		}
 
-		const mirrorId = activeRoute(MIRROR, category, type);
+		const mirrorId = await activeRoute(MIRROR, category, type);
 		if (mirrorId && target !== mainId && mirrorId !== channelId) {
-			const guildName = network.find(target)?.name ?? target;
+			const guildName = (await network.find(target))?.name ?? target;
 			const mirrored = { ...message, title: `[${guildName}] ${message.title ?? ''}`.trim() };
 			sent.push(mirrorId);
 			enqueue(mirrorId, () => send(mirrorId, category, mirrored));
@@ -111,11 +123,11 @@ export function createLogRouting({ db, executor, network, audit, logger = consol
 		return sent;
 	}
 
-	function checkTarget(actor, guildId) {
+	async function checkTarget(actor, guildId) {
 		if (!actor.can('logs.manage')) throw new ForbiddenError('Permission manquante : logs.manage');
-		const ownerGuild = guildId === MIRROR ? network.getMainId() : guildId;
+		const ownerGuild = guildId === MIRROR ? await network.getMainId() : guildId;
 		if (!ownerGuild) throw new ValidationError('Choisis d’abord le serveur principal.');
-		if (guildId !== MIRROR && !network.find(guildId)) throw new ValidationError('Serveur inconnu.');
+		if (guildId !== MIRROR && !await network.find(guildId)) throw new ValidationError('Serveur inconnu.');
 		return ownerGuild;
 	}
 
@@ -135,7 +147,7 @@ export function createLogRouting({ db, executor, network, audit, logger = consol
 		// Routes of single types are kept. staffRoleIds: roles that may read the logs.
 		async applyPack(actor, guildId, packKey, { categoryName = 'Logs', staffRoleIds = [] } = {}) {
 			if (guildId === MIRROR) throw new ValidationError('Les packs s’appliquent à un serveur, pas au miroir.');
-			checkTarget(actor, guildId);
+			await checkTarget(actor, guildId);
 			const pack = LOG_PACKS[packKey];
 			if (!pack) throw new ValidationError('Pack de logs inconnu.');
 			const name = String(categoryName).trim().slice(0, 100) || 'Logs';
@@ -145,27 +157,27 @@ export function createLogRouting({ db, executor, network, audit, logger = consol
 			const plan = new Map();
 			for (const c of pack.channels) for (const category of c.categories) if (categories.has(category)) plan.set(category, created.channels[c.name]);
 			if (rest) for (const key of categories.keys()) if (!listed.has(key)) plan.set(key, created.channels[rest.name]);
-			db.transaction(() => {
-				for (const [category, channelId] of plan) q.upsert.run(guildId, category, channelId, 1);
+			await db.transaction(async () => {
+				for (const [category, channelId] of plan) await q.upsert.run(guildId, category, channelId, 1);
 			})();
-			audit?.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'logs.pack', guildId, target: packKey, details: { pack: pack.label, channels: pack.channels.length, categories: plan.size, created: created.createdCount } });
-			return { routes: this.routes(guildId), created: created.createdCount, channels: created.channels };
+			await audit?.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'logs.pack', guildId, target: packKey, details: { pack: pack.label, channels: pack.channels.length, categories: plan.size, created: created.createdCount } });
+			return { routes: await this.routes(guildId), created: created.createdCount, channels: created.channels };
 		},
 
 		// Every category routed to one existing channel (types routed apart are kept)
 		async routeAll(actor, guildId, channelId) {
-			const ownerGuild = checkTarget(actor, guildId);
+			const ownerGuild = await checkTarget(actor, guildId);
 			const channel = await executor.getTextChannel(ownerGuild, channelId);
 			if (!channel) throw new ValidationError('Ce salon n’existe pas sur ce serveur, ou le bot ne peut pas y écrire.');
-			db.transaction(() => {
-				for (const key of categories.keys()) q.upsert.run(guildId, key, channelId, 1);
+			await db.transaction(async () => {
+				for (const key of categories.keys()) await q.upsert.run(guildId, key, channelId, 1);
 			})();
-			audit?.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'logs.route', guildId: ownerGuild, target: '*', details: { mirror: guildId === MIRROR, channelId, all: true } });
+			await audit?.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'logs.route', guildId: ownerGuild, target: '*', details: { mirror: guildId === MIRROR, channelId, all: true } });
 			return this.routes(guildId);
 		},
 
-		routes(guildId) {
-			return q.routes.all(guildId).map(r => ({ category: r.category, channelId: r.channel_id, enabled: r.enabled === 1 }));
+		async routes(guildId) {
+			return (await q.routes.all(guildId)).map(r => ({ category: r.category, channelId: r.channel_id, enabled: r.enabled === 1 }));
 		},
 
 		// channelId null removes the route; "category:type" routes one type apart, OFF turns that type off
@@ -174,21 +186,21 @@ export function createLogRouting({ db, executor, network, audit, logger = consol
 			if (!categories.has(base) || category.split(':').length > 2) throw new ValidationError(`Catégorie de logs inconnue : ${category}`);
 			if (type !== undefined && !/^[a-z0-9_]{1,40}$/.test(type)) throw new ValidationError(`Type de log invalide : ${type}`);
 			if (channelId === OFF && !type) throw new ValidationError('Pour couper une catégorie entière, retire son salon.');
-			const ownerGuild = checkTarget(actor, guildId);
+			const ownerGuild = await checkTarget(actor, guildId);
 
 			if (channelId === null) {
-				q.delete.run(guildId, category);
+				await q.delete.run(guildId, category);
 			}
 			else if (channelId === OFF) {
-				q.upsert.run(guildId, category, OFF, 0);
+				await q.upsert.run(guildId, category, OFF, 0);
 			}
 			else {
 				const channel = await executor.getTextChannel(ownerGuild, channelId);
 				if (!channel) throw new ValidationError('Ce salon n’existe pas sur ce serveur, ou le bot ne peut pas y écrire.');
-				q.upsert.run(guildId, category, channelId, enabled ? 1 : 0);
+				await q.upsert.run(guildId, category, channelId, enabled ? 1 : 0);
 			}
 
-			audit?.record({
+			await audit?.record({
 				actorId: actor.id,
 				source: actor.source ?? 'panel',
 				action: 'logs.route',
@@ -201,7 +213,7 @@ export function createLogRouting({ db, executor, network, audit, logger = consol
 
 		// Resolves once every queued message has been handled (tests, graceful shutdown)
 		async flush() {
-			while (queues.size) await Promise.allSettled([...queues.values()]);
+			while (queues.size || inflight.size) await Promise.allSettled([...queues.values(), ...inflight]);
 		},
 	};
 }

@@ -73,18 +73,21 @@ export function createTemplates({ db, network, audit, executor, events, automod,
 	const sourceIds = () => new Set(q.sources.all().map(r => r.source_guild_id));
 
 	// A job cut by a restart leaves the server half built: it is reported, and "Réparer" finishes it
-	const interrupted = settings.get('templates.running', null);
-	if (interrupted?.backupId) {
-		settings.set('templates.running', null);
-	}
-	else if (interrupted) {
-		const report = { created: 0, edited: 0, deleted: 0, warnings: ['Interrompue par un redémarrage du bot : lance « Réparer » pour terminer.'], durationMs: 0 };
-		const last = q.application.get(interrupted.guildId);
-		q.saveApplication.run({
-			guildId: interrupted.guildId, templateId: interrupted.templateId, mapping: last?.mapping ?? JSON.stringify({ roles: {}, channels: {} }),
-			mode: interrupted.mode, status: 'failed', report: JSON.stringify(report), at: now(), by: interrupted.by,
-		});
-		settings.set('templates.running', null);
+	// Run once by the bot process when it starts (init)
+	async function recoverInterrupted() {
+		const interrupted = await settings.get('templates.running', null);
+		if (interrupted?.backupId) {
+			await settings.set('templates.running', null);
+		}
+		else if (interrupted) {
+			const report = { created: 0, edited: 0, deleted: 0, warnings: ['Interrompue par un redémarrage du bot : lance « Réparer » pour terminer.'], durationMs: 0 };
+			const last = await q.application.get(interrupted.guildId);
+			await q.saveApplication.run({
+				guildId: interrupted.guildId, templateId: interrupted.templateId, mapping: last?.mapping ?? JSON.stringify({ roles: {}, channels: {} }),
+				mode: interrupted.mode, status: 'failed', report: JSON.stringify(report), at: now(), by: interrupted.by,
+			});
+			await settings.set('templates.running', null);
+		}
 	}
 
 	// --- Panel configuration of the model, rewritten with the target's ids -----------------------------
@@ -334,6 +337,7 @@ export function createTemplates({ db, network, audit, executor, events, automod,
 	}
 
 	return {
+		recover: recoverInterrupted,
 		list: () => q.all.all().map(row => toTemplate(row)),
 		get: id => toTemplate(getOrThrow(id), { withSnapshot: true }),
 

@@ -95,7 +95,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const roleImport = createRoleImport({ db, network, ranks, staffSync, executor, audit });
 	const uploads = createUploads({ dir: path.join(config.DATA_DIR, 'uploads') });
 	// Template variables shared by every message of the bot; {fivem.*} come from fivemData, created further down
-	const variables = createVariables({ executor, logger, fivemVars: discordId => fivemData.discordVars(discordId), fivemEnabled: () => fivemData.settingsView().enabled });
+	const variables = createVariables({ executor, logger, fivemVars: discordId => fivemData.discordVars(discordId), fivemEnabled: async () => (await fivemData.settingsView()).enabled });
 	const announcements = createAnnouncements({ db, network, audit, executor, logs, uploads, variables, logger });
 	const tickets = createTickets({ db, network, ranks, audit, executor, logs, variables, logger, dataDir: config.DATA_DIR, fetchImpl });
 	const onboarding = createOnboarding({ db, network, audit, executor, uploads, variables, logger, fetchImpl });
@@ -137,7 +137,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const fivemData = createFivemData({ audit, settings, logger, discord: {
 		activity: sinceDay => discordActivity.all(sinceDay),
 		members: async () => {
-			const mainId = network.getMainId();
+			const mainId = await network.getMainId();
 			return mainId ? new Set((await executor.listMembers(mainId)).filter(m => !m.bot).map(m => m.id)) : null;
 		},
 	} });
@@ -201,5 +201,12 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	// Public page (no login); the maintenance block shows only when a fivemEvents service exists
 	core.publicPage = createPublicPage({ settings, audit, network, ranks, executor, fivem, rpEvents, recruitment, logger, maintenance: () => core.fivemEvents?.publicState?.() ?? null });
 	logs.registerCategory('publicpage', 'Page publique (réglages)', auditTypes().publicpage);
+
+	// What the services load from the database before working (open tickets, raids in progress…).
+	// `worker`: the process running the Discord bot also repairs what a restart cut (announcements being sent…).
+	core.init = async ({ worker = false } = {}) => {
+		for (const service of [tickets, antiraid]) await service.init();
+		if (worker) for (const service of [templates, announcements]) await service.recover();
+	};
 	return core;
 }

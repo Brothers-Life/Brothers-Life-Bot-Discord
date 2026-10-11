@@ -19,7 +19,7 @@ test('each category goes to its own channel', async () => {
 	await core.logs.setRoute(owner, MAIN, 'network', 'c-main-network');
 	executor.sent.length = 0;
 
-	core.ranks.create(owner, { name: 'Modo', level: 10, permissions: [] });
+	await core.ranks.create(owner, { name: 'Modo', level: 10, permissions: [] });
 	await core.logs.flush();
 
 	assert.deepEqual(executor.sent.map(s => s.channelId), ['c-main-ranks']);
@@ -44,7 +44,7 @@ test('the network mirror receives other servers logs with a prefix', async () =>
 	await core.logs.setRoute(owner, MIRROR, 'network', 'c-main-mirror');
 	executor.sent.length = 0;
 
-	core.logs.log(OTHER, 'network', { title: 'Test' });
+	await core.logs.log(OTHER, 'network', { title: 'Test' });
 	await core.logs.flush();
 
 	assert.deepEqual(executor.sent.map(s => [s.channelId, s.message.title]), [
@@ -61,10 +61,10 @@ test('a dead channel disables its routes and raises a system log', async () => {
 	executor.failures.set('c-main-ranks', 10003);
 	executor.sent.length = 0;
 
-	core.logs.log(null, 'ranks', { title: 'Test' });
+	await core.logs.log(null, 'ranks', { title: 'Test' });
 	await core.logs.flush();
 
-	assert.equal(core.logs.routes(MAIN).find(r => r.category === 'ranks').enabled, false);
+	assert.equal((await core.logs.routes(MAIN)).find(r => r.category === 'ranks').enabled, false);
 	assert.deepEqual(executor.sent.map(s => s.channelId), ['c-system']);
 	assert.equal(executor.sent[0].message.title, 'Salon de logs désactivé');
 });
@@ -73,7 +73,7 @@ test('removing a route', async () => {
 	const { core, owner } = await setup();
 	await core.logs.setRoute(owner, MAIN, 'ranks', 'c-main-ranks');
 	await core.logs.setRoute(owner, MAIN, 'ranks', null);
-	assert.deepEqual(core.logs.routes(MAIN), []);
+	assert.deepEqual(await core.logs.routes(MAIN), []);
 });
 
 test('point by point: one type sent elsewhere or turned off, the rest of its category follows the category route', async () => {
@@ -82,9 +82,9 @@ test('point by point: one type sent elsewhere or turned off, the rest of its cat
 	await core.logs.setRoute(owner, MAIN, 'ranks:delete', 'c-main-network');
 	await core.logs.setRoute(owner, MAIN, 'ranks:update', '0');
 	executor.sent.length = 0;
-	const rank = core.ranks.create(owner, { name: 'Modo', level: 10, permissions: [] });
-	core.ranks.update(owner, rank.id, { name: 'Modérateur' });
-	core.ranks.remove(owner, rank.id);
+	const rank = await core.ranks.create(owner, { name: 'Modo', level: 10, permissions: [] });
+	await core.ranks.update(owner, rank.id, { name: 'Modérateur' });
+	await core.ranks.remove(owner, rank.id);
 	await core.logs.flush();
 	assert.deepEqual(executor.sent.map(s => [s.channelId, s.message.title]), [['c-main-ranks', 'Rang créé'], ['c-main-network', 'Rang supprimé']]);
 

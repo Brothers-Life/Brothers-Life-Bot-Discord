@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { openDb } from '../src/db/index.js';
+import { openTestDb } from './db.js';
 import { createCore } from '../src/core/context.js';
 import { parseConfig } from '../src/utils/config.js';
 
@@ -592,8 +592,9 @@ export function createFakeExecutor() {
 	};
 }
 
-export function createTestCore(overrides = {}) {
-	const db = openDb(':memory:');
+// A core on the test database of this file, emptied first
+export async function createTestCore(overrides = {}) {
+	const db = await openTestDb();
 	const executor = createFakeExecutor();
 	const config = { ...parseConfig({ OWNER_ID: OWNER }), DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'brl-test-')), ...overrides };
 	const noop = () => undefined;
@@ -601,16 +602,17 @@ export function createTestCore(overrides = {}) {
 	// No network in tests: every remote image is "not found"
 	const fetchImpl = async () => new Response(null, { status: 404 });
 	const core = createCore({ db, config, executor, logger: silent, fetchImpl });
+	await core.init({ worker: true });
 	return { core, executor, db };
 }
 
 // Owner principal, main server set up with MAIN (+ OTHER pending)
 export async function withNetwork() {
-	const ctx = createTestCore();
+	const ctx = await createTestCore();
 	const { core } = ctx;
-	core.network.upsertSeen({ id: MAIN, name: 'Main' });
-	core.network.upsertSeen({ id: OTHER, name: 'Other' });
+	await core.network.upsertSeen({ id: MAIN, name: 'Main' });
+	await core.network.upsertSeen({ id: OTHER, name: 'Other' });
 	const owner = await core.ranks.resolve(OWNER);
-	core.network.setMain(owner, MAIN);
+	await core.network.setMain(owner, MAIN);
 	return { ...ctx, owner };
 }

@@ -6,8 +6,8 @@ import { fillText } from '../../src/core/customCommands/engine.js';
 
 const MEMBER = '300000000000000001';
 
-function setup({ fivemVars = async () => ({ 'fivem.dbid': 42 }), enabled = true } = {}) {
-	const { executor } = createTestCore();
+async function setup({ fivemVars = async () => ({ 'fivem.dbid': 42 }), enabled = true } = {}) {
+	const { executor } = await createTestCore();
 	executor.memberRoles.set(`${MAIN}:${MEMBER}`, ['800000000000000001']);
 	executor.roles.set(MAIN, [{ id: '800000000000000001', name: 'Citoyen' }]);
 	const calls = [];
@@ -20,7 +20,7 @@ function setup({ fivemVars = async () => ({ 'fivem.dbid': 42 }), enabled = true 
 }
 
 test('member variables: Discord member, server, and FiveM only when asked', async () => {
-	const { variables, calls } = setup();
+	const { variables, calls } = await setup();
 	const vars = await variables.member(MAIN, MEMBER);
 	assert.equal(vars.user, `<@${MEMBER}>`);
 	assert.equal(vars['user.id'], MEMBER);
@@ -34,22 +34,22 @@ test('member variables: Discord member, server, and FiveM only when asked', asyn
 });
 
 test('a FiveM failure never breaks the other variables', async () => {
-	const { variables } = setup({ fivemVars: async () => { throw new Error('ECONNREFUSED'); } });
+	const { variables } = await setup({ fivemVars: async () => { throw new Error('ECONNREFUSED'); } });
 	const vars = await variables.member(MAIN, MEMBER, { fivem: true });
 	assert.equal(vars['user.id'], MEMBER);
 	assert.equal(vars['fivem.dbid'], undefined);
 });
 
-test('catalog: FiveM group only when the database is set up', () => {
-	assert.ok(setup().variables.catalog('member').some(g => g.title === 'Compte FiveM'));
-	assert.ok(!setup({ enabled: false }).variables.catalog('member').some(g => g.title === 'Compte FiveM'));
-	assert.ok(!setup().variables.catalog('server').some(g => g.title === 'Membre'));
+test('catalog: FiveM group only when the database is set up', async () => {
+	assert.ok((await setup()).variables.catalog('member').some(g => g.title === 'Compte FiveM'));
+	assert.ok(!(await setup({ enabled: false })).variables.catalog('member').some(g => g.title === 'Compte FiveM'));
+	assert.ok(!(await setup()).variables.catalog('server').some(g => g.title === 'Membre'));
 	assert.equal(usesFivem({ content: 'id {fivem.dbid}' }), true);
 	assert.equal(usesFivem('salut {user}'), false);
 });
 
 test('custom commands read the shared variables lazily, FiveM included', async () => {
-	const { variables, calls } = setup();
+	const { variables, calls } = await setup();
 	let shared = null;
 	const io = {
 		now: Date.now, random: () => 0,

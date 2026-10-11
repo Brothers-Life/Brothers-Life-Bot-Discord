@@ -20,21 +20,21 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 		clearPerms: db.prepare('DELETE FROM rank_permissions WHERE rank_id = ?'),
 		addPerm: db.prepare('INSERT INTO rank_permissions (rank_id, permission) VALUES (?, ?)'),
 		clearRoles: db.prepare('DELETE FROM rank_roles WHERE rank_id = ? AND guild_id = ?'),
-		addRole: db.prepare('INSERT OR IGNORE INTO rank_roles (rank_id, guild_id, role_id) VALUES (?, ?, ?)'),
-		byName: db.prepare('SELECT id FROM ranks WHERE name = ? COLLATE NOCASE AND id != ?'),
+		addRole: db.prepare('INSERT IGNORE INTO rank_roles (rank_id, guild_id, role_id) VALUES (?, ?, ?)'),
+		byName: db.prepare('SELECT id FROM ranks WHERE name = ? COLLATE utf8mb4_unicode_ci AND id != ?'),
 		directOf: db.prepare('SELECT rank_id FROM user_ranks WHERE discord_id = ?'),
 		direct: db.prepare('SELECT discord_id, rank_id, added_by, added_at FROM user_ranks ORDER BY added_at'),
-		assign: db.prepare('INSERT OR IGNORE INTO user_ranks (discord_id, rank_id, added_by, added_at) VALUES (?, ?, ?, ?)'),
+		assign: db.prepare('INSERT IGNORE INTO user_ranks (discord_id, rank_id, added_by, added_at) VALUES (?, ?, ?, ?)'),
 		unassign: db.prepare('DELETE FROM user_ranks WHERE discord_id = ? AND rank_id = ?'),
 	};
 
 	// Permissions a rank gets from the ranks below it (when it inherits): [{ permission, from }]
-	function inheritedOf(row, own) {
+	async function inheritedOf(row, own) {
 		if (!row.inherit) return [];
 		const seen = new Set(own);
 		const out = [];
-		for (const lower of q.lower.all(row.level)) {
-			for (const { permission } of q.perms.all(lower.id)) {
+		for (const lower of await q.lower.all(row.level)) {
+			for (const { permission } of await q.perms.all(lower.id)) {
 				if (seen.has(permission)) continue;
 				seen.add(permission);
 				out.push({ permission, from: lower.name });
@@ -43,9 +43,9 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 		return out;
 	}
 
-	function hydrate(row) {
-		const own = q.perms.all(row.id).map(r => r.permission);
-		const inherited = inheritedOf(row, own);
+	async function hydrate(row) {
+		const own = (await q.perms.all(row.id)).map(r => r.permission);
+		const inherited = await inheritedOf(row, own);
 		return {
 			id: row.id,
 			name: row.name,
@@ -56,14 +56,14 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 			permissions: own,
 			inherited,
 			effectivePermissions: [...own, ...inherited.map(i => i.permission)],
-			roles: q.roles.all(row.id).map(r => ({ guildId: r.guild_id, roleId: r.role_id })),
+			roles: (await q.roles.all(row.id)).map(r => ({ guildId: r.guild_id, roleId: r.role_id })),
 			createdAt: row.created_at,
 			updatedAt: row.updated_at,
 		};
 	}
 
-	function getOrThrow(id) {
-		const row = q.get.get(id);
+	async function getOrThrow(id) {
+		const row = await q.get.get(id);
 		if (!row) throw new NotFoundError('Rang introuvable.');
 		return hydrate(row);
 	}
@@ -101,12 +101,12 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 		if (missing.length) throw new ForbiddenError(`Tu ne peux pas donner des permissions que tu n’as pas : ${missing.join(', ')}`);
 	}
 
-	function assertUniqueName(name, id = -1) {
-		if (q.byName.get(name.trim(), id)) throw new ConflictError(`Un rang nommé « ${name.trim()} » existe déjà.`);
+	async function assertUniqueName(name, id = -1) {
+		if (await q.byName.get(name.trim(), id)) throw new ConflictError(`Un rang nommé « ${name.trim()} » existe déjà.`);
 	}
 
 	function record(actor, action, target, details) {
-		audit?.record({ actorId: actor.id, source: actor.source ?? 'panel', action, target: String(target), details });
+		return audit?.record({ actorId: actor.id, source: actor.source ?? 'panel', action, target: String(target), details });
 	}
 
 	function invalidate(userId) {
@@ -115,27 +115,28 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 	}
 
 	async function computeRanks(userId) {
-		const rankIds = new Set(q.directOf.all(userId).map(r => r.rank_id));
+		const rankIds = new Set((await q.directOf.all(userId)).map(r => r.rank_id));
 
-		const mainGuildId = getMainGuildId();
+		const mainGuildId = await getMainGuildId();
 		if (mainGuildId) {
 			const roleIds = await getMemberRoleIds(mainGuildId, userId);
 			if (roleIds?.length) {
 				const placeholders = roleIds.map(() => '?').join(',');
-				const rows = db.prepare(`SELECT DISTINCT rank_id FROM rank_roles WHERE guild_id = ? AND role_id IN (${placeholders})`)
+				const rows = await db.prepare(`SELECT DISTINCT rank_id FROM rank_roles WHERE guild_id = ? AND role_id IN (${placeholders})`)
 					.all(mainGuildId, ...roleIds);
 				for (const row of rows) rankIds.add(row.rank_id);
 			}
 		}
 
-		return [...rankIds].map(id => q.get.get(id)).filter(Boolean).map(hydrate);
+		const rows = (await Promise.all([...rankIds].map(id => q.get.get(id)))).filter(Boolean);
+		return Promise.all(rows.map(hydrate));
 	}
 
 	const service = {
 		system: SYSTEM,
 
-		list() {
-			return q.all.all().map(hydrate);
+		async list() {
+			return Promise.all((await q.all.all()).map(hydrate));
 		},
 
 		get: getOrThrow,
@@ -160,34 +161,34 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 
 		invalidate,
 
-		create(actor, { name, level, color = null, permissions = [], inherit = false, syncRoles = true }) {
+		async create(actor, { name, level, color = null, permissions = [], inherit = false, syncRoles = true }) {
 			requirePermission(actor, 'ranks.manage');
 			validate({ name, level, color, permissions });
 			requireBelow(actor, level);
 			requireHeld(actor, permissions);
-			assertUniqueName(name);
+			await assertUniqueName(name);
 			// What it would inherit must also be something the actor could give
-			if (inherit) requireHeld(actor, inheritedOf({ inherit: 1, level }, permissions).map(i => i.permission));
+			if (inherit) requireHeld(actor, (await inheritedOf({ inherit: 1, level }, permissions)).map(i => i.permission));
 
-			const id = db.transaction(() => {
+			const id = await db.transaction(async () => {
 				const at = now();
-				const { lastInsertRowid } = q.insert.run(name.trim(), level, color, inherit ? 1 : 0, syncRoles ? 1 : 0, at, at);
-				for (const permission of new Set(permissions)) q.addPerm.run(lastInsertRowid, permission);
+				const { lastInsertRowid } = await q.insert.run(name.trim(), level, color, inherit ? 1 : 0, syncRoles ? 1 : 0, at, at);
+				for (const permission of new Set(permissions)) await q.addPerm.run(lastInsertRowid, permission);
 				return Number(lastInsertRowid);
 			})();
 
-			const rank = getOrThrow(id);
-			record(actor, 'ranks.create', id, { name: rank.name, level, permissions: rank.permissions });
+			const rank = await getOrThrow(id);
+			await record(actor, 'ranks.create', id, { name: rank.name, level, permissions: rank.permissions });
 			return rank;
 		},
 
-		update(actor, id, patch) {
+		async update(actor, id, patch) {
 			requirePermission(actor, 'ranks.manage');
-			const rank = getOrThrow(id);
+			const rank = await getOrThrow(id);
 			validate(patch);
 			requireBelow(actor, rank.level);
 			if (patch.level !== undefined) requireBelow(actor, patch.level);
-			if (patch.name !== undefined) assertUniqueName(patch.name, id);
+			if (patch.name !== undefined) await assertUniqueName(patch.name, id);
 
 			let added = [], removed = [];
 			if (patch.permissions !== undefined) {
@@ -199,11 +200,11 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 			const inherit = patch.inherit !== undefined ? Boolean(patch.inherit) : rank.inherit;
 			const syncRoles = patch.syncRoles !== undefined ? Boolean(patch.syncRoles) : rank.syncRoles;
 			if (inherit && (!rank.inherit || patch.level !== undefined)) {
-				requireHeld(actor, inheritedOf({ inherit: 1, level: patch.level ?? rank.level }, patch.permissions ?? rank.permissions).map(i => i.permission));
+				requireHeld(actor, (await inheritedOf({ inherit: 1, level: patch.level ?? rank.level }, patch.permissions ?? rank.permissions)).map(i => i.permission));
 			}
 
-			db.transaction(() => {
-				q.update.run(
+			await db.transaction(async () => {
+				await q.update.run(
 					patch.name?.trim() ?? rank.name,
 					patch.level ?? rank.level,
 					patch.color !== undefined ? patch.color : rank.color,
@@ -213,14 +214,14 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 					id,
 				);
 				if (patch.permissions !== undefined) {
-					q.clearPerms.run(id);
-					for (const permission of new Set(patch.permissions)) q.addPerm.run(id, permission);
+					await q.clearPerms.run(id);
+					for (const permission of new Set(patch.permissions)) await q.addPerm.run(id, permission);
 				}
 			})();
 			invalidate();
 
-			const updated = getOrThrow(id);
-			record(actor, 'ranks.update', id, {
+			const updated = await getOrThrow(id);
+			await record(actor, 'ranks.update', id, {
 				name: updated.name,
 				...(patch.name !== undefined && patch.name !== rank.name ? { renamedFrom: rank.name } : {}),
 				...(patch.level !== undefined && patch.level !== rank.level ? { level: [rank.level, patch.level] } : {}),
@@ -233,30 +234,30 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 		},
 
 		// Same permissions and options under a new name (no Discord role linked)
-		duplicate(actor, id, { name, level } = {}) {
-			const rank = getOrThrow(id);
+		async duplicate(actor, id, { name, level } = {}) {
+			const rank = await getOrThrow(id);
 			let copyName = String(name ?? '').trim() || `${rank.name} (copie)`;
-			for (let i = 2; !name && q.byName.get(copyName, -1); i++) copyName = `${rank.name} (copie ${i})`;
+			for (let i = 2; !name && await q.byName.get(copyName, -1); i++) copyName = `${rank.name} (copie ${i})`;
 			return service.create(actor, { name: copyName.slice(0, 50), level: level ?? Math.max(0, rank.level - 1), color: rank.color, permissions: rank.permissions, inherit: rank.inherit, syncRoles: rank.syncRoles });
 		},
 
-		remove(actor, id) {
+		async remove(actor, id) {
 			requirePermission(actor, 'ranks.manage');
-			const rank = getOrThrow(id);
+			const rank = await getOrThrow(id);
 			requireBelow(actor, rank.level);
-			q.delete.run(id);
+			await q.delete.run(id);
 			invalidate();
-			record(actor, 'ranks.delete', id, { name: rank.name });
+			await record(actor, 'ranks.delete', id, { name: rank.name });
 		},
 
 		// Replaces the Discord roles (of the main server) that grant this rank
-		setRoleLinks(actor, id, roleIds) {
+		async setRoleLinks(actor, id, roleIds) {
 			requirePermission(actor, 'ranks.manage');
-			const rank = getOrThrow(id);
+			const rank = await getOrThrow(id);
 			requireBelow(actor, rank.level);
 			// Linking a role hands the rank (and its permissions) to whoever holds that role
 			requireHeld(actor, rank.effectivePermissions);
-			const mainGuildId = getMainGuildId();
+			const mainGuildId = await getMainGuildId();
 			if (!mainGuildId) throw new ValidationError('Choisis d’abord le serveur principal.');
 			if (!Array.isArray(roleIds) || roleIds.some(r => typeof r !== 'string' || !r)) {
 				throw new ValidationError('roleIds doit être une liste d’ID de rôles.');
@@ -264,17 +265,17 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 			// @everyone has the server's id: linking it would give the rank to every member
 			if (roleIds.includes(mainGuildId)) throw new ValidationError('Le rôle @everyone ne peut pas donner de rang.');
 
-			db.transaction(() => {
-				q.clearRoles.run(id, mainGuildId);
-				for (const roleId of new Set(roleIds)) q.addRole.run(id, mainGuildId, roleId);
+			await db.transaction(async () => {
+				await q.clearRoles.run(id, mainGuildId);
+				for (const roleId of new Set(roleIds)) await q.addRole.run(id, mainGuildId, roleId);
 			})();
 			invalidate();
-			record(actor, 'ranks.roles', id, { name: rank.name, roles: [...new Set(roleIds)] });
+			await record(actor, 'ranks.roles', id, { name: rank.name, roles: [...new Set(roleIds)] });
 			return getOrThrow(id);
 		},
 
-		listDirectAssignments() {
-			return q.direct.all().map(r => ({ discordId: r.discord_id, rankId: r.rank_id, addedBy: r.added_by, addedAt: r.added_at }));
+		async listDirectAssignments() {
+			return (await q.direct.all()).map(r => ({ discordId: r.discord_id, rankId: r.rank_id, addedBy: r.added_by, addedAt: r.added_at }));
 		},
 
 		async assignDirect(actor, userId, rankId) {
@@ -292,7 +293,7 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 		if (!/^\d{17,20}$/.test(userId)) throw new ValidationError('ID Discord invalide.');
 		if (userId === actor.id && !actor.isOwner) throw new ForbiddenError('Tu ne peux pas modifier tes propres rangs.');
 		if (userId === ownerId) throw new ForbiddenError('Le chef du réseau a déjà toutes les permissions.');
-		const rank = getOrThrow(rankId);
+		const rank = await getOrThrow(rankId);
 		requireBelow(actor, rank.level);
 		if (assign) requireHeld(actor, rank.effectivePermissions);
 
@@ -303,10 +304,10 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 			if (target.level >= actor.level) throw new ForbiddenError('Tu ne peux pas modifier les rangs de quelqu’un de niveau égal ou supérieur au tien.');
 		}
 
-		if (assign) q.assign.run(userId, rankId, actor.id, now());
-		else q.unassign.run(userId, rankId);
+		if (assign) await q.assign.run(userId, rankId, actor.id, now());
+		else await q.unassign.run(userId, rankId);
 		invalidate(userId);
-		record(actor, assign ? 'ranks.assign' : 'ranks.unassign', userId, { rank: rank.name, rankId });
+		await record(actor, assign ? 'ranks.assign' : 'ranks.unassign', userId, { rank: rank.name, rankId });
 	}
 
 	return service;

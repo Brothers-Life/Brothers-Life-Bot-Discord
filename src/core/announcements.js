@@ -163,8 +163,11 @@ export function createAnnouncements({ db, network, audit, executor, logs, upload
 		addTemplate: db.prepare('INSERT INTO announcement_templates (name, payload, options, targets, created_by, created_at) VALUES (@name, @payload, @options, @targets, @createdBy, @at)'),
 		dropTemplate: db.prepare('DELETE FROM announcement_templates WHERE id = ?'),
 	};
-	// Cut while sending (crash, restart): shown as failed so it can be sent again, instead of stuck forever
-	db.prepare('UPDATE announcements SET status = \'failed\' WHERE status = \'sending\'').run();
+	// Cut while sending (crash, restart): shown as failed so it can be sent again, instead of stuck forever.
+	// Run once by the bot process when it starts (init).
+	async function recoverInterrupted() {
+		await db.prepare('UPDATE announcements SET status = \'failed\' WHERE status = \'sending\'').run();
+	}
 
 	function toAnnouncement(row) {
 		if (!row) return null;
@@ -303,6 +306,7 @@ export function createAnnouncements({ db, network, audit, executor, logs, upload
 	}
 
 	return {
+		recover: recoverInterrupted,
 		list({ status, limit = 100 } = {}) {
 			const rows = status
 				? db.prepare('SELECT * FROM announcements WHERE status = ? ORDER BY id DESC LIMIT ?').all(status, limit)
