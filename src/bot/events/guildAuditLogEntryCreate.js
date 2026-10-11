@@ -8,7 +8,7 @@ export const name = Events.GuildAuditLogEntryCreate;
 export async function execute(entry, guild) {
 	const { core } = guild.client;
 	// Role, channel and server changes go to the event logs (with their author)
-	auditEntry(entry, guild);
+	await auditEntry(entry, guild);
 
 	if (!entry.executorId || entry.executorId === guild.client.user.id || !entry.targetId) return;
 
@@ -16,17 +16,17 @@ export async function execute(entry, guild) {
 
 	switch (entry.action) {
 	case AuditLogEvent.MemberBanAdd:
-		return core.sanctions.handleNative({ ...base, kind: 'ban' });
+		return await core.sanctions.handleNative({ ...base, kind: 'ban' });
 	case AuditLogEvent.MemberBanRemove:
-		return core.sanctions.handleNative({ ...base, kind: 'unban' });
+		return await core.sanctions.handleNative({ ...base, kind: 'unban' });
 	case AuditLogEvent.MemberKick:
-		return core.sanctions.handleNative({ ...base, kind: 'kick' });
+		return await core.sanctions.handleNative({ ...base, kind: 'kick' });
 	case AuditLogEvent.MemberUpdate: {
 		const change = entry.changes.find(c => c.key === 'communication_disabled_until');
 		if (!change) return;
 		const until = change.new ? Date.parse(change.new) : null;
-		if (until && until > Date.now()) return core.sanctions.handleNative({ ...base, kind: 'timeout', until });
-		if (!change.new && change.old) return core.sanctions.handleNative({ ...base, kind: 'untimeout' });
+		if (until && until > Date.now()) return await core.sanctions.handleNative({ ...base, kind: 'timeout', until });
+		if (!change.new && change.old) return await core.sanctions.handleNative({ ...base, kind: 'untimeout' });
 	}
 	}
 }

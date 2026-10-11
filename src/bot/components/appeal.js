@@ -17,7 +17,7 @@ export async function execute(interaction) {
 	try {
 		switch (action) {
 		case 'open': {
-			const { questions } = appeals.start(interaction.user.id, id);
+			const { questions } = await appeals.start(interaction.user.id, id);
 			return await interaction.showModal(appealModal(id, questions));
 		}
 		case 'submit': {

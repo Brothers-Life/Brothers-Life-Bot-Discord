@@ -7,9 +7,9 @@ export function registerRpEventRoutes(app, { core }) {
 	const { rpEvents, network, executor } = core;
 
 	app.get('/api/rp-events', { config: { permission: 'rpevents.view' } }, async () => {
-		const guilds = network.list().filter(g => g.status === 'active' && g.botPresent);
+		const guilds = (await network.list()).filter(g => g.status === 'active' && g.botPresent);
 		return {
-			events: rpEvents.list(),
+			events: await rpEvents.list(),
 			// Where to announce, whom to ping, which "participant" role to give
 			guilds: await Promise.all(guilds.map(async g => ({
 				id: g.id, name: g.name, isMain: g.isMain,
@@ -19,7 +19,7 @@ export function registerRpEventRoutes(app, { core }) {
 		};
 	});
 	app.get('/api/rp-events/:id/participants', { config: { permission: 'rpevents.view' }, schema: { params: idParam } }, async (request) => {
-		const event = rpEvents.get(request.params.id);
+		const event = await rpEvents.get(request.params.id);
 		const names = await resolveNames(executor, event.rsvps.map(r => r.userId));
 		return event.rsvps.map(r => ({ ...r, user: names.get(r.userId) ?? null }));
 	});

@@ -6,9 +6,9 @@ export function registerAntinukeRoutes(app, { core }) {
 	const { antinuke, executor, network, ranks } = core;
 
 	app.get('/api/antinuke', { config: { permission: 'antinuke.view' } }, async () => {
-		const config = antinuke.get();
-		const incidents = antinuke.incidents(50);
-		const live = antinuke.live();
+		const config = await antinuke.get();
+		const incidents = await antinuke.incidents(50);
+		const live = await antinuke.live();
 		const people = await resolveNames(executor, [...config.whitelistUserIds, ...incidents.flatMap(i => [i.userId, i.resolvedBy]), ...live.map(l => l.userId)]);
 		const roleNames = new Map();
 		for (const guildId of new Set(incidents.flatMap(i => [...Object.keys(i.removedRoles), ...i.failures.map(f => f.guildId)]))) {
@@ -17,8 +17,8 @@ export function registerAntinukeRoutes(app, { core }) {
 		return {
 			config,
 			actions: Object.entries(antinuke.actions).map(([key, a]) => ({ key, label: a.label, limit: a.limit, windowSeconds: a.windowSeconds })),
-			ranks: ranks.list().map(({ id, name, color, level }) => ({ id, name, color, level })),
-			guilds: network.list().filter(g => g.status === 'active').map(({ id, name, icon }) => ({ id, name, icon })),
+			ranks: (await ranks.list()).map(({ id, name, color, level }) => ({ id, name, color, level })),
+			guilds: (await network.list()).filter(g => g.status === 'active').map(({ id, name, icon }) => ({ id, name, icon })),
 			people: Object.fromEntries(people),
 			live,
 			incidents: incidents.map(i => ({

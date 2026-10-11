@@ -69,7 +69,7 @@ export function sanctionEmbed(sanction, { revoked = false } = {}) {
 // Runs a moderation action and answers with the result or a readable error
 export async function runModeration(interaction, action) {
 	const { core } = interaction.client;
-	if (core.network.find(interaction.guildId)?.status !== 'active') {
+	if ((await core.network.find(interaction.guildId))?.status !== 'active') {
 		return interaction.reply({ content: 'Ce serveur ne fait pas partie du réseau : ajoute-le depuis le panel.', flags: MessageFlags.Ephemeral });
 	}
 	await interaction.deferReply({ flags: MessageFlags.Ephemeral });

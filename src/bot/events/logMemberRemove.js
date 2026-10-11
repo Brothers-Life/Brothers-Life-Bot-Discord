@@ -4,6 +4,6 @@ import { memberFacts } from '../memberFacts.js';
 
 export const name = Events.GuildMemberRemove;
 export async function execute(member) {
-	memberLeft(member);
+	await memberLeft(member);
 	await member.client.core.onboarding.memberLeft(member.guild.id, memberFacts(member));
 }

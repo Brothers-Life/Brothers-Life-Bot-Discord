@@ -20,7 +20,8 @@ function fakeFivem() {
 }
 
 async function setup({ maintenance = () => null } = {}) {
-	let clock = Date.UTC(2026, 9, 10, 18, 0);
+	// Real time: the RP events service checks its dates against the real clock
+	let clock = Date.now();
 	const ctx = await withNetwork();
 	const { core, executor, owner } = ctx;
 	const publicPage = createPublicPage({
@@ -28,8 +29,8 @@ async function setup({ maintenance = () => null } = {}) {
 		rpEvents: core.rpEvents, recruitment: core.recruitment, maintenance, logger: { warn: noop }, now: () => clock,
 	});
 	// A staff rank linked to a role of the main server, held by Alice; Bob has it directly
-	const rank = core.ranks.create(owner, { name: 'Modérateur', level: 10, color: '#ff9628' });
-	core.ranks.setRoleLinks(owner, rank.id, [STAFF_ROLE]);
+	const rank = await core.ranks.create(owner, { name: 'Modérateur', level: 10, color: '#ff9628' });
+	await core.ranks.setRoleLinks(owner, rank.id, [STAFF_ROLE]);
 	executor.memberRoles.set(`${MAIN}:${ALICE}`, [STAFF_ROLE]);
 	await core.ranks.assignDirect(owner, BOB, rank.id);
 	return { ...ctx, publicPage, rank, advance: (ms) => { clock += ms; }, at: () => clock };
@@ -37,13 +38,13 @@ async function setup({ maintenance = () => null } = {}) {
 
 test('disabled by default: no view at all', async () => {
 	const { publicPage } = await setup();
-	assert.equal(publicPage.enabled(), false);
+	assert.equal(await publicPage.enabled(), false);
 	assert.equal(await publicPage.view(), null);
 });
 
 test('sections follow their toggles; status hides the address and player names unless asked', async () => {
 	const { publicPage, owner, rank } = await setup();
-	publicPage.save(owner, { enabled: true, staff: { enabled: true, rankIds: [rank.id] }, rules: { enabled: true, text: '# Règlement\nPas de **freekill**.' } });
+	await publicPage.save(owner, { enabled: true, staff: { enabled: true, rankIds: [rank.id] }, rules: { enabled: true, text: '# Règlement\nPas de **freekill**.' } });
 	const view = await publicPage.view();
 	assert.equal(view.status[0].name, 'BRL RP');
 	assert.equal(view.status[0].players, 2);
@@ -56,7 +57,7 @@ test('sections follow their toggles; status hides the address and player names u
 	assert.equal(view.discord.guilds.length, 1);
 	assert.equal(view.maintenance, null, 'no fivemEvents service: block absent');
 
-	publicPage.save(owner, { enabled: true, status: { enabled: true, showPlayerNames: true }, discord: { enabled: false }, events: { enabled: false }, links: { enabled: false } });
+	await publicPage.save(owner, { enabled: true, status: { enabled: true, showPlayerNames: true }, discord: { enabled: false }, events: { enabled: false }, links: { enabled: false } });
 	const next = await publicPage.view();
 	assert.deepEqual(next.status[0].playerNames, ['Léa', 'Tom']);
 	assert.equal(next.discord, undefined);
@@ -69,10 +70,10 @@ test('nothing sensitive: no Discord IDs, no player IDs, no RSVPs', async () => {
 	const { publicPage, owner, rank, core, executor, at } = await setup();
 	executor.channels.set(CHANNEL, { guildId: MAIN, name: 'events' });
 	await core.rpEvents.save(owner, { title: 'Course', description: 'Départ au port', startsAt: at() + 2 * HOUR, endsAt: at() + 3 * HOUR, image: 'https://cdn.example.com/course.png', targets: [{ guildId: MAIN, channelId: CHANNEL }] });
-	await core.rpEvents.rsvp(ALICE, (core.rpEvents.upcoming()[0]).id, 'going');
-	core.recruitment.savePosition(owner, MAIN, { name: 'Modérateur', config: { open: true } });
+	await core.rpEvents.rsvp(ALICE, (await core.rpEvents.upcoming())[0].id, 'going');
+	await core.recruitment.savePosition(owner, MAIN, { name: 'Modérateur', config: { open: true } });
 	await core.sanctions.create(owner, { type: 'warn', userId: BOB, reason: 'Secret' });
-	publicPage.save(owner, { enabled: true, staff: { enabled: true, rankIds: [rank.id] }, recruitment: { enabled: true }, status: { enabled: true, showPlayerNames: true } });
+	await publicPage.save(owner, { enabled: true, staff: { enabled: true, rankIds: [rank.id] }, recruitment: { enabled: true }, status: { enabled: true, showPlayerNames: true } });
 	const view = await publicPage.view();
 	const json = JSON.stringify(view);
 	for (const id of [ALICE, BOB, MAIN, STAFF_ROLE]) assert.ok(!json.includes(id), `no id ${id}`);
@@ -87,7 +88,7 @@ test('nothing sensitive: no Discord IDs, no player IDs, no RSVPs', async () => {
 test('maintenance block from fivemEvents when present, cached 30 s, refreshed on save', async () => {
 	let state = { maintenance: { active: true, reason: 'Mise à jour', since: 5 }, nextRestart: null };
 	const { publicPage, owner, advance } = await setup({ maintenance: () => state });
-	publicPage.save(owner, { enabled: true });
+	await publicPage.save(owner, { enabled: true });
 	assert.equal((await publicPage.view()).maintenance.maintenance.reason, 'Mise à jour');
 	state = { maintenance: { active: false }, nextRestart: { at: Date.UTC(2030, 0, 1) } };
 	assert.equal((await publicPage.view()).maintenance.maintenance.active, true, 'cached');
@@ -100,12 +101,12 @@ test('maintenance block from fivemEvents when present, cached 30 s, refreshed on
 
 test('settings: links must be http(s), only public.manage can save', async () => {
 	const { publicPage, owner, core } = await setup();
-	assert.throws(() => publicPage.save(owner, { links: { shop: 'javascript:alert(1)' } }), /Boutique/);
-	const saved = publicPage.save(owner, { links: { enabled: true, shop: 'https://brl.tebex.io', items: [{ label: 'TikTok', url: 'https://tiktok.com/@brl' }, { label: '', url: 'https://x' }] } });
+	await assert.rejects(async () => publicPage.save(owner, { links: { shop: 'javascript:alert(1)' } }), /Boutique/);
+	const saved = await publicPage.save(owner, { links: { enabled: true, shop: 'https://brl.tebex.io', items: [{ label: 'TikTok', url: 'https://tiktok.com/@brl' }, { label: '', url: 'https://x' }] } });
 	assert.equal(saved.links.items.length, 1);
 	assert.equal(normalizePublicPage({ links: { shop: 'ftp://x' } }).links.shop, '', 'stored junk is dropped on read');
 	const alice = await core.ranks.resolve(ALICE);
-	assert.throws(() => publicPage.save(alice, { enabled: true }), { code: 'FORBIDDEN' });
+	await assert.rejects(async () => publicPage.save(alice, { enabled: true }), { code: 'FORBIDDEN' });
 });
 
 test('rules: HTML never goes through, links only http(s)', () => {
@@ -130,7 +131,7 @@ test('routes: /api/public-page and /public answer 404 while the page is off', as
 	assert.equal((await app.inject({ method: 'GET', url: '/public' })).statusCode, 404);
 	assert.equal((await app.inject({ method: 'GET', url: '/api/public-page/config' })).statusCode, 401, 'settings need a session');
 
-	core.publicPage.save(owner, { enabled: true });
+	await core.publicPage.save(owner, { enabled: true });
 	const res = await app.inject({ method: 'GET', url: '/api/public-page' });
 	assert.equal(res.statusCode, 200);
 	assert.equal(res.json().title, 'Brothers Life');

@@ -44,7 +44,7 @@ async function setup({ links = { 123: ALICE } } = {}) {
 	executor.roles.set(MAIN, [{ id: ROLE_VIP, name: 'VIP', editable: true }, { id: ROLE_GOLD, name: 'Gold', editable: true }]);
 	executor.channels.set(CHANNEL, { guildId: MAIN, name: 'boutique' });
 	const tebex = createTebex({ db: core.db, network: core.network, audit: core.audit, executor, settings: core.settings, logs, variables: core.variables, fivemData, fetchImpl: fakeTebex(store), logger: { warn: () => undefined } });
-	tebex.setSecret(ctx.owner, SECRET);
+	await tebex.setSecret(ctx.owner, SECRET);
 	return { ...ctx, tebex, store, logged, lookups };
 }
 
@@ -67,37 +67,37 @@ test('Tebex payloads are read defensively', () => {
 
 test('the secret is stored but never handed back to the panel', async () => {
 	const { tebex, owner, core, store } = await setup();
-	const view = tebex.view(owner);
+	const view = await tebex.view(owner);
 	assert.equal(view.hasSecret, true);
 	assert.ok(!JSON.stringify(view).includes(SECRET));
-	assert.equal(core.settings.get('tebex.secret'), SECRET);
+	assert.equal(await core.settings.get('tebex.secret'), SECRET);
 	// The key goes to Tebex in the header, nowhere else
 	const info = await tebex.test(owner);
 	assert.equal(info.store, 'Brothers Life');
 	assert.equal(store.calls[0].secret, SECRET);
-	assert.throws(() => tebex.setSecret(owner, 'short'), ValidationError);
-	assert.deepEqual(tebex.setSecret(owner, null), { hasSecret: false });
-	assert.equal(tebex.view(owner).hasSecret, false);
+	await assert.rejects(async () => tebex.setSecret(owner, 'short'), ValidationError);
+	assert.deepEqual(await tebex.setSecret(owner, null), { hasSecret: false });
+	assert.equal((await tebex.view(owner)).hasSecret, false);
 });
 
 test('only people with the Tebex permissions see or change the store', async () => {
 	const { tebex } = await setup();
 	const nobody = { id: BOB, can: () => false };
-	assert.throws(() => tebex.view(nobody), ForbiddenError);
-	assert.throws(() => tebex.payments(nobody), ForbiddenError);
-	assert.throws(() => tebex.setSecret(nobody, SECRET), ForbiddenError);
+	await assert.rejects(async () => tebex.view(nobody), ForbiddenError);
+	await assert.rejects(async () => tebex.payments(nobody), ForbiddenError);
+	await assert.rejects(async () => tebex.setSecret(nobody, SECRET), ForbiddenError);
 	await assert.rejects(tebex.link(nobody, 1, { discordId: ALICE }), ForbiddenError);
 });
 
 test('first poll only marks existing payments, later polls handle each new one once', async () => {
 	const { tebex, owner, store, executor, logged } = await setup();
-	tebex.setConfig(owner, { mappings: [{ packageId: '10', guildId: MAIN, roleId: ROLE_VIP }] });
+	await tebex.setConfig(owner, { mappings: [{ packageId: '10', guildId: MAIN, roleId: ROLE_VIP }] });
 	store.payments = [payment(2), payment(1)];
 	const first = await tebex.poll();
 	assert.equal(first.firstRun, true);
 	assert.equal(roleCalls(executor).length, 0);
 	assert.equal(logged.length, 0);
-	assert.ok(tebex.payments(owner, { filter: 'baseline' }).every(p => p.baseline));
+	assert.ok((await tebex.payments(owner, { filter: 'baseline' })).every(p => p.baseline));
 
 	store.payments = [payment(3), payment(2), payment(1)];
 	const second = await tebex.poll();
@@ -111,7 +111,7 @@ test('first poll only marks existing payments, later polls handle each new one o
 	await tebex.poll();
 	assert.equal(roleCalls(executor).length, 1);
 	assert.equal(logged.length, 1);
-	assert.equal(tebex.view(owner).state.lastId, 3);
+	assert.equal((await tebex.view(owner)).state.lastId, 3);
 });
 
 test('the price stays out of the Discord log unless asked', async () => {
@@ -121,24 +121,24 @@ test('the price stays out of the Discord log unless asked', async () => {
 	store.payments = [payment(1)];
 	await tebex.poll();
 	assert.ok(!logged[0].message.fields.some(f => f.name === 'Montant'));
-	tebex.setConfig(owner, { showPrice: true });
+	await tebex.setConfig(owner, { showPrice: true });
 	store.payments = [payment(2), payment(1)];
 	await tebex.poll();
 	assert.equal(logged[1].message.fields.find(f => f.name === 'Montant').value, '9.99 EUR');
 	// The panel always shows it
-	assert.equal(tebex.payments(owner)[0].amount, '9.99');
+	assert.equal((await tebex.payments(owner))[0].amount, '9.99');
 });
 
 test('an unknown buyer stays unlinked until linked by hand, then the link is remembered', async () => {
 	const { tebex, owner, store, executor, logged, lookups } = await setup();
-	tebex.setConfig(owner, { mappings: [{ packageId: '10', guildId: MAIN, roleId: ROLE_VIP }] });
+	await tebex.setConfig(owner, { mappings: [{ packageId: '10', guildId: MAIN, roleId: ROLE_VIP }] });
 	await tebex.poll();
 	store.payments = [payment(1, { uuid: '999', name: 'Inconnu' })];
 	await tebex.poll();
 	assert.deepEqual(lookups, ['999']);
 	assert.equal(roleCalls(executor).length, 0);
 	assert.equal(logged[0].message.fields.find(f => f.name === 'Discord').value, 'non lié');
-	assert.equal(tebex.payments(owner, { filter: 'unlinked' }).length, 1);
+	assert.equal((await tebex.payments(owner, { filter: 'unlinked' })).length, 1);
 	// The FiveM database is not asked again on every poll
 	await tebex.poll();
 	assert.equal(lookups.length, 1);
@@ -147,51 +147,51 @@ test('an unknown buyer stays unlinked until linked by hand, then the link is rem
 	assert.equal(linked.discordId, BOB);
 	assert.equal(linked.linkMethod, 'manual');
 	assert.deepEqual(roleCalls(executor), [['addRole', MAIN, BOB, ROLE_VIP]]);
-	assert.equal(tebex.payments(owner, { filter: 'unlinked' }).length, 0);
+	assert.equal((await tebex.payments(owner, { filter: 'unlinked' })).length, 0);
 
 	// Next purchase of the same buyer: linked alone
 	store.payments = [payment(2, { uuid: '999', name: 'Inconnu' }), payment(1, { uuid: '999', name: 'Inconnu' })];
 	await tebex.poll();
-	const second = tebex.payments(owner).find(p => p.id === 2);
+	const second = (await tebex.payments(owner)).find(p => p.id === 2);
 	assert.equal(second.discordId, BOB);
 	assert.equal(second.linkMethod, 'known');
 });
 
 test('roles of the articles: several mappings, limited durations in the temporary roles', async () => {
 	const { tebex, owner, store, executor, db } = await setup();
-	tebex.setConfig(owner, { mappings: [
+	await tebex.setConfig(owner, { mappings: [
 		{ packageId: '10', guildId: MAIN, roleId: ROLE_VIP },
 		{ packageId: '11', guildId: MAIN, roleId: ROLE_GOLD, days: 30 },
 	] });
-	assert.throws(() => tebex.setConfig(owner, { mappings: [{ packageId: '10', guildId: MAIN, roleId: ROLE_VIP, days: 999 }] }), ValidationError);
+	await assert.rejects(async () => tebex.setConfig(owner, { mappings: [{ packageId: '10', guildId: MAIN, roleId: ROLE_VIP, days: 999 }] }), ValidationError);
 	await tebex.poll();
 	store.payments = [payment(1, { packages: [{ id: 11, name: 'Gold 30 j' }] })];
 	await tebex.poll();
 	assert.deepEqual(roleCalls(executor), [['addRole', MAIN, ALICE, ROLE_GOLD]]);
-	const temp = db.prepare('SELECT * FROM temp_roles WHERE user_id = ? AND removed_at IS NULL').get(ALICE);
+	const temp = await db.prepare('SELECT * FROM temp_roles WHERE user_id = ? AND removed_at IS NULL').get(ALICE);
 	assert.equal(temp.role_id, ROLE_GOLD);
 	assert.ok(temp.expires_at > Date.now() + 29 * 86_400_000);
 	// A second month adds up
 	store.payments = [payment(2, { packages: [{ id: 11, name: 'Gold 30 j' }] }), payment(1, { packages: [{ id: 11, name: 'Gold 30 j' }] })];
 	await tebex.poll();
-	const extended = db.prepare('SELECT * FROM temp_roles WHERE id = ?').get(temp.id);
+	const extended = await db.prepare('SELECT * FROM temp_roles WHERE id = ?').get(temp.id);
 	assert.ok(extended.expires_at > Date.now() + 59 * 86_400_000);
-	assert.equal(db.prepare('SELECT COUNT(*) AS n FROM temp_roles WHERE removed_at IS NULL').get().n, 1);
+	assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM temp_roles WHERE removed_at IS NULL').get()).n, 1);
 });
 
 test('refunding one of two cumulated temporary purchases only takes its days off', async () => {
 	const { tebex, owner, store, executor, db } = await setup();
-	tebex.setConfig(owner, { mappings: [{ packageId: '11', guildId: MAIN, roleId: ROLE_GOLD, days: 30 }] });
+	await tebex.setConfig(owner, { mappings: [{ packageId: '11', guildId: MAIN, roleId: ROLE_GOLD, days: 30 }] });
 	await tebex.poll();
 	const gold = id => payment(id, { packages: [{ id: 11, name: 'Gold 30 j' }] });
 	store.payments = [gold(2), gold(1)];
 	await tebex.poll();
-	const temp = db.prepare('SELECT * FROM temp_roles WHERE user_id = ? AND removed_at IS NULL').get(ALICE);
+	const temp = await db.prepare('SELECT * FROM temp_roles WHERE user_id = ? AND removed_at IS NULL').get(ALICE);
 	assert.ok(temp.expires_at > Date.now() + 59 * 86_400_000);
 
 	store.payments = [payment(2, { status: 'Refund', packages: [{ id: 11, name: 'Gold 30 j' }] }), gold(1)];
 	await tebex.poll();
-	const left = db.prepare('SELECT * FROM temp_roles WHERE id = ?').get(temp.id);
+	const left = await db.prepare('SELECT * FROM temp_roles WHERE id = ?').get(temp.id);
 	assert.equal(left.removed_at, null, 'the temporary role stays for the other purchase');
 	assert.ok(left.expires_at > Date.now() + 29 * 86_400_000 && left.expires_at < Date.now() + 31 * 86_400_000);
 	assert.equal(roleCalls(executor).filter(c => c[0] === 'removeRole').length, 0);
@@ -199,13 +199,13 @@ test('refunding one of two cumulated temporary purchases only takes its days off
 	// The last one refunded: nothing remains, the role goes
 	store.payments = [payment(2, { status: 'Refund', packages: [{ id: 11, name: 'Gold 30 j' }] }), payment(1, { status: 'Refund', packages: [{ id: 11, name: 'Gold 30 j' }] })];
 	await tebex.poll();
-	assert.notEqual(db.prepare('SELECT removed_at FROM temp_roles WHERE id = ?').get(temp.id).removed_at, null);
+	assert.notEqual((await db.prepare('SELECT removed_at FROM temp_roles WHERE id = ?').get(temp.id)).removed_at, null);
 	assert.deepEqual(roleCalls(executor).filter(c => c[0] === 'removeRole'), [['removeRole', MAIN, ALICE, ROLE_GOLD]]);
 });
 
 test('a refund or chargeback takes the roles back, unless another purchase still gives them', async () => {
 	const { tebex, owner, store, executor, logged } = await setup();
-	tebex.setConfig(owner, { mappings: [{ packageId: '10', guildId: MAIN, roleId: ROLE_VIP }] });
+	await tebex.setConfig(owner, { mappings: [{ packageId: '10', guildId: MAIN, roleId: ROLE_VIP }] });
 	await tebex.poll();
 	store.payments = [payment(2), payment(1)];
 	await tebex.poll();
@@ -222,7 +222,7 @@ test('a refund or chargeback takes the roles back, unless another purchase still
 	await tebex.poll();
 	assert.deepEqual(roleCalls(executor).filter(c => c[0] === 'removeRole'), [['removeRole', MAIN, ALICE, ROLE_VIP]]);
 	assert.equal(logged.at(-1).message.title, 'Paiement contesté (chargeback)');
-	assert.equal(tebex.view(owner).stats.revoked, 2);
+	assert.equal((await tebex.view(owner)).stats.revoked, 2);
 	// Nothing more on the next poll
 	await tebex.poll();
 	assert.equal(roleCalls(executor).filter(c => c[0] === 'removeRole').length, 1);
@@ -231,7 +231,7 @@ test('a refund or chargeback takes the roles back, unless another purchase still
 
 test('the thank-you message fills member and purchase variables', async () => {
 	const { tebex, owner, store, executor } = await setup();
-	tebex.setConfig(owner, { thanks: { enabled: true, guildId: MAIN, channelId: CHANNEL, template: 'Merci {user} ({achat.joueur}) pour {achat.articles} - {achat.montant}' } });
+	await tebex.setConfig(owner, { thanks: { enabled: true, guildId: MAIN, channelId: CHANNEL, template: 'Merci {user} ({achat.joueur}) pour {achat.articles} - {achat.montant}' } });
 	await tebex.poll();
 	store.payments = [payment(1)];
 	await tebex.poll();
@@ -241,17 +241,17 @@ test('the thank-you message fills member and purchase variables', async () => {
 	assert.deepEqual(executor.messages[0].mentionUserIds, [ALICE]);
 	// FiveM account data in a public message needs the right to see it
 	const manager = { id: BOB, can: p => p === 'tebex.manage' };
-	assert.throws(() => tebex.setConfig(manager, { thanks: { enabled: true, guildId: MAIN, channelId: CHANNEL, template: 'Merci {fivem.license}' } }), ForbiddenError);
+	await assert.rejects(async () => tebex.setConfig(manager, { thanks: { enabled: true, guildId: MAIN, channelId: CHANNEL, template: 'Merci {fivem.license}' } }), ForbiddenError);
 });
 
 test('a refused key is reported and kept as the last error', async () => {
 	const { tebex, owner, store } = await setup();
 	store.status = 403;
 	await assert.rejects(tebex.poll(), /Clé secrète refusée/);
-	assert.match(tebex.view(owner).state.lastError, /Clé secrète refusée/);
+	assert.match((await tebex.view(owner)).state.lastError, /Clé secrète refusée/);
 	store.status = null;
 	await tebex.poll();
-	assert.equal(tebex.view(owner).state.lastError, null);
+	assert.equal((await tebex.view(owner)).state.lastError, null);
 });
 
 test('packages come from Tebex and from the payments already seen', async () => {

@@ -9,10 +9,10 @@ const OTHER_ROLE = '810000000000000001';
 async function setup() {
 	const ctx = await withNetwork();
 	const { core, owner, executor } = ctx;
-	core.network.activate(owner, OTHER);
+	await core.network.activate(owner, OTHER);
 	executor.roles.set(OTHER, [{ id: OTHER_ROLE, name: 'Modo', editable: true }]);
-	const modo = core.ranks.create(owner, { name: 'Modo', level: 40, permissions: [] });
-	core.ranks.setRoleLinks(owner, modo.id, [MAIN_ROLE]);
+	const modo = await core.ranks.create(owner, { name: 'Modo', level: 40, permissions: [] });
+	await core.ranks.setRoleLinks(owner, modo.id, [MAIN_ROLE]);
 	await core.staffSync.setLinks(owner, modo.id, OTHER, [OTHER_ROLE]);
 	executor.rolePermissions.set(`${MAIN}:${MAIN_ROLE}`, { name: 'Modo', permissions: ['ViewChannel', 'KickMembers'], editable: true });
 	executor.rolePermissions.set(`${OTHER}:${OTHER_ROLE}`, { name: 'Modo', permissions: ['ViewChannel', 'BanMembers'], editable: true });
@@ -22,7 +22,7 @@ async function setup() {
 
 test('preview shows what each linked role is missing or has in excess', async () => {
 	const { core, owner, modo } = await setup();
-	core.permissionSync.setProfile(owner, modo.id, ['ViewChannel', 'KickMembers', 'ModerateMembers']);
+	await core.permissionSync.setProfile(owner, modo.id, ['ViewChannel', 'KickMembers', 'ModerateMembers']);
 	const rows = await core.permissionSync.preview();
 	const main = rows.find(r => r.guildId === MAIN);
 	const other = rows.find(r => r.guildId === OTHER);
@@ -34,7 +34,7 @@ test('preview shows what each linked role is missing or has in excess', async ()
 
 test('apply sets the profile on every differing role, one failure does not stop the others', async () => {
 	const { core, owner, modo, executor } = await setup();
-	core.permissionSync.setProfile(owner, modo.id, ['ViewChannel', 'KickMembers']);
+	await core.permissionSync.setProfile(owner, modo.id, ['ViewChannel', 'KickMembers']);
 	executor.failOn.add(OTHER);
 	const result = await core.permissionSync.apply(owner);
 	assert.equal(result.applied, 0, 'main role already matches');
@@ -49,20 +49,20 @@ test('apply sets the profile on every differing role, one failure does not stop 
 
 test('only the owner can give Administrator; unknown permissions are refused', async () => {
 	const { core, owner, modo } = await setup();
-	const admin = core.ranks.create(owner, { name: 'Admin', level: 80, permissions: ['permsync.manage'] });
+	const admin = await core.ranks.create(owner, { name: 'Admin', level: 80, permissions: ['permsync.manage'] });
 	await core.ranks.assignDirect(owner, ALICE, admin.id);
 	const alice = await core.ranks.resolve(ALICE);
-	assert.throws(() => core.permissionSync.setProfile(alice, modo.id, ['Administrator']), ForbiddenError);
-	assert.throws(() => core.permissionSync.setProfile(alice, modo.id, ['BanMembers']), ForbiddenError);
-	assert.throws(() => core.permissionSync.setProfile(alice, modo.id, ['FlyAway']), ValidationError);
-	core.permissionSync.setProfile(alice, modo.id, ['ViewChannel']);
-	assert.throws(() => core.permissionSync.setProfile(alice, admin.id, ['ViewChannel']), ForbiddenError, 'own level');
+	await assert.rejects(async () => core.permissionSync.setProfile(alice, modo.id, ['Administrator']), ForbiddenError);
+	await assert.rejects(async () => core.permissionSync.setProfile(alice, modo.id, ['BanMembers']), ForbiddenError);
+	await assert.rejects(async () => core.permissionSync.setProfile(alice, modo.id, ['FlyAway']), ValidationError);
+	await core.permissionSync.setProfile(alice, modo.id, ['ViewChannel']);
+	await assert.rejects(async () => core.permissionSync.setProfile(alice, admin.id, ['ViewChannel']), ForbiddenError, 'own level');
 });
 
 test('drift is reported once until it changes', async () => {
 	const { core, owner, modo } = await setup();
-	core.permissionSync.setProfile(owner, modo.id, ['ViewChannel', 'KickMembers']);
+	await core.permissionSync.setProfile(owner, modo.id, ['ViewChannel', 'KickMembers']);
 	assert.equal((await core.permissionSync.checkDrift()).length, 1);
 	await core.permissionSync.checkDrift();
-	assert.equal(core.audit.query({ action: 'permissions.drift' }).length, 1);
+	assert.equal((await core.audit.query({ action: 'permissions.drift' })).length, 1);
 });

@@ -28,7 +28,7 @@ export function embedModal(customId, embed = {}, content = '') {
 
 export async function autocomplete(interaction) {
 	const typed = interaction.options.getFocused().toLowerCase();
-	const list = interaction.client.core.embedBuilder.list().filter(m => m.guildId === interaction.guildId && m.name.toLowerCase().includes(typed)).slice(0, 25);
+	const list = (await interaction.client.core.embedBuilder.list()).filter(m => m.guildId === interaction.guildId && m.name.toLowerCase().includes(typed)).slice(0, 25);
 	await interaction.respond(list.map(m => ({ name: m.name.slice(0, 100), value: String(m.id) })));
 }
 
@@ -36,7 +36,7 @@ export async function execute(interaction) {
 	const { embedBuilder } = interaction.client.core;
 	try {
 		if (interaction.options.getSubcommand() === 'creer') return await interaction.showModal(embedModal('emb:create'));
-		const message = embedBuilder.get(Number(interaction.options.getString('message')));
+		const message = await embedBuilder.get(Number(interaction.options.getString('message')));
 		return await interaction.showModal(embedModal(`emb:edit:${message.id}`, message.payload.embeds[0], message.payload.content));
 	}
 	catch (error) {

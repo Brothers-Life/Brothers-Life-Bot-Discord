@@ -53,7 +53,7 @@ export function createVerification({ db, network, audit, settings, executor, log
 		kicked: 'Expulsé faute de vérification',
 	});
 	const q = {
-		add: db.prepare('INSERT OR REPLACE INTO verification_pending (guild_id, user_id, joined_at) VALUES (?, ?, ?)'),
+		add: db.prepare('REPLACE INTO verification_pending (guild_id, user_id, joined_at) VALUES (?, ?, ?)'),
 		get: db.prepare('SELECT * FROM verification_pending WHERE guild_id = ? AND user_id = ?'),
 		done: db.prepare('DELETE FROM verification_pending WHERE guild_id = ? AND user_id = ?'),
 		attempt: db.prepare('UPDATE verification_pending SET attempts = attempts + 1 WHERE guild_id = ? AND user_id = ?'),
@@ -66,75 +66,82 @@ export function createVerification({ db, network, audit, settings, executor, log
 	const locks = new Map();
 
 	const all = () => settings.get('verification.config', {});
-	function config(guildId) {
-		return normalizeVerification(all()[guildId] ?? {});
+	// The configs of every server live in one setting: changes are queued so two saves do not overwrite each other
+	let configWrite = Promise.resolve();
+	function updateAll(change) {
+		const run = configWrite.then(async () => settings.set('verification.config', change(await all())));
+		configWrite = run.catch(() => undefined);
+		return run;
+	}
+	async function config(guildId) {
+		return normalizeVerification((await all())[guildId] ?? {});
 	}
 
-	function log(guildId, type, title, description, color = 'info') {
-		logs.log(guildId, 'verification', { title, description, color }, type);
+	async function log(guildId, type, title, description, color = 'info') {
+		await logs.log(guildId, 'verification', { title, description, color }, type);
 	}
 
 	async function grant(guildId, userId) {
-		const cfg = config(guildId);
+		const cfg = await config(guildId);
 		if (cfg.verifiedRoleId) await executor.addRole(guildId, userId, cfg.verifiedRoleId, 'Vérification réussie');
 		if (cfg.unverifiedRoleId) await executor.removeRole(guildId, userId, cfg.unverifiedRoleId, 'Vérification réussie').catch(() => undefined);
-		q.done.run(guildId, userId);
+		await q.done.run(guildId, userId);
 		codes.delete(`${guildId}:${userId}`);
 		locks.delete(`${guildId}:${userId}`);
-		log(guildId, 'passed', 'Vérification réussie', `<@${userId}>`, 'success');
+		await log(guildId, 'passed', 'Vérification réussie', `<@${userId}>`, 'success');
 		await onboarding?.verified(guildId, userId);
 	}
 
 	const service = {
 		config,
 		// Whether newcomers of this server must verify before getting access (and the automatic roles)
-		active: guildId => config(guildId).enabled && network.find(guildId)?.status === 'active',
-		pending: guildId => q.count.get(guildId).n,
+		active: async guildId => (await config(guildId)).enabled && (await network.find(guildId))?.status === 'active',
+		pending: async guildId => (await q.count.get(guildId)).n,
 
-		setConfig(actor, guildId, input) {
+		async setConfig(actor, guildId, input) {
 			if (!actor.can('verification.manage')) throw new ForbiddenError('Permission manquante : verification.manage');
-			if (network.find(guildId)?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
-			const previous = config(guildId);
+			if ((await network.find(guildId))?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
+			const previous = await config(guildId);
 			const cfg = { ...normalizeVerification(input), messageId: previous.messageId };
 			if (cfg.enabled && !cfg.verifiedRoleId && !cfg.unverifiedRoleId) throw new ValidationError('Choisis le rôle donné une fois vérifié, ou le rôle « non vérifié » retiré ensuite.');
-			settings.set('verification.config', { ...all(), [guildId]: cfg });
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'verification.config', guildId });
+			await updateAll(current => ({ ...current, [guildId]: cfg }));
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'verification.config', guildId });
 			return cfg;
 		},
 
 		// The message with the button, in the verification channel (edited in place when it exists)
 		async publish(actor, guildId) {
 			if (!actor.can('verification.manage')) throw new ForbiddenError('Permission manquante : verification.manage');
-			if (network.find(guildId)?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
-			const cfg = config(guildId);
+			if ((await network.find(guildId))?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
+			const cfg = await config(guildId);
 			if (!cfg.channelId) throw new ValidationError('Choisis d’abord le salon de vérification.');
 			const messageId = await executor.publishVerificationPanel(cfg.channelId, cfg.messageId, cfg);
-			settings.set('verification.config', { ...all(), [guildId]: { ...cfg, messageId } });
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'verification.publish', guildId });
+			await updateAll(current => ({ ...current, [guildId]: { ...cfg, messageId } }));
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'verification.publish', guildId });
 			return { messageId };
 		},
 
 		// A newcomer: the "not verified" role right away, and a deadline when the server kicks the slow ones
 		async memberJoined(guildId, userId, { bot = false } = {}) {
-			const cfg = config(guildId);
-			if (!cfg.enabled || bot || network.find(guildId)?.status !== 'active') return;
-			q.add.run(guildId, userId, now());
+			const cfg = await config(guildId);
+			if (!cfg.enabled || bot || (await network.find(guildId))?.status !== 'active') return;
+			await q.add.run(guildId, userId, now());
 			if (cfg.unverifiedRoleId) await executor.addRole(guildId, userId, cfg.unverifiedRoleId, 'Arrivée : vérification à faire').catch(error => logger.warn('Unverified role failed:', error.message));
 		},
 
-		memberLeft(guildId, userId) {
-			q.done.run(guildId, userId);
+		async memberLeft(guildId, userId) {
+			await q.done.run(guildId, userId);
 			codes.delete(`${guildId}:${userId}`);
 		},
 
 		// Click on the button: verified at once, or a captcha code to type ({ code } to draw)
 		async start(guildId, userId, { accountCreatedAt = null } = {}) {
-			const cfg = config(guildId);
+			const cfg = await config(guildId);
 			if (!cfg.enabled) throw new ValidationError('La vérification n’est pas active sur ce serveur.');
 			if (cfg.minAccountAgeDays && accountCreatedAt && now() - accountCreatedAt < cfg.minAccountAgeDays * DAY) {
 				// Not their fault: never kicked for being too slow to verify (the account age is the only reason)
-				q.done.run(guildId, userId);
-				log(guildId, 'refused', 'Compte trop récent', `<@${userId}> : compte créé <t:${Math.round(accountCreatedAt / 1000)}:R>`, 'warning');
+				await q.done.run(guildId, userId);
+				await log(guildId, 'refused', 'Compte trop récent', `<@${userId}> : compte créé <t:${Math.round(accountCreatedAt / 1000)}:R>`, 'warning');
 				const from = Math.round((accountCreatedAt + cfg.minAccountAgeDays * DAY) / 1000);
 				throw new ValidationError(`Ton compte Discord doit avoir au moins ${cfg.minAccountAgeDays} jour${cfg.minAccountAgeDays > 1 ? 's' : ''} pour accéder au serveur. Tu n’es pas expulsé : reviens cliquer sur ce bouton à partir du <t:${from}:f>.`);
 			}
@@ -161,28 +168,29 @@ export function createVerification({ db, network, audit, settings, executor, log
 				await grant(guildId, userId);
 				return { verified: true };
 			}
-			pending.attempts += 1;
-			q.attempt.run(guildId, userId);
-			log(guildId, 'failed', 'Captcha raté', `<@${userId}> (essai ${pending.attempts}/${MAX_ATTEMPTS})`, 'warning');
-			if (pending.attempts >= MAX_ATTEMPTS) {
+			const attempts = ++pending.attempts;
+			await q.attempt.run(guildId, userId);
+			await log(guildId, 'failed', 'Captcha raté', `<@${userId}> (essai ${attempts}/${MAX_ATTEMPTS})`, 'warning');
+			if (attempts >= MAX_ATTEMPTS) {
 				codes.delete(key);
 				locks.set(key, now() + LOCK_MS);
 				throw new ValidationError(`Code faux ${MAX_ATTEMPTS} fois : attends ${LOCK_MS / 60_000} minutes avant de redemander un code.`);
 			}
-			throw new ValidationError(`Code faux, il te reste ${MAX_ATTEMPTS - pending.attempts} essai${MAX_ATTEMPTS - pending.attempts > 1 ? 's' : ''}.`);
+			throw new ValidationError(`Code faux, il te reste ${MAX_ATTEMPTS - attempts} essai${MAX_ATTEMPTS - attempts > 1 ? 's' : ''}.`);
 		},
 
 		// Every minute: newcomers still not verified after the delay are kicked (when the server wants it)
 		async tick() {
-			for (const guildId of network.activeIds()) {
-				const cfg = config(guildId);
+			for (const guildId of await network.activeIds()) {
+				const cfg = await config(guildId);
 				if (!cfg.enabled || !cfg.kickAfterMinutes) continue;
-				for (const row of q.overdue.all(guildId, now() - cfg.kickAfterMinutes * 60_000)) {
-					q.done.run(guildId, row.user_id);
+				for (const row of await q.overdue.all(guildId, now() - cfg.kickAfterMinutes * 60_000)) {
+					// Claimed by deleting it: verified meanwhile (or another tick) means nothing to do
+					if (!(await q.done.run(guildId, row.user_id)).changes) continue;
 					// An account too young could not have verified anyway: it stays, the button tells it when to come back
 					if (cfg.minAccountAgeDays && now() - createdAtOf(row.user_id) < cfg.minAccountAgeDays * DAY) continue;
 					const result = await executor.kick(guildId, row.user_id, 'Pas de vérification à temps').catch(error => logger.warn('Verification kick failed:', error.message));
-					if (result !== 'not_member') log(guildId, 'kicked', 'Expulsé faute de vérification', `<@${row.user_id}> (${cfg.kickAfterMinutes} min)`, 'danger');
+					if (result !== 'not_member') await log(guildId, 'kicked', 'Expulsé faute de vérification', `<@${row.user_id}> (${cfg.kickAfterMinutes} min)`, 'danger');
 				}
 			}
 		},

@@ -90,7 +90,7 @@ test('flow: conditions with else branch, counters, ephemeral reply with buttons,
 	const click = recorder();
 	await customCommands.execute({ commandId: cmd.id, componentId: 'merci', trigger: 'component', guildId: MAIN, channelId: CHANNEL, user: user(ALICE), respond: click.respond });
 	assert.deepEqual(click.out.replies, [{ content: `Avec plaisir <@${ALICE}>`, embed: null, ephemeral: true, components: [] }]);
-	assert.equal(customCommands.get(cmd.id).uses, 3);
+	assert.equal((await customCommands.get(cmd.id)).uses, 3);
 });
 
 test('access: channels, refused roles, Discord permission, ranks or roles; cooldown; scope', async () => {
@@ -105,23 +105,23 @@ test('access: channels, refused roles, Discord permission, ranks or roles; coold
 	assert.equal((await run(user(BOB, [VIP]), '610000000000000099')).reason, 'Réservé aux VIP.');
 	assert.equal((await run(user(BOB, [VIP]))).ok, true);
 	assert.match((await run(user(BOB, [VIP]))).reason, /réessaie/, 'cooldown');
-	core.network.activate(owner, OTHER);
+	await core.network.activate(owner, OTHER);
 	assert.equal((await run(user(ALICE, [VIP]), CHANNEL, OTHER)).denied, true, 'not on this server');
-	assert.deepEqual(customCommands.guildCommands(OTHER), []);
-	assert.equal(customCommands.guildCommands(MAIN).length, 1);
-	assert.ok(customCommands.runs(cmd.id).some(r => r.detail?.startsWith('Refusé')));
+	assert.deepEqual(await customCommands.guildCommands(OTHER), []);
+	assert.equal((await customCommands.guildCommands(MAIN)).length, 1);
+	assert.ok((await customCommands.runs(cmd.id)).some(r => r.detail?.startsWith('Refusé')));
 });
 
 test('keywords, sensitive blocks need their own permission, sanctions run with the user’s rights', async () => {
 	const { core, customCommands, owner } = await setup();
 	const kw = await customCommands.save(owner, { name: 'regles', trigger: { type: 'keyword', keyword: { mode: 'startsWith', patterns: ['!regles'] } }, flow: [{ type: 'react', emoji: '📜' }, { type: 'reply', content: 'Voir #règlement' }, { type: 'deleteTrigger' }] });
-	assert.deepEqual(customCommands.matchKeywords(MAIN, CHANNEL, '!REGLES stp').map(c => c.id), [kw.id]);
-	assert.deepEqual(customCommands.matchKeywords(MAIN, CHANNEL, 'les !regles'), []);
+	assert.deepEqual((await customCommands.matchKeywords(MAIN, CHANNEL, '!REGLES stp')).map(c => c.id), [kw.id]);
+	assert.deepEqual(await customCommands.matchKeywords(MAIN, CHANNEL, 'les !regles'), []);
 	const r = recorder();
 	await customCommands.execute({ commandId: kw.id, trigger: 'keyword', guildId: MAIN, channelId: CHANNEL, user: user(BOB), respond: r.respond });
 	assert.deepEqual([r.out.reactions, r.out.deleted], [['📜'], 1]);
 
-	const editor = core.ranks.create(owner, { name: 'Créateur', level: 30, permissions: ['panel.access', 'customcommands.manage'] });
+	const editor = await core.ranks.create(owner, { name: 'Créateur', level: 30, permissions: ['panel.access', 'customcommands.manage'] });
 	await core.ranks.assignDirect(owner, ALICE, editor.id);
 	const alice = await core.ranks.resolve(ALICE);
 	const warnFlow = { name: 'avertir', description: 'x', options: [{ name: 'membre', type: 'user', required: true }], flow: [{ type: 'sanction', kind: 'warn', target: 'option:membre', reason: 'Via /avertir' }] };

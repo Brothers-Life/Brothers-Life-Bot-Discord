@@ -36,6 +36,13 @@ export function parseConfig(vars) {
 		GITHUB_REPO: str('GITHUB_REPO'),
 		GITHUB_TOKEN: str('GITHUB_TOKEN'),
 		USE_TRANSLATION_CACHE: str('USE_TRANSLATION_CACHE') !== 'false',
+		// MariaDB: DATABASE_URL (mysql://user:password@host:3306/database) or the DB_* variables
+		DATABASE_URL: str('DATABASE_URL'),
+		DB_HOST: str('DB_HOST'),
+		DB_PORT: str('DB_PORT'),
+		DB_USER: str('DB_USER'),
+		DB_PASSWORD: vars.DB_PASSWORD ?? '',
+		DB_NAME: str('DB_NAME'),
 	};
 
 	if (!SNOWFLAKE.test(config.OWNER_ID)) problems.push('OWNER_ID must be a single Discord user ID (17 to 20 digits)');
@@ -63,12 +70,33 @@ export function parseConfig(vars) {
 	if (config.WEB_MODE === 'https-custom' && (!config.TLS_CERT || !config.TLS_KEY)) {
 		problems.push('TLS_CERT and TLS_KEY are required when WEB_MODE is https-custom');
 	}
+	if (config.DATABASE_URL) {
+		let url = null;
+		try {
+			url = new URL(config.DATABASE_URL);
+		}
+		catch {
+			// reported below
+		}
+		if (!url || !['mysql:', 'mariadb:'].includes(url.protocol) || !url.hostname || url.pathname.length < 2) {
+			problems.push('DATABASE_URL must look like mysql://user:password@host:3306/database');
+		}
+	}
+	if (config.DB_PORT && !(Number.isInteger(Number(config.DB_PORT)) && Number(config.DB_PORT) >= 1 && Number(config.DB_PORT) <= 65535)) {
+		problems.push('DB_PORT must be a port number');
+	}
 	if (config.GITHUB_REPO && !/^[\w.-]+\/[\w.-]+$/.test(config.GITHUB_REPO)) {
 		problems.push('GITHUB_REPO must look like owner/repo');
 	}
 
 	if (problems.length) throw new ConfigError(problems);
 	return config;
+}
+
+// The database settings that are missing (empty when DATABASE_URL or every DB_* variable is set)
+export function missingDatabaseConfig(config) {
+	if (config.DATABASE_URL) return [];
+	return ['DB_HOST', 'DB_USER', 'DB_NAME'].filter(key => !config[key]);
 }
 
 // Launcher sets BOT_ROOT so that every installed version shares the same .env and data/

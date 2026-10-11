@@ -65,7 +65,7 @@ test('panel images become attachments, variables are filled, send options and au
 	assert.equal(sent.options.pin, true);
 	assert.deepEqual(sent.options.reactions, ['🎉']);
 
-	const { messageId } = announcements.get(a.id).results[0];
+	const { messageId } = (await announcements.get(a.id)).results[0];
 	await announcements.sendDue();
 	assert.equal(executor.deleted.length, 0, 'not yet');
 	advance(3 * 3_600_000);
@@ -78,12 +78,12 @@ test('recurring announcement: sent, planned again, stops after N sends; calendar
 	const a = await announcements.create(owner, { name: 'Rappel', targets: [target], payload: { content: 'Pensez à voter !' } });
 	const scheduled = await announcements.schedule(owner, a.id, null, { type: 'daily', time: '20:00', maxRuns: 2 });
 	assert.equal(zonedParts(scheduled.scheduledAt, 'Europe/Paris').hour, 20);
-	const cal = announcements.calendar(at(), at() + 7 * 86_400_000);
+	const cal = await announcements.calendar(at(), at() + 7 * 86_400_000);
 	assert.equal(cal.length, 2);
 
 	advance(scheduled.scheduledAt - at() + 1000);
 	await announcements.sendDue();
-	const again = announcements.get(a.id);
+	const again = await announcements.get(a.id);
 	assert.equal(again.status, 'scheduled');
 	assert.equal(again.runCount, 1);
 	assert.equal(again.scheduledAt - scheduled.scheduledAt, 25 * 3_600_000, 'the clocks go back that night');
@@ -91,7 +91,7 @@ test('recurring announcement: sent, planned again, stops after N sends; calendar
 
 	advance(25 * 3_600_000);
 	await announcements.sendDue();
-	const done = announcements.get(a.id);
+	const done = await announcements.get(a.id);
 	assert.equal(done.status, 'sent');
 	assert.equal(done.runCount, 2);
 	assert.equal(done.history.length, 2);
@@ -100,8 +100,8 @@ test('recurring announcement: sent, planned again, stops after N sends; calendar
 
 test('templates: saved, listed, deleted', async () => {
 	const { owner, announcements } = await setup();
-	const t = announcements.saveTemplate(owner, { name: 'Maintenance', payload: { embed: { title: 'Maintenance ce soir' } }, options: { pin: true } });
-	assert.equal(announcements.templates()[0].options.pin, true);
-	announcements.deleteTemplate(owner, t.id);
-	assert.equal(announcements.templates().length, 0);
+	const t = await announcements.saveTemplate(owner, { name: 'Maintenance', payload: { embed: { title: 'Maintenance ce soir' } }, options: { pin: true } });
+	assert.equal((await announcements.templates())[0].options.pin, true);
+	await announcements.deleteTemplate(owner, t.id);
+	assert.equal((await announcements.templates()).length, 0);
 });

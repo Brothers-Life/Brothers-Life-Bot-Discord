@@ -46,7 +46,7 @@ test('log embeds: a deleted message carries its author, the deleted picture and 
 	const guild = { id: MAIN, client: { core } };
 	const user = { id: ALICE, username: 'alice', globalName: 'Alice', displayAvatarURL: () => 'https://cdn.example/alice.png' };
 	core.events.record = event => posted.push(event.message);
-	messageDeleted({
+	await messageDeleted({
 		guild, author: user, partial: false, content: 'regarde', id: '42', channelId: '1', channel: { name: 'general' }, createdTimestamp: Date.now() - 60_000,
 		attachments: new Collection([['a', { name: 'chat.png', url: 'https://cdn.example/chat.png', proxyURL: 'https://media.example/chat.png', size: 2048, contentType: 'image/png' }]]),
 		reference: { messageId: '41', channelId: '1' },

@@ -43,12 +43,12 @@ function normalizeConfig(kind, input = {}) {
 // the decisions are taken here, the executor reacts, deletes, sends or publishes.
 export function createChannelFeatures({ db, network, audit, executor, logger = console, now = Date.now }) {
 	const q = {
-		all: db.prepare('SELECT * FROM channel_features'),
+		all: db.prepare('SELECT * FROM channel_features ORDER BY created_at, channel_id, kind'),
 		byGuild: db.prepare('SELECT * FROM channel_features WHERE guild_id = ? ORDER BY kind, channel_id'),
 		get: db.prepare('SELECT * FROM channel_features WHERE channel_id = ? AND kind = ?'),
 		upsert: db.prepare(`
 			INSERT INTO channel_features (channel_id, guild_id, kind, config, state, created_at, updated_at) VALUES (@channelId, @guildId, @kind, @config, '{}', @at, @at)
-			ON CONFLICT (channel_id, kind) DO UPDATE SET config = excluded.config, updated_at = excluded.updated_at
+			ON DUPLICATE KEY UPDATE config = VALUES(config), updated_at = VALUES(updated_at)
 		`),
 		state: db.prepare('UPDATE channel_features SET state = ? WHERE channel_id = ? AND kind = ?'),
 		remove: db.prepare('DELETE FROM channel_features WHERE channel_id = ? AND kind = ?'),
@@ -56,17 +56,36 @@ export function createChannelFeatures({ db, network, audit, executor, logger = c
 	const toFeature = row => row && ({ channelId: row.channel_id, guildId: row.guild_id, kind: row.kind, config: JSON.parse(row.config), state: JSON.parse(row.state), updatedAt: row.updated_at });
 
 	// channelId -> features, kept in memory: every message of the network goes through here
+	// (the promise of the loading map, so that messages arriving while it loads all wait for the same one)
 	let cache = null;
-	function features(channelId) {
+	function load() {
 		if (!cache) {
-			cache = new Map();
-			for (const f of q.all.all().map(toFeature)) cache.set(f.channelId, [...(cache.get(f.channelId) ?? []), f]);
+			const loading = q.all.all().then((rows) => {
+				const map = new Map();
+				for (const f of rows.map(toFeature)) map.set(f.channelId, [...(map.get(f.channelId) ?? []), f]);
+				return map;
+			});
+			cache = loading;
+			loading.catch(() => { if (cache === loading) cache = null; });
 		}
-		return cache.get(channelId) ?? [];
+		return cache;
+	}
+	async function features(channelId) {
+		return (await load()).get(channelId) ?? [];
 	}
 	const reload = () => { cache = null; };
+	// The state lives in memory (changed synchronously for each message, so counting stays right when messages
+	// are handled at the same time); writes of one feature are queued so they reach the database in order,
+	// each one writing the latest state.
+	const writes = new Map();
 	function save(feature) {
-		q.state.run(JSON.stringify(feature.state), feature.channelId, feature.kind);
+		const key = `${feature.channelId}:${feature.kind}`;
+		const write = (writes.get(key) ?? Promise.resolve())
+			.catch(() => undefined)
+			.then(() => q.state.run(JSON.stringify(feature.state), feature.channelId, feature.kind));
+		writes.set(key, write);
+		write.finally(() => { if (writes.get(key) === write) writes.delete(key); }).catch(() => undefined);
+		return write;
 	}
 
 	const notice = (channelId, text) => executor.sendTemporary(channelId, text, NOTICE_MS).catch(() => undefined);
@@ -76,7 +95,7 @@ export function createChannelFeatures({ db, network, audit, executor, logger = c
 	async function postSticky(feature) {
 		const previous = feature.state.messageId;
 		feature.state.messageId = await executor.sendMessage(feature.channelId, { payload: feature.config.payload, files: [], mentionUserIds: [] });
-		save(feature);
+		await save(feature);
 		if (previous) await executor.deleteMessage(feature.channelId, previous).catch(() => undefined);
 	}
 
@@ -92,7 +111,7 @@ export function createChannelFeatures({ db, network, audit, executor, logger = c
 			const twice = !f.config.allowTwice && f.state.lastUserId === m.authorId;
 			if (value === expected && !twice) {
 				Object.assign(f.state, { count: value, lastUserId: m.authorId, lastMessageId: m.messageId, best: Math.max(f.state.best ?? 0, value) });
-				save(f);
+				await save(f);
 				await executor.react(m.channelId, m.messageId, value % 100 === 0 ? '💯' : '✅').catch(() => undefined);
 				return;
 			}
@@ -103,7 +122,7 @@ export function createChannelFeatures({ db, network, audit, executor, logger = c
 			}
 			const reached = f.state.count ?? 0;
 			Object.assign(f.state, { count: 0, lastUserId: null, lastMessageId: null, fails: (f.state.fails ?? 0) + 1 });
-			save(f);
+			await save(f);
 			await executor.react(m.channelId, m.messageId, '❌').catch(() => undefined);
 			await executor.sendMessage(m.channelId, {
 				payload: { content: `💥 <@${m.authorId}> a cassé la série à **${reached}** ${twice ? '(deux fois de suite)' : `(il fallait **${expected}**)`}. Record : **${f.state.best ?? 0}**. On repart de **1** !`, embed: { enabled: false } },
@@ -124,7 +143,7 @@ export function createChannelFeatures({ db, network, audit, executor, logger = c
 			if (SENTENCE_END.test(word) && words.length >= f.config.minWords) {
 				const sentences = (f.state.sentences ?? 0) + 1;
 				Object.assign(f.state, { words: [], authors: [], lastUserId: null, sentences });
-				save(f);
+				await save(f);
 				const text = words.join(' ');
 				await executor.sendMessage(m.channelId, {
 					payload: { content: '', embed: { enabled: true, title: `📜 Phrase n°${sentences}`, description: `« ${text.charAt(0).toUpperCase()}${text.slice(1)} »`.slice(0, 4000), color: '#ff9628', footerText: `${words.length} mots · ${authors.length} participant${authors.length > 1 ? 's' : ''}`, fields: [] } },
@@ -133,7 +152,7 @@ export function createChannelFeatures({ db, network, audit, executor, logger = c
 				return;
 			}
 			Object.assign(f.state, { words, authors, lastUserId: m.authorId });
-			save(f);
+			await save(f);
 		},
 
 		// Brought back to the bottom a few seconds after the conversation calms down
@@ -142,8 +161,12 @@ export function createChannelFeatures({ db, network, audit, executor, logger = c
 			clearTimeout(stickyTimers.get(f.channelId));
 			const timer = setTimeout(() => {
 				stickyTimers.delete(f.channelId);
-				const current = features(f.channelId).find(x => x.kind === 'sticky');
-				if (current) postSticky(current).catch(error => logger.warn('Sticky message failed:', error.message));
+				features(f.channelId)
+					.then((list) => {
+						const current = list.find(x => x.kind === 'sticky');
+						if (current) return postSticky(current);
+					})
+					.catch(error => logger.warn('Sticky message failed:', error.message));
 			}, f.config.delaySeconds * 1000);
 			timer.unref?.();
 			stickyTimers.set(f.channelId, timer);
@@ -164,54 +187,54 @@ export function createChannelFeatures({ db, network, audit, executor, logger = c
 	const service = {
 		kinds: KINDS,
 
-		list(guildId) {
-			return q.byGuild.all(guildId).map(toFeature);
+		async list(guildId) {
+			return (await q.byGuild.all(guildId)).map(toFeature);
 		},
 
 		async set(actor, { guildId, channelId, kind, config = {} }) {
 			if (!actor.can('channelfeatures.manage')) throw new ForbiddenError('Permission manquante : channelfeatures.manage');
-			if (network.find(guildId)?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
+			if ((await network.find(guildId))?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
 			if (!SNOWFLAKE.test(channelId)) throw new ValidationError('Salon invalide.');
 			if (!KINDS[kind]) throw new ValidationError('Type de salon inconnu.');
 			const channel = (await executor.listTextChannels(guildId)).find(c => c.id === channelId);
 			if (!channel) throw new ValidationError('Ce salon n’existe pas sur ce serveur.');
 			if (kind === 'autopublish' && !channel.announcement) throw new ValidationError('La publication automatique ne marche que dans un salon d’annonces.');
-			const others = features(channelId).map(f => f.kind);
+			const others = (await features(channelId)).map(f => f.kind);
 			const games = ['counting', 'oneword', 'mediaonly'];
 			if (games.includes(kind) && others.some(k => games.includes(k) && k !== kind)) throw new ValidationError('Ce salon a déjà un autre jeu ou une autre règle (compteur, un mot, média).');
 			const normalized = normalizeConfig(kind, config);
-			q.upsert.run({ channelId, guildId, kind, config: JSON.stringify(normalized), at: now() });
+			await q.upsert.run({ channelId, guildId, kind, config: JSON.stringify(normalized), at: now() });
 			reload();
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'channelfeatures.set', guildId, target: channelId, details: { salon: `<#${channelId}>`, type: KINDS[kind] } });
-			const feature = features(channelId).find(f => f.kind === kind);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'channelfeatures.set', guildId, target: channelId, details: { salon: `<#${channelId}>`, type: KINDS[kind] } });
+			const feature = (await features(channelId)).find(f => f.kind === kind);
 			if (kind === 'sticky') await postSticky(feature).catch(error => { throw new ValidationError(`Message impossible à poster : ${error.message}`); });
 			return feature;
 		},
 
 		// Counting: start again from a number (after a mistake of the bot, a raid...)
-		setCount(actor, channelId, count) {
+		async setCount(actor, channelId, count) {
 			if (!actor.can('channelfeatures.manage')) throw new ForbiddenError('Permission manquante : channelfeatures.manage');
-			const f = features(channelId).find(x => x.kind === 'counting');
+			const f = (await features(channelId)).find(x => x.kind === 'counting');
 			if (!f) throw new NotFoundError('Pas de compteur dans ce salon.');
 			Object.assign(f.state, { count: Math.max(0, Math.round(count)), lastUserId: null });
-			save(f);
+			await save(f);
 			return f;
 		},
 
 		async remove(actor, channelId, kind) {
 			if (!actor.can('channelfeatures.manage')) throw new ForbiddenError('Permission manquante : channelfeatures.manage');
-			const row = toFeature(q.get.get(channelId, kind));
+			const row = toFeature(await q.get.get(channelId, kind));
 			if (!row) throw new NotFoundError('Ce salon n’a pas ce réglage.');
-			q.remove.run(channelId, kind);
+			await q.remove.run(channelId, kind);
 			reload();
 			clearTimeout(stickyTimers.get(channelId));
 			if (kind === 'sticky' && row.state.messageId) await executor.deleteMessage(channelId, row.state.messageId).catch(() => undefined);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'channelfeatures.remove', guildId: row.guildId, target: channelId, details: { salon: `<#${channelId}>`, type: KINDS[kind] } });
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'channelfeatures.remove', guildId: row.guildId, target: channelId, details: { salon: `<#${channelId}>`, type: KINDS[kind] } });
 		},
 
 		// m: { guildId, channelId, messageId, authorId, bot, self, content, attachments, mediaEmbeds, staff }
 		async onMessage(m) {
-			const list = features(m.channelId);
+			const list = await features(m.channelId);
 			if (!list.length || m.self) return;
 			for (const f of list) {
 				// Only publishing deals with bots; the games and rules are for people
@@ -227,10 +250,10 @@ export function createChannelFeatures({ db, network, audit, executor, logger = c
 
 		// A counted number deleted: everyone is told where the count is
 		async onDelete(channelId, messageId) {
-			const f = features(channelId).find(x => x.kind === 'counting');
+			const f = (await features(channelId)).find(x => x.kind === 'counting');
 			if (!f || f.state.lastMessageId !== messageId) return;
 			f.state.lastMessageId = null;
-			save(f);
+			await save(f);
 			await executor.sendMessage(channelId, { payload: { content: `⚠️ Le dernier nombre (**${f.state.count}**) a été supprimé. Le prochain est **${f.state.count + 1}**.`, embed: { enabled: false } }, files: [], mentionUserIds: [] }).catch(() => undefined);
 		},
 	};

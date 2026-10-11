@@ -11,7 +11,7 @@ export function registerSanctionRoutes(app, { core }) {
 
 	async function withNames(list) {
 		const names = await resolveNames(executor, list.flatMap(s => [s.userId, s.moderatorId, s.revokedBy]));
-		const profiles = new Map(restrictions.profiles().map(p => [p.key, p.label]));
+		const profiles = new Map((await restrictions.profiles()).map(p => [p.key, p.label]));
 		return list.map(s => ({
 			...s,
 			profileLabel: s.profile ? profiles.get(s.profile) ?? s.profile : null,
@@ -35,7 +35,7 @@ export function registerSanctionRoutes(app, { core }) {
 				},
 			},
 		},
-	}, async (request) => withNames(sanctions.list(request.query)));
+	}, async (request) => withNames(await sanctions.list(request.query)));
 
 	// Each type is checked by the sanctions service (sanctions.ban, sanctions.warn...)
 	app.post('/api/sanctions', {
@@ -82,7 +82,7 @@ export function registerSanctionRoutes(app, { core }) {
 	app.patch('/api/sanctions/:id', {
 		config: { permission: 'sanctions.edit' },
 		schema: { params: idParam, body: { type: 'object', required: ['reason'], properties: { reason: { type: 'string', maxLength: 500 } }, additionalProperties: false } },
-	}, async (request) => (await withNames([sanctions.setReason(request.actor, request.params.id, request.body.reason)]))[0]);
+	}, async (request) => (await withNames([await sanctions.setReason(request.actor, request.params.id, request.body.reason)]))[0]);
 
 	// --- Sanction templates ----------------------------------------------------------------------
 	app.get('/api/sanction-templates', { config: { permission: null } }, async () => core.sanctionTemplates.list());
@@ -114,7 +114,7 @@ export function registerSanctionRoutes(app, { core }) {
 	});
 
 	app.delete('/api/sanction-templates/:id', { config: { permission: 'sanctions.templates' }, schema: { params: idParam } }, async (request) => {
-		core.sanctionTemplates.remove(request.actor, request.params.id);
+		await core.sanctionTemplates.remove(request.actor, request.params.id);
 		return { ok: true };
 	});
 
@@ -125,7 +125,7 @@ export function registerSanctionRoutes(app, { core }) {
 
 	// --- Restriction profiles ("punishment roles") ---------------------------------------------
 	app.get('/api/restrictions', { config: { permission: 'sanctions.view' } }, async () => ({
-		profiles: restrictions.profiles(),
+		profiles: await restrictions.profiles(),
 		restrictable: RESTRICTABLE,
 	}));
 

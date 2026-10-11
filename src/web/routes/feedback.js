@@ -11,10 +11,10 @@ export function registerFeedbackRoutes(app, { core }) {
 	const handles = (actor, boxKind) => actor.can('feedback.manage') || (boxKind === 'staff' && actor.can('feedback.staff'));
 	async function withNames(actor, items) {
 		const kinds = new Map();
-		const kindOf = boxId => kinds.get(boxId) ?? kinds.set(boxId, feedback.getBox(boxId).kind).get(boxId);
+		for (const boxId of new Set(items.map(i => i.boxId))) kinds.set(boxId, (await feedback.getBox(boxId)).kind);
 		const names = await resolveNames(executor, items.flatMap(i => [i.authorId, i.assigneeId, i.approvedBy]));
 		return items.map((i) => {
-			const hidden = i.anonymous && !handles(actor, kindOf(i.boxId));
+			const hidden = i.anonymous && !handles(actor, kinds.get(i.boxId));
 			return {
 				...i,
 				authorId: hidden ? null : i.authorId,
@@ -30,16 +30,16 @@ export function registerFeedbackRoutes(app, { core }) {
 	// to other permissions must be stopped here, with the permissions of the request
 	async function requireHandler(request) {
 		const { actor } = request;
-		const item = feedback.get({ can: () => true }, request.params.id);
-		const box = feedback.getBox(item.boxId);
+		const item = await feedback.get({ can: () => true }, request.params.id);
+		const box = await feedback.getBox(item.boxId);
 		if (!actor.can('feedback.manage') && !(box.kind === 'staff' && actor.can('feedback.staff'))) throw new ForbiddenError('Réservé au staff.');
 	}
 
 	// Boxes the panel user may see, with the channels and roles of the server
 	app.get('/api/feedback/:guildId', { config: { permission: null }, schema: { params: guildParam } }, async (request) => {
 		const { guildId } = request.params;
-		if (!network.find(guildId)) throw new NotFoundError('Serveur introuvable.');
-		const boxes = feedback.boxes(guildId).filter(b => (b.kind === 'staff' ? request.actor.can('feedback.staff') : request.actor.can('feedback.view')));
+		if (!await network.find(guildId)) throw new NotFoundError('Serveur introuvable.');
+		const boxes = (await feedback.boxes(guildId)).filter(b => (b.kind === 'staff' ? request.actor.can('feedback.staff') : request.actor.can('feedback.view')));
 		const [channels, roles] = await Promise.all([executor.listTextChannels(guildId), executor.listRoles(guildId)]);
 		return { boxes, channels, roles, presets: Object.entries(feedback.presets).map(([key, p]) => ({ key, name: p.name, kind: p.kind })) };
 	});
@@ -49,11 +49,11 @@ export function registerFeedbackRoutes(app, { core }) {
 		schema: { params: guildParam, body: { type: 'object', properties: { preset: { type: 'string', enum: ['suggestions', 'bugs', 'staff'] }, name: { type: 'string', maxLength: 60 }, config: { type: 'object' } } } },
 	}, async (request, reply) => {
 		reply.code(201);
-		return feedback.createBox(request.actor, request.params.guildId, request.body);
+		return await feedback.createBox(request.actor, request.params.guildId, request.body);
 	});
 	app.put('/api/feedback/boxes/:id', { config: { permission: 'feedback.manage' }, schema: { params: idParam, body: { type: 'object' } } }, async (request) => feedback.updateBox(request.actor, request.params.id, request.body));
 	app.delete('/api/feedback/boxes/:id', { config: { permission: 'feedback.manage', confirm: true }, schema: { params: idParam } }, async (request) => {
-		feedback.deleteBox(request.actor, request.params.id);
+		await feedback.deleteBox(request.actor, request.params.id);
 		return { ok: true };
 	});
 	app.post('/api/feedback/boxes/:id/panel', { config: { permission: 'feedback.manage' }, schema: { params: idParam } }, async (request) => feedback.publishPanel(request.actor, request.params.id));
@@ -61,11 +61,11 @@ export function registerFeedbackRoutes(app, { core }) {
 	app.get('/api/feedback/boxes/:id/items', {
 		config: { permission: null },
 		schema: { params: idParam, querystring: { type: 'object', properties: { status: { type: 'string', maxLength: 20 }, sort: { type: 'string', enum: ['recent', 'score', 'urgency'] } } } },
-	}, async (request) => withNames(request.actor, feedback.list(request.actor, { boxId: request.params.id, ...request.query })));
+	}, async (request) => withNames(request.actor, await feedback.list(request.actor, { boxId: request.params.id, ...request.query })));
 
 	app.get('/api/feedback/boxes/:id/export', { config: { permission: null }, schema: { params: idParam } }, async (request, reply) => {
-		const box = feedback.getBox(request.params.id);
-		const items = await withNames(request.actor, feedback.list(request.actor, { boxId: box.id, limit: 500 }));
+		const box = await feedback.getBox(request.params.id);
+		const items = await withNames(request.actor, await feedback.list(request.actor, { boxId: box.id, limit: 500 }));
 		const rows = [['N°', 'Titre', 'Statut', 'Pour', 'Contre', 'Auteur', 'Urgence', 'Créé le'], ...items.map(i => [
 			i.number, i.title, box.config.statuses.find(s => s.key === i.status)?.label ?? i.status, i.up, i.down, i.author?.name ?? 'anonyme', i.urgency ?? '', new Date(i.createdAt).toLocaleString('fr-FR'),
 		])];
@@ -75,7 +75,7 @@ export function registerFeedbackRoutes(app, { core }) {
 
 	// Status history (who, when, why) and, for the people handling the box, who voted what
 	app.get('/api/feedback/items/:id/details', { config: { permission: null }, schema: { params: idParam } }, async (request) => {
-		const { history, voters } = feedback.details(request.actor, request.params.id);
+		const { history, voters } = await feedback.details(request.actor, request.params.id);
 		const names = await resolveNames(executor, [...history.map(h => h.by), ...(voters ?? []).map(v => v.userId)]);
 		return {
 			history: history.map(h => ({ status: h.status, at: h.at, reason: h.reason ?? null, by: h.by ? names.get(h.by) ?? { name: h.by, avatar: null } : null })),

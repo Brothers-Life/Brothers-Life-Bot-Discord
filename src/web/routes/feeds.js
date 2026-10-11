@@ -17,9 +17,9 @@ export function registerFeedRoutes(app, { core }) {
 	const { feeds } = core;
 
 	app.get('/api/feeds', { config: { permission: 'notifications.view' } }, async () => ({
-		subscriptions: feeds.list(),
-		history: feeds.history(100),
-		variables: feeds.variables(),
+		subscriptions: await feeds.list(),
+		history: await feeds.history(100),
+		variables: await feeds.variables(),
 	}));
 	app.post('/api/feeds/preview', {
 		config: { permission: 'notifications.manage' },

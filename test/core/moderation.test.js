@@ -10,13 +10,13 @@ const ROLE = '800000000000000005';
 async function setup() {
 	const ctx = await withNetwork();
 	const { core, owner, executor } = ctx;
-	core.network.activate(owner, OTHER);
+	await core.network.activate(owner, OTHER);
 	executor.roles.set(MAIN, [
 		{ id: ROLE, name: 'VIP', position: 3, editable: true, dangerous: false },
 		{ id: '800000000000000006', name: 'Admin', position: 9, editable: true, dangerous: true },
 	]);
 	executor.memberRoles.set(`${MAIN}:${MEMBER}`, []);
-	const modo = core.ranks.create(owner, { name: 'Modo', level: 30, permissions: ['commands.clear', 'commands.lock', 'commands.lockdown', 'commands.slowmode', 'commands.roles', 'commands.voice', 'sanctions.restrict', 'sanctions.revoke'] });
+	const modo = await core.ranks.create(owner, { name: 'Modo', level: 30, permissions: ['commands.clear', 'commands.lock', 'commands.lockdown', 'commands.slowmode', 'commands.roles', 'commands.voice', 'sanctions.restrict', 'sanctions.revoke'] });
 	await core.ranks.assignDirect(owner, ALICE, modo.id);
 	const alice = { ...(await core.ranks.resolve(ALICE)), source: 'bot' };
 	return { ...ctx, alice };
@@ -32,14 +32,14 @@ test('clear, lock, slowmode need their permission and are audited', async () => 
 	await core.moderation.slowmode(alice, { guildId: MAIN, channelId: '610000000000000001', seconds: 30 });
 	await assert.rejects(core.moderation.slowmode(alice, { guildId: MAIN, channelId: '1', seconds: 99999 }), ValidationError);
 	assert.deepEqual(executor.calls.map(c => c[0]).filter(c => ['purge', 'lock', 'slowmode'].includes(c)), ['purge', 'lock', 'slowmode']);
-	assert.equal(core.audit.query({ action: 'moderation.clear' }).length, 1);
+	assert.equal((await core.audit.query({ action: 'moderation.clear' })).length, 1);
 });
 
 test('lockdown remembers the locked channels and only reopens those', async () => {
 	const { core, executor, alice } = await setup();
 	assert.equal(await core.moderation.lockdown(alice, MAIN, true), 2);
 	await assert.rejects(core.moderation.lockdown(alice, MAIN, true), /déjà verrouillé/);
-	assert.equal(core.moderation.isLockedDown(MAIN), true);
+	assert.equal(await core.moderation.isLockedDown(MAIN), true);
 	assert.equal(await core.moderation.lockdown(alice, MAIN, false), 2);
 	assert.deepEqual(executor.calls.find(c => c[0] === 'unlockChannels')[1], ['610000000000000001', '610000000000000002']);
 	await assert.rejects(core.moderation.lockdown(alice, MAIN, false), /pas verrouillé/);
@@ -72,9 +72,9 @@ test('temporary roles: given, extended, then removed when due', async () => {
 	assert.equal(temp.expiresAt, clock + 3600_000);
 	// Giving it again for a duration moves the end, without a second row
 	await moderation.giveRole(alice, { guildId: MAIN, userId: MEMBER, roleId: ROLE, durationMs: 7200_000 });
-	assert.equal(moderation.listTempRoles({ userId: MEMBER }).length, 1);
+	assert.equal((await moderation.listTempRoles({ userId: MEMBER })).length, 1);
 	await moderation.extendTempRole(alice, temp.id, 3600_000);
-	assert.equal(moderation.listTempRoles({ userId: MEMBER })[0].expiresAt, clock + 3 * 3600_000);
+	assert.equal((await moderation.listTempRoles({ userId: MEMBER }))[0].expiresAt, clock + 3 * 3600_000);
 	await assert.rejects(moderation.giveRole(alice, { guildId: MAIN, userId: MEMBER, roleId: ROLE, durationMs: 1000 }), /entre 1 minute/);
 
 	clock += 2 * 3600_000;
@@ -82,8 +82,8 @@ test('temporary roles: given, extended, then removed when due', async () => {
 	clock += 2 * 3600_000;
 	assert.equal(await moderation.expireTempRoles(), 1);
 	assert.deepEqual(executor.memberRoles.get(`${MAIN}:${MEMBER}`), []);
-	assert.equal(moderation.listTempRoles({ userId: MEMBER }).length, 0);
-	assert.equal(core.audit.query({ action: 'temproles.expire' }).length, 1);
+	assert.equal((await moderation.listTempRoles({ userId: MEMBER })).length, 0);
+	assert.equal((await core.audit.query({ action: 'temproles.expire' })).length, 1);
 });
 
 test('restrictions: a role per profile and server, lifted on revoke, reapplied on join', async () => {
@@ -111,14 +111,14 @@ test('restrictions: a role per profile and server, lifted on revoke, reapplied o
 
 test('restriction profiles are validated; the reason of a sanction can be edited', async () => {
 	const { core, owner, alice } = await setup();
-	assert.throws(() => core.restrictions.saveProfiles(alice, []), ForbiddenError);
-	assert.throws(() => core.restrictions.saveProfiles(owner, [{ key: 'x', label: 'X', deny: ['Administrator'] }]), /n’interdit rien/);
-	const profiles = core.restrictions.saveProfiles(owner, [{ key: 'no_reactions', label: 'Pas de réactions', deny: ['AddReactions', 'Bogus'] }]);
+	await assert.rejects(async () => core.restrictions.saveProfiles(alice, []), ForbiddenError);
+	await assert.rejects(async () => core.restrictions.saveProfiles(owner, [{ key: 'x', label: 'X', deny: ['Administrator'] }]), /n’interdit rien/);
+	const profiles = await core.restrictions.saveProfiles(owner, [{ key: 'no_reactions', label: 'Pas de réactions', deny: ['AddReactions', 'Bogus'] }]);
 	assert.deepEqual(profiles.map(p => p.deny), [['AddReactions']]);
 
 	const warn = await core.sanctions.create(owner, { type: 'warn', userId: MEMBER, reason: 'Spamm', originGuildId: MAIN });
-	assert.throws(() => core.sanctions.setReason(alice, warn.id, 'Spam'), ForbiddenError);
-	assert.equal(core.sanctions.setReason(owner, warn.id, 'Spam').reason, 'Spam');
+	await assert.rejects(async () => core.sanctions.setReason(alice, warn.id, 'Spam'), ForbiddenError);
+	assert.equal((await core.sanctions.setReason(owner, warn.id, 'Spam')).reason, 'Spam');
 });
 
 test('temporary roles: overlapping ticks remove a due role only once', async () => {
@@ -132,7 +132,7 @@ test('temporary roles: overlapping ticks remove a due role only once', async () 
 	const counts = await Promise.all([moderation.expireTempRoles(), moderation.expireTempRoles()]);
 	assert.equal(counts[0] + counts[1], 1);
 	assert.equal(executor.calls.filter(c => c[0] === 'removeRole').length, 1);
-	assert.equal(core.audit.query({ action: 'temproles.expire' }).length, 1);
+	assert.equal((await core.audit.query({ action: 'temproles.expire' })).length, 1);
 });
 
 test('lockdown: two simultaneous requests lock once (the second must not erase the list to reopen)', async () => {

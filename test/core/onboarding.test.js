@@ -19,17 +19,17 @@ async function setup() {
 test('the configuration is validated and needs onboarding.manage', async () => {
 	const { core, owner } = await setup();
 	const alice = await core.ranks.resolve(ALICE);
-	assert.throws(() => core.onboarding.save(alice, MAIN, {}), ForbiddenError);
-	assert.throws(() => core.onboarding.save(owner, MAIN, { welcome: { enabled: true } }), /salon/);
-	assert.throws(() => core.onboarding.save(owner, OTHER, {}), /réseau/);
-	const saved = core.onboarding.save(owner, MAIN, { welcome: { enabled: true, channelId: WELCOME, payload: { content: 'Salut {user} ({memberCount})' } } });
+	await assert.rejects(async () => core.onboarding.save(alice, MAIN, {}), ForbiddenError);
+	await assert.rejects(async () => core.onboarding.save(owner, MAIN, { welcome: { enabled: true } }), /salon/);
+	await assert.rejects(async () => core.onboarding.save(owner, OTHER, {}), /réseau/);
+	const saved = await core.onboarding.save(owner, MAIN, { welcome: { enabled: true, channelId: WELCOME, payload: { content: 'Salut {user} ({memberCount})' } } });
 	assert.equal(saved.welcome.payload.content, 'Salut {user} ({memberCount})');
 	assert.equal(saved.welcome.card.design.layers.length, 3, 'a default card is ready');
 });
 
 test('welcome: message with the variables, card attached, DM, automatic roles', async () => {
 	const { core, owner, executor } = await setup();
-	core.onboarding.save(owner, MAIN, {
+	await core.onboarding.save(owner, MAIN, {
 		welcome: {
 			enabled: true, channelId: WELCOME,
 			payload: { content: 'Bienvenue {user} !', embed: { enabled: true, description: 'Tu es le {memberCount}e, invité par {inviter}', thumbnailUrl: '{user.avatar}' } },
@@ -54,7 +54,7 @@ test('welcome: message with the variables, card attached, DM, automatic roles', 
 
 test('rules: roles wait for the acceptance, which gives and removes roles', async () => {
 	const { core, owner, executor } = await setup();
-	core.onboarding.save(owner, MAIN, {
+	await core.onboarding.save(owner, MAIN, {
 		autoroles: { humanRoleIds: [ROLE_MEMBER] },
 		rules: { enabled: true, channelId: WELCOME, acceptRoleIds: ['800000000000000003'], removeRoleIds: [ROLE_NEW] },
 	});
@@ -74,7 +74,7 @@ test('rules: roles wait for the acceptance, which gives and removes roles', asyn
 
 test('rules: accounts that are too recent are refused', async () => {
 	const { core, owner } = await setup();
-	core.onboarding.save(owner, MAIN, { rules: { enabled: true, channelId: WELCOME, acceptRoleIds: [ROLE_MEMBER], minAccountAgeDays: 30 } });
+	await core.onboarding.save(owner, MAIN, { rules: { enabled: true, channelId: WELCOME, acceptRoleIds: [ROLE_MEMBER], minAccountAgeDays: 30 } });
 	// An ID generated now: the account is brand new
 	const fresh = String((BigInt(Date.now() - 1420070400000) << 22n));
 	await assert.rejects(core.onboarding.acceptRules(MAIN, fresh), ValidationError);
@@ -82,7 +82,7 @@ test('rules: accounts that are too recent are refused', async () => {
 
 test('boost: message, bonus roles given then taken back', async () => {
 	const { core, owner, executor } = await setup();
-	core.onboarding.save(owner, MAIN, { boost: { enabled: true, channelId: WELCOME, bonusRoleIds: ['800000000000000009'], end: { enabled: true } } });
+	await core.onboarding.save(owner, MAIN, { boost: { enabled: true, channelId: WELCOME, bonusRoleIds: ['800000000000000009'], end: { enabled: true } } });
 	await core.onboarding.boostStarted(MAIN, MEMBER);
 	assert.match(executor.messages[0].payload.content, /Merci <@300000000000000001> pour le boost ! Le serveur a maintenant 3 boosts/);
 	assert.ok(executor.memberRoles.get(`${MAIN}:${MEMBER.id}`).includes('800000000000000009'));

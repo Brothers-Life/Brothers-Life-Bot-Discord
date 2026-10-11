@@ -17,8 +17,8 @@ export function registerAuthRoutes(app, { config, core, fetchImpl = fetch }) {
 	const redirectUri = `${config.WEB_PUBLIC_URL}/api/auth/callback`;
 	const rateLimit = { max: 10, timeWindow: '15 minutes' };
 
-	function audit(action, request, actorId, details) {
-		core.audit.record({ actorId, source: 'panel', action, target: actorId, details: { ip: request.ip, ...details } });
+	async function audit(action, request, actorId, details) {
+		await core.audit.record({ actorId, source: 'panel', action, target: actorId, details: { ip: request.ip, ...details } });
 	}
 
 	app.get('/api/auth/login', { config: { public: true, rateLimit } }, async (request, reply) => {
@@ -81,19 +81,19 @@ export function registerAuthRoutes(app, { config, core, fetchImpl = fetch }) {
 		core.ranks.invalidate(user.id);
 		const principal = await core.ranks.resolve(user.id);
 		if (!principal.can('panel.access')) {
-			audit('panel.login_denied', request, user.id, { username: user.username });
+			await audit('panel.login_denied', request, user.id, { username: user.username });
 			return reply.redirect('/login?error=denied');
 		}
 
 		const avatar = user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=64` : null;
-		const sessionId = core.sessions.create({
+		const sessionId = await core.sessions.create({
 			discordId: user.id,
 			username: user.global_name ?? user.username,
 			avatar,
 			ip: request.ip,
 			userAgent: request.headers['user-agent'],
 		});
-		audit('panel.login', request, user.id, { username: user.username });
+		await audit('panel.login', request, user.id, { username: user.username });
 
 		reply.setCookie(SESSION_COOKIE, sessionId, { path: '/', httpOnly: true, sameSite: 'strict', secure, maxAge: SESSION_TTL_S });
 		return reply.redirect('/');
@@ -102,10 +102,10 @@ export function registerAuthRoutes(app, { config, core, fetchImpl = fetch }) {
 	app.post('/api/auth/logout', { config: { public: true } }, async (request, reply) => {
 		const sessionId = request.cookies?.[SESSION_COOKIE];
 		if (request.headers['x-requested-with'] !== 'panel') return reply.code(403).send({ error: { code: 'CSRF', message: 'En-tête X-Requested-With manquant.' } });
-		const session = sessionId ? core.sessions.get(sessionId) : null;
+		const session = sessionId ? await core.sessions.get(sessionId) : null;
 		if (session) {
-			core.sessions.revoke(sessionId);
-			audit('panel.logout', request, session.discordId);
+			await core.sessions.revoke(sessionId);
+			await audit('panel.logout', request, session.discordId);
 		}
 		reply.clearCookie(SESSION_COOKIE, { path: '/' });
 		return { ok: true };

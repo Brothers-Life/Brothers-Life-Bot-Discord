@@ -20,6 +20,7 @@ async function setup() {
 	const status = { maintenance: [], republished: 0 };
 	const fivem = { setMaintenance: m => status.maintenance.push(m), republish: async () => { status.republished += 1; } };
 	const events = createFivemEvents({ db: core.db, settings: core.settings, audit: core.audit, logs: core.logs, executor, network: core.network, variables: core.variables, fivem, logger: { warn: () => undefined }, now: () => clock.at });
+	await events.init();
 	// The bridge's key: only fivem.events
 	const bridge = { id: ctx.owner.id, source: 'panel', can: p => p === 'fivem.events' };
 	const enableAll = (patch = {}) => {
@@ -50,13 +51,13 @@ test('only a key with fivem.events can send events; disabled events are only sto
 	const res = await events.ingest(bridge, { type: 'announcement', data: { author: 'Admin', message: 'Coucou' } });
 	assert.equal(res.status, 'disabled');
 	assert.equal(executor.announcements.length, 0);
-	assert.equal(events.recent()[0].status, 'disabled');
+	assert.equal((await events.recent())[0].status, 'disabled');
 	await assert.rejects(events.ingest(bridge, { type: 'nope' }), ValidationError);
 });
 
 test('announcement posted with the template, variables filled and only the chosen roles pinged', async () => {
 	const { events, bridge, executor, enableAll } = await setup();
-	enableAll();
+	await enableAll();
 	const res = await events.ingest(bridge, { type: 'announcement', server: 'Brothers Life', data: { author: 'Pedro', message: 'Event ce soir !' } });
 	assert.equal(res.status, 'posted');
 	const sent = executor.announcements[0];
@@ -68,10 +69,10 @@ test('announcement posted with the template, variables filled and only the chose
 
 test('restart countdown: only chosen thresholds, each once per restart, next restart exposed', async () => {
 	const { events, bridge, executor, clock, enableAll } = await setup();
-	enableAll();
+	await enableAll();
 	const send = secondsRemaining => events.ingest(bridge, { type: 'scheduledRestart', server: 'BRL', data: { secondsRemaining } });
 	assert.equal((await send(1800)).status, 'posted');
-	assert.deepEqual(events.publicState().nextRestart, { at: START + 1_800_000 });
+	assert.deepEqual((await events.publicState()).nextRestart, { at: START + 1_800_000 });
 	// Same warning a minute later (second resource, retry after the 15 s window): not posted twice
 	clock.at += 20_000;
 	assert.equal((await send(1780)).status, 'duplicate');
@@ -83,12 +84,12 @@ test('restart countdown: only chosen thresholds, each once per restart, next res
 	assert.match(executor.announcements[1].payload.embed.title, /5 min/);
 	// Skipped: no next restart any more
 	await events.ingest(bridge, { type: 'scheduledRestartSkipped', data: { author: 'Admin', secondsRemaining: 300 } });
-	assert.equal(events.publicState().nextRestart, null);
+	assert.equal((await events.publicState()).nextRestart, null);
 });
 
 test('the same event twice in a few seconds is a duplicate', async () => {
 	const { events, bridge, executor, enableAll } = await setup();
-	enableAll();
+	await enableAll();
 	await events.ingest(bridge, { type: 'serverStarted', server: 'BRL', data: {} });
 	assert.equal((await events.ingest(bridge, { type: 'serverStarted', server: 'BRL', data: {} })).status, 'duplicate');
 	assert.equal(executor.announcements.length, 1);
@@ -96,7 +97,7 @@ test('the same event twice in a few seconds is a duplicate', async () => {
 
 test('player events go to the staff log category, never to the public channels', async () => {
 	const { core, events, bridge, executor, enableAll } = await setup();
-	enableAll();
+	await enableAll();
 	const res = await events.ingest(bridge, { type: 'playerBanned', server: 'BRL', data: { author: 'Admin', reason: 'Cheat', targetName: 'Léa', targetDiscord: ALICE, durationTranslated: '7 jours', targetIds: ['license:x'] } });
 	assert.equal(res.status, 'logged');
 	await core.logs.flush();
@@ -104,13 +105,13 @@ test('player events go to the staff log category, never to the public channels',
 	assert.equal(log.message.title, 'Joueur banni (txAdmin)');
 	assert.equal(log.message.thumbnailUserId, ALICE);
 	assert.ok(log.message.fields.some(f => f.name === 'Durée' && f.value === '7 jours'));
-	assert.ok(!JSON.stringify(events.recent()[0].data).includes('license'));
+	assert.ok(!JSON.stringify((await events.recent())[0].data).includes('license'));
 	assert.equal(executor.announcements.length, 0);
 });
 
 test('maintenance: announced, shown in the status messages, mutes the public events, then ended', async () => {
 	const { core, events, owner, bridge, executor, status, clock, enableAll } = await setup();
-	enableAll();
+	await enableAll();
 	const state = await events.setMaintenance(owner, { active: true, reason: 'Mise à jour 2.0' });
 	assert.equal(state.maintenance.active, true);
 	assert.equal(state.maintenance.reason, 'Mise à jour 2.0');
@@ -124,8 +125,8 @@ test('maintenance: announced, shown in the status messages, mutes the public eve
 	await events.setMaintenance(owner, { active: false });
 	assert.match(executor.announcements.at(-1).payload.embed.description, /1 h 30/);
 	assert.equal(status.maintenance.at(-1), null);
-	assert.equal(events.publicState().maintenance.active, false);
-	assert.deepEqual(core.audit.query({ action: 'fivemevents.maintenance_off' }).length, 1);
+	assert.equal((await events.publicState()).maintenance.active, false);
+	assert.deepEqual((await core.audit.query({ action: 'fivemevents.maintenance_off' })).length, 1);
 	await assert.rejects(events.setMaintenance({ ...owner, can: () => false }, { active: true }), ForbiddenError);
 });
 
@@ -133,15 +134,15 @@ test('settings: an enabled event needs a channel, @everyone needs its permission
 	const { events, owner, executor, enableAll } = await setup();
 	const config = defaultConfig();
 	config.events.announcement.enabled = true;
-	assert.throws(() => events.saveConfig(owner, config), ValidationError);
+	await assert.rejects(async () => events.saveConfig(owner, config), ValidationError);
 	config.events.announcement.targets = [{ guildId: MAIN, channelId: ANNOUNCE, ping: 'everyone', roleIds: [], publish: false }];
 	const limited = { ...owner, can: p => p !== 'announcements.everyone' };
-	assert.throws(() => events.saveConfig(limited, config), ForbiddenError);
-	enableAll();
+	await assert.rejects(async () => events.saveConfig(limited, config), ForbiddenError);
+	await enableAll();
 	const res = await events.test(owner, 'scheduledRestart');
 	assert.equal(res.status, 'posted');
-	assert.equal(events.publicState().nextRestart, null);
-	assert.equal(events.recent()[0].test, true);
+	assert.equal((await events.publicState()).nextRestart, null);
+	assert.equal((await events.recent())[0].test, true);
 	assert.equal(executor.announcements.length, 1);
 });
 

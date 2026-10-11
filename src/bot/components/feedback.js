@@ -33,14 +33,14 @@ export async function execute(interaction) {
 		case 'openanon':
 			return await startForm(interaction, id, action === 'openanon');
 		case 'next': {
-			const box = feedback.getBox(id);
+			const box = await feedback.getBox(id);
 			const step = Number(extra);
 			return await showFormModal(interaction, `fb:form:${id}:${step}`, title(box, step), box.config.form.steps[step]);
 		}
 		case 'form': {
-			const box = feedback.getBox(id);
+			const box = await feedback.getBox(id);
 			const step = Number(extra);
-			const result = feedback.submitStep(id, me, step, readModal(interaction, box.config.form.steps[step]));
+			const result = await feedback.submitStep(id, me, step, readModal(interaction, box.config.form.steps[step]));
 			if (!result.done) {
 				const payload = nextStepPayload('fb', id, result.next, result.total);
 				if (fromEphemeralMessage(interaction)) return await interaction.update(payload);

@@ -35,9 +35,14 @@ export function registerNotificationRoutes(app, { core }) {
 	// New notifications as they happen, already filtered for the person connected
 	app.get('/api/notifications/live', { websocket: true, config: panelOnly }, (socket, request) => {
 		let actor = request.actor;
-		const unsubscribe = notifications.subscribe((notification) => {
-			if (socket.readyState !== 1 || !notifications.visibleTo(actor, notification)) return;
-			socket.send(JSON.stringify({ type: 'notification', notification: { ...notification, read: false } }));
+		const unsubscribe = notifications.subscribe(async (notification) => {
+			try {
+				if (socket.readyState !== 1 || !await notifications.visibleTo(actor, notification)) return;
+				if (socket.readyState === 1) socket.send(JSON.stringify({ type: 'notification', notification: { ...notification, read: false } }));
+			}
+			catch {
+				// A closed socket or a failed read never breaks the action that notified
+			}
 		});
 		// Rank changes and session expiry apply to an open socket too
 		const recheck = setInterval(async () => {

@@ -256,8 +256,8 @@ export function createFivemEvents({ db, settings, audit, logs, executor, network
 	// Countdown messages already posted: { server, minutes, restartAt }
 	let countdown = [];
 
-	const config = () => {
-		const stored = settings.get('fivemEvents.config', null);
+	const config = async () => {
+		const stored = await settings.get('fivemEvents.config', null);
 		if (!stored) return defaultConfig();
 		try {
 			return normalizeConfig(stored);
@@ -266,21 +266,21 @@ export function createFivemEvents({ db, settings, audit, logs, executor, network
 			return defaultConfig();
 		}
 	};
-	const maintenance = () => settings.get('fivemEvents.maintenance', { active: false, reason: null, since: null, by: null });
-	const nextRestart = () => {
-		const at = settings.get('fivemEvents.nextRestart', null);
+	const maintenance = async () => settings.get('fivemEvents.maintenance', { active: false, reason: null, since: null, by: null });
+	const nextRestart = async () => {
+		const at = await settings.get('fivemEvents.nextRestart', null);
 		return at && at > now() ? at : null;
 	};
 
-	function syncStatus() {
-		const m = maintenance();
-		fivem?.setMaintenance?.(m.active && config().maintenance.statusMessages ? m : null);
+	// Maintenance shown in the status messages of the fivem service (in memory there): at startup and on every change
+	async function syncStatus() {
+		const m = await maintenance();
+		fivem?.setMaintenance?.(m.active && (await config()).maintenance.statusMessages ? m : null);
 	}
-	syncStatus();
 
-	function store(type, server, data, status, detail, test) {
-		q.insert.run({ type, server: server ?? null, data: JSON.stringify(data), status, detail: detail ?? null, test: test ? 1 : 0, at: now() });
-		q.prune.run(KEEP_EVENTS);
+	async function store(type, server, data, status, detail, test) {
+		await q.insert.run({ type, server: server ?? null, data: JSON.stringify(data), status, detail: detail ?? null, test: test ? 1 : 0, at: now() });
+		await q.prune.run(KEEP_EVENTS);
 		return { status, detail: detail ?? null };
 	}
 
@@ -290,7 +290,7 @@ export function createFivemEvents({ db, settings, audit, logs, executor, network
 		let ok = 0;
 		const errors = [];
 		for (const target of targets) {
-			if (network.find(target.guildId)?.status !== 'active') {
+			if ((await network.find(target.guildId))?.status !== 'active') {
 				errors.push('serveur hors réseau');
 				continue;
 			}
@@ -325,22 +325,22 @@ export function createFivemEvents({ db, settings, audit, logs, executor, network
 	async function handle(type, data, server, { test = false } = {}) {
 		const def = EVENT_TYPES[type];
 		const at = now();
-		const conf = config();
+		const conf = await config();
 		const eventConf = conf.events[type];
 
 		if (!test) {
-			if (type === 'scheduledRestart' && data.secondsRemaining !== undefined) settings.set('fivemEvents.nextRestart', at + data.secondsRemaining * 1000);
-			if (['scheduledRestartSkipped', 'serverStarted', 'serverShuttingDown'].includes(type)) settings.set('fivemEvents.nextRestart', null);
+			if (type === 'scheduledRestart' && data.secondsRemaining !== undefined) await settings.set('fivemEvents.nextRestart', at + data.secondsRemaining * 1000);
+			if (['scheduledRestartSkipped', 'serverStarted', 'serverShuttingDown'].includes(type)) await settings.set('fivemEvents.nextRestart', null);
 		}
 
 		if (!eventConf.enabled) return store(type, server, data, 'disabled', 'Événement désactivé dans le panel', test);
 
 		if (def.kind === 'staff') {
-			const channels = logs.log(null, 'fivemevents', staffLogMessage(type, data, { server }), type);
+			const channels = await logs.log(null, 'fivemevents', staffLogMessage(type, data, { server }), type);
 			return store(type, server, data, 'logged', channels.length ? null : 'Aucun salon de logs pour « Événements FiveM »', test);
 		}
 
-		if (maintenance().active && conf.maintenance.mutePublic && type !== 'announcement') {
+		if ((await maintenance()).active && conf.maintenance.mutePublic && type !== 'announcement') {
 			return store(type, server, data, 'muted', 'Maintenance en cours', test);
 		}
 
@@ -365,8 +365,44 @@ export function createFivemEvents({ db, settings, audit, logs, executor, network
 		};
 	}
 
+	let maintenanceQueue = Promise.resolve();
+	async function switchMaintenance(actor, { active, reason = null }) {
+		if (!actor.can('fivemevents.maintenance')) throw new ForbiddenError('Permission manquante : fivemevents.maintenance');
+		const current = await maintenance();
+		if (active && current.active) throw new ValidationError('La maintenance est déjà en cours.');
+		if (!active && !current.active) throw new ValidationError('Aucune maintenance en cours.');
+		const conf = (await config()).maintenance;
+		const at = now();
+		let state;
+		let sent;
+		if (active) {
+			state = { active: true, reason: text(reason, 300), since: at, by: actor.id };
+			await settings.set('fivemEvents.maintenance', state);
+			sent = await announce(conf.targets, conf.start, {
+				'maintenance.reason': state.reason ?? '', 'maintenance.since': ts(at, 'f'), 'maintenance.duration': '', 'maintenance.by': `<@${actor.id}>`,
+			});
+		}
+		else {
+			state = { active: false, reason: null, since: null, by: null };
+			await settings.set('fivemEvents.maintenance', state);
+			sent = await announce(conf.targets, conf.end, {
+				'maintenance.reason': current.reason ?? '', 'maintenance.since': ts(current.since ?? at, 'f'), 'maintenance.duration': durationText(at - (current.since ?? at)), 'maintenance.by': current.by ? `<@${current.by}>` : '',
+			});
+		}
+		await syncStatus();
+		await fivem?.republish?.();
+		await audit.record({
+			actorId: actor.id, source: actor.source ?? 'panel', action: active ? 'fivemevents.maintenance_on' : 'fivemevents.maintenance_off', target: 'maintenance',
+			details: active ? { Raison: state.reason ?? 'aucune', Annonces: `${sent.ok}/${conf.targets.length}` } : { Durée: durationText(at - (current.since ?? at)), Annonces: `${sent.ok}/${conf.targets.length}` },
+		});
+		return { ...await service.publicState(), announced: sent.ok, targets: conf.targets.length };
+	}
+
 	const service = {
 		config,
+
+		// Startup: the maintenance state shown by the status messages
+		init: syncStatus,
 
 		// POST /api/fivem/events: called by the FiveM bridge with its API key
 		async ingest(actor, { type, data = {}, server = null }) {
@@ -386,66 +422,41 @@ export function createFivemEvents({ db, settings, audit, logs, executor, network
 			return handle(type, cleanEventData(SAMPLES[type]), 'Serveur de test', { test: true });
 		},
 
-		saveConfig(actor, input) {
+		async saveConfig(actor, input) {
 			if (!actor.can('fivemevents.manage')) throw new ForbiddenError('Permission manquante : fivemevents.manage');
-			const previous = config();
+			const previous = await config();
 			const next = normalizeConfig(input);
 			for (const [type, e] of Object.entries(next.events)) if (e.targets) assertPings(actor, e.targets, previous.events[type].targets);
 			assertPings(actor, next.maintenance.targets, previous.maintenance.targets);
-			settings.set('fivemEvents.config', next);
-			syncStatus();
-			void fivem?.republish?.();
+			await settings.set('fivemEvents.config', next);
+			await syncStatus();
+			void Promise.resolve(fivem?.republish?.()).catch(error => logger.warn('FiveM status republish failed:', error.message));
 			const on = Object.entries(next.events).filter(([, e]) => e.enabled).map(([type]) => EVENT_TYPES[type].label);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'fivemevents.config', target: 'config', details: { 'Événements actifs': on } });
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'fivemevents.config', target: 'config', details: { 'Événements actifs': on } });
 			return next;
 		},
 
 		maintenance,
 
-		async setMaintenance(actor, { active, reason = null }) {
-			if (!actor.can('fivemevents.maintenance')) throw new ForbiddenError('Permission manquante : fivemevents.maintenance');
-			const current = maintenance();
-			if (active && current.active) throw new ValidationError('La maintenance est déjà en cours.');
-			if (!active && !current.active) throw new ValidationError('Aucune maintenance en cours.');
-			const conf = config().maintenance;
-			const at = now();
-			let state;
-			let sent;
-			if (active) {
-				state = { active: true, reason: text(reason, 300), since: at, by: actor.id };
-				settings.set('fivemEvents.maintenance', state);
-				sent = await announce(conf.targets, conf.start, {
-					'maintenance.reason': state.reason ?? '', 'maintenance.since': ts(at, 'f'), 'maintenance.duration': '', 'maintenance.by': `<@${actor.id}>`,
-				});
-			}
-			else {
-				state = { active: false, reason: null, since: null, by: null };
-				settings.set('fivemEvents.maintenance', state);
-				sent = await announce(conf.targets, conf.end, {
-					'maintenance.reason': current.reason ?? '', 'maintenance.since': ts(current.since ?? at, 'f'), 'maintenance.duration': durationText(at - (current.since ?? at)), 'maintenance.by': current.by ? `<@${current.by}>` : '',
-				});
-			}
-			syncStatus();
-			await fivem?.republish?.();
-			audit.record({
-				actorId: actor.id, source: actor.source ?? 'panel', action: active ? 'fivemevents.maintenance_on' : 'fivemevents.maintenance_off', target: 'maintenance',
-				details: active ? { Raison: state.reason ?? 'aucune', Annonces: `${sent.ok}/${conf.targets.length}` } : { Durée: durationText(at - (current.since ?? at)), Annonces: `${sent.ok}/${conf.targets.length}` },
-			});
-			return { ...service.publicState(), announced: sent.ok, targets: conf.targets.length };
+		// One switch at a time: a double click must see the state the first one wrote
+		setMaintenance(actor, input) {
+			const run = maintenanceQueue.then(() => switchMaintenance(actor, input));
+			maintenanceQueue = run.catch(() => undefined);
+			return run;
 		},
 
 		// Read-only view for other features (public page…): no personal data
-		publicState() {
-			const m = maintenance();
-			const at = nextRestart();
+		async publicState() {
+			const m = await maintenance();
+			const at = await nextRestart();
 			return {
 				maintenance: { active: Boolean(m.active), reason: m.active ? m.reason ?? null : null, since: m.active ? m.since : null },
 				nextRestart: at ? { at } : null,
 			};
 		},
 
-		recent(limit = 50) {
-			return q.recent.all(Math.min(Math.max(1, limit), 200)).map(toEvent);
+		async recent(limit = 50) {
+			return (await q.recent.all(Math.min(Math.max(1, limit), 200))).map(toEvent);
 		},
 
 		types: () => Object.entries(EVENT_TYPES).map(([key, d]) => ({ key, ...d })),

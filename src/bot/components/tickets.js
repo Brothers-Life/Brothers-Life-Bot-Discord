@@ -57,14 +57,14 @@ export async function execute(interaction) {
 		}
 		case 'next': {
 			const step = Number(extra);
-			const category = tickets.getCategory(interaction.guildId, id);
+			const category = await tickets.getCategory(interaction.guildId, id);
 			return await showFormModal(interaction, `ticket:form:${id}:${step}`, stepTitle(category, step), category.config.form.steps[step]);
 		}
 		case 'form': {
 			const step = Number(extra);
-			const category = tickets.getCategory(interaction.guildId, id);
+			const category = await tickets.getCategory(interaction.guildId, id);
 			const values = readModal(interaction, category.config.form.steps[step]);
-			const result = tickets.submitFormStep({ guildId: interaction.guildId, userId: interaction.user.id, categoryId: id, step, values });
+			const result = await tickets.submitFormStep({ guildId: interaction.guildId, userId: interaction.user.id, categoryId: id, step, values });
 			if (!result.done) {
 				const payload = nextStepPayload('ticket', id, result.next, result.total);
 				// A modal opened from the previous "continue" message: replace it instead of stacking messages
@@ -94,7 +94,7 @@ export async function execute(interaction) {
 		}
 		case 'status': {
 			const ticket = await tickets.setStatus(interaction.user.id, id, interaction.values[0]);
-			const status = tickets.statuses(ticket.guildId).find(s => s.key === ticket.statusKey);
+			const status = (await tickets.statuses(ticket.guildId)).find(s => s.key === ticket.statusKey);
 			await interaction.reply({ content: `Statut : ${status?.emoji ?? ''} **${status?.label ?? ticket.statusKey}** (par <@${interaction.user.id}>)`, allowedMentions: { parse: [] } });
 			// Resets the menu once answered (the 3 s of the interaction are for the answer)
 			return void interaction.message.edit({ components: interaction.message.components }).catch(() => null);
@@ -133,7 +133,7 @@ export async function execute(interaction) {
 		}
 		case 'delete':
 			// Asked first, privately: deleting the channel cannot be undone
-			return await interaction.reply({ ...deleteConfirmPayload(tickets.get(id)), flags: MessageFlags.Ephemeral });
+			return await interaction.reply({ ...deleteConfirmPayload(await tickets.get(id)), flags: MessageFlags.Ephemeral });
 		case 'delcancel':
 			return await interaction.update({ content: 'Suppression annulée.', components: [] });
 		case 'delconfirm': {
@@ -146,18 +146,18 @@ export async function execute(interaction) {
 				throw new ForbiddenError('Permission manquante : tickets.view');
 			}
 			// The web page of the conversation (Discord look) when it was saved, else the plain text
-			const html = tickets.transcriptFile(id);
+			const html = await tickets.transcriptFile(id);
 			const size = html ? fs.statSync(html.file).size : 0;
 			if (html && size <= HTML_TRANSCRIPT_MAX) {
 				const name = `ticket-${String(html.ticket.number).padStart(4, '0')}.html`;
 				return await interaction.reply({ content: 'Conversation du ticket : ouvre le fichier dans ton navigateur.', files: [new AttachmentBuilder(html.file, { name })], flags: MessageFlags.Ephemeral });
 			}
-			const ticket = tickets.get(id, { withTranscript: true });
+			const ticket = await tickets.get(id, { withTranscript: true });
 			const file = new AttachmentBuilder(Buffer.from(ticket.transcript ?? '(vide)', 'utf8'), { name: `ticket-${ticket.number}.txt` });
 			return await interaction.reply({ files: [file], flags: MessageFlags.Ephemeral });
 		}
 		case 'rate': {
-			tickets.rate(interaction.user.id, id, Number(extra));
+			await tickets.rate(interaction.user.id, id, Number(extra));
 			return await interaction.update({
 				content: `Merci ! Note : ${'★'.repeat(Number(extra))}${'☆'.repeat(5 - Number(extra))}`,
 				components: [new ActionRowBuilder().addComponents(
@@ -166,7 +166,7 @@ export async function execute(interaction) {
 			});
 		}
 		case 'ratecomment': {
-			tickets.rateComment(interaction.user.id, id, interaction.fields.getTextInputValue('comment') ?? '');
+			await tickets.rateComment(interaction.user.id, id, interaction.fields.getTextInputValue('comment') ?? '');
 			return await interaction.reply({ content: 'Merci pour ton avis.', flags: MessageFlags.Ephemeral });
 		}
 		case 'comment':

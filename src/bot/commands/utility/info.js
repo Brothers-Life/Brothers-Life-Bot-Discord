@@ -139,9 +139,9 @@ function channelEmbed(channel) {
 	return embed;
 }
 
-function botEmbed(client) {
+async function botEmbed(client) {
 	const { network } = client.core;
-	const servers = network.list().filter(g => g.status === 'active');
+	const servers = (await network.list()).filter(g => g.status === 'active');
 	const uptime = Date.now() - (client.uptime ?? 0);
 	const memory = Math.round(process.memoryUsage().rss / 1024 / 1024);
 	return new EmbedBuilder()
@@ -165,10 +165,10 @@ export async function execute(interaction) {
 	let embed;
 	if (sub === 'serveur') embed = await serverEmbed(interaction.guild);
 	else if (sub === 'membre') embed = await memberEmbed(interaction);
-	else if (sub === 'giveaways') embed = openGiveawaysEmbed(interaction.client.core.giveaways, interaction.guildId);
+	else if (sub === 'giveaways') embed = await openGiveawaysEmbed(interaction.client.core.giveaways, interaction.guildId);
 	else if (sub === 'avatar') embed = await avatarEmbed(interaction);
 	else if (sub === 'role') embed = roleEmbed(interaction.options.getRole('role'));
 	else if (sub === 'salon') embed = channelEmbed(interaction.options.getChannel('salon') ?? interaction.channel);
-	else embed = botEmbed(interaction.client);
+	else embed = await botEmbed(interaction.client);
 	await interaction.reply({ embeds: [embed], allowedMentions: { parse: [] }, ...(ephemeral ? { flags: MessageFlags.Ephemeral } : {}) });
 }

@@ -24,12 +24,12 @@ async function setup(config = {}) {
 	const join = async (member, channelId) => {
 		for (const c of executor.voiceChannels.values()) c.members = c.members.filter(m => m !== member.id);
 		executor.voiceChannels.get(channelId)?.members.push(member.id);
-		return rooms.voiceMoved(MAIN, member, { from: null, to: channelId });
+		return await rooms.voiceMoved(MAIN, member, { from: null, to: channelId });
 	};
 	const leave = async (member, channelId) => {
 		const channel = executor.voiceChannels.get(channelId);
 		channel.members = channel.members.filter(m => m !== member.id);
-		return rooms.voiceMoved(MAIN, member, { from: channelId, to: null });
+		return await rooms.voiceMoved(MAIN, member, { from: channelId, to: null });
 	};
 	return { ...ctx, rooms, hub, join, leave, timers };
 }
@@ -45,7 +45,7 @@ test('joining the hub creates a room owned by the member, with a control panel',
 	assert.equal(executor.roomPanels[0].ownerId, MEMBER.id);
 	// Joining the hub again sends back to the same room
 	await join(MEMBER, hub.channelId);
-	assert.equal(rooms.rooms(MAIN).length, 1);
+	assert.equal((await rooms.rooms(MAIN)).length, 1);
 });
 
 test('only the owner controls the room; lock, permit, reject; settings remembered', async () => {
@@ -68,7 +68,7 @@ test('only the owner controls the room; lock, permit, reject; settings remembere
 	executor.voiceChannels.get(room.channelId).members = [MEMBER.id];
 	await leave(MEMBER, room.channelId);
 	await timers[0]();
-	assert.equal(rooms.rooms(MAIN).length, 0);
+	assert.equal((await rooms.rooms(MAIN)).length, 0);
 	const next = await join(MEMBER, hub.channelId);
 	assert.equal(next.state.name, 'QG');
 	assert.equal(next.state.locked, true);
@@ -81,7 +81,7 @@ test('claim when the owner left, transfer to someone inside', async () => {
 	await join(bob, room.channelId);
 	await assert.rejects(rooms.claim(BOB, room.channelId), /toujours là/);
 	await rooms.transfer(MEMBER.id, room.channelId, BOB);
-	assert.equal(rooms.getRoom(room.channelId).ownerId, BOB);
+	assert.equal((await rooms.getRoom(room.channelId)).ownerId, BOB);
 	await assert.rejects(rooms.transfer(MEMBER.id, room.channelId, MEMBER.id), ForbiddenError);
 });
 
@@ -101,5 +101,5 @@ test('joining the hub twice very fast creates one room only', async () => {
 		rooms.voiceMoved(MAIN, MEMBER, { from: null, to: hub.channelId }),
 		rooms.voiceMoved(MAIN, MEMBER, { from: null, to: hub.channelId }),
 	]);
-	assert.equal(rooms.rooms(MAIN).length, 1);
+	assert.equal((await rooms.rooms(MAIN)).length, 1);
 });

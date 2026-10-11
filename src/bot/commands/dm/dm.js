@@ -17,10 +17,10 @@ export async function execute(interaction) {
 		const { dms } = interaction.client.core;
 		const user = interaction.options.getUser('membre');
 		if (interaction.options.getSubcommand() === 'bloquer') {
-			dms.block(actor, user.id, interaction.options.getString('raison') ?? '');
+			await dms.block(actor, user.id, interaction.options.getString('raison') ?? '');
 			return { content: `🚫 ${user} est bloqué : ses MP au bot sont ignorés.` };
 		}
-		dms.unblock(actor, user.id);
+		await dms.unblock(actor, user.id);
 		return { content: `✅ ${user} est débloqué.` };
 	});
 }

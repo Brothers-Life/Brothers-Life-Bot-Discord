@@ -13,12 +13,12 @@ async function setup(config = {}) {
 	let clock = Date.now();
 	const ctx = await withNetwork();
 	const { core, executor, owner } = ctx;
-	core.network.activate(owner, OTHER);
+	await core.network.activate(owner, OTHER);
 	const antinuke = createAntinuke({
 		db: core.db, network: core.network, ranks: core.ranks, audit: core.audit, executor, settings: core.settings, logs: core.logs,
 		ownerId: OWNER, logger: { warn: () => undefined }, now: () => clock,
 	});
-	antinuke.save(owner, { enabled: true, ...config });
+	await antinuke.save(owner, { enabled: true, ...config });
 	// ALICE is a moderator on both servers: an admin role, a ban role and a plain role
 	for (const guildId of [MAIN, OTHER]) {
 		executor.roles.set(guildId, [
@@ -66,7 +66,7 @@ test('under the limit nothing happens, at the limit the account is quarantined',
 	assert.ok(executor.sent.some(s => s.channelId === 'c-antinuke' && /quarantaine/.test(s.message.title)));
 	assert.equal(executor.dms.length, 1);
 	assert.equal(executor.dms[0][0], OWNER);
-	assert.equal(antinuke.incidents().length, 1);
+	assert.equal((await antinuke.incidents()).length, 1);
 });
 
 test('the window slides: old actions stop counting', async () => {
@@ -90,12 +90,12 @@ test('actions are summed across every server of the network', async () => {
 
 test('servers outside the network, disabled actions and a disabled protection are ignored', async () => {
 	const { antinuke, act, owner, core } = await setup({ actions: { member_kick: { enabled: false } } });
-	core.network.upsertSeen({ id: '900000000000000009', name: 'Hors réseau' });
+	await core.network.upsertSeen({ id: '900000000000000009', name: 'Hors réseau' });
 	assert.equal((await act('channel_delete', '900000000000000009')).counted, false);
 	for (let i = 0; i < 10; i++) assert.equal((await act('member_kick')).counted, false);
-	antinuke.save(owner, { enabled: false });
+	await antinuke.save(owner, { enabled: false });
 	for (let i = 0; i < 5; i++) assert.equal((await act('channel_delete')).counted, false);
-	assert.equal(antinuke.incidents().length, 0);
+	assert.equal((await antinuke.incidents()).length, 0);
 });
 
 test('exemptions: owner, bot, whitelisted user and whitelisted rank', async () => {
@@ -105,15 +105,15 @@ test('exemptions: owner, bot, whitelisted user and whitelisted rank', async () =
 		assert.equal((await act('channel_delete', MAIN, OWNER)).exempt, true);
 		assert.equal((await act('channel_delete', MAIN, BOT)).exempt, true);
 	}
-	antinuke.save(owner, { enabled: true, whitelistUserIds: [ALICE] });
+	await antinuke.save(owner, { enabled: true, whitelistUserIds: [ALICE] });
 	for (let i = 0; i < 5; i++) assert.equal((await act('channel_delete')).exempt, true);
 
-	const rank = core.ranks.create(owner, { name: 'Direction', level: 50 });
+	const rank = await core.ranks.create(owner, { name: 'Direction', level: 50 });
 	await core.ranks.assignDirect(owner, BOB, rank.id);
-	antinuke.save(owner, { enabled: true, whitelistRankIds: [rank.id, 9999] });
-	assert.deepEqual(antinuke.get().whitelistRankIds, [rank.id]);
+	await antinuke.save(owner, { enabled: true, whitelistRankIds: [rank.id, 9999] });
+	assert.deepEqual((await antinuke.get()).whitelistRankIds, [rank.id]);
 	for (let i = 0; i < 5; i++) assert.equal((await act('channel_delete', MAIN, BOB)).exempt, true);
-	assert.equal(antinuke.incidents().length, 0);
+	assert.equal((await antinuke.incidents()).length, 0);
 });
 
 test('no double quarantine: later actions are added to the open incident', async () => {
@@ -122,8 +122,8 @@ test('no double quarantine: later actions are added to the open incident', async
 	const results = await Promise.all([1, 2, 3, 4, 5].map(() => act('channel_delete')));
 	assert.equal(results.filter(r => r.incident).length, 1);
 	await act('role_delete');
-	assert.equal(antinuke.incidents().length, 1);
-	assert.equal(antinuke.incidents()[0].actions.length, 6);
+	assert.equal((await antinuke.incidents()).length, 1);
+	assert.equal((await antinuke.incidents())[0].actions.length, 6);
 	assert.equal(executor.calls.filter(c => c[0] === 'removeRole').length, 4);
 	assert.equal(executor.dms.length, 1);
 });
@@ -152,24 +152,24 @@ test('restore gives every removed role back and closes the incident', async () =
 	// After a restore, a new burst opens a new incident
 	for (let i = 0; i < 4; i++) await act('member_ban');
 	assert.ok((await act('member_ban')).incident);
-	assert.equal(antinuke.incidents().length, 2);
+	assert.equal((await antinuke.incidents()).length, 2);
 });
 
 test('dismiss closes without giving anything back', async () => {
 	const { antinuke, act, owner, executor } = await setup();
 	for (let i = 0; i < 2; i++) await act('guild_update');
-	const [incident] = antinuke.incidents();
-	const dismissed = antinuke.dismiss(owner, incident.id);
+	const [incident] = await antinuke.incidents();
+	const dismissed = await antinuke.dismiss(owner, incident.id);
 	assert.equal(dismissed.status, 'dismissed');
 	assert.equal(executor.calls.filter(c => c[0] === 'addRole').length, 0);
-	assert.throws(() => antinuke.dismiss(owner, incident.id), ValidationError);
+	await assert.rejects(async () => antinuke.dismiss(owner, incident.id), ValidationError);
 });
 
 test('removeAllRoles takes every role, roles above the bot are reported', async () => {
 	const { antinuke, act, executor } = await setup({ removeAllRoles: true });
 	executor.roles.get(OTHER)[0].editable = false;
 	for (let i = 0; i < 3; i++) await act('channel_delete');
-	const [incident] = antinuke.incidents();
+	const [incident] = await antinuke.incidents();
 	assert.deepEqual(incident.removedRoles[MAIN], ['9001', '9002', '9003']);
 	assert.deepEqual(incident.removedRoles[OTHER], ['9002', '9003']);
 	assert.equal(incident.failures.length, 1);
@@ -182,7 +182,7 @@ test('a bot added by someone untrusted is kicked', async () => {
 	await act('bot_add', MAIN, ALICE, { targetId: BOT, targetName: 'NukeBot' });
 	assert.ok(executor.calls.some(c => c[0] === 'kick' && c[2] === BOT));
 	executor.calls.length = 0;
-	antinuke.save(owner, { enabled: true, kickBots: false });
+	await antinuke.save(owner, { enabled: true, kickBots: false });
 	await act('bot_add', MAIN, BOB, { targetId: BOT });
 	assert.equal(executor.calls.filter(c => c[0] === 'kick').length, 0);
 });
@@ -190,6 +190,6 @@ test('a bot added by someone untrusted is kicked', async () => {
 test('only antinuke.manage can change the settings', async () => {
 	const { antinuke, core } = await setup();
 	const alice = await core.ranks.resolve(ALICE);
-	assert.throws(() => antinuke.save(alice, { enabled: false }), ForbiddenError);
-	assert.throws(() => antinuke.dismiss(alice, 1), ForbiddenError);
+	await assert.rejects(async () => antinuke.save(alice, { enabled: false }), ForbiddenError);
+	await assert.rejects(async () => antinuke.dismiss(alice, 1), ForbiddenError);
 });

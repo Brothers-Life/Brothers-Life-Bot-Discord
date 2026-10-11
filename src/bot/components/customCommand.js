@@ -6,7 +6,7 @@ export const prefix = 'cc';
 
 export async function execute(interaction) {
 	const [, commandId, componentId] = interaction.customId.split(':');
-	const command = interaction.client.core.customCommands.list().find(c => c.id === Number(commandId));
+	const command = (await interaction.client.core.customCommands.list()).find(c => c.id === Number(commandId));
 	if (!command?.components.some(c => c.id === componentId)) {
 		await interaction.reply({ content: 'Ce bouton ne fonctionne plus : la commande a été modifiée ou supprimée.', flags: MessageFlags.Ephemeral });
 		return;

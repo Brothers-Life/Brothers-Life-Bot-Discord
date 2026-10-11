@@ -17,10 +17,10 @@ export function registerFivemRoutes(app, { core }) {
 
 	app.get('/api/fivem', { config: { permission: 'fivem.view' } }, async (request) => {
 		const manage = request.actor.can('fivem.manage');
-		const guilds = manage ? network.list().filter(g => g.status === 'active' && g.botPresent) : [];
+		const guilds = manage ? (await network.list()).filter(g => g.status === 'active' && g.botPresent) : [];
 		return {
-			servers: fivem.list(),
-			presence: fivem.presence(),
+			servers: await fivem.list(),
+			presence: await fivem.presence(),
 			guilds: await Promise.all(guilds.map(async g => ({ id: g.id, name: g.name, channels: await executor.listTextChannels(g.id) }))),
 		};
 	});

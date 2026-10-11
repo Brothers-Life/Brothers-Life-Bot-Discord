@@ -7,7 +7,7 @@ import * as ipc from './utils/ipc.js';
 import config from './utils/config.js';
 import logger, { scheduleLogCleanup } from './utils/logger.js';
 import { startupChecks } from './utils/startupChecks.js';
-import { openDb } from './db/index.js';
+import { openDb, databaseOptions } from './db/index.js';
 import { schemaVersion } from './db/migrate.js';
 import { createCore } from './core/context.js';
 import { createVersionService } from './core/versions.js';
@@ -80,7 +80,7 @@ async function main() {
 	}
 	scheduleLogCleanup();
 
-	const db = openDb(path.join(config.DATA_DIR, 'bot.db'));
+	const db = await openDb(databaseOptions(config));
 	cleanups.push(() => db.close());
 	if (db.migration.from !== db.migration.to) {
 		logger.info(`Database migrated from schema v${db.migration.from} to v${db.migration.to}`);
@@ -89,6 +89,8 @@ async function main() {
 	const bot = createBot({ dataDir: config.DATA_DIR });
 	setPanelUrl(config.WEB_PUBLIC_URL);
 	const core = createCore({ db, config, executor: bot.executor, logger });
+	// Caches every process needs, then the repairs only the bot process does
+	await core.init({ worker: true });
 	const versions = createVersionService({
 		config,
 		settings: core.settings,
@@ -111,7 +113,7 @@ async function main() {
 	cleanups.push(() => core.fivemData.close());
 
 	await bot.login(config.TOKEN);
-	core.audit.record({ actorId: 'system', source: 'system', action: 'system.start', details: { version: `v${pkg.version}`, supervised: ipc.supervised } });
+	await core.audit.record({ actorId: 'system', source: 'system', action: 'system.start', details: { version: `v${pkg.version}`, supervised: ipc.supervised } });
 
 	const timers = [
 		every(HOUR, () => core.sessions.purgeExpired(), 'Session purge failed'),
@@ -173,7 +175,7 @@ async function main() {
 	}
 	cleanups.push(() => timers.forEach(clearInterval));
 
-	ipc.send({ type: 'ready', version: `v${pkg.version}`, schemaVersion: schemaVersion(db) });
+	ipc.send({ type: 'ready', version: `v${pkg.version}`, schemaVersion: await schemaVersion(db) });
 	logger.success(`Ready. Panel: ${config.WEB_PUBLIC_URL}`);
 }
 

@@ -86,7 +86,7 @@ test('HTML documents of the API are sandboxed', async () => {
 
 test('null clears a permission profile (null-first anyOf, no coercion to [""])', async () => {
 	const { app, core, owner } = await setup();
-	const rank = core.ranks.create(owner, { name: 'Modo', level: 10, permissions: ['panel.access'] });
+	const rank = await core.ranks.create(owner, { name: 'Modo', level: 10, permissions: ['panel.access'] });
 	const cookies = await sessionFor(app, OWNER);
 	const put = body => app.inject({ method: 'PUT', url: `/api/permissions/${rank.id}`, cookies, headers: { 'x-requested-with': 'panel' }, payload: body });
 	assert.equal((await put({ permissions: ['ViewChannel'] })).statusCode, 200);
@@ -96,18 +96,18 @@ test('null clears a permission profile (null-first anyOf, no coercion to [""])',
 
 test('feedback handling with an API key needs the permission in the key scope', async () => {
 	const { app, core, owner } = await setup();
-	const box = core.feedback.createBox(owner, MAIN, { preset: 'suggestions', config: { cooldownMinutes: 0 } });
+	const box = await core.feedback.createBox(owner, MAIN, { preset: 'suggestions', config: { cooldownMinutes: 0 } });
 	const item = await core.feedback.create({ boxId: box.id, guildId: MAIN, userId: BOB, userName: 'bob', answers: [{ id: 'title', type: 'short', label: 'Titre', value: 'Une idée' }] });
 	const call = (secret, url, payload) => app.inject({ method: 'POST', url, headers: { authorization: `Bearer ${secret}` }, payload });
 
-	const narrow = core.apiKeys.create(owner, { name: 'Musique', permissions: ['music.use'] }).secret;
+	const narrow = (await core.apiKeys.create(owner, { name: 'Musique', permissions: ['music.use'] })).secret;
 	for (const [url, payload] of [[`/api/feedback/items/${item.id}/status`, { status: 'accepted' }], [`/api/feedback/items/${item.id}/assign`, {}], [`/api/feedback/items/${item.id}/review`, { approved: true }]]) {
 		const res = await call(narrow, url, payload);
 		assert.equal(res.statusCode, 403, `${url}: ${res.body}`);
 	}
-	assert.equal(core.feedback.get(owner, item.id).status, 'pending');
+	assert.equal((await core.feedback.get(owner, item.id)).status, 'pending');
 
-	const full = core.apiKeys.create(owner, { name: 'Suggestions', permissions: ['feedback.manage'] }).secret;
+	const full = (await core.apiKeys.create(owner, { name: 'Suggestions', permissions: ['feedback.manage'] })).secret;
 	const res = await call(full, `/api/feedback/items/${item.id}/status`, { status: 'accepted' });
 	assert.equal(res.statusCode, 200, res.body);
 });
@@ -123,7 +123,7 @@ test('CSV cells never start a formula', () => {
 
 test('the server list is readable by any panel user, the network history only with network.view', async () => {
 	const { app, core, owner } = await setup();
-	const rank = core.ranks.create(owner, { name: 'Support', level: 10, permissions: ['panel.access', 'tickets.view'] });
+	const rank = await core.ranks.create(owner, { name: 'Support', level: 10, permissions: ['panel.access', 'tickets.view'] });
 	await core.ranks.assignDirect(owner, BOB, rank.id);
 	const res = await app.inject({ method: 'GET', url: '/api/network', cookies: await sessionFor(app, BOB) });
 	assert.equal(res.statusCode, 200, res.body);

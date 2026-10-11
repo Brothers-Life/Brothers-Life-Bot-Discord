@@ -143,7 +143,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	} });
 	const fivemRoles = createFivemRoles({ fivemData, settings, executor, network, audit, logs, logger });
 	// Notifications are created later in this function: looked up when a purchase comes in
-	const tebex = createTebex({ db, network, audit, executor, settings, logs, variables, fivemData, notify: n => core.notifications?.push(n), fetchImpl, logger });
+	const tebex = createTebex({ db, network, audit, executor, settings, logs, variables, fivemData, notify: n => core.notifications?.push(n).catch(error => logger.warn('Notification failed:', error?.message)), fetchImpl, logger });
 	const dms = createDms({ db, audit, executor, settings, logs, uploads, logger });
 	const templates = createTemplates({ db, network, audit, executor, events, automod, tickets, logs, settings, logger });
 	const rpEvents = createRpEvents({ db, network, audit, executor, uploads, logger });
@@ -205,7 +205,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	// What the services load from the database before working (open tickets, raids in progress…).
 	// `worker`: the process running the Discord bot also repairs what a restart cut (announcements being sent…).
 	core.init = async ({ worker = false } = {}) => {
-		for (const service of [tickets, antiraid]) await service.init();
+		for (const service of [tickets, antiraid, fivemEvents]) await service.init();
 		if (worker) for (const service of [templates, announcements]) await service.recover();
 	};
 	return core;

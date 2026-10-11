@@ -8,15 +8,15 @@ const guildParam = { type: 'object', properties: { guildId: snowflake }, require
 export function registerOnboardingRoutes(app, { core }) {
 	const { onboarding, uploads, executor, network } = core;
 
-	function requireGuild(guildId) {
-		if (!network.find(guildId)) throw new NotFoundError('Serveur introuvable.');
+	async function requireGuild(guildId) {
+		if (!await network.find(guildId)) throw new NotFoundError('Serveur introuvable.');
 	}
 
 	app.get('/api/onboarding/:guildId', { config: { permission: 'onboarding.view' }, schema: { params: guildParam } }, async (request) => {
 		const { guildId } = request.params;
-		requireGuild(guildId);
+		await requireGuild(guildId);
 		const [channels, roles] = await Promise.all([executor.listTextChannels(guildId), executor.listRoles(guildId)]);
-		return { config: onboarding.get(guildId), channels, roles, fonts: Object.keys(FONTS) };
+		return { config: await onboarding.get(guildId), channels, roles, fonts: Object.keys(FONTS) };
 	});
 
 	app.put('/api/onboarding/:guildId', {
@@ -31,7 +31,7 @@ export function registerOnboardingRoutes(app, { core }) {
 		schema: { params: guildParam, body: { type: 'object', required: ['design'], properties: { design: { type: 'object' } } } },
 		bodyLimit: 1024 * 1024,
 	}, async (request, reply) => {
-		requireGuild(request.params.guildId);
+		await requireGuild(request.params.guildId);
 		const user = await executor.getUser(request.actor.id);
 		const png = await onboarding.previewCard(request.params.guildId, request.body.design, user ? { id: user.id, username: user.username, globalName: user.globalName, avatarUrl: user.avatar } : null);
 		return reply.type('image/png').header('Cache-Control', 'no-store').send(png);
@@ -46,7 +46,7 @@ export function registerOnboardingRoutes(app, { core }) {
 	});
 
 	app.post('/api/onboarding/:guildId/rules/publish', { config: { permission: 'onboarding.manage' }, schema: { params: guildParam } }, async (request) => {
-		return onboarding.publishRules(request.actor, request.params.guildId);
+		return await onboarding.publishRules(request.actor, request.params.guildId);
 	});
 
 	// --- Images sent from the panel -----------------------------------------------------------
@@ -62,7 +62,7 @@ export function registerOnboardingRoutes(app, { core }) {
 		}
 		const buffer = Buffer.from(request.body.data.replace(/^data:[^,]*,/, ''), 'base64');
 		const saved = uploads.save(buffer);
-		core.audit.record({ actorId: actor.id, source: 'panel', action: 'uploads.add', target: saved.id, details: { size: saved.size } });
+		await core.audit.record({ actorId: actor.id, source: 'panel', action: 'uploads.add', target: saved.id, details: { size: saved.size } });
 		reply.code(201);
 		return saved;
 	});

@@ -22,8 +22,9 @@ function keep(t) {
 // a shared one can be played by anyone, but only changed by its owner (or music.manage).
 export function createPlaylists({ db, audit, now = Date.now }) {
 	const q = {
-		visible: db.prepare('SELECT * FROM music_playlists WHERE shared = 1 OR owner_id = ? ORDER BY updated_at DESC'),
+		visible: db.prepare('SELECT * FROM music_playlists WHERE shared = 1 OR owner_id = ? ORDER BY updated_at DESC, id DESC'),
 		get: db.prepare('SELECT * FROM music_playlists WHERE id = ?'),
+		lock: db.prepare('SELECT * FROM music_playlists WHERE id = ? FOR UPDATE'),
 		count: db.prepare('SELECT COUNT(*) AS n FROM music_playlists WHERE owner_id = ?'),
 		insert: db.prepare('INSERT INTO music_playlists (name, owner_id, shared, tracks, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'),
 		update: db.prepare('UPDATE music_playlists SET name = ?, shared = ?, tracks = ?, updated_at = ? WHERE id = ?'),
@@ -46,24 +47,38 @@ export function createPlaylists({ db, audit, now = Date.now }) {
 		return text;
 	}
 
-	function editable(ctx, id) {
-		const list = service.get(id, ctx.actorId);
+	// lock: inside a transaction, the row stays locked until it ends (read-change-write of the tracks)
+	async function editable(ctx, id, { lock = false } = {}) {
+		const list = await load(id, ctx.actorId, { lock });
 		if (list.ownerId !== ctx.actorId && !ctx.can?.('music.manage')) throw new ForbiddenError('Seul son créateur peut modifier cette playlist.');
 		return list;
 	}
 
-	function write(list, patch = {}, ctx = null, verb = null) {
-		const next = { ...list, ...patch };
-		if (next.tracks.length > MAX_TRACKS) throw new ValidationError(`Une playlist contient ${MAX_TRACKS} titres maximum.`);
-		q.update.run(next.name, next.shared ? 1 : 0, JSON.stringify(next.tracks), now(), list.id);
-		if (ctx && verb) audit.record({ actorId: ctx.actorId, source: ctx.source === 'panel' ? 'panel' : 'bot', action: `music.${verb}`, target: String(list.id), details: { playlist: next.name } });
-		return service.get(list.id, ctx?.actorId);
+	async function load(id, userId, { forPlay = false, lock = false } = {}) {
+		const row = await (lock ? q.lock : q.get).get(Number(id));
+		if (!row || (!row.shared && row.owner_id !== String(userId))) throw new NotFoundError('Playlist introuvable.');
+		if (forPlay) await q.played.run(row.id);
+		return toPlaylist(row);
+	}
+
+	// Reads the playlist, applies change(list) -> patch and saves it in one transaction: two additions
+	// at the same time must not lose one of them
+	async function write(ctx, id, change, verb = null) {
+		const { list, next } = await db.transaction(async () => {
+			const saved = await editable(ctx, id, { lock: true });
+			const changed = { ...saved, ...change(saved) };
+			if (changed.tracks.length > MAX_TRACKS) throw new ValidationError(`Une playlist contient ${MAX_TRACKS} titres maximum.`);
+			await q.update.run(changed.name, changed.shared ? 1 : 0, JSON.stringify(changed.tracks), now(), saved.id);
+			return { list: saved, next: changed };
+		})();
+		if (verb) await audit.record({ actorId: ctx.actorId, source: ctx.source === 'panel' ? 'panel' : 'bot', action: `music.${verb}`, target: String(list.id), details: { playlist: next.name } });
+		return service.get(list.id, ctx.actorId);
 	}
 
 	const service = {
 		// Own playlists and the shared ones; `forPlay` also counts a play
-		list(userId) {
-			return q.visible.all(String(userId)).map((row) => {
+		async list(userId) {
+			return (await q.visible.all(String(userId))).map((row) => {
 				const list = toPlaylist(row);
 				delete list.tracks;
 				return list;
@@ -71,57 +86,55 @@ export function createPlaylists({ db, audit, now = Date.now }) {
 		},
 
 		get(id, userId, { forPlay = false } = {}) {
-			const row = q.get.get(Number(id));
-			if (!row || (!row.shared && row.owner_id !== String(userId))) throw new NotFoundError('Playlist introuvable.');
-			if (forPlay) q.played.run(row.id);
-			return toPlaylist(row);
+			return load(id, userId, { forPlay });
 		},
 
 		// By name (autocomplete of /musique playlist)
-		suggest(userId, typed = '', { ownOnly = false } = {}) {
+		async suggest(userId, typed = '', { ownOnly = false } = {}) {
 			const text = String(typed).toLowerCase();
-			return service.list(userId).filter(p => (!ownOnly || p.ownerId === String(userId)) && (!text || p.name.toLowerCase().includes(text))).slice(0, 25);
+			return (await service.list(userId)).filter(p => (!ownOnly || p.ownerId === String(userId)) && (!text || p.name.toLowerCase().includes(text))).slice(0, 25);
 		},
 
-		create(ctx, { name, shared = true, tracks = [] }) {
-			if (q.count.get(ctx.actorId).n >= MAX_PER_OWNER) throw new ValidationError(`${MAX_PER_OWNER} playlists maximum par personne.`);
+		async create(ctx, { name, shared = true, tracks = [] }) {
+			if ((await q.count.get(String(ctx.actorId))).n >= MAX_PER_OWNER) throw new ValidationError(`${MAX_PER_OWNER} playlists maximum par personne.`);
 			const list = tracks.map(keep);
 			if (list.length > MAX_TRACKS) throw new ValidationError(`Une playlist contient ${MAX_TRACKS} titres maximum.`);
 			const at = now();
-			const id = Number(q.insert.run(cleanName(name), String(ctx.actorId), shared ? 1 : 0, JSON.stringify(list), at, at).lastInsertRowid);
-			audit.record({ actorId: ctx.actorId, source: ctx.source === 'panel' ? 'panel' : 'bot', action: 'music.playlist_create', target: String(id), details: { playlist: String(name).trim(), count: list.length } });
+			const id = Number((await q.insert.run(cleanName(name), String(ctx.actorId), shared ? 1 : 0, JSON.stringify(list), at, at)).lastInsertRowid);
+			await audit.record({ actorId: ctx.actorId, source: ctx.source === 'panel' ? 'panel' : 'bot', action: 'music.playlist_create', target: String(id), details: { playlist: String(name).trim(), count: list.length } });
 			return service.get(id, ctx.actorId);
 		},
 
-		update(ctx, id, { name, shared }) {
-			const list = editable(ctx, id);
-			return write(list, { ...(name !== undefined ? { name: cleanName(name) } : {}), ...(shared !== undefined ? { shared: Boolean(shared) } : {}) }, ctx, 'playlist_update');
+		async update(ctx, id, { name, shared }) {
+			return write(ctx, id, () => ({ ...(name !== undefined ? { name: cleanName(name) } : {}), ...(shared !== undefined ? { shared: Boolean(shared) } : {}) }), 'playlist_update');
 		},
 
-		addTracks(ctx, id, tracks) {
-			const list = editable(ctx, id);
-			return write(list, { tracks: [...list.tracks, ...tracks.map(keep)] });
+		async addTracks(ctx, id, tracks) {
+			const added = tracks.map(keep);
+			return write(ctx, id, list => ({ tracks: [...list.tracks, ...added] }));
 		},
 
-		removeTrack(ctx, id, index) {
-			const list = editable(ctx, id);
-			if (!Number.isInteger(index) || index < 0 || index >= list.tracks.length) throw new ValidationError('Titre introuvable dans la playlist.');
-			return write(list, { tracks: list.tracks.filter((_, i) => i !== index) });
+		async removeTrack(ctx, id, index) {
+			return write(ctx, id, (list) => {
+				if (!Number.isInteger(index) || index < 0 || index >= list.tracks.length) throw new ValidationError('Titre introuvable dans la playlist.');
+				return { tracks: list.tracks.filter((_, i) => i !== index) };
+			});
 		},
 
-		moveTrack(ctx, id, from, to) {
-			const list = editable(ctx, id);
-			const tracks = [...list.tracks];
-			if (![from, to].every(i => Number.isInteger(i) && i >= 0 && i < tracks.length)) throw new ValidationError('Position invalide.');
-			const [track] = tracks.splice(from, 1);
-			tracks.splice(to, 0, track);
-			return write(list, { tracks });
+		async moveTrack(ctx, id, from, to) {
+			return write(ctx, id, (list) => {
+				const tracks = [...list.tracks];
+				if (![from, to].every(i => Number.isInteger(i) && i >= 0 && i < tracks.length)) throw new ValidationError('Position invalide.');
+				const [track] = tracks.splice(from, 1);
+				tracks.splice(to, 0, track);
+				return { tracks };
+			});
 		},
 
-		remove(ctx, id) {
-			const list = editable(ctx, id);
-			q.remove.run(list.id);
-			audit.record({ actorId: ctx.actorId, source: ctx.source === 'panel' ? 'panel' : 'bot', action: 'music.playlist_delete', target: String(list.id), details: { playlist: list.name } });
+		async remove(ctx, id) {
+			const list = await editable(ctx, id);
+			await q.remove.run(list.id);
+			await audit.record({ actorId: ctx.actorId, source: ctx.source === 'panel' ? 'panel' : 'bot', action: 'music.playlist_delete', target: String(list.id), details: { playlist: list.name } });
 		},
 	};
 	return service;

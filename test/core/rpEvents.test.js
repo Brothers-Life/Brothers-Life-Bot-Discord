@@ -53,12 +53,12 @@ test('reminders once, participant role while it lasts, ended at the end; cancel 
 	assert.equal(executor.dms.filter(d => /Rappel/.test(d[1])).length, 2, 'going and maybe, once');
 	advance(HOUR);
 	await rpEvents.tick();
-	assert.equal(rpEvents.get(e.id).status, 'live');
+	assert.equal((await rpEvents.get(e.id)).status, 'live');
 	assert.ok(executor.memberRoles.get(`${MAIN}:${ALICE}`).includes(PARTICIPANT));
 	assert.ok(!executor.memberRoles.get(`${MAIN}:${BOB}`).includes(PARTICIPANT), 'maybe gets no role');
 	advance(HOUR);
 	await rpEvents.tick();
-	assert.equal(rpEvents.get(e.id).status, 'ended');
+	assert.equal((await rpEvents.get(e.id)).status, 'ended');
 	assert.ok(!executor.memberRoles.get(`${MAIN}:${ALICE}`).includes(PARTICIPANT));
 	await assert.rejects(rpEvents.rsvp(BOB, e.id, 'going'), /fermées/);
 
@@ -81,7 +81,7 @@ test('update: a new date resets the reminders and warns everyone; more seats pro
 	await rpEvents.rsvp(DAVE, e.id, 'going');
 	advance(HOUR + 1);
 	await rpEvents.tick();
-	assert.deepEqual(rpEvents.get(e.id).reminded, [60]);
+	assert.deepEqual((await rpEvents.get(e.id)).reminded, [60]);
 
 	executor.dms.length = 0;
 	const moved = await rpEvents.save(owner, { ...input, id: e.id, startsAt: at() + 5 * HOUR, endsAt: at() + 6 * HOUR, capacity: 2 });

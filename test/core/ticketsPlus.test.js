@@ -10,9 +10,9 @@ const HOUR = 3600_000;
 async function setup(config = {}) {
 	const ctx = await withNetwork();
 	const { core, owner, executor } = ctx;
-	const modo = core.ranks.create(owner, { name: 'Modo', level: 20, permissions: ['tickets.handle', 'tickets.view'] });
+	const modo = await core.ranks.create(owner, { name: 'Modo', level: 20, permissions: ['tickets.handle', 'tickets.view'] });
 	await core.ranks.assignDirect(owner, ALICE, modo.id);
-	core.tickets.saveSettings(owner, MAIN, { maxOpen: 10 });
+	await core.tickets.saveSettings(owner, MAIN, { maxOpen: 10 });
 	const category = await core.tickets.saveCategory(owner, MAIN, { name: 'Support', rankIds: [modo.id], config });
 	executor.channels.set('c-tickets', { guildId: MAIN, name: 'logs-tickets' });
 	await core.logs.setRoute(owner, MAIN, 'tickets', 'c-tickets');
@@ -21,8 +21,8 @@ async function setup(config = {}) {
 }
 
 // Moves a column of a ticket back in time (no clock injection in the core)
-function age(db, ticketId, column, ms) {
-	db.prepare(`UPDATE tickets SET ${column} = ${column} - ? WHERE id = ?`).run(ms, ticketId);
+async function age(db, ticketId, column, ms) {
+	await db.prepare(`UPDATE tickets SET ${column} = ${column} - ? WHERE id = ?`).run(ms, ticketId);
 }
 
 test('close request: the opener accepts, the ticket closes', async () => {
@@ -39,7 +39,7 @@ test('close request: the opener accepts, the ticket closes', async () => {
 	assert.equal(closed.status, 'closed');
 	assert.equal(closed.closeReason, 'Problème réglé');
 	assert.equal(closed.closeRequest, null);
-	assert.equal(core.audit.query({ action: 'tickets.close_request' }).length, 1);
+	assert.equal((await core.audit.query({ action: 'tickets.close_request' })).length, 1);
 });
 
 test('close request: accepted even when members cannot close their ticket themselves', async () => {
@@ -60,24 +60,24 @@ test('close request: refusal cancels it and tells the staff', async () => {
 	assert.equal(still.status, 'open');
 	assert.equal(still.closeRequest, null);
 	assert.ok(executor.notices.some(n => n.kind === 'close_refused'));
-	assert.equal(core.audit.query({ action: 'tickets.close_refused' }).length, 1);
+	assert.equal((await core.audit.query({ action: 'tickets.close_refused' })).length, 1);
 	await assert.rejects(core.tickets.answerCloseRequest(MEMBER, ticket.id, true), /plus de demande/);
 	// No auto close afterwards
-	age(db, ticket.id, 'created_at', 48 * HOUR);
+	await age(db, ticket.id, 'created_at', 48 * HOUR);
 	await core.tickets.sweep();
-	assert.equal(core.tickets.get(ticket.id).status, 'open');
+	assert.equal((await core.tickets.get(ticket.id)).status, 'open');
 });
 
 test('close request: closed by the bot after the delay of the type, never with 0', async () => {
 	const { core, owner, category, open, db } = await setup({ closeRequest: { autoCloseHours: 2 } });
 	const ticket = await open();
 	await core.tickets.requestClose(ALICE, ticket.id);
-	age(db, ticket.id, 'close_request_at', HOUR);
+	await age(db, ticket.id, 'close_request_at', HOUR);
 	await core.tickets.sweep();
-	assert.equal(core.tickets.get(ticket.id).status, 'open');
-	age(db, ticket.id, 'close_request_at', 2 * HOUR);
+	assert.equal((await core.tickets.get(ticket.id)).status, 'open');
+	await age(db, ticket.id, 'close_request_at', 2 * HOUR);
 	await core.tickets.sweep();
-	const closed = core.tickets.get(ticket.id);
+	const closed = await core.tickets.get(ticket.id);
 	assert.equal(closed.status, 'closed');
 	assert.equal(closed.closedBy, 'system');
 	assert.match(closed.closeReason, /Pas de réponse/);
@@ -85,9 +85,9 @@ test('close request: closed by the bot after the delay of the type, never with 0
 	await core.tickets.saveCategory(owner, MAIN, { id: category.id, name: 'Support', rankIds: category.rankIds, config: { ...category.config, closeRequest: { autoCloseHours: 0 } } });
 	const other = await open();
 	await core.tickets.requestClose(ALICE, other.id);
-	age(db, other.id, 'close_request_at', 1000 * HOUR);
+	await age(db, other.id, 'close_request_at', 1000 * HOUR);
 	await core.tickets.sweep();
-	assert.equal(core.tickets.get(other.id).status, 'open');
+	assert.equal((await core.tickets.get(other.id)).status, 'open');
 });
 
 test('the default delay of a close request is 24 h', async () => {
@@ -99,25 +99,25 @@ test('the default delay of a close request is 24 h', async () => {
 test('saved replies: managed with tickets.replies, sent with variables filled', async () => {
 	const { core, owner, executor, category, open } = await setup();
 	const alice = await core.ranks.resolve(ALICE);
-	assert.throws(() => core.tickets.saveReply(alice, MAIN, { name: 'Salut', content: 'x' }), ForbiddenError);
-	const reply = core.tickets.saveReply(owner, MAIN, { name: 'Salut', content: 'Bonjour {user}, ticket #{number} ({type}) : {subject}. {staff} s’en occupe. {nope}' });
-	assert.throws(() => core.tickets.saveReply(owner, MAIN, { name: 'salut', content: 'doublon' }), ValidationError);
-	assert.throws(() => core.tickets.saveReply(owner, MAIN, { name: 'Vide', content: '  ' }), ValidationError);
+	await assert.rejects(async () => core.tickets.saveReply(alice, MAIN, { name: 'Salut', content: 'x' }), ForbiddenError);
+	const reply = await core.tickets.saveReply(owner, MAIN, { name: 'Salut', content: 'Bonjour {user}, ticket #{number} ({type}) : {subject}. {staff} s’en occupe. {nope}' });
+	await assert.rejects(async () => core.tickets.saveReply(owner, MAIN, { name: 'salut', content: 'doublon' }), ValidationError);
+	await assert.rejects(async () => core.tickets.saveReply(owner, MAIN, { name: 'Vide', content: '  ' }), ValidationError);
 	const other = await core.tickets.saveCategory(owner, MAIN, { name: 'Autre' });
-	const scoped = core.tickets.saveReply(owner, MAIN, { name: 'Autre type', content: 'x', categoryId: other.id });
+	const scoped = await core.tickets.saveReply(owner, MAIN, { name: 'Autre type', content: 'x', categoryId: other.id });
 
 	const ticket = await open();
-	assert.deepEqual(core.tickets.ticketReplies(ticket.id).map(r => r.id), [reply.id]);
+	assert.deepEqual((await core.tickets.ticketReplies(ticket.id)).map(r => r.id), [reply.id]);
 	await assert.rejects(core.tickets.sendSavedReply(ALICE, ticket.id, scoped.id), NotFoundError);
 	await assert.rejects(core.tickets.sendSavedReply(MEMBER, ticket.id, reply.id), ForbiddenError);
 
 	const text = await core.tickets.sendSavedReply(ALICE, ticket.id, reply.id);
 	assert.equal(text, `Bonjour <@${MEMBER}>, ticket #1 (Support) : Aide. <@${ALICE}> s’en occupe. {nope}`);
 	assert.equal(executor.replies.at(-1).content, text);
-	assert.equal(core.tickets.replies(MAIN).find(r => r.id === reply.id).uses, 1);
-	assert.equal(core.audit.query({ action: 'tickets.saved_reply' }).length, 1);
+	assert.equal((await core.tickets.replies(MAIN)).find(r => r.id === reply.id).uses, 1);
+	assert.equal((await core.audit.query({ action: 'tickets.saved_reply' })).length, 1);
 	// A saved reply counts as the first response
-	assert.equal(core.tickets.get(ticket.id).firstResponderId, ALICE);
+	assert.equal((await core.tickets.get(ticket.id)).firstResponderId, ALICE);
 	assert.ok(category);
 });
 
@@ -125,12 +125,12 @@ test('saved replies from the panel: the edited text is filled, FiveM keys only f
 	const { core, owner, executor, open } = await setup();
 	core.fivemData.discordVars = async () => ({ 'fivem.linked': 'Oui', 'fivem.dbid': 42, 'fivem.citizenid': 'ABC123' });
 	core.fivemData.settingsView = () => ({ enabled: true });
-	const reply = core.tickets.saveReply(owner, MAIN, { name: 'Dossier', content: 'Ton dbid : {fivem.dbid}' });
+	const reply = await core.tickets.saveReply(owner, MAIN, { name: 'Dossier', content: 'Ton dbid : {fivem.dbid}' });
 	// Without fivemdata.view, nobody adds FiveM data to a saved reply
-	const manager = core.ranks.create(owner, { name: 'Gestion', level: 30, permissions: ['tickets.replies', 'tickets.handle'] });
+	const manager = await core.ranks.create(owner, { name: 'Gestion', level: 30, permissions: ['tickets.replies', 'tickets.handle'] });
 	await core.ranks.assignDirect(owner, '100000000000000005', manager.id);
 	const actor = await core.ranks.resolve('100000000000000005');
-	assert.throws(() => core.tickets.saveReply(actor, MAIN, { name: 'Leak', content: '{fivem.citizenid}' }), ForbiddenError);
+	await assert.rejects(async () => core.tickets.saveReply(actor, MAIN, { name: 'Leak', content: '{fivem.citizenid}' }), ForbiddenError);
 
 	const ticket = await open();
 	const sent = await core.tickets.reply(actor, ticket.id, { content: 'Ton dbid : {fivem.dbid}, citizen {fivem.citizenid}, n°{number}', replyId: reply.id });
@@ -145,12 +145,12 @@ test('first response: the first message of someone else than the opener, not the
 	const { core, open } = await setup();
 	const ticket = await open();
 	const at = Date.now();
-	core.tickets.recordMessage(ticket.channelId, { id: 'm1', authorId: MEMBER, content: 'allô', createdAt: at });
-	core.tickets.recordMessage(ticket.channelId, { id: 'm2', authorId: '1', bot: true, content: 'bot', createdAt: at + 10 });
-	assert.equal(core.tickets.get(ticket.id).firstResponseAt, null);
-	core.tickets.recordMessage(ticket.channelId, { id: 'm3', authorId: ALICE, content: 'Je regarde', createdAt: at + 5000 });
-	core.tickets.recordMessage(ticket.channelId, { id: 'm4', authorId: '100000000000000009', content: 'moi aussi', createdAt: at + 9000 });
-	const after = core.tickets.get(ticket.id);
+	await core.tickets.recordMessage(ticket.channelId, { id: 'm1', authorId: MEMBER, content: 'allô', createdAt: at });
+	await core.tickets.recordMessage(ticket.channelId, { id: 'm2', authorId: '1', bot: true, content: 'bot', createdAt: at + 10 });
+	assert.equal((await core.tickets.get(ticket.id)).firstResponseAt, null);
+	await core.tickets.recordMessage(ticket.channelId, { id: 'm3', authorId: ALICE, content: 'Je regarde', createdAt: at + 5000 });
+	await core.tickets.recordMessage(ticket.channelId, { id: 'm4', authorId: '100000000000000009', content: 'moi aussi', createdAt: at + 9000 });
+	const after = await core.tickets.get(ticket.id);
 	assert.equal(after.firstResponseAt, at + 5000);
 	assert.equal(after.firstResponderId, ALICE);
 });
@@ -159,12 +159,12 @@ test('SLA: one alert in the tickets logs when nobody answered in time', async ()
 	const { core, executor, open, db } = await setup({ sla: { firstResponseMinutes: 30 } });
 	const ticket = await open();
 	await core.tickets.sweep();
-	assert.equal(core.audit.query({ action: 'tickets.sla_breach' }).length, 0);
-	age(db, ticket.id, 'created_at', 31 * 60_000);
+	assert.equal((await core.audit.query({ action: 'tickets.sla_breach' })).length, 0);
+	await age(db, ticket.id, 'created_at', 31 * 60_000);
 	await core.tickets.sweep();
 	await core.tickets.sweep();
-	assert.equal(core.audit.query({ action: 'tickets.sla_breach' }).length, 1);
-	assert.ok(core.tickets.get(ticket.id).slaBreachedAt > 0);
+	assert.equal((await core.audit.query({ action: 'tickets.sla_breach' })).length, 1);
+	assert.ok((await core.tickets.get(ticket.id)).slaBreachedAt > 0);
 	await core.logs.flush();
 	await new Promise(r => setImmediate(r));
 	assert.ok(executor.sent.some(s => s.channelId === 'c-tickets' && s.message.title === 'Délai de première réponse dépassé'));
@@ -173,15 +173,15 @@ test('SLA: one alert in the tickets logs when nobody answered in time', async ()
 test('SLA: answered late counts as a breach without alert, answered in time is fine', async () => {
 	const { core, open, db } = await setup({ sla: { firstResponseMinutes: 30 } });
 	const late = await open();
-	age(db, late.id, 'created_at', 40 * 60_000);
-	core.tickets.recordMessage(late.channelId, { id: 'l1', authorId: ALICE, content: 'désolé', createdAt: Date.now() });
+	await age(db, late.id, 'created_at', 40 * 60_000);
+	await core.tickets.recordMessage(late.channelId, { id: 'l1', authorId: ALICE, content: 'désolé', createdAt: Date.now() });
 	const fast = await open();
-	core.tickets.recordMessage(fast.channelId, { id: 'f1', authorId: ALICE, content: 'ok', createdAt: Date.now() });
+	await core.tickets.recordMessage(fast.channelId, { id: 'f1', authorId: ALICE, content: 'ok', createdAt: Date.now() });
 	await core.tickets.sweep();
-	assert.ok(core.tickets.get(late.id).slaBreachedAt > 0);
-	assert.equal(core.tickets.get(fast.id).slaBreachedAt, null);
-	assert.equal(core.audit.query({ action: 'tickets.sla_breach' }).length, 0);
-	const stats = core.tickets.stats({ guildId: MAIN });
+	assert.ok((await core.tickets.get(late.id)).slaBreachedAt > 0);
+	assert.equal((await core.tickets.get(fast.id)).slaBreachedAt, null);
+	assert.equal((await core.audit.query({ action: 'tickets.sla_breach' })).length, 0);
+	const stats = await core.tickets.stats({ guildId: MAIN });
 	assert.equal(stats.totals.slaTracked, 2);
 	assert.equal(stats.totals.slaBreaches, 1);
 });
@@ -227,10 +227,10 @@ test('stats from the service: filters by type and refuses an empty period', asyn
 	await core.tickets.claim(ALICE, t.id);
 	await core.tickets.close(ALICE, t.id, 'ok');
 	const other = await core.tickets.saveCategory(owner, MAIN, { name: 'Autre' });
-	assert.equal(core.tickets.stats({ guildId: MAIN }).totals.closed, 1);
-	assert.equal(core.tickets.stats({ guildId: MAIN, categoryId: other.id }).totals.opened, 0);
-	assert.equal(core.tickets.stats({ guildId: MAIN }).staff[0].userId, ALICE);
-	assert.throws(() => core.tickets.stats({ from: Date.now() + 10 * HOUR }), ValidationError);
+	assert.equal((await core.tickets.stats({ guildId: MAIN })).totals.closed, 1);
+	assert.equal((await core.tickets.stats({ guildId: MAIN, categoryId: other.id })).totals.opened, 0);
+	assert.equal((await core.tickets.stats({ guildId: MAIN })).staff[0].userId, ALICE);
+	await assert.rejects(async () => core.tickets.stats({ from: Date.now() + 10 * HOUR }), ValidationError);
 });
 
 test('close request: the opener writing in the ticket cancels it, no auto close afterwards', async () => {
@@ -238,14 +238,14 @@ test('close request: the opener writing in the ticket cancels it, no auto close 
 	const ticket = await open();
 	await core.tickets.requestClose(ALICE, ticket.id);
 	// Someone else writing does not cancel it
-	core.tickets.recordMessage(ticket.channelId, { id: 'x1', authorId: ALICE, content: 'Alors ?' });
-	assert.ok(core.tickets.get(ticket.id).closeRequest);
-	core.tickets.recordMessage(ticket.channelId, { id: 'x2', authorId: MEMBER, content: 'Non, toujours pas réglé' });
-	assert.equal(core.tickets.get(ticket.id).closeRequest, null);
+	await core.tickets.recordMessage(ticket.channelId, { id: 'x1', authorId: ALICE, content: 'Alors ?' });
+	assert.ok((await core.tickets.get(ticket.id)).closeRequest);
+	await core.tickets.recordMessage(ticket.channelId, { id: 'x2', authorId: MEMBER, content: 'Non, toujours pas réglé' });
+	assert.equal((await core.tickets.get(ticket.id)).closeRequest, null);
 	assert.ok(executor.notices.some(n => n.kind === 'close_refused'));
-	age(db, ticket.id, 'created_at', 48 * HOUR);
+	await age(db, ticket.id, 'created_at', 48 * HOUR);
 	await core.tickets.sweep();
-	assert.equal(core.tickets.get(ticket.id).status, 'open');
+	assert.equal((await core.tickets.get(ticket.id)).status, 'open');
 });
 
 test('close request accepted: the requester is kept for the staff activity, cleared when reopened', async () => {
@@ -253,23 +253,23 @@ test('close request accepted: the requester is kept for the staff activity, clea
 	const ticket = await open();
 	await core.tickets.requestClose(ALICE, ticket.id);
 	await core.tickets.answerCloseRequest(MEMBER, ticket.id, true);
-	assert.equal(db.prepare('SELECT close_request_by FROM tickets WHERE id = ?').get(ticket.id).close_request_by, ALICE);
-	assert.equal(core.tickets.get(ticket.id).closeRequest, null);
+	assert.equal((await db.prepare('SELECT close_request_by FROM tickets WHERE id = ?').get(ticket.id)).close_request_by, ALICE);
+	assert.equal((await core.tickets.get(ticket.id)).closeRequest, null);
 	await core.tickets.reopen(ALICE, ticket.id);
-	assert.equal(db.prepare('SELECT close_request_by FROM tickets WHERE id = ?').get(ticket.id).close_request_by, null);
+	assert.equal((await db.prepare('SELECT close_request_by FROM tickets WHERE id = ?').get(ticket.id)).close_request_by, null);
 });
 
 test('reopened ticket: the rating is reset so it can be rated again', async () => {
 	const { core, open } = await setup({ close: { mode: 'archive' }, rating: { enabled: true } });
 	const ticket = await open();
 	await core.tickets.close(ALICE, ticket.id);
-	core.tickets.rate(MEMBER, ticket.id, 2);
-	core.tickets.rateComment(MEMBER, ticket.id, 'Lent');
+	await core.tickets.rate(MEMBER, ticket.id, 2);
+	await core.tickets.rateComment(MEMBER, ticket.id, 'Lent');
 	const reopened = await core.tickets.reopen(ALICE, ticket.id);
 	assert.equal(reopened.rating, null);
 	assert.equal(reopened.ratingComment, null);
 	await core.tickets.close(ALICE, ticket.id);
-	assert.equal(core.tickets.rate(MEMBER, ticket.id, 5).rating, 5);
+	assert.equal((await core.tickets.rate(MEMBER, ticket.id, 5)).rating, 5);
 });
 
 test('closing DMs name the server', async () => {

@@ -18,30 +18,44 @@ export function createCustomCommands({ db, network, ranks, audit, executor, logs
 	const cooldowns = new Map();
 
 	const q = {
-		all: db.prepare('SELECT * FROM custom_commands ORDER BY name COLLATE NOCASE'),
+		all: db.prepare('SELECT * FROM custom_commands ORDER BY name COLLATE utf8mb4_unicode_ci, id'),
 		get: db.prepare('SELECT * FROM custom_commands WHERE id = ?'),
 		insert: db.prepare('INSERT INTO custom_commands (name, definition, enabled, created_by, created_at, updated_by, updated_at) VALUES (@name, @definition, 1, @by, @at, @by, @at)'),
 		update: db.prepare('UPDATE custom_commands SET name = @name, definition = @definition, updated_by = @by, updated_at = @at WHERE id = @id'),
 		enable: db.prepare('UPDATE custom_commands SET enabled = ?, updated_by = ?, updated_at = ? WHERE id = ?'),
 		delete: db.prepare('DELETE FROM custom_commands WHERE id = ?'),
 		used: db.prepare('UPDATE custom_commands SET uses = uses + 1 WHERE id = ?'),
-		counter: db.prepare('SELECT value FROM custom_command_counters WHERE key = ? AND user_id = ?'),
-		setCounter: db.prepare('INSERT INTO custom_command_counters (key, user_id, value) VALUES (?, ?, ?) ON CONFLICT (key, user_id) DO UPDATE SET value = excluded.value'),
-		run: db.prepare('INSERT INTO custom_command_runs (command_id, guild_id, user_id, trigger, ok, detail, at) VALUES (?, ?, ?, ?, ?, ?, ?)'),
+		counter: db.prepare('SELECT value FROM custom_command_counters WHERE `key` = ? AND user_id = ?'),
+		setCounter: db.prepare('INSERT INTO custom_command_counters (`key`, user_id, value) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)'),
+		// Atomic increment (two runs at once both count)
+		addCounter: db.prepare('INSERT INTO custom_command_counters (`key`, user_id, value) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE value = value + VALUES(value)'),
+		run: db.prepare('INSERT INTO custom_command_runs (command_id, guild_id, user_id, `trigger`, ok, detail, at) VALUES (?, ?, ?, ?, ?, ?, ?)'),
 		runs: db.prepare('SELECT * FROM custom_command_runs WHERE command_id = ? ORDER BY id DESC LIMIT ?'),
-		trim: db.prepare('DELETE FROM custom_command_runs WHERE command_id = ? AND id NOT IN (SELECT id FROM custom_command_runs WHERE command_id = ? ORDER BY id DESC LIMIT 500)'),
+		trim: db.prepare('DELETE FROM custom_command_runs WHERE command_id = ? AND id NOT IN (SELECT id FROM (SELECT id FROM custom_command_runs WHERE command_id = ? ORDER BY id DESC LIMIT 500) AS kept)'),
 	};
 
 	let cache = null;
-	const all = () => (cache ??= q.all.all().map(toCommand));
+	// Bumped at every change: a load started before a change does not fill the cache with old rows
+	let version = 0;
+	async function all() {
+		if (cache) return cache;
+		const loading = version;
+		const commands = (await q.all.all()).map(toCommand);
+		if (loading === version) cache = commands;
+		return commands;
+	}
+	function invalidate() {
+		cache = null;
+		version++;
+	}
 
 	function toCommand(row) {
 		if (!row) return null;
 		return { id: row.id, name: row.name, ...JSON.parse(row.definition), enabled: Boolean(row.enabled), uses: row.uses, createdBy: row.created_by, createdAt: row.created_at, updatedBy: row.updated_by, updatedAt: row.updated_at };
 	}
 
-	function getOrThrow(id) {
-		const c = toCommand(q.get.get(id));
+	async function getOrThrow(id) {
+		const c = toCommand(await q.get.get(id));
 		if (!c) throw new NotFoundError('Commande introuvable.');
 		return c;
 	}
@@ -51,7 +65,7 @@ export function createCustomCommands({ db, network, ranks, audit, executor, logs
 	}
 
 	function changed() {
-		cache = null;
+		invalidate();
 		for (const fn of listeners) {
 			try {
 				fn();
@@ -63,7 +77,7 @@ export function createCustomCommands({ db, network, ranks, audit, executor, logs
 	}
 
 	const inScope = (c, guildId) => c.scope.mode === 'network' || c.scope.guildIds.includes(guildId);
-	const activeGuilds = () => network.list().filter(g => g.status === 'active');
+	const activeGuilds = async () => (await network.list()).filter(g => g.status === 'active');
 
 	// The editor must be allowed to write what the command will do
 	async function checkRights(actor, def, currentId) {
@@ -75,7 +89,7 @@ export function createCustomCommands({ db, network, ranks, audit, executor, logs
 			if (b.type === 'role') b.roleIds.forEach(id => roleIds.add(id));
 		});
 		if (roleIds.size) {
-			const guilds = activeGuilds();
+			const guilds = await activeGuilds();
 			const byRole = new Map();
 			for (const g of guilds) for (const r of await executor.listRoles(g.id)) byRole.set(r.id, g.id);
 			for (const roleId of roleIds) {
@@ -86,15 +100,16 @@ export function createCustomCommands({ db, network, ranks, audit, executor, logs
 		}
 		// Discord allows 15 right-click commands of each kind per server
 		if (def.trigger.type === 'user' || def.trigger.type === 'message') {
-			for (const g of activeGuilds()) {
+			for (const g of await activeGuilds()) {
 				if (!inScope(def, g.id)) continue;
-				const same = all().filter(c => c.id !== currentId && c.enabled && c.trigger.type === def.trigger.type && inScope(c, g.id));
+				const same = (await all()).filter(c => c.id !== currentId && c.enabled && c.trigger.type === def.trigger.type && inScope(c, g.id));
 				if (same.length >= MAX_CONTEXT_MENUS) throw new ValidationError(`${g.name} a déjà ${MAX_CONTEXT_MENUS} commandes de clic droit de ce type (limite de Discord).`);
 			}
 		}
 		// Same name on a server twice is refused by Discord
-		const clash = all().find(c => c.id !== currentId && c.name === def.name && c.trigger.type === def.trigger.type && c.trigger.type !== 'keyword'
-			&& activeGuilds().some(g => inScope(c, g.id) && inScope(def, g.id)));
+		const guilds = await activeGuilds();
+		const clash = (await all()).find(c => c.id !== currentId && c.name === def.name && c.trigger.type === def.trigger.type && c.trigger.type !== 'keyword'
+			&& guilds.some(g => inScope(c, g.id) && inScope(def, g.id)));
 		if (clash) throw new ValidationError(`Une commande « ${def.name} » existe déjà sur un des mêmes serveurs.`);
 	}
 
@@ -128,15 +143,15 @@ export function createCustomCommands({ db, network, ranks, audit, executor, logs
 		return 0;
 	}
 
-	function counterGet(key, userId) {
-		return q.counter.get(key, userId)?.value ?? 0;
+	async function counterGet(key, userId) {
+		return (await q.counter.get(key, userId))?.value ?? 0;
 	}
 
 	return {
 		list: () => all(),
 		get: getOrThrow,
-		runs: (id, limit = 100) => q.runs.all(id, limit).map(r => ({ id: r.id, guildId: r.guild_id, userId: r.user_id, trigger: r.trigger, ok: Boolean(r.ok), detail: r.detail, at: r.at })),
-		counters: () => db.prepare('SELECT key, user_id AS userId, value FROM custom_command_counters ORDER BY key, value DESC LIMIT 500').all(),
+		runs: async (id, limit = 100) => (await q.runs.all(id, limit)).map(r => ({ id: r.id, guildId: r.guild_id, userId: r.user_id, trigger: r.trigger, ok: Boolean(r.ok), detail: r.detail, at: r.at })),
+		counters: () => db.prepare('SELECT `key`, user_id AS userId, value FROM custom_command_counters ORDER BY `key`, value DESC, user_id LIMIT 500').all(),
 		onChange(fn) {
 			listeners.add(fn);
 			return () => listeners.delete(fn);
@@ -144,48 +159,48 @@ export function createCustomCommands({ db, network, ranks, audit, executor, logs
 
 		async save(actor, input) {
 			need(actor, 'customcommands.manage');
-			const current = input.id ? getOrThrow(input.id) : null;
+			const current = input.id ? await getOrThrow(input.id) : null;
 			const def = normalizeCommand(input, { reservedNames: reserved });
 			assertFivemAllowed(actor, def, current);
 			await checkRights(actor, def, current?.id ?? null);
 			const row = { name: def.name, definition: JSON.stringify(def), by: actor.id, at: now() };
 			let id = current?.id;
-			if (current) q.update.run({ ...row, id });
-			else id = Number(q.insert.run(row).lastInsertRowid);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: current ? 'customcommands.update' : 'customcommands.create', target: String(id), details: { name: def.name } });
+			if (current) await q.update.run({ ...row, id });
+			else id = Number((await q.insert.run(row)).lastInsertRowid);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: current ? 'customcommands.update' : 'customcommands.create', target: String(id), details: { name: def.name } });
 			changed();
-			return getOrThrow(id);
+			return await getOrThrow(id);
 		},
 
-		setEnabled(actor, id, enabled) {
+		async setEnabled(actor, id, enabled) {
 			need(actor, 'customcommands.manage');
-			const c = getOrThrow(id);
-			q.enable.run(enabled ? 1 : 0, actor.id, now(), id);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: enabled ? 'customcommands.enable' : 'customcommands.disable', target: String(id), details: { name: c.name } });
+			const c = await getOrThrow(id);
+			await q.enable.run(enabled ? 1 : 0, actor.id, now(), id);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: enabled ? 'customcommands.enable' : 'customcommands.disable', target: String(id), details: { name: c.name } });
 			changed();
-			return getOrThrow(id);
+			return await getOrThrow(id);
 		},
 
-		remove(actor, id) {
+		async remove(actor, id) {
 			need(actor, 'customcommands.manage');
-			const c = getOrThrow(id);
-			q.delete.run(id);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'customcommands.delete', target: String(id), details: { name: c.name } });
+			const c = await getOrThrow(id);
+			await q.delete.run(id);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'customcommands.delete', target: String(id), details: { name: c.name } });
 			changed();
 		},
 
 		// Slash and right-click commands to register on a server
-		guildCommands(guildId) {
-			return all().filter(c => c.enabled && c.trigger.type !== 'keyword' && inScope(c, guildId));
+		async guildCommands(guildId) {
+			return (await all()).filter(c => c.enabled && c.trigger.type !== 'keyword' && inScope(c, guildId));
 		},
 
-		find(guildId, name, type) {
-			return all().find(c => c.enabled && c.trigger.type === type && c.name === name && inScope(c, guildId)) ?? null;
+		async find(guildId, name, type) {
+			return (await all()).find(c => c.enabled && c.trigger.type === type && c.name === name && inScope(c, guildId)) ?? null;
 		},
 
 		// Keyword commands that match a message
-		matchKeywords(guildId, channelId, content) {
-			return all().filter((c) => {
+		async matchKeywords(guildId, channelId, content) {
+			return (await all()).filter((c) => {
 				if (!c.enabled || c.trigger.type !== 'keyword' || !inScope(c, guildId)) return false;
 				const k = c.trigger.keyword;
 				if (k.channelIds.length && !k.channelIds.includes(channelId)) return false;
@@ -210,12 +225,12 @@ export function createCustomCommands({ db, network, ranks, audit, executor, logs
 		// Runs a command (or one of its buttons / menus). `respond` sends to Discord: reply, send, dm, react, deleteTrigger.
 		// Returns { ok, denied?, reason?, warnings }
 		async execute({ commandId, componentId = null, trigger, guildId, channelId, user, options = {}, respond }) {
-			const c = getOrThrow(commandId);
-			if (!c.enabled || !inScope(c, guildId) || network.find(guildId)?.status !== 'active') return { ok: false, denied: true, reason: 'Cette commande n’est pas disponible ici.', warnings: [] };
+			const c = await getOrThrow(commandId);
+			if (!c.enabled || !inScope(c, guildId) || (await network.find(guildId))?.status !== 'active') return { ok: false, denied: true, reason: 'Cette commande n’est pas disponible ici.', warnings: [] };
 			const ctx = { guildId, channelId, user, options, serverName: '', memberCount: '' };
 			const access = await allowed(c, ctx);
 			if (!access.ok) {
-				q.run.run(c.id, guildId, user.id, trigger, 0, `Refusé : ${access.reason}`, now());
+				await q.run.run(c.id, guildId, user.id, trigger, 0, `Refusé : ${access.reason}`, now());
 				return { ok: false, denied: true, reason: access.reason, warnings: [] };
 			}
 			if (!componentId) {
@@ -259,17 +274,17 @@ export function createCustomCommands({ db, network, ranks, audit, executor, logs
 				nickname: (userId, value) => executor.setNickname(guildId, userId, value.slice(0, 32) || null, reason),
 				sanction: (kind, userId, why, durationMs) => sanctions.create({ ...access.principal, source: 'bot' }, { type: kind, userId, reason: `${why} (${reason})`, durationMs, scope: 'local', originGuildId: guildId }),
 				counterGet: (key, userId) => counterGet(key, userId),
-				counterUpdate: (key, userId, op, value) => {
-					const next = op === 'reset' ? 0 : op === 'set' ? value : counterGet(key, userId) + value;
-					q.setCounter.run(key, userId, next);
+				counterUpdate: async (key, userId, op, value) => {
+					if (op === 'reset' || op === 'set') await q.setCounter.run(key, userId, op === 'reset' ? 0 : value);
+					else await q.addCounter.run(key, userId, value);
 				},
 				log: textValue => audit.record({ actorId: user.id, source: 'bot', action: 'customcommands.log', guildId, target: c.name, details: { text: textValue.slice(0, 1000) } }),
 			};
 			const result = await runFlow(flow, ctx, io);
-			q.used.run(c.id);
-			cache = null;
-			q.run.run(c.id, guildId, user.id, trigger, result.warnings.length ? 0 : 1, result.warnings.join(' · ').slice(0, 500) || null, now());
-			if (Math.random() < 0.05) q.trim.run(c.id, c.id);
+			await q.used.run(c.id);
+			invalidate();
+			await q.run.run(c.id, guildId, user.id, trigger, result.warnings.length ? 0 : 1, result.warnings.join(' · ').slice(0, 500) || null, now());
+			if (Math.random() < 0.05) await q.trim.run(c.id, c.id);
 			return { ok: true, warnings: result.warnings };
 		},
 	};

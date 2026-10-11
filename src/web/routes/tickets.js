@@ -13,10 +13,12 @@ export function registerTicketRoutes(app, { core }) {
 
 	async function withNames(list) {
 		const names = await resolveNames(executor, list.flatMap(t => [t.openerId, t.claimedBy, t.closedBy]));
-		const guilds = new Map(network.list().map(g => [g.id, g.name]));
+		const guilds = new Map((await network.list()).map(g => [g.id, g.name]));
 		const categories = new Map();
+		for (const t of list) {
+			if (!categories.has(t.guildId)) categories.set(t.guildId, new Map((await tickets.describe(t.guildId)).categories.map(c => [c.id, c])));
+		}
 		return list.map((t) => {
-			if (!categories.has(t.guildId)) categories.set(t.guildId, new Map(tickets.describe(t.guildId).categories.map(c => [c.id, c])));
 			const category = categories.get(t.guildId).get(t.categoryId);
 			return {
 				...t,
@@ -44,7 +46,7 @@ export function registerTicketRoutes(app, { core }) {
 				},
 			},
 		},
-	}, async (request) => withNames(tickets.list(request.query)));
+	}, async (request) => withNames(await tickets.list(request.query)));
 
 	// Live updates of tickets and their conversations (new messages, statuses, claims...)
 	app.get('/api/tickets/live', { websocket: true, config: { permission: 'tickets.view' } }, (socket, request) => {
@@ -79,9 +81,10 @@ export function registerTicketRoutes(app, { core }) {
 			},
 		},
 	}, async (request) => {
-		const stats = tickets.stats(request.query);
+		const stats = await tickets.stats(request.query);
 		const names = await resolveNames(executor, stats.staff.map(s => s.userId));
-		const categories = new Map(network.list().flatMap(g => tickets.describe(g.id).categories.map(c => [c.id, c])));
+		const described = await Promise.all((await network.list()).map(g => tickets.describe(g.id)));
+		const categories = new Map(described.flatMap(d => d.categories.map(c => [c.id, c])));
 		return {
 			...stats,
 			staff: stats.staff.map(s => ({ ...s, user: names.get(s.userId) ?? null })),
@@ -90,16 +93,16 @@ export function registerTicketRoutes(app, { core }) {
 	});
 
 	app.get('/api/tickets/:id', { config: { permission: 'tickets.view' }, schema: { params: idParam } }, async (request) => {
-		const [ticket] = await withNames([tickets.get(request.params.id, { withTranscript: true })]);
-		const category = ticket.categoryId ? tickets.describe(ticket.guildId).categories.find(c => c.id === ticket.categoryId) : null;
+		const [ticket] = await withNames([await tickets.get(request.params.id, { withTranscript: true })]);
+		const category = ticket.categoryId ? (await tickets.describe(ticket.guildId)).categories.find(c => c.id === ticket.categoryId) : null;
 		return {
 			...ticket,
 			slaMinutes: category?.config.sla.firstResponseMinutes ?? 0,
 			closeRequestHours: category?.config.closeRequest.autoCloseHours ?? 24,
-			messages: tickets.messages(ticket.id),
-			statuses: tickets.statuses(ticket.guildId),
+			messages: await tickets.messages(ticket.id),
+			statuses: await tickets.statuses(ticket.guildId),
 			priorities: tickets.priorities(),
-			htmlTranscript: Boolean(tickets.transcriptFile(ticket.id)),
+			htmlTranscript: Boolean(await tickets.transcriptFile(ticket.id)),
 		};
 	});
 
@@ -108,7 +111,7 @@ export function registerTicketRoutes(app, { core }) {
 		config: { permission: 'tickets.view' },
 		schema: { params: idParam, querystring: { type: 'object', properties: { download: { type: 'boolean' } } } },
 	}, async (request, reply) => {
-		const found = tickets.transcriptFile(request.params.id);
+		const found = await tickets.transcriptFile(request.params.id);
 		if (!found) throw new NotFoundError('Pas de transcript web pour ce ticket (fermé avant cette fonction, ou salon illisible).');
 		const name = `ticket-${String(found.ticket.number).padStart(4, '0')}.html`;
 		return reply.type('text/html; charset=utf-8')
@@ -164,18 +167,18 @@ export function registerTicketRoutes(app, { core }) {
 	// --- Configuration of a server ------------------------------------------------------------
 	app.get('/api/tickets/config/:guildId', { config: { permission: 'tickets.view' }, schema: { params: guildParam } }, async (request) => {
 		const { guildId } = request.params;
-		if (!network.find(guildId)) throw new NotFoundError('Serveur introuvable.');
+		if (!await network.find(guildId)) throw new NotFoundError('Serveur introuvable.');
 		const [channels, categoryChannels, roles] = await Promise.all([
 			executor.listTextChannels(guildId),
 			executor.listCategoryChannels(guildId),
 			executor.listRoles(guildId),
 		]);
 		return {
-			...tickets.describe(guildId, request.actor),
+			...await tickets.describe(guildId, request.actor),
 			channels,
 			categoryChannels,
 			roles,
-			ranks: ranks.list().map(({ id, name, level, color }) => ({ id, name, level, color })),
+			ranks: (await ranks.list()).map(({ id, name, level, color }) => ({ id, name, level, color })),
 		};
 	});
 
@@ -225,7 +228,7 @@ export function registerTicketRoutes(app, { core }) {
 		config: { permission: 'tickets.manage', confirm: true },
 		schema: { params: guildIdParam },
 	}, async (request) => {
-		tickets.deleteCategory(request.actor, request.params.guildId, request.params.id);
+		await tickets.deleteCategory(request.actor, request.params.guildId, request.params.id);
 		return { ok: true };
 	});
 
@@ -280,11 +283,11 @@ export function registerTicketRoutes(app, { core }) {
 		config: { permission: 'tickets.replies', confirm: true },
 		schema: { params: guildIdParam },
 	}, async (request) => {
-		tickets.deleteReply(request.actor, request.params.guildId, request.params.id);
+		await tickets.deleteReply(request.actor, request.params.guildId, request.params.id);
 		return { ok: true };
 	});
 
 	app.post('/api/tickets/config/:guildId/panels/:id/publish', { config: { permission: 'tickets.manage' }, schema: { params: guildIdParam } }, async (request) => {
-		return tickets.publishPanel(request.actor, request.params.guildId, request.params.id);
+		return await tickets.publishPanel(request.actor, request.params.guildId, request.params.id);
 	});
 }

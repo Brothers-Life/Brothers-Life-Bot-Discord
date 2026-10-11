@@ -25,16 +25,16 @@ export function createStats({ db, network, audit, executor, logger = console, no
 	const q = {
 		addActivity: db.prepare(`
 			INSERT INTO stats_activity (guild_id, day, user_id, channel_id, messages, voice_seconds) VALUES (@guildId, @day, @userId, @channelId, @messages, @voice)
-			ON CONFLICT(guild_id, day, user_id, channel_id) DO UPDATE SET messages = messages + excluded.messages, voice_seconds = voice_seconds + excluded.voice_seconds
+			ON DUPLICATE KEY UPDATE messages = messages + VALUES(messages), voice_seconds = voice_seconds + VALUES(voice_seconds)
 		`),
 		addHourly: db.prepare(`
 			INSERT INTO stats_hourly (guild_id, hour, messages, voice_seconds) VALUES (@guildId, @hour, @messages, @voice)
-			ON CONFLICT(guild_id, hour) DO UPDATE SET messages = messages + excluded.messages, voice_seconds = voice_seconds + excluded.voice_seconds
+			ON DUPLICATE KEY UPDATE messages = messages + VALUES(messages), voice_seconds = voice_seconds + VALUES(voice_seconds)
 		`),
 		addMembers: db.prepare(`
 			INSERT INTO stats_members (guild_id, day, joins, leaves, member_count, voice_peak) VALUES (@guildId, @day, @joins, @leaves, @memberCount, @voicePeak)
-			ON CONFLICT(guild_id, day) DO UPDATE SET joins = joins + excluded.joins, leaves = leaves + excluded.leaves,
-				member_count = COALESCE(excluded.member_count, member_count), voice_peak = MAX(voice_peak, excluded.voice_peak)
+			ON DUPLICATE KEY UPDATE joins = joins + VALUES(joins), leaves = leaves + VALUES(leaves),
+				member_count = COALESCE(VALUES(member_count), member_count), voice_peak = GREATEST(voice_peak, VALUES(voice_peak))
 		`),
 		purgeActivity: db.prepare('DELETE FROM stats_activity WHERE day < ?'),
 		purgeHourly: db.prepare('DELETE FROM stats_hourly WHERE hour < ?'),
@@ -61,6 +61,12 @@ export function createStats({ db, network, audit, executor, logger = console, no
 	const voice = new Map();
 	// Extra variables for the counters (the FiveM service adds its own)
 	const variableProviders = [];
+	// guildId -> { active, at }: network status, not read from the database for every message
+	const trackedCache = new Map();
+	const TRACKED_TTL = 60_000;
+	for (const event of ['activated', 'removed', 'mainChanged']) network.on(event, () => trackedCache.clear());
+	// Voice changes are applied in the order they arrive
+	let voiceQueue = Promise.resolve();
 
 	function bump(map, key, field, amount, init) {
 		const entry = map.get(key) ?? { ...init };
@@ -68,8 +74,12 @@ export function createStats({ db, network, audit, executor, logger = console, no
 		map.set(key, entry);
 	}
 
-	function tracked(guildId) {
-		return network.find(guildId)?.status === 'active';
+	async function tracked(guildId) {
+		const cached = trackedCache.get(guildId);
+		if (cached && Date.now() - cached.at < TRACKED_TTL) return cached.active;
+		const active = (await network.find(guildId))?.status === 'active';
+		trackedCache.set(guildId, { active, at: Date.now() });
+		return active;
 	}
 
 	// Credits the voice time elapsed since the last credit, only for people who are not alone
@@ -107,16 +117,16 @@ export function createStats({ db, network, audit, executor, logger = console, no
 		return { start, end, fromDay: dayOf(start), toDay: dayOf(end) };
 	}
 
-	function guildFilter(guildIds) {
-		const ids = guildIds?.length ? guildIds : network.activeIds();
+	async function guildFilter(guildIds) {
+		const ids = guildIds?.length ? guildIds : await network.activeIds();
 		return { sql: `guild_id IN (${ids.map(() => '?').join(',') || 'NULL'})`, params: ids };
 	}
 
 	async function staffIds() {
-		const ids = new Set(q.directStaff.all().map(r => r.discord_id));
-		const mainId = network.getMainId();
+		const ids = new Set((await q.directStaff.all()).map(r => r.discord_id));
+		const mainId = await network.getMainId();
 		if (mainId) {
-			const roleIds = q.linkedRoles.all(mainId).map(r => r.role_id);
+			const roleIds = (await q.linkedRoles.all(mainId)).map(r => r.role_id);
 			const members = await executor.listMembersWithAnyRole(mainId, roleIds).catch(() => []);
 			for (const m of members) ids.add(m.id);
 		}
@@ -125,7 +135,7 @@ export function createStats({ db, network, audit, executor, logger = console, no
 
 	// WHERE clause of stats_activity for the filters of the page
 	async function activityWhere({ guildIds, channelId, userId, staffOnly }, range) {
-		const guilds = guildFilter(guildIds);
+		const guilds = await guildFilter(guildIds);
 		const where = [guilds.sql, 'day BETWEEN ? AND ?'];
 		const params = [...guilds.params, range.fromDay, range.toDay];
 		if (channelId) {
@@ -150,7 +160,7 @@ export function createStats({ db, network, audit, executor, logger = console, no
 
 	async function counterVars(guildId) {
 		const counts = await executor.getGuildCounts(guildId);
-		const staffRoles = q.linkedRoles.all(guildId).map(r => r.role_id);
+		const staffRoles = (await q.linkedRoles.all(guildId)).map(r => r.role_id);
 		const staff = staffRoles.length ? (await executor.listMembersWithAnyRole(guildId, staffRoles).catch(() => [])).length : 0;
 		const vars = { ...counts, staff };
 		for (const provider of variableProviders) Object.assign(vars, await provider(guildId).catch(() => ({})));
@@ -161,88 +171,98 @@ export function createStats({ db, network, audit, executor, logger = console, no
 
 	const service = {
 		// --- Collection ---------------------------------------------------------------------------
-		message(guildId, channelId, userId, bot) {
-			if (bot || !tracked(guildId)) return;
-			bump(activity, `${guildId}|${dayOf(now())}|${userId}|${channelId}`, 'messages', 1, { messages: 0, voice: 0 });
-			bump(hourly, `${guildId}|${Math.floor(now() / 3600_000)}`, 'messages', 1, { messages: 0, voice: 0 });
+		async message(guildId, channelId, userId, bot) {
+			const at = now();
+			if (bot || !await tracked(guildId)) return;
+			bump(activity, `${guildId}|${dayOf(at)}|${userId}|${channelId}`, 'messages', 1, { messages: 0, voice: 0 });
+			bump(hourly, `${guildId}|${Math.floor(at / 3600_000)}`, 'messages', 1, { messages: 0, voice: 0 });
 		},
 
 		// channelId null: left the voice; afk: joined the AFK channel (not counted)
 		voiceState(guildId, userId, channelId, { bot = false, afk = false } = {}) {
-			if (bot || !tracked(guildId)) return;
-			creditVoice();
-			const key = `${guildId}:${userId}`;
-			if (!channelId || afk) voice.delete(key);
-			else voice.set(key, { channelId, since: now() });
+			const at = now();
+			const apply = async () => {
+				if (bot || !await tracked(guildId)) return;
+				creditVoice(at);
+				const key = `${guildId}:${userId}`;
+				if (!channelId || afk) voice.delete(key);
+				else voice.set(key, { channelId, since: at });
+			};
+			voiceQueue = voiceQueue.then(apply).catch(error => logger.warn('Voice statistics failed:', error.message));
+			return voiceQueue;
 		},
 
 		// On startup: who is already in voice
-		seedVoice(states) {
-			for (const s of states) service.voiceState(s.guildId, s.userId, s.channelId, s);
+		async seedVoice(states) {
+			for (const s of states) await service.voiceState(s.guildId, s.userId, s.channelId, s);
 		},
 
-		memberJoined(guildId) {
-			if (!tracked(guildId)) return;
-			bump(membersBuffer, `${guildId}|${dayOf(now())}`, 'joins', 1, { joins: 0, leaves: 0, voicePeak: 0 });
+		async memberJoined(guildId) {
+			const at = now();
+			if (!await tracked(guildId)) return;
+			bump(membersBuffer, `${guildId}|${dayOf(at)}`, 'joins', 1, { joins: 0, leaves: 0, voicePeak: 0 });
 		},
 
-		memberLeft(guildId) {
-			if (!tracked(guildId)) return;
-			bump(membersBuffer, `${guildId}|${dayOf(now())}`, 'leaves', 1, { joins: 0, leaves: 0, voicePeak: 0 });
+		async memberLeft(guildId) {
+			const at = now();
+			if (!await tracked(guildId)) return;
+			bump(membersBuffer, `${guildId}|${dayOf(at)}`, 'leaves', 1, { joins: 0, leaves: 0, voicePeak: 0 });
 		},
 
 		// Every minute: everything collected goes to the database
 		async flush() {
+			// Pending voice changes first
+			await voiceQueue;
 			creditVoice();
 			const [a, h, m] = [activity, hourly, membersBuffer];
 			activity = new Map();
 			hourly = new Map();
 			membersBuffer = new Map();
 			const counts = new Map();
-			for (const guildId of network.activeIds()) {
+			for (const guildId of await network.activeIds()) {
 				const info = await executor.getGuildInfo(guildId).catch(() => null);
 				if (info) counts.set(guildId, info.memberCount);
 			}
-			db.transaction(() => {
+			await db.transaction(async () => {
 				for (const [key, v] of a) {
 					const [guildId, day, userId, channelId] = key.split('|');
-					q.addActivity.run({ guildId, day, userId, channelId, messages: v.messages, voice: v.voice });
+					await q.addActivity.run({ guildId, day, userId, channelId, messages: v.messages, voice: v.voice });
 				}
 				for (const [key, v] of h) {
 					const [guildId, hour] = key.split('|');
-					q.addHourly.run({ guildId, hour: Number(hour), messages: v.messages, voice: v.voice });
+					await q.addHourly.run({ guildId, hour: Number(hour), messages: v.messages, voice: v.voice });
 				}
 				const today = dayOf(now());
 				const keys = new Set([...m.keys(), ...[...counts.keys()].map(g => `${g}|${today}`)]);
 				for (const key of keys) {
 					const [guildId, day] = key.split('|');
 					const v = m.get(key) ?? { joins: 0, leaves: 0, voicePeak: 0 };
-					q.addMembers.run({ guildId, day, joins: v.joins, leaves: v.leaves, memberCount: day === today ? counts.get(guildId) ?? null : null, voicePeak: v.voicePeak });
+					await q.addMembers.run({ guildId, day, joins: v.joins, leaves: v.leaves, memberCount: day === today ? counts.get(guildId) ?? null : null, voicePeak: v.voicePeak });
 				}
 			})();
 		},
 
-		purge() {
+		async purge() {
 			const limit = now() - RETENTION_DAYS * DAY_MS;
-			q.purgeActivity.run(dayOf(limit));
-			q.purgeHourly.run(Math.floor(limit / 3600_000));
-			q.purgeMembers.run(dayOf(limit));
+			await q.purgeActivity.run(dayOf(limit));
+			await q.purgeHourly.run(Math.floor(limit / 3600_000));
+			await q.purgeMembers.run(dayOf(limit));
 		},
 
 		// --- Reading -------------------------------------------------------------------------------
 		async overview(filters = {}) {
 			const range = rangeOf(filters);
 			const where = await activityWhere(filters, range);
-			const guilds = guildFilter(filters.guildIds);
-			const perDay = db.prepare(`
+			const guilds = await guildFilter(filters.guildIds);
+			const perDay = await db.prepare(`
 				SELECT day, SUM(messages) AS messages, SUM(voice_seconds) AS voice, COUNT(DISTINCT user_id) AS active
 				FROM stats_activity WHERE ${where.sql} GROUP BY day
 			`).all(...where.params);
-			const totals = db.prepare(`
+			const totals = await db.prepare(`
 				SELECT COALESCE(SUM(messages), 0) AS messages, COALESCE(SUM(voice_seconds), 0) AS voice, COUNT(DISTINCT user_id) AS active
 				FROM stats_activity WHERE ${where.sql}
 			`).get(...where.params);
-			const members = db.prepare(`
+			const members = await db.prepare(`
 				SELECT day, SUM(joins) AS joins, SUM(leaves) AS leaves, SUM(member_count) AS memberCount, MAX(voice_peak) AS voicePeak
 				FROM stats_members WHERE ${guilds.sql} AND day BETWEEN ? AND ? GROUP BY day
 			`).all(...guilds.params, range.fromDay, range.toDay);
@@ -272,10 +292,10 @@ export function createStats({ db, network, audit, executor, logger = console, no
 		},
 
 		// 7 x 24: messages and voice hours by weekday (Monday first) and hour, Paris time
-		heatmap(filters = {}) {
+		async heatmap(filters = {}) {
 			const range = rangeOf(filters);
-			const guilds = guildFilter(filters.guildIds);
-			const rows = db.prepare(`SELECT hour, SUM(messages) AS messages, SUM(voice_seconds) AS voice FROM stats_hourly WHERE ${guilds.sql} AND hour BETWEEN ? AND ? GROUP BY hour`)
+			const guilds = await guildFilter(filters.guildIds);
+			const rows = await db.prepare(`SELECT hour, SUM(messages) AS messages, SUM(voice_seconds) AS voice FROM stats_hourly WHERE ${guilds.sql} AND hour BETWEEN ? AND ? GROUP BY hour`)
 				.all(...guilds.params, Math.floor(range.start / 3600_000) - 24, Math.floor(range.end / 3600_000));
 			const grid = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => ({ messages: 0, voiceHours: 0 })));
 			for (const row of rows) {
@@ -290,34 +310,34 @@ export function createStats({ db, network, audit, executor, logger = console, no
 		async topMembers(filters = {}, { metric = 'messages', limit = 50 } = {}) {
 			const range = rangeOf(filters);
 			const where = await activityWhere(filters, range);
-			const order = metric === 'voice' ? 'voice' : 'messages';
-			return db.prepare(`
+			const order = metric === 'voice' ? 'SUM(voice_seconds)' : 'SUM(messages)';
+			return (await db.prepare(`
 				SELECT user_id AS userId, SUM(messages) AS messages, SUM(voice_seconds) AS voice, COUNT(DISTINCT day) AS days
 				FROM stats_activity WHERE ${where.sql} GROUP BY user_id ORDER BY ${order} DESC LIMIT ?
-			`).all(...where.params, Math.min(Math.max(limit, 1), 200))
+			`).all(...where.params, Math.min(Math.max(limit, 1), 200)))
 				.map(r => ({ ...r, voiceHours: Math.round(r.voice / 36) / 100 }));
 		},
 
 		async topChannels(filters = {}, { limit = 50 } = {}) {
 			const range = rangeOf(filters);
 			const where = await activityWhere(filters, range);
-			return db.prepare(`
+			return (await db.prepare(`
 				SELECT guild_id AS guildId, channel_id AS channelId, SUM(messages) AS messages, SUM(voice_seconds) AS voice, COUNT(DISTINCT user_id) AS members
-				FROM stats_activity WHERE ${where.sql} GROUP BY guild_id, channel_id ORDER BY messages + voice / 60 DESC LIMIT ?
-			`).all(...where.params, Math.min(Math.max(limit, 1), 200))
+				FROM stats_activity WHERE ${where.sql} GROUP BY guild_id, channel_id ORDER BY SUM(messages) + SUM(voice_seconds) / 60 DESC LIMIT ?
+			`).all(...where.params, Math.min(Math.max(limit, 1), 200)))
 				.map(r => ({ ...r, voiceHours: Math.round(r.voice / 36) / 100 }));
 		},
 
 		// Work of the staff: sanctions given, tickets handled, satisfaction, activity
 		async staff(filters = {}) {
 			const range = rangeOf(filters);
-			const guilds = guildFilter(filters.guildIds);
-			const sanctions = db.prepare(`
+			const guilds = await guildFilter(filters.guildIds);
+			const sanctions = await db.prepare(`
 				SELECT moderator_id AS userId, type, COUNT(*) AS n FROM sanctions
-				WHERE created_at BETWEEN ? AND ? AND (origin_guild_id IS NULL OR ${guilds.sql.replace('guild_id', 'origin_guild_id')}) AND moderator_id GLOB '[0-9]*'
+				WHERE created_at BETWEEN ? AND ? AND (origin_guild_id IS NULL OR ${guilds.sql.replace('guild_id', 'origin_guild_id')}) AND moderator_id REGEXP '^[0-9]'
 				GROUP BY moderator_id, type
 			`).all(range.start, range.end + DAY_MS, ...guilds.params);
-			const tickets = db.prepare(`
+			const tickets = await db.prepare(`
 				SELECT claimed_by AS userId, COUNT(*) AS claimed, SUM(status = 'closed') AS closed,
 					AVG(CASE WHEN closed_at IS NOT NULL THEN closed_at - created_at END) AS avgResolutionMs, AVG(rating) AS rating, COUNT(rating) AS ratings
 				FROM tickets WHERE claimed_by IS NOT NULL AND created_at BETWEEN ? AND ? AND ${guilds.sql} GROUP BY claimed_by
@@ -325,7 +345,7 @@ export function createStats({ db, network, audit, executor, logger = console, no
 			const ids = new Set([...await staffIds(), ...sanctions.map(s => s.userId), ...tickets.map(t => t.userId)]);
 			const where = await activityWhere({ ...filters, staffOnly: false }, range);
 			const activityRows = ids.size
-				? db.prepare(`SELECT user_id AS userId, SUM(messages) AS messages, SUM(voice_seconds) AS voice FROM stats_activity WHERE ${where.sql} AND user_id IN (${[...ids].map(() => '?').join(',')}) GROUP BY user_id`)
+				? await db.prepare(`SELECT user_id AS userId, SUM(messages) AS messages, SUM(voice_seconds) AS voice FROM stats_activity WHERE ${where.sql} AND user_id IN (${[...ids].map(() => '?').join(',')}) GROUP BY user_id`)
 					.all(...where.params, ...ids)
 				: [];
 			return [...ids].map((userId) => {
@@ -350,12 +370,13 @@ export function createStats({ db, network, audit, executor, logger = console, no
 		async member(userId, filters = {}) {
 			const range = rangeOf(filters);
 			const where = await activityWhere({ ...filters, userId }, range);
-			const totals = db.prepare(`SELECT COALESCE(SUM(messages), 0) AS messages, COALESCE(SUM(voice_seconds), 0) AS voice, COUNT(DISTINCT day) AS days FROM stats_activity WHERE ${where.sql}`).get(...where.params);
-			const channels = db.prepare(`SELECT channel_id AS channelId, SUM(messages) AS messages FROM stats_activity WHERE ${where.sql} GROUP BY channel_id ORDER BY messages DESC LIMIT 3`).all(...where.params);
-			const rankRow = db.prepare(`
-				SELECT COUNT(*) + 1 AS rank FROM (SELECT user_id, SUM(messages) AS m FROM stats_activity WHERE ${(await activityWhere({ ...filters, userId: null }, range)).sql} GROUP BY user_id)
+			const totals = await db.prepare(`SELECT COALESCE(SUM(messages), 0) AS messages, COALESCE(SUM(voice_seconds), 0) AS voice, COUNT(DISTINCT day) AS days FROM stats_activity WHERE ${where.sql}`).get(...where.params);
+			const channels = await db.prepare(`SELECT channel_id AS channelId, SUM(messages) AS messages FROM stats_activity WHERE ${where.sql} GROUP BY channel_id ORDER BY SUM(messages) DESC, channel_id LIMIT 3`).all(...where.params);
+			const all = await activityWhere({ ...filters, userId: null }, range);
+			const rankRow = await db.prepare(`
+				SELECT COUNT(*) + 1 AS \`rank\` FROM (SELECT user_id, SUM(messages) AS m FROM stats_activity WHERE ${all.sql} GROUP BY user_id) AS totals
 				WHERE m > ?
-			`).get(...(await activityWhere({ ...filters, userId: null }, range)).params, totals.messages);
+			`).get(...all.params, totals.messages);
 			return { ...totals, voiceHours: Math.round(totals.voice / 36) / 100, topChannels: channels, rank: rankRow.rank, from: range.fromDay, to: range.toDay };
 		},
 
@@ -367,56 +388,56 @@ export function createStats({ db, network, audit, executor, logger = console, no
 			variableProviders.push(provider);
 		},
 
-		counters(guildId) {
-			return (guildId ? q.countersOf.all(guildId) : q.counters.all()).map(r => ({ id: r.id, guildId: r.guild_id, channelId: r.channel_id, template: r.template, lastName: r.last_name, updatedAt: r.updated_at }));
+		async counters(guildId) {
+			return (guildId ? await q.countersOf.all(guildId) : await q.counters.all()).map(r => ({ id: r.id, guildId: r.guild_id, channelId: r.channel_id, template: r.template, lastName: r.last_name, updatedAt: r.updated_at }));
 		},
 
 		async createCounter(actor, guildId, { template, channelId = null, categoryId = null }) {
 			if (!actor.can('stats.manage')) throw new ForbiddenError('Permission manquante : stats.manage');
-			if (!tracked(guildId)) throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
+			if (!await tracked(guildId)) throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
 			const text = String(template ?? '').trim();
 			if (!text || text.length > 90) throw new ValidationError('Le nom du compteur fait 1 à 90 caractères.');
 			if (!/\{[a-z.]+\}/.test(text)) throw new ValidationError('Mets au moins une variable, par exemple {members}.');
-			if (q.countersOf.all(guildId).length >= 10) throw new ValidationError('10 compteurs maximum par serveur.');
+			if ((await q.countersOf.all(guildId)).length >= 10) throw new ValidationError('10 compteurs maximum par serveur.');
 			const name = counterName(text, await counterVars(guildId));
 			const id = channelId ?? await executor.createCounterChannel(guildId, { name, categoryId });
-			q.insertCounter.run(guildId, id, text, now());
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'stats.counter_add', guildId, target: id, details: { template: text } });
+			await q.insertCounter.run(guildId, id, text, now());
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'stats.counter_add', guildId, target: id, details: { template: text } });
 			await service.updateCounters(guildId);
-			return service.counters(guildId).find(c => c.channelId === id);
+			return (await service.counters(guildId)).find(c => c.channelId === id);
 		},
 
 		async updateCounter(actor, id, template) {
 			if (!actor.can('stats.manage')) throw new ForbiddenError('Permission manquante : stats.manage');
-			const row = q.counter.get(id);
+			const row = await q.counter.get(id);
 			if (!row) throw new NotFoundError('Compteur introuvable.');
 			const text = String(template ?? '').trim();
 			if (!text || text.length > 90 || !/\{[a-z.]+\}/.test(text)) throw new ValidationError('Nom de 1 à 90 caractères, avec au moins une variable.');
-			q.updateCounter.run(text, id);
+			await q.updateCounter.run(text, id);
 			await service.updateCounters(row.guild_id);
-			return service.counters(row.guild_id).find(c => c.id === id);
+			return (await service.counters(row.guild_id)).find(c => c.id === id);
 		},
 
 		async deleteCounter(actor, id, { deleteChannel = false } = {}) {
 			if (!actor.can('stats.manage')) throw new ForbiddenError('Permission manquante : stats.manage');
-			const row = q.counter.get(id);
+			const row = await q.counter.get(id);
 			if (!row) throw new NotFoundError('Compteur introuvable.');
-			q.deleteCounter.run(id);
+			await q.deleteCounter.run(id);
 			if (deleteChannel) await executor.deleteChannel(row.channel_id, 'Compteur supprimé').catch(() => null);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'stats.counter_delete', guildId: row.guild_id, target: row.channel_id });
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'stats.counter_delete', guildId: row.guild_id, target: row.channel_id });
 		},
 
-		counterDeleted(channelId) {
-			q.deleteCounterByChannel.run(channelId);
+		async counterDeleted(channelId) {
+			await q.deleteCounterByChannel.run(channelId);
 		},
 
 		// Every 10 minutes (Discord allows 2 renames per 10 minutes per channel)
 		async updateCounters(onlyGuildId = null) {
-			const rows = onlyGuildId ? q.countersOf.all(onlyGuildId) : q.counters.all();
+			const rows = onlyGuildId ? await q.countersOf.all(onlyGuildId) : await q.counters.all();
 			const byGuild = new Map();
 			for (const row of rows) byGuild.set(row.guild_id, [...(byGuild.get(row.guild_id) ?? []), row]);
 			for (const [guildId, list] of byGuild) {
-				if (!tracked(guildId)) continue;
+				if (!await tracked(guildId)) continue;
 				const vars = await counterVars(guildId).catch(() => null);
 				if (!vars) continue;
 				for (const row of list) {
@@ -424,7 +445,7 @@ export function createStats({ db, network, audit, executor, logger = console, no
 					if (name === row.last_name) continue;
 					try {
 						await executor.renameChannel(row.channel_id, name);
-						q.renamedCounter.run(name, now(), row.id);
+						await q.renamedCounter.run(name, now(), row.id);
 					}
 					catch (error) {
 						logger.warn(`Counter ${row.channel_id} not renamed:`, error.message);

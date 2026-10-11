@@ -19,21 +19,21 @@ export function registerGiveawayRoutes(app, { core }) {
 	const { giveaways, executor, network } = core;
 
 	app.get('/api/giveaways', { config: { permission: 'giveaways.view' } }, async () => giveaways.list());
-	app.get('/api/giveaways/targets', { config: { permission: 'giveaways.view' } }, async () => networkTargets(core));
+	app.get('/api/giveaways/targets', { config: { permission: 'giveaways.view' } }, async () => await networkTargets(core));
 	app.get('/api/giveaways/:id', { config: { permission: 'giveaways.view' }, schema: { params: idParam } }, async (request) => {
-		const g = giveaways.get(request.params.id);
+		const g = await giveaways.get(request.params.id);
 		const names = await resolveNames(executor, g.winners.map(w => w.userId));
 		return { ...g, winners: g.winners.map(w => ({ ...w, user: names.get(w.userId) ?? { name: w.userId, avatar: null } })) };
 	});
 	app.get('/api/giveaways/:id/participants', { config: { permission: 'giveaways.view' }, schema: { params: idParam } }, async (request) => {
 		const list = await giveaways.participants(request.actor, request.params.id);
 		const names = await resolveNames(executor, list.map(p => p.userId));
-		const guilds = new Map(network.list().map(g => [g.id, g.name]));
+		const guilds = new Map((await network.list()).map(g => [g.id, g.name]));
 		return list.map(p => ({ ...p, user: names.get(p.userId) ?? { name: p.userId, avatar: null }, guildName: guilds.get(p.guildId) ?? p.guildId }));
 	});
 	app.get('/api/giveaways/:id/export', { config: { permission: 'giveaways.view' }, schema: { params: idParam } }, async (request, reply) => {
-		const g = giveaways.get(request.params.id);
-		const entries = giveaways.entries(request.params.id);
+		const g = await giveaways.get(request.params.id);
+		const entries = await giveaways.entries(request.params.id);
 		const names = await resolveNames(executor, entries.map(e => e.userId));
 		const winners = new Set(g.winners.filter(w => w.status === 'winner').map(w => w.userId));
 		const rows = [['Membre', 'ID', 'Entrées', 'Inscrit le', 'Gagnant'], ...entries.map(e => [names.get(e.userId)?.name ?? e.userId, e.userId, e.entries, new Date(e.at).toLocaleString('fr-FR'), winners.has(e.userId) ? 'oui' : ''])];
@@ -46,7 +46,7 @@ export function registerGiveawayRoutes(app, { core }) {
 	const manage = { permission: 'giveaways.manage' };
 	app.post('/api/giveaways', { config: manage, schema: { body } }, async (request, reply) => {
 		reply.code(201);
-		return giveaways.create(request.actor, request.body);
+		return await giveaways.create(request.actor, request.body);
 	});
 	app.put('/api/giveaways/:id', { config: manage, schema: { params: idParam, body } }, async (request) => giveaways.update(request.actor, request.params.id, request.body));
 	app.post('/api/giveaways/:id/publish', { config: manage, schema: { params: idParam } }, async (request) => giveaways.publish(request.actor, request.params.id));

@@ -12,7 +12,7 @@ async function setup() {
 	let clock = Date.now();
 	const ctx = await withNetwork();
 	const { core, executor, owner } = ctx;
-	core.network.activate(owner, OTHER);
+	await core.network.activate(owner, OTHER);
 	const live = createLiveMessages({ db: core.db, network: core.network, audit: core.audit, executor, stats: core.stats, logger: { warn: () => undefined }, now: () => clock });
 	return { ...ctx, live, advance: (ms) => { clock += ms; } };
 }
@@ -60,7 +60,7 @@ test('dynamic messages refresh on their own; permission and validation', async (
 
 test('changelog: grouped items, published, edited everywhere, removed from a channel taken out', async () => {
 	const { core, owner, executor } = await setup();
-	const entry = core.changelog.create(owner, {
+	const entry = await core.changelog.create(owner, {
 		version: 'v2.3', title: 'Mise à jour d’automne', intro: 'Beaucoup de nouveautés',
 		items: [{ type: 'added', text: 'Tickets en direct' }, { type: 'fixed', text: 'Bug des cartes' }, { type: 'added', text: 'Stats' }],
 		targets: [{ guildId: MAIN, channelId: C_MAIN }, { guildId: OTHER, channelId: C_OTHER }],
@@ -75,5 +75,5 @@ test('changelog: grouped items, published, edited everywhere, removed from a cha
 	await core.changelog.update(owner, entry.id, { ...published, title: 'Mise à jour d’automne (corrigée)', targets: [{ guildId: MAIN, channelId: C_MAIN }] });
 	assert.match([...executor.posted.get(C_MAIN).values()][0].embed.title, /corrigée/);
 	assert.equal(executor.deleted.length, 1, 'removed from the other server');
-	assert.equal(core.changelog.latest('v2.3').id, entry.id);
+	assert.equal((await core.changelog.latest('v2.3')).id, entry.id);
 });

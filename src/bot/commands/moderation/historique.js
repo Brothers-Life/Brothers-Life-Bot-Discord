@@ -12,7 +12,7 @@ export async function execute(interaction) {
 	await runModeration(interaction, async (actor) => {
 		if (!actor.can('sanctions.view')) throw new ForbiddenError('il te faut la permission de voir les sanctions.');
 		const user = interaction.options.getUser('membre');
-		const sanctions = interaction.client.core.sanctions.list({ userId: user.id, limit: 15 });
+		const sanctions = await interaction.client.core.sanctions.list({ userId: user.id, limit: 15 });
 		const lines = sanctions.map((s) => {
 			const state = s.revokedAt ? ' · levée' : s.active ? ' · **en cours**' : '';
 			return `**#${s.id}** ${LABELS[s.type]} <t:${Math.round(s.createdAt / 1000)}:d>${state} — ${clip(s.reason ?? 'sans raison', 200)}`;

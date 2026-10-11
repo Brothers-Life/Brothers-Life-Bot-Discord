@@ -23,7 +23,7 @@ export async function autocomplete(interaction) {
 	const actor = await actorOf(interaction);
 	if (!actor.can('polls.manage')) return interaction.respond([]);
 	const typed = String(interaction.options.getFocused() ?? '').toLowerCase();
-	const open = interaction.client.core.polls.list()
+	const open = (await interaction.client.core.polls.list())
 		.filter(p => p.status === 'open' && p.targets.some(t => t.guildId === interaction.guildId))
 		.filter(p => !typed || String(p.id).startsWith(typed) || p.question.toLowerCase().includes(typed));
 	await interaction.respond(open.slice(0, 25).map(p => ({ name: `#${p.id} · ${p.question}`.slice(0, 100), value: p.id })));
@@ -42,7 +42,7 @@ export async function execute(interaction) {
 		const raw = interaction.options.getString('duree');
 		const durationMs = raw ? parseDuration(raw) : null;
 		if (raw && !durationMs) throw new AppError('VALIDATION', `Durée invalide : « ${raw} ».`);
-		const poll = polls.create(actor, {
+		const poll = await polls.create(actor, {
 			question: interaction.options.getString('question'),
 			options: interaction.options.getString('choix').split(';').map(label => ({ label: label.trim() })),
 			settings: { multiple: interaction.options.getBoolean('multiple') ?? false, anonymous: !(interaction.options.getBoolean('public') ?? false) },

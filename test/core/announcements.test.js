@@ -10,7 +10,7 @@ const OTHER_CHANNEL = '620000000000000001';
 async function setup() {
 	const ctx = await withNetwork();
 	const { core, owner, executor } = ctx;
-	core.network.activate(owner, OTHER);
+	await core.network.activate(owner, OTHER);
 	executor.channels.set(MAIN_CHANNEL, { guildId: MAIN, name: 'annonces' });
 	executor.channels.set(OTHER_CHANNEL, { guildId: OTHER, name: 'news' });
 	return ctx;
@@ -57,7 +57,7 @@ test('partial failure is reported per channel', async () => {
 
 test('@everyone needs its own permission; managing needs announcements.manage', async () => {
 	const { core, owner } = await setup();
-	const writer = core.ranks.create(owner, { name: 'Com', level: 20, permissions: ['announcements.manage'] });
+	const writer = await core.ranks.create(owner, { name: 'Com', level: 20, permissions: ['announcements.manage'] });
 	await core.ranks.assignDirect(owner, ALICE, writer.id);
 	const alice = await core.ranks.resolve(ALICE);
 	await assert.rejects(core.announcements.create(alice, { name: 'x', payload, targets }), ForbiddenError);
@@ -82,14 +82,14 @@ test('scheduling: sent by the scheduler once due, can be cancelled', async () =>
 	assert.equal(scheduled.status, 'scheduled');
 	assert.equal(await core.announcements.sendDue(), 0, 'not yet');
 
-	core.db.prepare('UPDATE announcements SET scheduled_at = ? WHERE id = ?').run(Date.now() - 1, draft.id);
+	await core.db.prepare('UPDATE announcements SET scheduled_at = ? WHERE id = ?').run(Date.now() - 1, draft.id);
 	assert.equal(await core.announcements.sendDue(), 1);
-	assert.equal(core.announcements.get(draft.id).status, 'sent');
+	assert.equal((await core.announcements.get(draft.id)).status, 'sent');
 	assert.equal(executor.announcements.length, 2);
 
 	const other = await core.announcements.create(owner, { name: 'Annulée', payload, targets });
 	await core.announcements.schedule(owner, other.id, Date.now() + 60_000);
-	assert.equal(core.announcements.unschedule(owner, other.id).status, 'draft');
+	assert.equal((await core.announcements.unschedule(owner, other.id)).status, 'draft');
 });
 
 test('duplicate and delete: drafts disappear, sent messages are removed from Discord', async () => {
@@ -104,14 +104,16 @@ test('duplicate and delete: drafts disappear, sent messages are removed from Dis
 	assert.equal(removed.status, 'deleted');
 	assert.equal(executor.deleted.length, 2);
 	assert.equal(await core.announcements.remove(owner, copy.id), null);
-	assert.equal(core.announcements.list().length, 1);
+	assert.equal((await core.announcements.list()).length, 1);
 });
 
 test('an announcement left « sending » by a crash can be sent again after a restart', async () => {
 	const { core, owner } = await setup();
 	const draft = await core.announcements.create(owner, { name: 'Coupée', payload, targets });
-	core.db.prepare('UPDATE announcements SET status = \'sending\' WHERE id = ?').run(draft.id);
+	await core.db.prepare('UPDATE announcements SET status = \'sending\' WHERE id = ?').run(draft.id);
 	const { createAnnouncements } = await import('../../src/core/announcements.js');
 	const restarted = createAnnouncements({ db: core.db, network: core.network, audit: core.audit, executor: { }, logs: { registerCategory: () => undefined } });
-	assert.equal(restarted.get(draft.id).status, 'failed');
+	assert.equal((await restarted.get(draft.id)).status, 'sending', 'nothing done while the service is created');
+	await restarted.recover();
+	assert.equal((await restarted.get(draft.id)).status, 'failed');
 });

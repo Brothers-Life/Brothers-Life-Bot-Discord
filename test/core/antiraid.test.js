@@ -11,12 +11,12 @@ async function setup(config) {
 	const ctx = await withNetwork();
 	const { core, executor, owner } = ctx;
 	const antiraid = createAntiraid({ db: core.db, network: core.network, audit: core.audit, executor, sanctions: core.sanctions, logs: core.logs, logger: { warn: () => undefined }, now: () => clock });
-	antiraid.save(owner, MAIN, { enabled: true, joinThreshold: 3, joinWindowSeconds: 10, raidMinutes: 5, ...config });
+	await antiraid.save(owner, MAIN, { enabled: true, joinThreshold: 3, joinWindowSeconds: 10, raidMinutes: 5, ...config });
 	executor.members.set(MAIN, new Set());
 	const join = async (n) => {
 		const id = String(400000000000000000n + BigInt(n));
 		executor.members.get(MAIN).add(id);
-		return antiraid.handleJoin(MAIN, { id, username: `u${n}`, bot: false, ...OLD_ACCOUNT });
+		return await antiraid.handleJoin(MAIN, { id, username: `u${n}`, bot: false, ...OLD_ACCOUNT });
 	};
 	return { ...ctx, antiraid, join, advance: (ms) => { clock += ms; } };
 }
@@ -29,17 +29,17 @@ test('a join flood starts the raid mode: locks, action on newcomers, then it end
 	assert.equal((await join(3)).blocked, true);
 	assert.equal(executor.raidLocks[0][0], 'lock');
 	assert.equal(executor.calls.filter(c => c[0] === 'kick').length, 3);
-	assert.equal(antiraid.state(MAIN).raid.actioned, 3);
+	assert.equal((await antiraid.state(MAIN)).raid.actioned, 3);
 
 	// Joins keep the raid going
 	advance(4 * 60_000);
 	await join(4);
 	advance(2 * 60_000);
 	await antiraid.tick();
-	assert.ok(antiraid.state(MAIN).raid, 'prolonged by the last join');
+	assert.ok((await antiraid.state(MAIN)).raid, 'prolonged by the last join');
 	advance(4 * 60_000);
 	await antiraid.tick();
-	assert.equal(antiraid.state(MAIN).raid, null);
+	assert.equal((await antiraid.state(MAIN)).raid, null);
 	assert.deepEqual(executor.raidLocks.at(-1), ['restore', MAIN, { verificationLevel: 1, invitesDisabled: false }]);
 });
 
@@ -49,7 +49,7 @@ test('joins spread over time do not trigger anything', async () => {
 		await join(i);
 		advance(11_000);
 	}
-	assert.equal(antiraid.state(MAIN).raid, null);
+	assert.equal((await antiraid.state(MAIN)).raid, null);
 });
 
 test('recent accounts: quarantine role, and the manual raid mode needs its permission', async () => {
@@ -65,7 +65,7 @@ test('recent accounts: quarantine role, and the manual raid mode needs its permi
 	await assert.rejects(antiraid.setRaid(owner, MAIN, true), /déjà actif/);
 	const ended = await antiraid.setRaid(owner, MAIN, false);
 	assert.equal(ended.actioned, 0);
-	assert.throws(() => antiraid.save(owner, MAIN, { newAccount: { enabled: true, action: 'role' } }), /quarantaine/);
+	await assert.rejects(async () => antiraid.save(owner, MAIN, { newAccount: { enabled: true, action: 'role' } }), /quarantaine/);
 });
 
 test('simultaneous joins start a single raid (the restore state is the one from before the raid)', async () => {
@@ -74,7 +74,7 @@ test('simultaneous joins start a single raid (the restore state is the one from 
 	await join(2);
 	await Promise.all([join(3), join(4), join(5)]);
 	assert.equal(executor.raidLocks.filter(l => l[0] === 'lock').length, 1);
-	assert.ok(antiraid.state(MAIN).raid);
+	assert.ok((await antiraid.state(MAIN)).raid);
 });
 
 test('a raid survives a restart: its locks are still restored at the end', async () => {
@@ -83,14 +83,17 @@ test('a raid survives a restart: its locks are still restored at the end', async
 	const { core, executor, owner } = ctx;
 	const make = () => createAntiraid({ db: core.db, network: core.network, audit: core.audit, executor, sanctions: core.sanctions, logs: core.logs, logger: { warn: () => undefined }, now: () => clock });
 	const first = make();
-	first.save(owner, MAIN, { enabled: true, raidMinutes: 5 });
+	await first.save(owner, MAIN, { enabled: true, raidMinutes: 5 });
 	await first.setRaid(owner, MAIN, true);
 
 	const second = make();
-	assert.ok(second.state(MAIN).raid, 'raid known after the restart');
+	await second.init();
+	assert.ok((await second.state(MAIN)).raid, 'raid known after the restart');
 	clock += 6 * 60_000;
 	await second.tick();
 	assert.deepEqual(executor.raidLocks.at(-1), ['restore', MAIN, { verificationLevel: 1, invitesDisabled: false }]);
-	assert.equal(second.state(MAIN).raid, null);
-	assert.equal(make().state(MAIN).raid, null);
+	assert.equal((await second.state(MAIN)).raid, null);
+	const third = make();
+	await third.init();
+	assert.equal((await third.state(MAIN)).raid, null);
 });

@@ -25,22 +25,22 @@ export function createAutomod({ db, network, sanctions, ranks, audit, executor, 
 		get: db.prepare('SELECT * FROM automod_config WHERE guild_id = ?'),
 		upsert: db.prepare(`
 			INSERT INTO automod_config (guild_id, config, updated_at, updated_by) VALUES (?, ?, ?, ?)
-			ON CONFLICT(guild_id) DO UPDATE SET config = excluded.config, updated_at = excluded.updated_at, updated_by = excluded.updated_by
+			ON DUPLICATE KEY UPDATE config = VALUES(config), updated_at = VALUES(updated_at), updated_by = VALUES(updated_by)
 		`),
 		delete: db.prepare('DELETE FROM automod_config WHERE guild_id = ?'),
 	};
 	const cache = new Map();
 
-	function raw(guildId) {
+	async function raw(guildId) {
 		if (!cache.has(guildId)) {
-			const row = q.get.get(guildId);
+			const row = await q.get.get(guildId);
 			cache.set(guildId, row ? { config: normalizeConfig(JSON.parse(row.config)), updatedAt: row.updated_at, updatedBy: row.updated_by } : null);
 		}
 		return cache.get(guildId);
 	}
 
-	function effective(guildId) {
-		return raw(guildId)?.config ?? raw(NETWORK)?.config ?? normalizeConfig();
+	async function effective(guildId) {
+		return (await raw(guildId))?.config ?? (await raw(NETWORK))?.config ?? normalizeConfig();
 	}
 
 	async function inviteGuild(code) {
@@ -57,7 +57,7 @@ export function createAutomod({ db, network, sanctions, ranks, audit, executor, 
 		const allowed = [];
 		for (const code of codes) {
 			const guildId = await inviteGuild(code);
-			if (guildId && network.find(guildId)?.status === 'active') allowed.push(code);
+			if (guildId && (await network.find(guildId))?.status === 'active') allowed.push(code);
 		}
 		return allowed;
 	}
@@ -70,11 +70,11 @@ export function createAutomod({ db, network, sanctions, ranks, audit, executor, 
 		const reason = `Automod : ${verdict.reason}`;
 		const base = { userId: facts.userId, reason, originGuildId: facts.guildId };
 		switch (verdict.action) {
-		case 'warn': return sanctions.create(AUTOMOD, { ...base, type: 'warn' });
-		case 'timeout': return sanctions.create(AUTOMOD, { ...base, type: 'timeout', scope: 'local', durationMs: (verdict.timeoutMinutes ?? 10) * 60_000 });
-		case 'kick': return sanctions.create(AUTOMOD, { ...base, type: 'kick', scope: 'local' });
-		case 'ban': return sanctions.create(AUTOMOD, { ...base, type: 'ban', scope: 'local', deleteMessageSeconds: 3600 });
-		case 'network_ban': return sanctions.create(AUTOMOD, { ...base, type: 'ban', scope: 'network', deleteMessageSeconds: 3600 });
+		case 'warn': return await sanctions.create(AUTOMOD, { ...base, type: 'warn' });
+		case 'timeout': return await sanctions.create(AUTOMOD, { ...base, type: 'timeout', scope: 'local', durationMs: (verdict.timeoutMinutes ?? 10) * 60_000 });
+		case 'kick': return await sanctions.create(AUTOMOD, { ...base, type: 'kick', scope: 'local' });
+		case 'ban': return await sanctions.create(AUTOMOD, { ...base, type: 'ban', scope: 'local', deleteMessageSeconds: 3600 });
+		case 'network_ban': return await sanctions.create(AUTOMOD, { ...base, type: 'ban', scope: 'network', deleteMessageSeconds: 3600 });
 		default: return null;
 		}
 	}
@@ -83,40 +83,40 @@ export function createAutomod({ db, network, sanctions, ranks, audit, executor, 
 		defaults: () => structuredClone(DEFAULT_CONFIG),
 		getConfig: effective,
 
-		describe() {
-			const guilds = network.list().filter(g => g.status === 'active');
+		async describe() {
+			const guilds = (await network.list()).filter(g => g.status === 'active');
 			return {
-				network: raw(NETWORK)?.config ?? normalizeConfig(),
-				guilds: guilds.map(g => ({ id: g.id, name: g.name, custom: Boolean(raw(g.id)), config: effective(g.id) })),
+				network: (await raw(NETWORK))?.config ?? normalizeConfig(),
+				guilds: await Promise.all(guilds.map(async g => ({ id: g.id, name: g.name, custom: Boolean(await raw(g.id)), config: await effective(g.id) }))),
 			};
 		},
 
-		setConfig(actor, guildId, input) {
+		async setConfig(actor, guildId, input) {
 			requireManage(actor);
-			if (guildId !== NETWORK && network.find(guildId)?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
+			if (guildId !== NETWORK && (await network.find(guildId))?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
 			const config = normalizeConfig(input);
 			if (guildId === NETWORK) {
 				config.exemptRoles = [];
 				config.exemptChannels = [];
 			}
-			q.upsert.run(guildId, JSON.stringify(config), now(), actor.id);
+			await q.upsert.run(guildId, JSON.stringify(config), now(), actor.id);
 			cache.delete(guildId);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'automod.config', guildId: guildId === NETWORK ? null : guildId, target: guildId === NETWORK ? 'réseau' : guildId });
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'automod.config', guildId: guildId === NETWORK ? null : guildId, target: guildId === NETWORK ? 'réseau' : guildId });
 			return config;
 		},
 
 		// The server goes back to the network settings
-		resetGuild(actor, guildId) {
+		async resetGuild(actor, guildId) {
 			requireManage(actor);
-			q.delete.run(guildId);
+			await q.delete.run(guildId);
 			cache.delete(guildId);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'automod.reset', guildId, target: guildId });
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'automod.reset', guildId, target: guildId });
 		},
 
 		// facts: { guildId, channelId, messageId, userId, userName, content, mentionCount, attachmentCount, hasEveryone, roleIds, isBot }
 		async handleMessage(facts, { edited = false } = {}) {
-			if (facts.isBot || network.find(facts.guildId)?.status !== 'active') return null;
-			const config = effective(facts.guildId);
+			if (facts.isBot || (await network.find(facts.guildId))?.status !== 'active') return null;
+			const config = await effective(facts.guildId);
 			if (!config.enabled) return null;
 			if (config.exemptChannels.includes(facts.channelId)) return null;
 			if (facts.roleIds?.some(r => config.exemptRoles.includes(r))) return null;
@@ -147,7 +147,7 @@ export function createAutomod({ db, network, sanctions, ranks, audit, executor, 
 				logger.warn(`Automod could not sanction ${facts.userId}:`, error.message);
 			}
 
-			audit.record({
+			await audit.record({
 				actorId: 'automod',
 				source: 'system',
 				action: 'automod.trigger',

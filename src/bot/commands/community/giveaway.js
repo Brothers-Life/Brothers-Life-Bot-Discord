@@ -5,8 +5,8 @@ import { actorOf } from '../../moderation.js';
 import { errorContent } from '../../userError.js';
 
 // Open giveaways (of one server, or of the whole network); members see them with /info giveaways
-export function openGiveawaysEmbed(giveaways, guildId = null) {
-	const open = giveaways.list().filter(g => g.status === 'open' && (!guildId || g.targets.some(t => t.guildId === guildId)));
+export async function openGiveawaysEmbed(giveaways, guildId = null) {
+	const open = (await giveaways.list()).filter(g => g.status === 'open' && (!guildId || g.targets.some(t => t.guildId === guildId)));
 	return new EmbedBuilder().setColor(0xe5484d).setTitle('Giveaways en cours')
 		.setDescription(open.map(g => `**#${g.id}** ${g.prize} · ${g.participants} participant(s) · fin <t:${Math.round(g.endsAt / 1000)}:R>`).join('\n').slice(0, 4096) || 'Aucun giveaway en cours.');
 }
@@ -36,12 +36,12 @@ export async function execute(interaction) {
 		const actor = await actorOf(interaction);
 		switch (interaction.options.getSubcommand()) {
 		case 'liste':
-			return await interaction.editReply({ embeds: [openGiveawaysEmbed(giveaways)] });
+			return await interaction.editReply({ embeds: [await openGiveawaysEmbed(giveaways)] });
 		case 'creer': {
 			if (!actor.can('giveaways.manage')) throw new ForbiddenError('Permission manquante : giveaways.manage');
 			const durationMs = parseDuration(interaction.options.getString('duree'));
 			if (!durationMs) throw new ValidationError('Durée invalide. Exemples : 30m, 2h, 3j.');
-			const g = giveaways.create(actor, {
+			const g = await giveaways.create(actor, {
 				prize: interaction.options.getString('lot'),
 				winnersCount: interaction.options.getInteger('gagnants') ?? 1,
 				endsAt: Date.now() + durationMs,

@@ -1,5 +1,5 @@
 import logger from './logger.js';
-import { env } from './config.js';
+import { env, missingDatabaseConfig } from './config.js';
 
 // Returns false when the bot must not start. No process.exit() here: exiting while
 // fetch is still closing its socket crashes Node on Windows (libuv assertion).
@@ -13,6 +13,12 @@ export async function startupChecks(config) {
 	}
 	else if (config.TOKEN === 'YOUR_BOT_TOKEN') {
 		logger.error(prefix + 'Make sure to fill in your .env file!');
+		return false;
+	}
+
+	const missingDb = missingDatabaseConfig(config);
+	if (missingDb.length) {
+		logger.error(prefix + `Database settings missing: set DATABASE_URL (mysql://user:password@host:3306/database) or ${missingDb.join(', ')} (.env file or environment variables)!`);
 		return false;
 	}
 

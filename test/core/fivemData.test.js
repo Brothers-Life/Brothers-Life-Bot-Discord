@@ -66,7 +66,7 @@ test('fivem data: config validation keeps the saved password and never shows it'
 	assert.equal(normalizeDbConfig({ host: 'h', database: 'x', user: 'u', password: '' }, { password: 'old' }).password, 'old');
 
 	const { data, actor } = setup();
-	const view = data.settingsView();
+	const view = await data.settingsView();
 	assert.equal(view.password, undefined);
 	assert.equal(view.hasPassword, true);
 	await assert.rejects(data.setConfig(actor(['fivemdata.view']), { enabled: false }), ForbiddenError);

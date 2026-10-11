@@ -41,13 +41,13 @@ export function registerFivemEventRoutes(app, { core }) {
 	app.get('/api/fivem-events', { config: { permission: 'fivemevents.view' } }, async (request) => {
 		const manage = request.actor.can('fivemevents.manage');
 		return {
-			config: fivemEvents.config(),
+			config: await fivemEvents.config(),
 			types: fivemEvents.types(),
 			restartWarnings: RESTART_WARNINGS,
 			variables: { txadmin: TXADMIN_VARIABLES, maintenance: MAINTENANCE_VARIABLES },
-			...fivemEvents.publicState(),
-			maintenanceBy: fivemEvents.maintenance().by ?? null,
-			events: fivemEvents.recent(50),
+			...await fivemEvents.publicState(),
+			maintenanceBy: (await fivemEvents.maintenance()).by ?? null,
+			events: await fivemEvents.recent(50),
 			baseUrl: core.config.WEB_PUBLIC_URL ?? '',
 			guilds: manage || request.actor.can('fivemevents.maintenance') ? await networkTargets(core) : [],
 		};

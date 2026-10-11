@@ -41,9 +41,9 @@ test('a FiveM failure never breaks the other variables', async () => {
 });
 
 test('catalog: FiveM group only when the database is set up', async () => {
-	assert.ok((await setup()).variables.catalog('member').some(g => g.title === 'Compte FiveM'));
-	assert.ok(!(await setup({ enabled: false })).variables.catalog('member').some(g => g.title === 'Compte FiveM'));
-	assert.ok(!(await setup()).variables.catalog('server').some(g => g.title === 'Membre'));
+	assert.ok((await (await setup()).variables.catalog('member')).some(g => g.title === 'Compte FiveM'));
+	assert.ok(!(await (await setup({ enabled: false })).variables.catalog('member')).some(g => g.title === 'Compte FiveM'));
+	assert.ok(!(await (await setup()).variables.catalog('server')).some(g => g.title === 'Membre'));
 	assert.equal(usesFivem({ content: 'id {fivem.dbid}' }), true);
 	assert.equal(usesFivem('salut {user}'), false);
 });

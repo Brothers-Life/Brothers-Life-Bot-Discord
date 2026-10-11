@@ -18,7 +18,7 @@ export async function execute(interaction) {
 			await embedBuilder.post(actor, saved.id, { guildId: interaction.guildId, channelId: interaction.channelId });
 			return await interaction.editReply('✅ Embed posté. Tu peux le modifier avec `/embed modifier` ou dans le panel (plusieurs embeds, boutons).');
 		}
-		const message = embedBuilder.get(Number(id));
+		const message = await embedBuilder.get(Number(id));
 		const embeds = [{ ...message.payload.embeds[0], ...embed }, ...message.payload.embeds.slice(1)];
 		await embedBuilder.save(actor, { id: message.id, name: message.name, payload: { ...message.payload, content: value('content'), embeds } });
 		await interaction.editReply('✅ Embed modifié.');

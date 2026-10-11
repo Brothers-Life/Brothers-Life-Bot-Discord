@@ -19,7 +19,7 @@ export const snowflake = { type: 'string', pattern: '^\\d{17,20}$' };
 
 // Servers of the network with their text channels (and roles), to choose where to post
 export async function networkTargets(core) {
-	const guilds = core.network.list().filter(g => g.status === 'active' && g.botPresent);
+	const guilds = (await core.network.list()).filter(g => g.status === 'active' && g.botPresent);
 	return Promise.all(guilds.map(async g => ({
 		id: g.id,
 		name: g.name,

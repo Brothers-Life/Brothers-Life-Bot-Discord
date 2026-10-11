@@ -46,19 +46,19 @@ export function createEvents({ db, network, logs, settings, now = Date.now }) {
 		},
 
 		// message: the log embed ({ title, description, fields, color }); built by the bot layer
-		record({ guildId, category, type, userId = null, actorId = null, channelId = null, summary, details = null, message = null }) {
+		async record({ guildId, category, type, userId = null, actorId = null, channelId = null, summary, details = null, message = null }) {
 			if (!EVENT_CATEGORIES[category]) throw new Error(`Unknown event category: ${category}`);
-			if (network.find(guildId)?.status !== 'active' || muted.has(guildId)) return null;
-			const { lastInsertRowid } = insert.run({
+			if ((await network.find(guildId))?.status !== 'active' || muted.has(guildId)) return null;
+			const { lastInsertRowid } = await insert.run({
 				at: now(), guildId, category, type, userId, actorId, channelId,
 				summary: summary.slice(0, 500),
 				details: details ? JSON.stringify(details) : null,
 			});
-			logs.log(guildId, category, message ?? { title: summary }, type);
+			await logs.log(guildId, category, message ?? { title: summary }, type);
 			return Number(lastInsertRowid);
 		},
 
-		query({ guildId, category, userId, q, from, to, before, limit = 50 } = {}) {
+		async query({ guildId, category, userId, q, from, to, before, limit = 50 } = {}) {
 			const params = {
 				guildId, category, userId, from, to, before,
 				q: q ? `%${String(q).replace(/[%_\\]/g, '\\$&')}%` : undefined,
@@ -68,27 +68,27 @@ export function createEvents({ db, network, logs, settings, now = Date.now }) {
 				guildId && 'guild_id = @guildId',
 				category && 'category = @category',
 				userId && '(user_id = @userId OR actor_id = @userId)',
-				q && '(summary LIKE @q ESCAPE \'\\\' OR details LIKE @q ESCAPE \'\\\')',
+				q && '(summary COLLATE utf8mb4_unicode_ci LIKE @q ESCAPE \'\\\\\' OR details COLLATE utf8mb4_unicode_ci LIKE @q ESCAPE \'\\\\\')',
 				from && 'at >= @from',
 				to && 'at <= @to',
 				before && 'id < @before',
 			].filter(Boolean);
 			const sql = `SELECT * FROM events ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY id DESC LIMIT @limit`;
-			return db.prepare(sql).all(params).map(toEvent);
+			return (await db.prepare(sql).all(params)).map(toEvent);
 		},
 
-		retentionDays() {
-			return settings.get('events.retentionDays', DEFAULT_RETENTION_DAYS);
+		async retentionDays() {
+			return await settings.get('events.retentionDays', DEFAULT_RETENTION_DAYS);
 		},
 
-		setRetention(actor, days) {
+		async setRetention(actor, days) {
 			if (!actor.can('logs.manage')) throw new ForbiddenError('Permission manquante : logs.manage');
 			if (!Number.isInteger(days) || days < 1 || days > 365) throw new ValidationError('La durée de conservation doit être entre 1 et 365 jours.');
-			settings.set('events.retentionDays', days);
+			await settings.set('events.retentionDays', days);
 		},
 
-		purge() {
-			return db.prepare('DELETE FROM events WHERE at < ?').run(now() - this.retentionDays() * DAY).changes;
+		async purge() {
+			return (await db.prepare('DELETE FROM events WHERE at < ?').run(now() - await this.retentionDays() * DAY)).changes;
 		},
 	};
 }

@@ -56,9 +56,9 @@ export function registerFivemDataRoutes(app, { core }) {
 	// Discord roles checked against the game
 	const { fivemRoles } = core;
 	app.get('/api/fivem-data/roles/setup', { config: { permission: 'fivemdata.roles' } }, async request => ({
-		links: fivemRoles.links(),
+		links: await fivemRoles.links(),
 		catalog: await fivemData.catalog(request.actor),
-		guilds: await Promise.all(core.network.list().filter(g => g.status === 'active' && g.botPresent).map(async g => ({
+		guilds: await Promise.all((await core.network.list()).filter(g => g.status === 'active' && g.botPresent).map(async g => ({
 			id: g.id, name: g.name, isMain: g.isMain,
 			roles: (await executor.listRoles(g.id)).map(({ id, name, color, editable }) => ({ id, name, color, editable })),
 		}))),

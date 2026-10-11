@@ -47,23 +47,26 @@ export function createRpEvents({ db, network, audit, executor, uploads = null, l
 				capacity = @capacity, allow_maybe = @allowMaybe, targets = @targets, roles = @roles, reminders = @reminders, updated_at = @at WHERE id = @id
 		`),
 		get: db.prepare('SELECT * FROM rp_events WHERE id = ?'),
-		list: db.prepare('SELECT * FROM rp_events ORDER BY starts_at DESC LIMIT 300'),
-		upcoming: db.prepare('SELECT * FROM rp_events WHERE status IN (\'scheduled\', \'live\') ORDER BY starts_at'),
+		list: db.prepare('SELECT * FROM rp_events ORDER BY starts_at DESC, id DESC LIMIT 300'),
+		upcoming: db.prepare('SELECT * FROM rp_events WHERE status IN (\'scheduled\', \'live\') ORDER BY starts_at, id'),
 		setStatus: db.prepare('UPDATE rp_events SET status = ?, updated_at = ? WHERE id = ?'),
 		setMessages: db.prepare('UPDATE rp_events SET messages = ? WHERE id = ?'),
 		setReminded: db.prepare('UPDATE rp_events SET reminded = ? WHERE id = ?'),
 		delete: db.prepare('DELETE FROM rp_events WHERE id = ?'),
-		rsvps: db.prepare('SELECT * FROM rp_event_rsvps WHERE event_id = ? ORDER BY at'),
+		rsvps: db.prepare('SELECT * FROM rp_event_rsvps WHERE event_id = ? ORDER BY at, user_id'),
 		rsvp: db.prepare('SELECT * FROM rp_event_rsvps WHERE event_id = ? AND user_id = ?'),
-		upsertRsvp: db.prepare('INSERT INTO rp_event_rsvps (event_id, user_id, status, at) VALUES (?, ?, ?, ?) ON CONFLICT (event_id, user_id) DO UPDATE SET status = excluded.status, at = CASE WHEN rp_event_rsvps.status = excluded.status THEN rp_event_rsvps.at ELSE excluded.at END'),
+		// `at` is set before `status` (MariaDB applies the assignments in order): kept when the status does not change
+		upsertRsvp: db.prepare('INSERT INTO rp_event_rsvps (event_id, user_id, status, at) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE at = IF(status = VALUES(status), at, VALUES(at)), status = VALUES(status)'),
 		deleteRsvp: db.prepare('DELETE FROM rp_event_rsvps WHERE event_id = ? AND user_id = ?'),
 		countGoing: db.prepare('SELECT COUNT(*) AS n FROM rp_event_rsvps WHERE event_id = ? AND status = \'going\''),
-		firstWaiting: db.prepare('SELECT * FROM rp_event_rsvps WHERE event_id = ? AND status = \'waitlist\' ORDER BY at LIMIT 1'),
+		// Sign-ups of an event are changed one at a time (capacity, waiting list)
+		lock: db.prepare('SELECT id FROM rp_events WHERE id = ? FOR UPDATE'),
+		firstWaiting: db.prepare('SELECT * FROM rp_event_rsvps WHERE event_id = ? AND status = \'waitlist\' ORDER BY at, user_id LIMIT 1'),
 	};
 
-	function toEvent(row) {
+	async function toEvent(row) {
 		if (!row) return null;
-		const rsvps = q.rsvps.all(row.id).map(r => ({ userId: r.user_id, status: r.status, at: r.at }));
+		const rsvps = (await q.rsvps.all(row.id)).map(r => ({ userId: r.user_id, status: r.status, at: r.at }));
 		return {
 			id: row.id, title: row.title, description: row.description, image: row.image, location: row.location, startsAt: row.starts_at, endsAt: row.ends_at,
 			capacity: row.capacity, allowMaybe: Boolean(row.allow_maybe), targets: JSON.parse(row.targets), roles: JSON.parse(row.roles),
@@ -73,8 +76,8 @@ export function createRpEvents({ db, network, audit, executor, uploads = null, l
 		};
 	}
 
-	function getOrThrow(id) {
-		const e = toEvent(q.get.get(id));
+	async function getOrThrow(id) {
+		const e = await toEvent(await q.get.get(id));
 		if (!e) throw new NotFoundError('Événement introuvable.');
 		return e;
 	}
@@ -110,17 +113,17 @@ export function createRpEvents({ db, network, audit, executor, uploads = null, l
 		if (create) {
 			for (const m of e.messages) if (!e.targets.some(t => t.channelId === m.channelId)) await executor.deleteMessage(m.channelId, m.messageId).catch(() => null);
 		}
-		q.setMessages.run(JSON.stringify(messages), e.id);
+		await q.setMessages.run(JSON.stringify(messages), e.id);
 	}
 
-	function record(actor, action, e, details = {}) {
-		audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action, target: String(e.id), details: { title: e.title, ...details } });
+	async function record(actor, action, e, details = {}) {
+		await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action, target: String(e.id), details: { title: e.title, ...details } });
 	}
 
 	async function setRoles(e, add) {
 		const going = e.rsvps.filter(r => r.status === 'going');
 		for (const [guildId, roleId] of Object.entries(e.roles)) {
-			if (network.find(guildId)?.status !== 'active') continue;
+			if ((await network.find(guildId))?.status !== 'active') continue;
 			for (const r of going) {
 				const fn = add ? executor.addRole : executor.removeRole;
 				await fn.call(executor, guildId, r.userId, roleId, `Événement « ${e.title} »`).catch(() => null);
@@ -129,12 +132,12 @@ export function createRpEvents({ db, network, audit, executor, uploads = null, l
 	}
 
 	// Free seats (capacity raised or removed): the waiting list moves up in order. Returns who got a seat
-	function promoteWaitlist(e) {
+	async function promoteWaitlist(e) {
 		const promoted = [];
 		let going = e.counts.going;
 		for (const r of e.rsvps.filter(x => x.status === 'waitlist')) {
 			if (e.capacity !== null && going >= e.capacity) break;
-			q.upsertRsvp.run(e.id, r.userId, 'going', now());
+			await q.upsertRsvp.run(e.id, r.userId, 'going', now());
 			promoted.push(r.userId);
 			going += 1;
 		}
@@ -142,27 +145,30 @@ export function createRpEvents({ db, network, audit, executor, uploads = null, l
 	}
 
 	return {
-		list: () => q.list.all().map(toEvent),
+		list: async () => Promise.all((await q.list.all()).map(toEvent)),
 		get: getOrThrow,
-		upcoming: () => q.upcoming.all().map(toEvent),
+		upcoming: async () => Promise.all((await q.upcoming.all()).map(toEvent)),
 
 		async save(actor, input) {
 			need(actor, 'rpevents.manage');
-			const current = input.id ? getOrThrow(input.id) : null;
+			const current = input.id ? await getOrThrow(input.id) : null;
 			if (current && ['ended', 'cancelled'].includes(current.status)) throw new ValidationError('Cet événement est terminé ou annulé.');
 			const c = normalizeEvent(input, { now: now() });
 			if (!c.targets.length) throw new ValidationError('Choisis au moins un salon où annoncer l’événement.');
-			for (const t of c.targets) if (network.find(t.guildId)?.status !== 'active') throw new ValidationError('Un des serveurs choisis ne fait pas partie du réseau.');
+			for (const t of c.targets) if ((await network.find(t.guildId))?.status !== 'active') throw new ValidationError('Un des serveurs choisis ne fait pas partie du réseau.');
 			if (c.image && UPLOAD.test(c.image) && uploads && !uploads.exists(c.image.slice(7))) throw new ValidationError('L’image envoyée n’existe plus : renvoie-la.');
 			const row = { ...c, allowMaybe: c.allowMaybe ? 1 : 0, targets: JSON.stringify(c.targets), roles: JSON.stringify(c.roles), reminders: JSON.stringify(c.reminders), by: actor.id, at: now() };
 			let id = current?.id;
-			if (current) q.update.run({ ...row, id });
-			else id = Number(q.insert.run(row).lastInsertRowid);
+			if (current) await q.update.run({ ...row, id });
+			else id = Number((await q.insert.run(row)).lastInsertRowid);
 			const moved = current && current.startsAt !== c.startsAt;
 			// New date: the reminders are sent again before it
-			if (moved) q.setReminded.run('[]', id);
-			const promoted = current ? promoteWaitlist(getOrThrow(id)) : [];
-			const e = getOrThrow(id);
+			if (moved) await q.setReminded.run('[]', id);
+			const promoted = current ? await db.transaction(async () => {
+				await q.lock.get(id);
+				return promoteWaitlist(await getOrThrow(id));
+			})() : [];
+			const e = await getOrThrow(id);
 			// New channels get the message, the others are edited
 			await refreshMessages(e, { create: true });
 			if (moved) {
@@ -175,65 +181,70 @@ export function createRpEvents({ db, network, audit, executor, uploads = null, l
 					for (const [guildId, roleId] of Object.entries(e.roles)) await executor.addRole(guildId, userId, roleId, `Événement « ${e.title} »`).catch(() => null);
 				}
 			}
-			record(actor, current ? 'rpevents.update' : 'rpevents.create', e, { when: new Date(e.startsAt).toISOString() });
-			return getOrThrow(id);
+			await record(actor, current ? 'rpevents.update' : 'rpevents.create', e, { when: new Date(e.startsAt).toISOString() });
+			return await getOrThrow(id);
 		},
 
 		async cancel(actor, id, reason = '') {
 			need(actor, 'rpevents.manage');
-			const e = getOrThrow(id);
+			const e = await getOrThrow(id);
 			if (['ended', 'cancelled'].includes(e.status)) throw new ValidationError('Cet événement est déjà terminé ou annulé.');
 			if (e.status === 'live') await setRoles(e, false);
-			q.setStatus.run('cancelled', now(), id);
-			const cancelled = getOrThrow(id);
+			await q.setStatus.run('cancelled', now(), id);
+			const cancelled = await getOrThrow(id);
 			await refreshMessages(cancelled);
 			// Everyone who answered: registered, maybe and waiting list
 			for (const r of cancelled.rsvps) {
 				await executor.sendDM(r.userId, `❌ L’événement « ${e.title} » est annulé.${reason ? ` ${String(reason).slice(0, 300)}` : ''}`).catch(() => null);
 			}
-			record(actor, 'rpevents.cancel', e, { reason: reason || null });
+			await record(actor, 'rpevents.cancel', e, { reason: reason || null });
 			return cancelled;
 		},
 
 		async remove(actor, id) {
 			need(actor, 'rpevents.manage');
-			const e = getOrThrow(id);
+			const e = await getOrThrow(id);
 			if (e.status === 'live') await setRoles(e, false);
 			for (const m of e.messages) await executor.deleteMessage(m.channelId, m.messageId).catch(() => null);
-			q.delete.run(id);
-			record(actor, 'rpevents.delete', e);
+			await q.delete.run(id);
+			await record(actor, 'rpevents.delete', e);
 		},
 
 		// A member's answer from the buttons: going, maybe or leave. Returns { status, event, promoted }
 		async rsvp(userId, id, choice) {
-			const e = getOrThrow(id);
+			const e = await getOrThrow(id);
 			if (!['scheduled', 'live'].includes(e.status)) throw new ValidationError('Les inscriptions sont fermées.');
 			if (choice === 'maybe' && !e.allowMaybe) throw new ValidationError('« Peut-être » n’est pas proposé pour cet événement.');
-			const before = q.rsvp.get(id, userId);
-			let status = choice;
-			let promoted = null;
-			if (choice === 'leave') {
-				q.deleteRsvp.run(id, userId);
-				status = null;
-			}
-			else if (choice === 'going') {
-				const full = e.capacity !== null && q.countGoing.get(id).n >= e.capacity && before?.status !== 'going';
-				status = full ? 'waitlist' : 'going';
-				q.upsertRsvp.run(id, userId, status, now());
-			}
-			else {
-				q.upsertRsvp.run(id, userId, 'maybe', now());
-			}
-			// A seat freed: the first on the waiting list takes it
-			if (before?.status === 'going' && status !== 'going' && e.capacity !== null) {
-				const next = q.firstWaiting.get(id);
-				if (next) {
-					q.upsertRsvp.run(id, next.user_id, 'going', now());
-					promoted = next.user_id;
-					await executor.sendDM(next.user_id, `🎟️ Une place s’est libérée : tu es inscrit à « ${e.title} » (<t:${Math.floor(e.startsAt / 1000)}:F>).`).catch(() => null);
+			// The event row is locked while the sign-ups are read and written: two clicks at once cannot both take the last seat
+			const { before, status, promoted } = await db.transaction(async () => {
+				await q.lock.get(id);
+				const prev = await q.rsvp.get(id, userId);
+				let answer = choice;
+				let seated = null;
+				if (choice === 'leave') {
+					await q.deleteRsvp.run(id, userId);
+					answer = null;
 				}
-			}
-			const updated = getOrThrow(id);
+				else if (choice === 'going') {
+					const full = e.capacity !== null && (await q.countGoing.get(id)).n >= e.capacity && prev?.status !== 'going';
+					answer = full ? 'waitlist' : 'going';
+					await q.upsertRsvp.run(id, userId, answer, now());
+				}
+				else {
+					await q.upsertRsvp.run(id, userId, 'maybe', now());
+				}
+				// A seat freed: the first on the waiting list takes it
+				if (prev?.status === 'going' && answer !== 'going' && e.capacity !== null) {
+					const next = await q.firstWaiting.get(id);
+					if (next) {
+						await q.upsertRsvp.run(id, next.user_id, 'going', now());
+						seated = next.user_id;
+					}
+				}
+				return { before: prev, status: answer, promoted: seated };
+			})();
+			if (promoted) await executor.sendDM(promoted, `🎟️ Une place s’est libérée : tu es inscrit à « ${e.title} » (<t:${Math.floor(e.startsAt / 1000)}:F>).`).catch(() => null);
+			const updated = await getOrThrow(id);
 			// Already live: the role follows the sign-ups
 			if (updated.status === 'live') {
 				for (const [guildId, roleId] of Object.entries(updated.roles)) {
@@ -248,25 +259,25 @@ export function createRpEvents({ db, network, audit, executor, uploads = null, l
 
 		// Every minute: reminders, start (role given), end (role taken back, message closed)
 		async tick() {
-			for (const e of q.upcoming.all().map(toEvent)) {
+			for (const e of await Promise.all((await q.upcoming.all()).map(toEvent))) {
 				const due = e.reminders.filter(m => !e.reminded.includes(m) && now() >= e.startsAt - m * MINUTE && now() < e.startsAt);
 				if (due.length) {
 					// Marked first: sending many DMs is slow, a run at the same time must not send them again
-					q.setReminded.run(JSON.stringify([...e.reminded, ...due]), e.id);
+					await q.setReminded.run(JSON.stringify([...e.reminded, ...due]), e.id);
 					for (const r of e.rsvps.filter(x => x.status === 'going' || x.status === 'maybe')) {
 						await executor.sendDM(r.userId, `⏰ Rappel : « ${e.title} » commence <t:${Math.floor(e.startsAt / 1000)}:R>${e.location ? ` · 📍 ${e.location}` : ''}.`).catch(() => null);
 					}
 				}
 				if (e.status === 'scheduled' && now() >= e.startsAt && now() < e.endsAt) {
-					q.setStatus.run('live', now(), e.id);
-					const live = getOrThrow(e.id);
+					await q.setStatus.run('live', now(), e.id);
+					const live = await getOrThrow(e.id);
 					await setRoles(live, true);
 					await refreshMessages(live);
 				}
 				if (now() >= e.endsAt) {
 					if (e.status === 'live') await setRoles(e, false);
-					q.setStatus.run('ended', now(), e.id);
-					await refreshMessages(getOrThrow(e.id));
+					await q.setStatus.run('ended', now(), e.id);
+					await refreshMessages(await getOrThrow(e.id));
 				}
 			}
 		},

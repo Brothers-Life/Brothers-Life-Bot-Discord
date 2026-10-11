@@ -16,25 +16,25 @@ export function registerStaffRoutes(app, { core }) {
 	// --- Recruitment ---------------------------------------------------------------------------
 	app.get('/api/recruitment/:guildId', { config: { permission: 'recruitment.view' }, schema: { params: guildParam } }, async (request) => {
 		const { guildId } = request.params;
-		if (!network.find(guildId)) throw new NotFoundError('Serveur introuvable.');
+		if (!await network.find(guildId)) throw new NotFoundError('Serveur introuvable.');
 		const [channels, categories, roles] = await Promise.all([executor.listTextChannels(guildId), executor.listCategoryChannels(guildId), executor.listRoles(guildId)]);
 		return {
-			positions: recruitment.positions(guildId),
-			applications: await withNames(recruitment.list(request.actor, { guildId }), ['userId', 'decidedBy']),
+			positions: await recruitment.positions(guildId),
+			applications: await withNames(await recruitment.list(request.actor, { guildId }), ['userId', 'decidedBy']),
 			statuses: recruitment.statuses,
 			channels, categories, roles,
-			ranks: ranks.list().map(({ id, name, level, color }) => ({ id, name, level, color })),
+			ranks: (await ranks.list()).map(({ id, name, level, color }) => ({ id, name, level, color })),
 		};
 	});
 	app.put('/api/recruitment/:guildId/positions', { config: { permission: 'recruitment.manage' }, schema: { params: guildParam, body: { type: 'object' } } }, async (request) => {
-		return recruitment.savePosition(request.actor, request.params.guildId, request.body);
+		return await recruitment.savePosition(request.actor, request.params.guildId, request.body);
 	});
 	app.post('/api/recruitment/positions/:id/open', {
 		config: { permission: 'recruitment.manage' },
 		schema: { params: idParam, body: { type: 'object', required: ['open'], properties: { open: { type: 'boolean' } } } },
 	}, async (request) => recruitment.setOpen(request.actor, request.params.id, request.body.open));
 	app.delete('/api/recruitment/positions/:id', { config: { permission: 'recruitment.manage', confirm: true }, schema: { params: idParam } }, async (request) => {
-		recruitment.deletePosition(request.actor, request.params.id);
+		await recruitment.deletePosition(request.actor, request.params.id);
 		return { ok: true };
 	});
 	app.post('/api/recruitment/:guildId/panel', {
@@ -42,7 +42,7 @@ export function registerStaffRoutes(app, { core }) {
 		schema: { params: guildParam, body: { type: 'object', required: ['channelId'], properties: { channelId: snowflake } } },
 	}, async (request) => ({ messageId: await recruitment.publishPanel(request.actor, request.params.guildId, request.body.channelId) }));
 	app.get('/api/recruitment/applications/:id', { config: { permission: 'recruitment.view' }, schema: { params: idParam } }, async (request) => {
-		const application = recruitment.get(request.actor, request.params.id);
+		const application = await recruitment.get(request.actor, request.params.id);
 		const names = await resolveNames(executor, [application.userId, ...application.votes.map(v => v.userId), ...application.notes.map(n => n.by), ...application.history.map(h => h.by)]);
 		return { ...application, names: Object.fromEntries(names) };
 	});
@@ -59,8 +59,8 @@ export function registerStaffRoutes(app, { core }) {
 		schema: { params: idParam, body: { type: 'object', required: ['text'], properties: { text: { type: 'string', maxLength: 1000 } } } },
 	}, async (request) => recruitment.addNote(request.actor, request.params.id, request.body.text));
 	app.get('/api/recruitment/:guildId/export', { config: { permission: 'recruitment.view' }, schema: { params: guildParam } }, async (request, reply) => {
-		const list = await withNames(recruitment.list(request.actor, { guildId: request.params.guildId }), ['userId']);
-		const positions = new Map(recruitment.positions(request.params.guildId).map(p => [p.id, p.name]));
+		const list = await withNames(await recruitment.list(request.actor, { guildId: request.params.guildId }), ['userId']);
+		const positions = new Map((await recruitment.positions(request.params.guildId)).map(p => [p.id, p.name]));
 		const rows = [['Candidat', 'Poste', 'Statut', 'Pour', 'Contre', 'Déposée le'], ...list.map(a => [a.names.userId?.name ?? a.userId, positions.get(a.positionId), recruitment.statuses[a.status].label, a.score.for, a.score.against, new Date(a.createdAt).toLocaleString('fr-FR')])];
 		return reply.type('text/csv; charset=utf-8').header('Content-Disposition', 'attachment; filename="candidatures.csv"')
 			.send(`${String.fromCharCode(0xfeff)}${rows.map(r => r.map(csvCell).join(';')).join('\n')}\n`);
@@ -72,14 +72,14 @@ export function registerStaffRoutes(app, { core }) {
 		schema: { querystring: { type: 'object', properties: { from: { type: 'integer' }, to: { type: 'integer' } } } },
 	}, async (request) => {
 		const canSeeAll = request.actor.can('absences.view') || request.actor.can('absences.manage');
-		const list = canSeeAll ? absences.list(request.actor, request.query) : absences.mine(request.actor.id);
-		const guilds = network.list().filter(g => g.status === 'active' && g.botPresent);
+		const list = canSeeAll ? await absences.list(request.actor, request.query) : await absences.mine(request.actor.id);
+		const guilds = (await network.list()).filter(g => g.status === 'active' && g.botPresent);
 		const roles = request.actor.can('absences.manage')
 			? Object.fromEntries(await Promise.all(guilds.map(async g => [g.id, (await executor.listRoles(g.id)).map(({ id, name, color }) => ({ id, name, color }))])))
 			: {};
 		return {
 			absences: await withNames(list, ['userId', 'declaredBy', 'reviewedBy']),
-			config: absences.config(),
+			config: await absences.config(),
 			guilds: guilds.map(({ id, name }) => ({ id, name })),
 			roles,
 			channels: request.actor.can('absences.manage') ? Object.fromEntries(await Promise.all(guilds.map(async g => [g.id, await executor.listTextChannels(g.id)]))) : {},
@@ -90,7 +90,7 @@ export function registerStaffRoutes(app, { core }) {
 		schema: { body: { type: 'object', required: ['endAt'], properties: { userId: snowflake, startAt: { type: ['integer', 'null'] }, endAt: { type: 'integer' }, reason: { type: 'string', maxLength: 300 } } } },
 	}, async (request, reply) => {
 		reply.code(201);
-		return absences.declare(request.actor, { ...request.body, startAt: request.body.startAt ?? undefined });
+		return await absences.declare(request.actor, { ...request.body, startAt: request.body.startAt ?? undefined });
 	});
 	app.post('/api/absences/:id/review', {
 		config: { permission: 'absences.manage' },

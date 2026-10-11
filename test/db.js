@@ -10,7 +10,8 @@ const WRITE = /^\s*(?:INSERT(?:\s+IGNORE)?\s+INTO|REPLACE\s+INTO|UPDATE(?:\s+IGN
 
 export function testServerOptions() {
 	const url = process.env.TEST_DATABASE_URL ?? 'mysql://root:root@127.0.0.1:3306/';
-	const { database: _ignored, ...server } = databaseOptions({ DATABASE_URL: url });
+	const server = databaseOptions({ DATABASE_URL: url });
+	delete server.database;
 	return server;
 }
 

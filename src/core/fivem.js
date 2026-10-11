@@ -30,20 +30,20 @@ export function createFivem({ db, network, audit, executor, settings, logs, fetc
 	let maintenance = null;
 
 	const q = {
-		all: db.prepare('SELECT * FROM fivem_servers ORDER BY name COLLATE NOCASE'),
+		all: db.prepare('SELECT * FROM fivem_servers ORDER BY name COLLATE utf8mb4_unicode_ci, id'),
 		get: db.prepare('SELECT * FROM fivem_servers WHERE id = ?'),
 		insert: db.prepare('INSERT INTO fivem_servers (name, address, join_code, config, created_by, created_at) VALUES (@name, @address, @joinCode, @config, @by, @at)'),
 		update: db.prepare('UPDATE fivem_servers SET name = @name, address = @address, join_code = @joinCode, config = @config WHERE id = @id'),
 		delete: db.prepare('DELETE FROM fivem_servers WHERE id = ?'),
 		messages: db.prepare('SELECT * FROM fivem_status_messages ORDER BY id'),
-		messagesOf: db.prepare('SELECT * FROM fivem_status_messages WHERE server_id = ?'),
+		messagesOf: db.prepare('SELECT * FROM fivem_status_messages WHERE server_id = ? ORDER BY id'),
 		message: db.prepare('SELECT * FROM fivem_status_messages WHERE id = ?'),
-		addMessage: db.prepare('INSERT INTO fivem_status_messages (server_id, guild_id, channel_id) VALUES (?, ?, ?) ON CONFLICT (server_id, channel_id) DO NOTHING'),
+		addMessage: db.prepare('INSERT IGNORE INTO fivem_status_messages (server_id, guild_id, channel_id) VALUES (?, ?, ?)'),
 		setMessage: db.prepare('UPDATE fivem_status_messages SET message_id = ? WHERE id = ?'),
 		dropMessage: db.prepare('DELETE FROM fivem_status_messages WHERE id = ?'),
 	};
 
-	function toServer(row) {
+	async function toServer(row) {
 		if (!row) return null;
 		const config = JSON.parse(row.config);
 		return {
@@ -51,12 +51,12 @@ export function createFivem({ db, network, audit, executor, settings, logs, fetc
 			config: { showPlayers: config.showPlayers !== false, color: /^#[0-9a-f]{6}$/i.test(config.color ?? '') ? config.color : '#d6a249' },
 			status: cache.get(row.id) ?? null,
 			maintenance,
-			messages: q.messagesOf.all(row.id).map(m => ({ id: m.id, guildId: m.guild_id, channelId: m.channel_id, messageId: m.message_id })),
+			messages: (await q.messagesOf.all(row.id)).map(m => ({ id: m.id, guildId: m.guild_id, channelId: m.channel_id, messageId: m.message_id })),
 		};
 	}
 
-	function getOrThrow(id) {
-		const s = toServer(q.get.get(id));
+	async function getOrThrow(id) {
+		const s = await toServer(await q.get.get(id));
 		if (!s) throw new NotFoundError('Serveur FiveM introuvable.');
 		return s;
 	}
@@ -65,8 +65,8 @@ export function createFivem({ db, network, audit, executor, settings, logs, fetc
 		if (!actor.can('fivem.manage')) throw new ForbiddenError('Permission manquante : fivem.manage');
 	}
 
-	function record(actor, action, target, details = {}) {
-		audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action, target: String(target), details });
+	async function record(actor, action, target, details = {}) {
+		await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action, target: String(target), details });
 	}
 
 	async function getJson(url) {
@@ -98,7 +98,7 @@ export function createFivem({ db, network, audit, executor, settings, logs, fetc
 	async function publishOne(server, row) {
 		try {
 			const id = await executor.upsertFivemMessage(row.channel_id, row.message_id, { server, status: cache.get(server.id) ?? null });
-			if (id !== row.message_id) q.setMessage.run(id, row.id);
+			if (id !== row.message_id) await q.setMessage.run(id, row.id);
 		}
 		catch (error) {
 			logger.warn(`FiveM status message ${row.channel_id} failed:`, error.message);
@@ -119,74 +119,74 @@ export function createFivem({ db, network, audit, executor, settings, logs, fetc
 		return { name, address, joinCode: code || null, config: JSON.stringify({ showPlayers: config.showPlayers !== false, color: /^#[0-9a-f]{6}$/i.test(config.color ?? '') ? config.color : '#d6a249' }) };
 	}
 
-	function presence() {
-		return normalizePresence(settings.get('fivem.presence', DEFAULT_PRESENCE));
+	async function presence() {
+		return normalizePresence(await settings.get('fivem.presence', DEFAULT_PRESENCE));
 	}
 
 	const service = {
-		list: () => q.all.all().map(toServer),
+		list: async () => Promise.all((await q.all.all()).map(toServer)),
 		get: getOrThrow,
 
 		async save(actor, input) {
 			requireManage(actor);
-			const current = input.id ? getOrThrow(input.id) : null;
+			const current = input.id ? await getOrThrow(input.id) : null;
 			const c = validate(input, current);
 			let id = current?.id;
-			if (current) q.update.run({ ...c, id });
-			else id = Number(q.insert.run({ ...c, by: actor.id, at: now() }).lastInsertRowid);
-			const server = getOrThrow(id);
+			if (current) await q.update.run({ ...c, id });
+			else id = Number((await q.insert.run({ ...c, by: actor.id, at: now() })).lastInsertRowid);
+			const server = await getOrThrow(id);
 			await poll(server);
-			record(actor, current ? 'fivem.update' : 'fivem.create', id, { name: server.name, address: server.address });
+			await record(actor, current ? 'fivem.update' : 'fivem.create', id, { name: server.name, address: server.address });
 			return getOrThrow(id);
 		},
 
 		async remove(actor, id) {
 			requireManage(actor);
-			const server = getOrThrow(id);
+			const server = await getOrThrow(id);
 			for (const m of server.messages) if (m.messageId) await executor.deleteMessage(m.channelId, m.messageId).catch(() => null);
-			q.delete.run(id);
+			await q.delete.run(id);
 			cache.delete(id);
-			record(actor, 'fivem.delete', id, { name: server.name });
+			await record(actor, 'fivem.delete', id, { name: server.name });
 		},
 
 		// A status message kept up to date in a channel
 		async addStatusMessage(actor, serverId, guildId, channelId) {
 			requireManage(actor);
-			const server = getOrThrow(serverId);
-			if (!SNOWFLAKE.test(channelId) || network.find(guildId)?.status !== 'active') throw new ValidationError('Salon invalide.');
+			const server = await getOrThrow(serverId);
+			if (!SNOWFLAKE.test(channelId) || (await network.find(guildId))?.status !== 'active') throw new ValidationError('Salon invalide.');
 			if (!await executor.getTextChannel(guildId, channelId)) throw new ValidationError('Le bot ne peut pas écrire dans ce salon.');
-			q.addMessage.run(serverId, guildId, channelId);
-			const row = q.messagesOf.all(serverId).find(m => m.channel_id === channelId);
+			await q.addMessage.run(serverId, guildId, channelId);
+			const row = (await q.messagesOf.all(serverId)).find(m => m.channel_id === channelId);
 			await publishOne(server, row);
-			record(actor, 'fivem.message', serverId, { name: server.name, channel: `<#${channelId}>` });
+			await record(actor, 'fivem.message', serverId, { name: server.name, channel: `<#${channelId}>` });
 			return getOrThrow(serverId);
 		},
 
 		async removeStatusMessage(actor, messageRowId) {
 			requireManage(actor);
-			const row = q.message.get(messageRowId);
+			const row = await q.message.get(messageRowId);
 			if (!row) throw new NotFoundError('Message introuvable.');
 			if (row.message_id) await executor.deleteMessage(row.channel_id, row.message_id).catch(() => null);
-			q.dropMessage.run(messageRowId);
-			record(actor, 'fivem.message_delete', row.server_id, { channel: `<#${row.channel_id}>` });
+			await q.dropMessage.run(messageRowId);
+			await record(actor, 'fivem.message_delete', row.server_id, { channel: `<#${row.channel_id}>` });
 		},
 
 		presence,
 
-		setPresence(actor, input) {
+		async setPresence(actor, input) {
 			requireManage(actor);
 			const p = normalizePresence(input);
-			settings.set('fivem.presence', p);
-			record(actor, 'fivem.presence', 'presence', { enabled: p.enabled });
+			await settings.set('fivem.presence', p);
+			await record(actor, 'fivem.presence', 'presence', { enabled: p.enabled });
 			if (!p.enabled) void executor.setBotStatus(null).catch(() => null);
 			return p;
 		},
 
 		// Every minute: poll every server, then refresh the status messages
 		async tick() {
-			const servers = q.all.all().map(toServer);
+			const servers = await Promise.all((await q.all.all()).map(toServer));
 			await Promise.all(servers.map(poll));
-			for (const row of q.messages.all()) {
+			for (const row of await q.messages.all()) {
 				const server = servers.find(s => s.id === row.server_id);
 				if (server) await publishOne({ ...server, status: cache.get(server.id) }, row);
 			}
@@ -194,9 +194,9 @@ export function createFivem({ db, network, audit, executor, settings, logs, fetc
 
 		// Every 30 s: bot status, rotating between the chosen servers
 		async presenceTick() {
-			const p = presence();
+			const p = await presence();
 			if (!p.enabled) return null;
-			const servers = p.serverIds.map(id => toServer(q.get.get(id))).filter(Boolean);
+			const servers = (await Promise.all(p.serverIds.map(async id => toServer(await q.get.get(id))))).filter(Boolean);
 			if (!servers.length) return null;
 			const server = servers[rotation++ % servers.length];
 			const status = cache.get(server.id);
@@ -211,8 +211,8 @@ export function createFivem({ db, network, audit, executor, settings, logs, fetc
 
 		// Status messages redrawn from the last poll (maintenance switched on or off)
 		async republish() {
-			const servers = q.all.all().map(toServer);
-			for (const row of q.messages.all()) {
+			const servers = await Promise.all((await q.all.all()).map(toServer));
+			for (const row of await q.messages.all()) {
 				const server = servers.find(s => s.id === row.server_id);
 				if (server) await publishOne(server, row);
 			}
@@ -231,7 +231,7 @@ export function createFivem({ db, network, audit, executor, settings, logs, fetc
 		},
 
 		async fresh(id) {
-			const server = getOrThrow(id);
+			const server = await getOrThrow(id);
 			const status = cache.get(id);
 			return status && now() - status.checkedAt < 30_000 ? server : { ...server, status: await poll(server) };
 		},

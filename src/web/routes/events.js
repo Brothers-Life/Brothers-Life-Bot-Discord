@@ -21,9 +21,9 @@ export function registerEventRoutes(app, { core }) {
 			},
 		},
 	}, async (request) => {
-		const list = events.query(request.query);
+		const list = await events.query(request.query);
 		const names = await resolveNames(executor, list.flatMap(e => [e.userId, e.actorId]));
-		const guilds = new Map(network.list().map(g => [g.id, g.name]));
+		const guilds = new Map((await network.list()).map(g => [g.id, g.name]));
 		return list.map(e => ({
 			...e,
 			guildName: guilds.get(e.guildId) ?? e.guildId,
@@ -33,7 +33,7 @@ export function registerEventRoutes(app, { core }) {
 	});
 
 	app.get('/api/events/settings', { config: { permission: 'events.view' } }, async () => ({
-		retentionDays: events.retentionDays(),
+		retentionDays: await events.retentionDays(),
 		categories: events.categories(),
 	}));
 
@@ -41,7 +41,7 @@ export function registerEventRoutes(app, { core }) {
 		config: { permission: 'logs.manage' },
 		schema: { body: { type: 'object', required: ['retentionDays'], properties: { retentionDays: { type: 'integer' } } } },
 	}, async (request) => {
-		events.setRetention(request.actor, request.body.retentionDays);
-		return { retentionDays: events.retentionDays() };
+		await events.setRetention(request.actor, request.body.retentionDays);
+		return { retentionDays: await events.retentionDays() };
 	});
 }

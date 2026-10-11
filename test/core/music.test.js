@@ -26,23 +26,23 @@ test('play: joins, starts the first track, queues the next ones; the end of a tr
 	assert.equal(backend.joined.get(MAIN), VOICE);
 	assert.equal(backend.played.at(-1).target, 'https://audio.example/Titre A');
 	await music.play(member(BOB), MAIN, 'playlist:B,C');
-	let state = music.state(MAIN);
+	let state = await music.state(MAIN);
 	assert.deepEqual([state.current.title, state.upcoming.map(t => t.title)], ['Titre A', ['B', 'C']]);
 	assert.equal(state.queue[1].requestedBy, BOB);
 
 	await music.trackEnded(MAIN);
-	assert.equal(music.state(MAIN).current.title, 'B');
+	assert.equal((await music.state(MAIN)).current.title, 'B');
 
-	music.setLoop(member(ALICE), MAIN, 'track');
+	await music.setLoop(member(ALICE), MAIN, 'track');
 	await music.trackEnded(MAIN);
-	assert.equal(music.state(MAIN).current.title, 'B', 'same track again');
-	music.setLoop(member(ALICE), MAIN, 'queue');
+	assert.equal((await music.state(MAIN)).current.title, 'B', 'same track again');
+	await music.setLoop(member(ALICE), MAIN, 'queue');
 	await music.trackEnded(MAIN);
 	await music.trackEnded(MAIN);
-	assert.equal(music.state(MAIN).current.title, 'Titre A', 'back to the start of the queue');
-	music.setLoop(member(ALICE), MAIN, 'off');
+	assert.equal((await music.state(MAIN)).current.title, 'Titre A', 'back to the start of the queue');
+	await music.setLoop(member(ALICE), MAIN, 'off');
 	await music.skip(member(ALICE), MAIN, 5);
-	state = music.state(MAIN);
+	state = await music.state(MAIN);
 	assert.equal(state.current, null, 'end of the queue');
 	assert.equal(backend.played.at(-1).stopped, true);
 });
@@ -57,35 +57,35 @@ test('controls: seek, speed and filters restart where the track is; volume live;
 	assert.deepEqual([backend.played.at(-1).seekMs, backend.played.at(-1).speed], [100_000, 1.5]);
 	await assert.rejects(music.setSpeed(member(ALICE), MAIN, 3), ValidationError);
 	await music.setFilters(member(ALICE), MAIN, ['bassboost', 'nightcore', 'vaporwave', 'nope']);
-	assert.deepEqual(music.state(MAIN).filters.sort(), ['bassboost', 'nightcore'], 'nightcore and vaporwave exclude each other');
-	assert.equal(music.state(MAIN).rate, 1.5 * 1.25);
+	assert.deepEqual((await music.state(MAIN)).filters.sort(), ['bassboost', 'nightcore'], 'nightcore and vaporwave exclude each other');
+	assert.equal((await music.state(MAIN)).rate, 1.5 * 1.25);
 	await music.setVolume(member(ALICE), MAIN, 150);
 	assert.equal(backend.volumes.get(MAIN), 150);
 	const plays = backend.played.length;
 	await music.setVolume(member(ALICE), MAIN, 999);
-	assert.equal(music.state(MAIN).volume, 200);
+	assert.equal((await music.state(MAIN)).volume, 200);
 	assert.equal(backend.played.length, plays, 'volume does not restart the track');
 
 	await music.previous(member(ALICE), MAIN);
 	assert.equal(backend.played.at(-1).seekMs, 0, 'past 5 s, previous restarts the track');
 	await music.jump(member(ALICE), MAIN, 2);
-	assert.equal(music.state(MAIN).current.title, 'C');
+	assert.equal((await music.state(MAIN)).current.title, 'C');
 	backend.positions.set(MAIN, 0);
 	await music.previous(member(ALICE), MAIN);
-	assert.equal(music.state(MAIN).current.title, 'B');
+	assert.equal((await music.state(MAIN)).current.title, 'B');
 
-	music.move(member(ALICE), MAIN, 3, 0);
-	assert.deepEqual(music.state(MAIN).queue.map(t => t.title), ['D', 'A', 'B', 'C']);
-	assert.equal(music.state(MAIN).current.title, 'B', 'moving tracks does not change what plays');
+	await music.move(member(ALICE), MAIN, 3, 0);
+	assert.deepEqual((await music.state(MAIN)).queue.map(t => t.title), ['D', 'A', 'B', 'C']);
+	assert.equal((await music.state(MAIN)).current.title, 'B', 'moving tracks does not change what plays');
 	await music.remove(member(ALICE), MAIN, 0);
-	assert.equal(music.state(MAIN).current.title, 'B');
+	assert.equal((await music.state(MAIN)).current.title, 'B');
 	await music.play(member(ALICE), MAIN, 'playlist:E,F,G,H');
-	music.shuffle(member(ALICE), MAIN);
-	const state = music.state(MAIN);
+	await music.shuffle(member(ALICE), MAIN);
+	const state = await music.state(MAIN);
 	assert.equal(state.current.title, 'B');
 	assert.deepEqual(state.upcoming.map(t => t.title).sort(), ['C', 'E', 'F', 'G', 'H']);
-	music.clear(member(ALICE), MAIN);
-	assert.equal(music.state(MAIN).upcoming.length, 0);
+	await music.clear(member(ALICE), MAIN);
+	assert.equal((await music.state(MAIN)).upcoming.length, 0);
 
 	await music.play(member(ALICE), MAIN, 'Z live');
 	await assert.rejects(music.jump(member(ALICE), MAIN, 99), ValidationError);
@@ -97,19 +97,19 @@ test('permissions: same voice channel, DJ roles for the controls, music.use from
 	await music.play(member(ALICE), MAIN, 'playlist:A,B');
 	await assert.rejects(music.skip(member(BOB, { voiceChannelId: OTHER_VOICE }), MAIN), /Rejoins/);
 
-	music.setConfig(owner, { djRoles: { [MAIN]: [DJ] } });
+	await music.setConfig(owner, { djRoles: { [MAIN]: [DJ] } });
 	await music.play(member(BOB), MAIN, 'C');
 	await assert.rejects(music.skip(member(BOB), MAIN), ForbiddenError, 'adding is open, skipping needs DJ');
 	await music.skip(member(BOB, { roleIds: [DJ] }), MAIN);
 	await music.skip(member(BOB, { voiceChannelId: null, can: (p) => p === 'music.use' }), MAIN);
 	await assert.rejects(music.pause({ actorId: ALICE, source: 'panel', can: () => false }, MAIN), ForbiddenError);
-	assert.throws(() => music.setConfig({ id: ALICE, can: () => false }, {}), ForbiddenError);
+	await assert.rejects(async () => music.setConfig({ id: ALICE, can: () => false }, {}), ForbiddenError);
 });
 
 test('broken tracks are skipped; the bot leaves when alone or idle for a while', async () => {
 	const { music, member, backend, advance, executor } = await setup();
 	await music.play(member(ALICE), MAIN, 'playlist:broken one,Bien');
-	const state = music.state(MAIN);
+	const state = await music.state(MAIN);
 	assert.equal(state.current.title, 'Bien');
 	assert.equal(state.history[0].error, 'Vidéo indisponible');
 	await new Promise(r => setTimeout(r, 10));
@@ -117,10 +117,10 @@ test('broken tracks are skipped; the bot leaves when alone or idle for a while',
 
 	backend.listenerCount.set(MAIN, 0);
 	await music.tick();
-	assert.equal(music.state(MAIN).connected, true);
+	assert.equal((await music.state(MAIN)).connected, true);
 	advance(5 * 60_000);
 	await music.tick();
-	assert.equal(music.state(MAIN).connected, false);
+	assert.equal((await music.state(MAIN)).connected, false);
 	assert.equal(backend.joined.has(MAIN), false);
 
 	backend.listenerCount.set(MAIN, 1);
@@ -128,7 +128,7 @@ test('broken tracks are skipped; the bot leaves when alone or idle for a while',
 	await music.trackEnded(MAIN);
 	advance(6 * 60_000);
 	await music.tick();
-	assert.equal(music.state(MAIN).connected, false, 'nothing left to play');
+	assert.equal((await music.state(MAIN)).connected, false, 'nothing left to play');
 });
 
 test('a track playing with people listening never makes the bot leave; an empty channel does within a minute', async () => {
@@ -138,49 +138,49 @@ test('a track playing with people listening never makes the bot leave; an empty 
 		advance(60_000);
 		await music.tick();
 	}
-	assert.equal(music.state(MAIN).connected, true, 'still playing after 30 min');
+	assert.equal((await music.state(MAIN)).connected, true, 'still playing after 30 min');
 
 	backend.listenerCount.set(MAIN, null);
 	advance(60 * 60_000);
 	await music.tick();
-	assert.equal(music.state(MAIN).connected, true, 'channel unknown: not taken for empty');
+	assert.equal((await music.state(MAIN)).connected, true, 'channel unknown: not taken for empty');
 
 	backend.listenerCount.set(MAIN, 0);
 	await music.tick();
 	advance(60_000);
 	await music.tick();
-	assert.equal(music.state(MAIN).connected, false, 'nobody left in the channel');
+	assert.equal((await music.state(MAIN)).connected, false, 'nobody left in the channel');
 });
 
 test('playlists: saved from the queue, personal or shared, played (shuffled or not), only the owner edits', async () => {
 	const { music, member, backend } = await setup();
 	await music.play(member(ALICE), MAIN, 'playlist:A,B,C');
-	const saved = music.saveQueue(member(ALICE), MAIN, { name: 'Soirée' });
+	const saved = await music.saveQueue(member(ALICE), MAIN, { name: 'Soirée' });
 	assert.deepEqual([saved.name, saved.count, saved.ownerId, saved.shared], ['Soirée', 3, ALICE, true]);
 	assert.equal(saved.tracks[0].id, undefined, 'no queue state kept');
-	const secret = music.playlists.create(member(BOB), { name: 'Perso', shared: false, tracks: [] });
-	assert.deepEqual(music.playlists.list(ALICE).map(p => p.name), ['Soirée'], 'private playlists of others are hidden');
-	assert.throws(() => music.playlists.get(secret.id, ALICE), /introuvable/);
-	assert.throws(() => music.playlists.addTracks(member(BOB), saved.id, [{ title: 'X' }]), ForbiddenError);
+	const secret = await music.playlists.create(member(BOB), { name: 'Perso', shared: false, tracks: [] });
+	assert.deepEqual((await music.playlists.list(ALICE)).map(p => p.name), ['Soirée'], 'private playlists of others are hidden');
+	await assert.rejects(async () => music.playlists.get(secret.id, ALICE), /introuvable/);
+	await assert.rejects(async () => music.playlists.addTracks(member(BOB), saved.id, [{ title: 'X' }]), ForbiddenError);
 
 	await music.skip(member(ALICE), MAIN);
-	music.addCurrentTo(member(ALICE), MAIN, saved.id);
-	music.playlists.moveTrack(member(ALICE), saved.id, 3, 0);
-	music.playlists.removeTrack(member(ALICE), saved.id, 1);
-	assert.deepEqual(music.playlists.get(saved.id, ALICE).tracks.map(t => t.title), ['B', 'B', 'C']);
+	await music.addCurrentTo(member(ALICE), MAIN, saved.id);
+	await music.playlists.moveTrack(member(ALICE), saved.id, 3, 0);
+	await music.playlists.removeTrack(member(ALICE), saved.id, 1);
+	assert.deepEqual((await music.playlists.get(saved.id, ALICE)).tracks.map(t => t.title), ['B', 'B', 'C']);
 
 	await music.stop(member(ALICE), MAIN);
 	const result = await music.playPlaylist(member(BOB), MAIN, saved.id);
 	assert.equal(result.playlist.title, 'Soirée');
 	assert.equal(backend.joined.get(MAIN), VOICE);
-	const state = music.state(MAIN);
+	const state = await music.state(MAIN);
 	assert.deepEqual([state.current.title, state.current.requestedBy, state.upcoming.length], ['B', BOB, 2]);
-	assert.equal(music.playlists.get(saved.id, ALICE).plays, 1);
+	assert.equal((await music.playlists.get(saved.id, ALICE)).plays, 1);
 	await assert.rejects(music.playPlaylist(member(BOB), MAIN, secret.id + 99), /introuvable/);
-	music.playlists.update(member(ALICE), saved.id, { name: 'Soirée RP', shared: false });
-	assert.deepEqual(music.playlists.list(BOB).map(p => p.name), ['Perso']);
-	music.playlists.remove(member(ALICE), saved.id);
-	assert.equal(music.playlists.list(ALICE).length, 0);
+	await music.playlists.update(member(ALICE), saved.id, { name: 'Soirée RP', shared: false });
+	assert.deepEqual((await music.playlists.list(BOB)).map(p => p.name), ['Perso']);
+	await music.playlists.remove(member(ALICE), saved.id);
+	assert.equal((await music.playlists.list(ALICE)).length, 0);
 });
 
 test('join without music: the bot comes with its player, the first search starts it, and it leaves if nothing is asked', async () => {
@@ -196,13 +196,13 @@ test('join without music: the bot comes with its player, the first search starts
 	assert.equal((await music.join(member(BOB), MAIN)).joined, false, 'already there: nothing new');
 
 	await music.play(member(ALICE), MAIN, 'Titre A');
-	assert.equal(music.state(MAIN).current.title, 'Titre A', 'first track starts right away');
+	assert.equal((await music.state(MAIN)).current.title, 'Titre A', 'first track starts right away');
 
 	await music.stop(member(ALICE), MAIN);
 	await music.join(member(ALICE), MAIN);
 	advance(60 * 60_000);
 	await music.tick();
-	assert.equal(music.state(MAIN).connected, false, 'left after the idle delay with nothing to play');
+	assert.equal((await music.state(MAIN)).connected, false, 'left after the idle delay with nothing to play');
 });
 
 test('search platform: prefix, then the chosen one, then the default one', async () => {
@@ -213,15 +213,15 @@ test('search platform: prefix, then the chosen one, then the default one', async
 	await music.search('ytm: daft punk', 5, 'soundcloud');
 	assert.deepEqual(calls.splice(0).map(c => [c.search, c.platform]), [['daft punk', 'youtube'], ['daft punk', 'soundcloud'], ['daft punk', 'ytmusic']]);
 
-	music.setConfig(owner, { ...music.config(), searchPlatform: 'ytmusic' });
-	assert.equal(music.config().searchPlatform, 'ytmusic');
+	await music.setConfig(owner, { ...await music.config(), searchPlatform: 'ytmusic' });
+	assert.equal((await music.config()).searchPlatform, 'ytmusic');
 	await music.play(member(ALICE), MAIN, 'Titre A');
 	await music.play(member(ALICE), MAIN, 'sc:Titre B');
 	await music.play(member(ALICE), MAIN, 'https://youtu.be/x', { platform: 'soundcloud' });
 	assert.deepEqual(calls.map(c => [c.resolve, c.platform]), [['Titre A', 'ytmusic'], ['Titre B', 'soundcloud'], ['https://youtu.be/x', 'soundcloud']]);
 
-	music.setConfig(owner, { ...music.config(), searchPlatform: 'deezer' });
-	assert.equal(music.config().searchPlatform, 'youtube');
+	await music.setConfig(owner, { ...await music.config(), searchPlatform: 'deezer' });
+	assert.equal((await music.config()).searchPlatform, 'youtube');
 	await assert.rejects(music.search('sc: a'), ValidationError);
 });
 
@@ -229,18 +229,18 @@ test('Spotify search needs the keys of a Spotify app, never sent back', async ()
 	const { music, executor, owner, member } = await setup();
 	await assert.rejects(music.search('daft punk', 5, 'spotify'), /pas configurée/);
 	await assert.rejects(music.play(member(ALICE), MAIN, 'sp: daft punk'), /pas configurée/);
-	assert.throws(() => music.setSpotify(owner, { clientId: 'nope', clientSecret: 'x' }), ValidationError);
-	assert.throws(() => music.setSpotify({ id: ALICE, can: () => false }, { clientId: 'a'.repeat(32), clientSecret: 'b'.repeat(32) }), ForbiddenError);
+	await assert.rejects(async () => music.setSpotify(owner, { clientId: 'nope', clientSecret: 'x' }), ValidationError);
+	await assert.rejects(async () => music.setSpotify({ id: ALICE, can: () => false }, { clientId: 'a'.repeat(32), clientSecret: 'b'.repeat(32) }), ForbiddenError);
 
-	assert.deepEqual(music.setSpotify(owner, { clientId: 'a'.repeat(32), clientSecret: 'b'.repeat(32) }), { clientId: 'a'.repeat(32), hasSecret: true });
+	assert.deepEqual(await music.setSpotify(owner, { clientId: 'a'.repeat(32), clientSecret: 'b'.repeat(32) }), { clientId: 'a'.repeat(32), hasSecret: true });
 	// An empty secret keeps the saved one
-	music.setSpotify(owner, { clientId: 'c'.repeat(32), clientSecret: '' });
+	await music.setSpotify(owner, { clientId: 'c'.repeat(32), clientSecret: '' });
 	await music.search('daft punk', 5, 'spotify');
 	assert.deepEqual(executor.musicResolver.calls.at(-1).options, { spotify: { clientId: 'c'.repeat(32), clientSecret: 'b'.repeat(32) } });
-	assert.ok(!JSON.stringify(music.spotify()).includes('b'.repeat(32)));
+	assert.ok(!JSON.stringify(await music.spotify()).includes('b'.repeat(32)));
 
-	music.setSpotify(owner, null);
-	assert.deepEqual(music.spotify(), { clientId: '', hasSecret: false });
+	await music.setSpotify(owner, null);
+	assert.deepEqual(await music.spotify(), { clientId: '', hasSecret: false });
 });
 
 test('two quick track changes: the last one asked wins, even if the first is slower to load', async () => {
@@ -254,7 +254,7 @@ test('two quick track changes: the last one asked wins, even if the first is slo
 	const slow = music.skip(member(ALICE), MAIN);
 	await music.jump(member(ALICE), MAIN, 2);
 	await slow;
-	assert.equal(music.state(MAIN).current.title, 'C');
+	assert.equal((await music.state(MAIN)).current.title, 'C');
 	assert.equal(backend.played.at(-1).target, 'https://audio.example/C', 'the stale load of B does not replace C');
 });
 
@@ -269,13 +269,13 @@ test('two first requests at once join the voice channel once', async () => {
 	};
 	await Promise.all([music.play(member(ALICE), MAIN, 'A'), music.play(member(BOB), MAIN, 'B')]);
 	assert.equal(joins, 1);
-	assert.deepEqual(music.state(MAIN).queue.map(t => t.title).sort(), ['A', 'B']);
+	assert.deepEqual((await music.state(MAIN)).queue.map(t => t.title).sort(), ['A', 'B']);
 });
 
 test('tracks failing while playing (looped queue) stop after a few errors instead of looping forever', async () => {
 	const { music, member, backend } = await setup();
 	await music.play(member(ALICE), MAIN, 'playlist:A,B');
-	music.setLoop(member(ALICE), MAIN, 'queue');
+	await music.setLoop(member(ALICE), MAIN, 'queue');
 	for (let i = 0; i < 8; i++) await music.trackEnded(MAIN, { error: 'YouTube demande une connexion' });
 	assert.equal(backend.played.at(-1).stopped, true);
 	const plays = backend.played.filter(p => p.target).length;
@@ -286,8 +286,16 @@ test('after stopping on errors, the next request plays at once', async () => {
 	const { music, member, backend } = await setup();
 	await music.play(member(ALICE), MAIN, 'playlist:A,B');
 	for (let i = 0; i < 5; i++) await music.trackEnded(MAIN, { error: 'x' });
-	assert.equal(music.state(MAIN).current, null);
+	assert.equal((await music.state(MAIN)).current, null);
 	const result = await music.play(member(ALICE), MAIN, 'Neuf');
 	assert.equal(result.startedNow, true);
 	assert.equal(backend.played.at(-1).target, 'https://audio.example/Neuf');
+});
+
+test('two additions to a playlist at the same time are both kept', async () => {
+	const { music, member } = await setup();
+	const list = await music.playlists.create(member(ALICE), { name: 'Mix', shared: false, tracks: [{ title: 'A' }] });
+	await Promise.all(['B', 'C', 'D'].map(title => music.playlists.addTracks(member(ALICE), list.id, [{ title }])));
+	const saved = await music.playlists.get(list.id, ALICE);
+	assert.deepEqual(saved.tracks.map(t => t.title).sort(), ['A', 'B', 'C', 'D']);
 });

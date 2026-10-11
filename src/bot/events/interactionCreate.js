@@ -21,7 +21,7 @@ export async function execute(interaction) {
 	// Custom commands built in the panel: right click (member / message), or a slash name the bot does not have
 	if (interaction.isContextMenuCommand() || (interaction.isChatInputCommand() && !interaction.client.commands.has(interaction.commandName))) {
 		const type = interaction.isUserContextMenuCommand() ? 'user' : interaction.isMessageContextMenuCommand() ? 'message' : 'slash';
-		const custom = interaction.guildId ? interaction.client.core.customCommands.find(interaction.guildId, interaction.commandName, type) : null;
+		const custom = interaction.guildId ? await interaction.client.core.customCommands.find(interaction.guildId, interaction.commandName, type) : null;
 		if (!custom) {
 			logger.error(`No command matching ${interaction.commandName} was found.`);
 			return;

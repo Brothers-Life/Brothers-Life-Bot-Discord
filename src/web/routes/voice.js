@@ -10,8 +10,8 @@ export function registerVoiceRoutes(app, { core }) {
 
 	app.get('/api/voice/:guildId', { config: { permission: 'voice.view' }, schema: { params: guildParam } }, async (request) => {
 		const { guildId } = request.params;
-		if (!network.find(guildId)) throw new NotFoundError('Serveur introuvable.');
-		const rooms = voiceRooms.rooms(guildId);
+		if (!await network.find(guildId)) throw new NotFoundError('Serveur introuvable.');
+		const rooms = await voiceRooms.rooms(guildId);
 		const [voiceChannels, categories, roles, names] = await Promise.all([
 			executor.listVoiceChannels(guildId), executor.listCategoryChannels(guildId), executor.listRoles(guildId), resolveNames(executor, rooms.map(r => r.ownerId)),
 		]);
@@ -20,7 +20,7 @@ export function registerVoiceRoutes(app, { core }) {
 			owner: names.get(r.ownerId) ?? { name: r.ownerId, avatar: null },
 			members: (await executor.voiceChannelMembers(r.channelId).catch(() => null))?.length ?? 0,
 		})));
-		return { hubs: voiceRooms.hubs(guildId), rooms: withMembers, voiceChannels, categories, roles, options: ROOM_OPTIONS };
+		return { hubs: await voiceRooms.hubs(guildId), rooms: withMembers, voiceChannels, categories, roles, options: ROOM_OPTIONS };
 	});
 
 	app.post('/api/voice/:guildId/hubs', {
@@ -40,7 +40,7 @@ export function registerVoiceRoutes(app, { core }) {
 	});
 
 	app.put('/api/voice/hubs/:id', { config: { permission: 'voice.manage' }, schema: { params: idParam, body: { type: 'object' } } }, async (request) => {
-		return voiceRooms.updateHub(request.actor, request.params.id, request.body);
+		return await voiceRooms.updateHub(request.actor, request.params.id, request.body);
 	});
 
 	app.delete('/api/voice/hubs/:id', {

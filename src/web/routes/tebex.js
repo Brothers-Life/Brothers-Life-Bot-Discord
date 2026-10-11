@@ -15,7 +15,7 @@ export function registerTebexRoutes(app, { core }) {
 	app.get('/api/tebex', { config: { permission: 'tebex.view' } }, async (request) => {
 		const manage = request.actor.can('tebex.manage');
 		return {
-			...tebex.view(request.actor),
+			...await tebex.view(request.actor),
 			guilds: manage ? await networkTargets(core) : [],
 			variables: [{ title: 'Achat', items: ACHAT_VARIABLES }],
 		};
@@ -24,7 +24,7 @@ export function registerTebexRoutes(app, { core }) {
 	app.get('/api/tebex/payments', {
 		config: { permission: 'tebex.view' },
 		schema: { querystring: { type: 'object', properties: { filter: { type: 'string', enum: ['all', 'unlinked', 'revoked', 'errors', 'baseline'] }, q: { type: 'string', maxLength: 100 }, before: { type: 'integer' } } } },
-	}, async request => withDiscord(tebex.payments(request.actor, { filter: request.query.filter ?? 'all', search: request.query.q?.trim() ?? '', before: request.query.before ?? null })));
+	}, async request => withDiscord(await tebex.payments(request.actor, { filter: request.query.filter ?? 'all', search: request.query.q?.trim() ?? '', before: request.query.before ?? null })));
 
 	app.put('/api/tebex/secret', {
 		config: { permission: 'tebex.manage' },

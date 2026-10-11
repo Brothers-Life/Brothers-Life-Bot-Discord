@@ -14,11 +14,11 @@ export function registerMeetingRoutes(app, { core }) {
 	const named = (names, id) => (id ? { id, ...(names.get(id) ?? { name: null, avatar: null }) } : null);
 
 	app.get('/api/meetings', { config: { permission: 'meetings.view' } }, async () => {
-		const list = meetings.list();
-		const stats = meetings.stats(90);
-		const tasks = meetings.openActions();
+		const list = await meetings.list();
+		const stats = await meetings.stats(90);
+		const tasks = await meetings.openActions();
 		const names = await withNames(list, [...stats.people.map(p => p.userId), ...tasks.map(t => t.assigneeId).filter(Boolean)]);
-		const guilds = network.list().filter(g => g.status === 'active' && g.botPresent);
+		const guilds = (await network.list()).filter(g => g.status === 'active' && g.botPresent);
 		return {
 			meetings: list.map(m => ({
 				...m,
@@ -28,7 +28,7 @@ export function registerMeetingRoutes(app, { core }) {
 			})),
 			stats: { ...stats, people: stats.people.map(p => ({ ...p, user: named(names, p.userId) })) },
 			tasks: tasks.map(t => ({ ...t, assignee: named(names, t.assigneeId) })),
-			ranks: ranks.list().map(({ id, name, color, level }) => ({ id, name, color, level })),
+			ranks: (await ranks.list()).map(({ id, name, color, level }) => ({ id, name, color, level })),
 			guilds: await Promise.all(guilds.map(async g => ({
 				id: g.id, name: g.name, icon: g.icon ?? null,
 				voiceChannels: await executor.listVoiceChannels(g.id),

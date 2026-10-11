@@ -190,7 +190,7 @@ export function createFeeds({ db, network, audit, executor, logs, fetchImpl = fe
 	let running = false;
 
 	const q = {
-		all: db.prepare('SELECT * FROM feed_subscriptions ORDER BY kind, display_name COLLATE NOCASE'),
+		all: db.prepare('SELECT * FROM feed_subscriptions ORDER BY kind, display_name COLLATE utf8mb4_unicode_ci, id'),
 		get: db.prepare('SELECT * FROM feed_subscriptions WHERE id = ?'),
 		insert: db.prepare(`
 			INSERT INTO feed_subscriptions (kind, url, display_name, targets, payload, config, enabled, created_by, created_at, updated_at)
@@ -199,10 +199,10 @@ export function createFeeds({ db, network, audit, executor, logs, fetchImpl = fe
 		update: db.prepare('UPDATE feed_subscriptions SET url = @url, display_name = @displayName, targets = @targets, payload = @payload, config = @config, enabled = @enabled, updated_at = @at WHERE id = @id'),
 		delete: db.prepare('DELETE FROM feed_subscriptions WHERE id = ?'),
 		state: db.prepare('SELECT * FROM feed_state WHERE subscription_id = ?'),
-		ensureState: db.prepare('INSERT OR IGNORE INTO feed_state (subscription_id) VALUES (?)'),
+		ensureState: db.prepare('INSERT IGNORE INTO feed_state (subscription_id) VALUES (?)'),
 		resetState: db.prepare('DELETE FROM feed_state WHERE subscription_id = ?'),
 		isSeen: db.prepare('SELECT 1 FROM feed_seen WHERE subscription_id = ? AND item_key = ?'),
-		seen: db.prepare('INSERT INTO feed_seen (subscription_id, item_key, seen_at) VALUES (?, ?, ?) ON CONFLICT (subscription_id, item_key) DO UPDATE SET seen_at = excluded.seen_at'),
+		seen: db.prepare('INSERT INTO feed_seen (subscription_id, item_key, seen_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE seen_at = VALUES(seen_at)'),
 		clearSeen: db.prepare('DELETE FROM feed_seen WHERE subscription_id = ?'),
 		pruneSeen: db.prepare('DELETE FROM feed_seen WHERE subscription_id = ? AND seen_at < ?'),
 		history: db.prepare('INSERT INTO feed_history (subscription_id, kind, title, url, channels, at) VALUES (?, ?, ?, ?, ?, ?)'),
@@ -212,10 +212,10 @@ export function createFeeds({ db, network, audit, executor, logs, fetchImpl = fe
 		`),
 	};
 
-	function setState(id, patch) {
-		q.ensureState.run(id);
+	async function setState(id, patch) {
+		await q.ensureState.run(id);
 		const keys = Object.keys(patch);
-		db.prepare(`UPDATE feed_state SET ${keys.map(k => `${k} = @${k}`).join(', ')} WHERE subscription_id = @id`).run({ ...patch, id });
+		await db.prepare(`UPDATE feed_state SET ${keys.map(k => `${k} = @${k}`).join(', ')} WHERE subscription_id = @id`).run({ ...patch, id });
 	}
 
 	function toState(row) {
@@ -225,17 +225,17 @@ export function createFeeds({ db, network, audit, executor, logs, fetchImpl = fe
 		};
 	}
 
-	function toSubscription(row) {
+	async function toSubscription(row) {
 		if (!row) return null;
 		return {
 			id: row.id, kind: row.kind, url: row.url, displayName: row.display_name, targets: JSON.parse(row.targets), payload: JSON.parse(row.payload),
 			config: normalizeFeedConfig(JSON.parse(row.config), row.kind), enabled: Boolean(row.enabled), createdBy: row.created_by, createdAt: row.created_at,
-			state: toState(q.state.get(row.id)),
+			state: toState(await q.state.get(row.id)),
 		};
 	}
 
-	function getOrThrow(id) {
-		const s = toSubscription(q.get.get(id));
+	async function getOrThrow(id) {
+		const s = await toSubscription(await q.get.get(id));
 		if (!s) throw new NotFoundError('Flux introuvable.');
 		return s;
 	}
@@ -244,8 +244,8 @@ export function createFeeds({ db, network, audit, executor, logs, fetchImpl = fe
 		if (!actor.can('notifications.manage')) throw new ForbiddenError('Permission manquante : notifications.manage');
 	}
 
-	function record(actor, action, s, details = {}) {
-		audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action, target: String(s.id), details: { feed: `${FEED_KINDS[s.kind]} · ${s.displayName}`, ...details } });
+	async function record(actor, action, s, details = {}) {
+		await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action, target: String(s.id), details: { feed: `${FEED_KINDS[s.kind]} · ${s.displayName}`, ...details } });
 	}
 	const system = { id: 'system', source: 'system' };
 
@@ -277,45 +277,46 @@ export function createFeeds({ db, network, audit, executor, logs, fetchImpl = fe
 				logger.warn(`Feed #${s.id} not sent to ${target.channelId}:`, error.message);
 			}
 		}
-		q.history.run(s.id, kind, own['item.titre'], item.link ?? null, sent, now());
+		await q.history.run(s.id, kind, own['item.titre'], item.link ?? null, sent, now());
 		return sent;
 	}
 
-	function markSeen(id, items) {
+	async function markSeen(id, items) {
 		const at = now();
-		db.transaction(() => {
-			for (const item of items) q.seen.run(id, keyOf(item), at);
+		await db.transaction(async () => {
+			for (const item of items) await q.seen.run(id, keyOf(item), at);
 		})();
 	}
 
 	// Remembers what the feed holds now, without announcing anything (first read, new URL)
-	function initialize(id, feed, meta = {}) {
-		q.clearSeen.run(id);
-		markSeen(id, feed.items);
+	async function initialize(id, feed, meta = {}) {
+		await q.clearSeen.run(id);
+		await markSeen(id, feed.items);
 		const at = now();
-		const s = toSubscription(q.get.get(id));
-		setState(id, {
+		const s = await toSubscription(await q.get.get(id));
+		await setState(id, {
 			feed_title: feed.title || null, initialized_at: at, checked_at: at, next_check_at: at + s.config.intervalMinutes * 60_000, failures: 0, error: null,
 			etag: meta.etag ?? null, last_modified: meta.lastModified ?? null, last_item_at: Math.max(0, ...feed.items.map(i => i.publishedAt ?? 0)) || null,
 		});
 	}
 
 	async function check(s) {
-		const row = q.state.get(s.id);
+		const row = await q.state.get(s.id);
 		const result = await fetchFeed(s.url, row?.initialized_at ? { etag: row.etag, lastModified: row.last_modified } : {});
 		const interval = s.config.intervalMinutes * 60_000;
 		if (result.notModified) {
-			setState(s.id, { checked_at: now(), next_check_at: now() + interval, failures: 0, error: null });
+			await setState(s.id, { checked_at: now(), next_check_at: now() + interval, failures: 0, error: null });
 			return 0;
 		}
 		const feed = parseFeed(result.text);
 		if (!row?.initialized_at) {
-			initialize(s.id, feed, result);
+			await initialize(s.id, feed, result);
 			return 0;
 		}
-		const fresh = feed.items.filter(item => !q.isSeen.get(s.id, keyOf(item)));
-		markSeen(s.id, feed.items);
-		q.pruneSeen.run(s.id, now() - SEEN_KEEP);
+		const fresh = [];
+		for (const item of feed.items) if (!await q.isSeen.get(s.id, keyOf(item))) fresh.push(item);
+		await markSeen(s.id, feed.items);
+		await q.pruneSeen.run(s.id, now() - SEEN_KEEP);
 		// Oldest first; undated items keep the feed order (newest first in feeds, hence the reverse)
 		const candidates = fresh
 			.filter(item => !(item.publishedAt && item.publishedAt < row.initialized_at - BACKDATED))
@@ -327,23 +328,23 @@ export function createFeeds({ db, network, audit, executor, logs, fetchImpl = fe
 		for (const item of candidates) {
 			if (!passes(s.config, `${item.title} ${item.description}`)) continue;
 			await notify(s, item, feed);
-			record(system, 'feed.item', s, { title: item.title, url: item.link });
+			await record(system, 'feed.item', s, { title: item.title, url: item.link });
 			posted++;
 		}
 		const newest = Math.max(row.last_item_at ?? 0, ...feed.items.map(i => i.publishedAt ?? 0)) || null;
-		setState(s.id, {
+		await setState(s.id, {
 			feed_title: feed.title || row.feed_title, checked_at: now(), next_check_at: now() + interval, failures: 0, error: null,
 			etag: result.etag, last_modified: result.lastModified, last_item_at: newest,
 		});
 		return posted;
 	}
 
-	function failed(s, error) {
-		const row = q.state.get(s.id);
+	async function failed(s, error) {
+		const row = await q.state.get(s.id);
 		const failures = (row?.failures ?? 0) + 1;
 		// Backoff: the interval doubles at each error in a row, 6 h at most
 		const wait = Math.min(MAX_BACKOFF, s.config.intervalMinutes * 60_000 * 2 ** Math.min(failures, 10));
-		setState(s.id, { checked_at: now(), next_check_at: now() + wait, failures, error: String(error?.message ?? error).slice(0, 300) });
+		await setState(s.id, { checked_at: now(), next_check_at: now() + wait, failures, error: String(error?.message ?? error).slice(0, 300) });
 	}
 
 	async function validate(actor, input, current) {
@@ -359,7 +360,7 @@ export function createFeeds({ db, network, audit, executor, logs, fetchImpl = fe
 		const targets = normalizeTargets(input.targets ?? current?.targets ?? []);
 		if (!targets.length) throw new ValidationError('Choisis au moins un salon.');
 		for (const t of targets) {
-			if (network.find(t.guildId)?.status !== 'active') throw new ValidationError('Un des serveurs choisis ne fait pas partie du réseau.');
+			if ((await network.find(t.guildId))?.status !== 'active') throw new ValidationError('Un des serveurs choisis ne fait pas partie du réseau.');
 			if ((t.ping === 'everyone' || t.ping === 'here') && !actor.can('announcements.everyone')) throw new ForbiddenError('Permission manquante pour mentionner @everyone ou @here.');
 		}
 		const payload = normalizePayload(input.payload ?? current?.payload ?? defaultFeedPayload(kind));
@@ -385,9 +386,9 @@ export function createFeeds({ db, network, audit, executor, logs, fetchImpl = fe
 	}
 
 	return {
-		list: () => q.all.all().map(toSubscription),
+		list: async () => Promise.all((await q.all.all()).map(toSubscription)),
 		get: getOrThrow,
-		history: (limit = 100) => q.recent.all(limit).map(h => ({ id: h.id, subscriptionId: h.subscription_id, displayName: h.display_name, feedKind: h.feed_kind, kind: h.kind, title: h.title, url: h.url, channels: h.channels, at: h.at })),
+		history: async (limit = 100) => (await q.recent.all(limit)).map(h => ({ id: h.id, subscriptionId: h.subscription_id, displayName: h.display_name, feedKind: h.feed_kind, kind: h.kind, title: h.title, url: h.url, channels: h.channels, at: h.at })),
 		variables: () => {
 			const groups = new Map();
 			for (const v of FEED_VARIABLES) {
@@ -406,41 +407,41 @@ export function createFeeds({ db, network, audit, executor, logs, fetchImpl = fe
 
 		async save(actor, input) {
 			requireManage(actor);
-			const current = input.id ? getOrThrow(input.id) : null;
+			const current = input.id ? await getOrThrow(input.id) : null;
 			const c = await validate(actor, input, current);
 			const changedUrl = !current || current.url !== c.url;
 			const fetched = changedUrl ? await read(c.url) : null;
 			const displayName = c.displayName || fetched?.feed.title.slice(0, 100) || current?.displayName || new URL(c.url).hostname;
 			const row = { ...c, displayName, targets: JSON.stringify(c.targets), payload: JSON.stringify(c.payload), config: JSON.stringify(c.config), enabled: c.enabled ? 1 : 0, at: now() };
 			let id = current?.id;
-			if (current) q.update.run({ ...row, id });
-			else id = Number(q.insert.run({ ...row, by: actor.id }).lastInsertRowid);
+			if (current) await q.update.run({ ...row, id });
+			else id = Number((await q.insert.run({ ...row, by: actor.id })).lastInsertRowid);
 			if (fetched) {
-				q.resetState.run(id);
-				initialize(id, fetched.feed, fetched.result);
+				await q.resetState.run(id);
+				await initialize(id, fetched.feed, fetched.result);
 			}
-			const s = getOrThrow(id);
-			record(actor, current ? 'feed.update' : 'feed.create', s, { url: s.url });
+			const s = await getOrThrow(id);
+			await record(actor, current ? 'feed.update' : 'feed.create', s, { url: s.url });
 			return s;
 		},
 
 		async remove(actor, id) {
 			requireManage(actor);
-			const s = getOrThrow(id);
-			q.delete.run(id);
-			record(actor, 'feed.delete', s);
+			const s = await getOrThrow(id);
+			await q.delete.run(id);
+			await record(actor, 'feed.delete', s);
 		},
 
 		// Sample message in the feed's channels
 		async test(actor, id) {
 			requireManage(actor);
-			const s = getOrThrow(id);
+			const s = await getOrThrow(id);
 			const sent = await notify(s, {
 				title: s.kind === 'tiktok' ? 'Vidéo de test · ceci est un exemple' : 'Publication de test · ceci est un exemple',
 				link: s.url, description: 'Le message des nouvelles publications ressemblera à celui-ci.', author: s.displayName,
 				image: 'https://static-cdn.jtvnw.net/ttv-static/404_preview-1280x720.jpg', publishedAt: now(),
 			}, { title: s.state.feedTitle, link: null }, 'test');
-			record(actor, 'feed.test', s, { channels: sent });
+			await record(actor, 'feed.test', s, { channels: sent });
 			return { sent, total: s.targets.length };
 		},
 
@@ -449,14 +450,14 @@ export function createFeeds({ db, network, audit, executor, logs, fetchImpl = fe
 			if (running) return;
 			running = true;
 			try {
-				const due = q.all.all().map(toSubscription).filter(s => s.enabled && (s.state.nextCheckAt ?? 0) <= now()).slice(0, PER_TICK);
+				const due = (await Promise.all((await q.all.all()).map(toSubscription))).filter(s => s.enabled && (s.state.nextCheckAt ?? 0) <= now()).slice(0, PER_TICK);
 				for (const s of due) {
 					try {
 						await check(s);
 					}
 					catch (error) {
 						logger.warn(`Feed #${s.id} check failed:`, error.message);
-						failed(s, error);
+						await failed(s, error);
 					}
 				}
 			}

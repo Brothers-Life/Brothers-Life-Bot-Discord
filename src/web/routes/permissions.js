@@ -3,9 +3,9 @@ export function registerPermissionRoutes(app, { core }) {
 	const rankParam = { type: 'object', properties: { rankId: { type: 'integer' } }, required: ['rankId'] };
 
 	app.get('/api/permissions', { config: { permission: 'permsync.view' } }, async () => ({
-		catalogue: permissionSync.catalogue(),
-		profiles: permissionSync.profiles(),
-		ranks: ranks.list().map(({ id, name, level, color, roles }) => ({ id, name, level, color, linkedRoles: roles.length })),
+		catalogue: await permissionSync.catalogue(),
+		profiles: await permissionSync.profiles(),
+		ranks: (await ranks.list()).map(({ id, name, level, color, roles }) => ({ id, name, level, color, linkedRoles: roles.length })),
 	}));
 
 	app.get('/api/permissions/preview', { config: { permission: 'permsync.view' } }, async () => permissionSync.preview());

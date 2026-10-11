@@ -12,10 +12,10 @@ export function registerStaffActivityRoutes(app, { core }) {
 
 	app.get('/api/staff-activity', { config: { permission: 'staffactivity.view' }, schema: { querystring: range } }, async (request) => {
 		const manage = request.actor.can('staffactivity.manage');
-		const guilds = manage ? network.list().filter(g => g.status === 'active' && g.botPresent) : [];
+		const guilds = manage ? (await network.list()).filter(g => g.status === 'active' && g.botPresent) : [];
 		return {
 			...await staffActivity.report(period(request.query)),
-			config: manage ? staffActivity.config() : null,
+			config: manage ? await staffActivity.config() : null,
 			guilds: await Promise.all(guilds.map(async g => ({ id: g.id, name: g.name, channels: await executor.listTextChannels(g.id) }))),
 		};
 	});

@@ -44,7 +44,7 @@ export function createAntiraid({ db, network, audit, executor, sanctions, logs, 
 		get: db.prepare('SELECT * FROM antiraid_config WHERE guild_id = ?'),
 		upsert: db.prepare(`
 			INSERT INTO antiraid_config (guild_id, config, updated_at, updated_by) VALUES (?, ?, ?, ?)
-			ON CONFLICT(guild_id) DO UPDATE SET config = excluded.config, updated_at = excluded.updated_at, updated_by = excluded.updated_by
+			ON DUPLICATE KEY UPDATE config = VALUES(config), updated_at = VALUES(updated_at), updated_by = VALUES(updated_by)
 		`),
 	};
 	const cache = new Map();
@@ -72,15 +72,20 @@ export function createAntiraid({ db, network, audit, executor, sanctions, logs, 
 		}
 	}
 
+	// Writes one after the other, each with the state of the moment: a late write never brings back an ended raid
+	let persisting = Promise.resolve();
 	function persist(guildId) {
-		const raid = raids.get(guildId);
-		if (raid) stored.set.run(RAID_KEY + guildId, JSON.stringify(raid));
-		else stored.delete.run(RAID_KEY + guildId);
+		persisting = persisting.catch(() => undefined).then(async () => {
+			const raid = raids.get(guildId);
+			if (raid) await stored.set.run(RAID_KEY + guildId, JSON.stringify(raid));
+			else await stored.delete.run(RAID_KEY + guildId);
+		});
+		return persisting;
 	}
 
-	function configOf(guildId) {
+	async function configOf(guildId) {
 		if (!cache.has(guildId)) {
-			const row = q.get.get(guildId);
+			const row = await q.get.get(guildId);
 			cache.set(guildId, normalizeAntiraid(row ? JSON.parse(row.config) : {}));
 		}
 		return cache.get(guildId);
@@ -93,8 +98,8 @@ export function createAntiraid({ db, network, audit, executor, sanctions, logs, 
 	}
 
 	async function alert(guildId, message, pingRoleIds = []) {
-		logs.log(guildId, 'antiraid', message);
-		const channelId = logs.routes(guildId).find(r => r.category === 'antiraid' && r.enabled)?.channelId;
+		await logs.log(guildId, 'antiraid', message);
+		const channelId = (await logs.routes(guildId)).find(r => r.category === 'antiraid' && r.enabled)?.channelId;
 		if (channelId && pingRoleIds.length) {
 			await executor.sendMessage(channelId, { payload: { content: pingRoleIds.map(id => `<@&${id}>`).join(' '), embed: { enabled: false } }, files: [], mentionRoleIds: pingRoleIds })
 				.catch(error => logger.warn(`Raid ping on ${guildId} failed:`, error.message));
@@ -114,9 +119,9 @@ export function createAntiraid({ db, network, audit, executor, sanctions, logs, 
 		}
 	}
 
-	const serverName = guildId => network.find(guildId)?.name ?? 'ce serveur';
-	const raidNotice = guildId => `**${serverName(guildId)}** n’accepte pas de nouvelles arrivées pour le moment (protection contre les raids). Réessaie un peu plus tard.`;
-	const youngNotice = (guildId, days) => `Ton compte est trop récent pour rejoindre **${serverName(guildId)}** pour le moment. Tu pourras revenir quand il aura au moins ${days} jour${days > 1 ? 's' : ''}.`;
+	const serverName = async guildId => (await network.find(guildId))?.name ?? 'ce serveur';
+	const raidNotice = async guildId => `**${await serverName(guildId)}** n’accepte pas de nouvelles arrivées pour le moment (protection contre les raids). Réessaie un peu plus tard.`;
+	const youngNotice = async (guildId, days) => `Ton compte est trop récent pour rejoindre **${await serverName(guildId)}** pour le moment. Tu pourras revenir quand il aura au moins ${days} jour${days > 1 ? 's' : ''}.`;
 
 	async function startRaid(guildId, by, config) {
 		// Known before the locks are set: joins arriving meanwhile must not start (and lock) a second time,
@@ -133,8 +138,8 @@ export function createAntiraid({ db, network, audit, executor, sanctions, logs, 
 			if (raid.restore) await executor.restoreRaidLocks(guildId, raid.restore).catch(error => logger.warn(`Raid unlock on ${guildId} failed:`, error.message));
 			return raid;
 		}
-		persist(guildId);
-		audit.record({ actorId: by === 'auto' ? 'antiraid' : by, source: by === 'auto' ? 'system' : 'panel', action: 'antiraid.start', guildId, target: guildId, details: { trigger: by === 'auto' ? 'automatique' : 'manuel' } });
+		await persist(guildId);
+		await audit.record({ actorId: by === 'auto' ? 'antiraid' : by, source: by === 'auto' ? 'system' : 'panel', action: 'antiraid.start', guildId, target: guildId, details: { trigger: by === 'auto' ? 'automatique' : 'manuel' } });
 		await alert(guildId, {
 			title: '🚨 Raid en cours',
 			description: by === 'auto'
@@ -153,9 +158,9 @@ export function createAntiraid({ db, network, audit, executor, sanctions, logs, 
 		const raid = raids.get(guildId);
 		if (!raid) return null;
 		raids.delete(guildId);
-		persist(guildId);
+		await persist(guildId);
 		if (raid.restore) await executor.restoreRaidLocks(guildId, raid.restore).catch(error => logger.warn(`Raid unlock on ${guildId} failed:`, error.message));
-		audit.record({ actorId: by === 'auto' ? 'antiraid' : by, source: by === 'auto' ? 'system' : 'panel', action: 'antiraid.end', guildId, target: guildId, details: { actioned: raid.actioned, minutes: Math.round((now() - raid.startedAt) / 60_000) } });
+		await audit.record({ actorId: by === 'auto' ? 'antiraid' : by, source: by === 'auto' ? 'system' : 'panel', action: 'antiraid.end', guildId, target: guildId, details: { actioned: raid.actioned, minutes: Math.round((now() - raid.startedAt) / 60_000) } });
 		await alert(guildId, { title: '✅ Fin du mode raid', description: `${raid.actioned} compte(s) traité(s). Invitations et vérification remises comme avant.`, color: 'success' });
 		return raid;
 	}
@@ -164,19 +169,19 @@ export function createAntiraid({ db, network, audit, executor, sanctions, logs, 
 		init,
 		get: configOf,
 
-		save(actor, guildId, input) {
+		async save(actor, guildId, input) {
 			if (!actor.can('antiraid.manage')) throw new ForbiddenError('Permission manquante : antiraid.manage');
-			if (network.find(guildId)?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
+			if ((await network.find(guildId))?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
 			const config = normalizeAntiraid(input);
 			if (config.newAccount.enabled && config.newAccount.action === 'role' && !config.newAccount.roleId) throw new ValidationError('Choisis le rôle de quarantaine des comptes récents.');
-			q.upsert.run(guildId, JSON.stringify(config), now(), actor.id);
+			await q.upsert.run(guildId, JSON.stringify(config), now(), actor.id);
 			cache.delete(guildId);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'antiraid.config', guildId, target: guildId });
-			return configOf(guildId);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'antiraid.config', guildId, target: guildId });
+			return await configOf(guildId);
 		},
 
-		state(guildId) {
-			const config = configOf(guildId);
+		async state(guildId) {
+			const config = await configOf(guildId);
 			const raid = raids.get(guildId);
 			return {
 				raid: raid ? { startedAt: raid.startedAt, until: raid.until, by: raid.by, actioned: raid.actioned } : null,
@@ -187,8 +192,8 @@ export function createAntiraid({ db, network, audit, executor, sanctions, logs, 
 
 		// A member joins: returns { blocked } so the welcome is skipped for removed accounts
 		async handleJoin(guildId, member) {
-			if (network.find(guildId)?.status !== 'active' || member.bot) return { blocked: false };
-			const config = configOf(guildId);
+			if ((await network.find(guildId))?.status !== 'active' || member.bot) return { blocked: false };
+			const config = await configOf(guildId);
 			if (!config.enabled) return { blocked: false };
 
 			const list = joins.get(guildId) ?? [];
@@ -201,16 +206,16 @@ export function createAntiraid({ db, network, audit, executor, sanctions, logs, 
 				raid = await startRaid(guildId, 'auto', config);
 				if (config.includeWindow && config.actionOnJoin !== 'none') {
 					for (const join of window.filter(j => j.userId !== member.id)) {
-						await act(guildId, join.userId, config.actionOnJoin, 'Anti-raid : arrivé pendant le raid', raidNotice(guildId));
+						await act(guildId, join.userId, config.actionOnJoin, 'Anti-raid : arrivé pendant le raid', await raidNotice(guildId));
 						raid.actioned++;
 					}
 				}
 			}
 			if (raid) {
 				raid.until = Math.max(raid.until, now() + config.raidMinutes * 60_000);
-				if (raids.get(guildId) === raid) persist(guildId);
+				if (raids.get(guildId) === raid) await persist(guildId);
 				if (config.actionOnJoin !== 'none') {
-					await act(guildId, member.id, config.actionOnJoin, 'Anti-raid : arrivé pendant le raid', raidNotice(guildId));
+					await act(guildId, member.id, config.actionOnJoin, 'Anti-raid : arrivé pendant le raid', await raidNotice(guildId));
 					raid.actioned++;
 					return { blocked: true };
 				}
@@ -223,12 +228,12 @@ export function createAntiraid({ db, network, audit, executor, sanctions, logs, 
 				const days = Math.floor((now() - created) / 86_400_000);
 				const reason = `Anti-raid : compte créé il y a ${days} jour(s), minimum ${newAccount.minAgeDays}`;
 				if (newAccount.action === 'kick') {
-					await act(guildId, member.id, 'kick', reason, youngNotice(guildId, newAccount.minAgeDays));
+					await act(guildId, member.id, 'kick', reason, await youngNotice(guildId, newAccount.minAgeDays));
 				}
 				else if (newAccount.action === 'role') {
 					await executor.addRole(guildId, member.id, newAccount.roleId, reason).catch(error => logger.warn('Quarantine role failed:', error.message));
 				}
-				logs.log(guildId, 'antiraid', {
+				await logs.log(guildId, 'antiraid', {
 					title: 'Compte récent',
 					description: `<@${member.id}> (${member.username ?? member.id}) · compte de ${days} jour(s)`,
 					fields: [{ name: 'Action', value: { none: 'aucune (alerte)', kick: 'expulsé', role: `rôle <@&${newAccount.roleId}>` }[newAccount.action], inline: true }],
@@ -241,10 +246,12 @@ export function createAntiraid({ db, network, audit, executor, sanctions, logs, 
 
 		async setRaid(actor, guildId, on) {
 			if (!actor.can('antiraid.manage')) throw new ForbiddenError('Permission manquante : antiraid.manage');
-			if (network.find(guildId)?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
+			if ((await network.find(guildId))?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
 			if (on) {
+				// Config read before the check: nothing awaited between the check and the start of the raid
+				const config = await configOf(guildId);
 				if (raids.has(guildId)) throw new ValidationError('Le mode raid est déjà actif.');
-				return startRaid(guildId, actor.id, configOf(guildId));
+				return startRaid(guildId, actor.id, config);
 			}
 			if (!raids.has(guildId)) throw new ValidationError('Aucun raid en cours.');
 			return endRaid(guildId, actor.id);

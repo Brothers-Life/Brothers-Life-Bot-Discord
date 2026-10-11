@@ -20,16 +20,19 @@ export async function execute(interaction) {
 			return await interaction.editReply(result.message);
 		}
 		case 'mine': {
-			const poll = polls.get(pollId);
-			const mine = poll.results.options.filter(o => polls.voters(pollId, o.id, { own: interaction.user.id }).includes(interaction.user.id));
+			const poll = await polls.get(pollId);
+			const mine = [];
+			for (const o of poll.results.options) {
+				if ((await polls.voters(pollId, o.id, { own: interaction.user.id })).includes(interaction.user.id)) mine.push(o);
+			}
 			return await interaction.editReply(mine.length ? `Ton vote : ${mine.map(o => o.label).join(', ')}` : 'Tu n’as pas encore voté.');
 		}
 		case 'who': {
-			const poll = polls.get(pollId);
-			const lines = poll.options.map((o) => {
-				const ids = polls.voters(pollId, o.id);
+			const poll = await polls.get(pollId);
+			const lines = await Promise.all(poll.options.map(async (o) => {
+				const ids = await polls.voters(pollId, o.id);
 				return `**${o.label}** (${ids.length}) : ${ids.slice(0, 30).map(id => `<@${id}>`).join(' ') || '—'}${ids.length > 30 ? ' …' : ''}`;
-			});
+			}));
 			return await interaction.editReply({ content: lines.join('\n').slice(0, 2000), allowedMentions: { parse: [] } });
 		}
 		}

@@ -158,7 +158,7 @@ export function createAnnouncements({ db, network, audit, executor, logs, upload
 		addDeletion: db.prepare('INSERT INTO scheduled_deletions (channel_id, message_id, delete_at, source) VALUES (?, ?, ?, ?)'),
 		dueDeletions: db.prepare('SELECT * FROM scheduled_deletions WHERE delete_at <= ? LIMIT 50'),
 		dropDeletion: db.prepare('DELETE FROM scheduled_deletions WHERE id = ?'),
-		templates: db.prepare('SELECT * FROM announcement_templates ORDER BY name COLLATE NOCASE'),
+		templates: db.prepare('SELECT * FROM announcement_templates ORDER BY name COLLATE utf8mb4_unicode_ci, id'),
 		template: db.prepare('SELECT * FROM announcement_templates WHERE id = ?'),
 		addTemplate: db.prepare('INSERT INTO announcement_templates (name, payload, options, targets, created_by, created_at) VALUES (@name, @payload, @options, @targets, @createdBy, @at)'),
 		dropTemplate: db.prepare('DELETE FROM announcement_templates WHERE id = ?'),
@@ -194,8 +194,8 @@ export function createAnnouncements({ db, network, audit, executor, logs, upload
 		return { id: row.id, name: row.name, payload: JSON.parse(row.payload), options: { ...DEFAULT_OPTIONS, ...JSON.parse(row.options) }, targets: JSON.parse(row.targets), createdBy: row.created_by, createdAt: row.created_at };
 	}
 
-	function getOrThrow(id) {
-		const a = toAnnouncement(q.get.get(id));
+	async function getOrThrow(id) {
+		const a = toAnnouncement(await q.get.get(id));
 		if (!a) throw new NotFoundError('Annonce introuvable.');
 		return a;
 	}
@@ -207,7 +207,7 @@ export function createAnnouncements({ db, network, audit, executor, logs, upload
 	async function checkTargets(actor, targets) {
 		if (!targets.length) throw new ValidationError('Choisis au moins un salon.');
 		for (const t of targets) {
-			if (network.find(t.guildId)?.status !== 'active') throw new ValidationError('Un des serveurs choisis ne fait pas partie du réseau.');
+			if ((await network.find(t.guildId))?.status !== 'active') throw new ValidationError('Un des serveurs choisis ne fait pas partie du réseau.');
 			if (!await executor.getTextChannel(t.guildId, t.channelId)) {
 				throw new ValidationError('Un des salons choisis n’existe plus, ou le bot ne peut pas y écrire.');
 			}
@@ -232,8 +232,8 @@ export function createAnnouncements({ db, network, audit, executor, logs, upload
 		return name.trim();
 	}
 
-	function record(actor, action, a, details = {}) {
-		audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action, target: String(a.id), details: { name: a.name, ...details } });
+	async function record(actor, action, a, details = {}) {
+		await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action, target: String(a.id), details: { name: a.name, ...details } });
 	}
 
 	// Panel images become attached files ("attachment://<name>"), variables are filled for the server
@@ -263,26 +263,26 @@ export function createAnnouncements({ db, network, audit, executor, logs, upload
 	}
 
 	async function deliver(id, actor) {
-		if (!q.claim.run(now(), id).changes) throw new ValidationError('Cette annonce est déjà envoyée ou en cours d’envoi.');
+		if (!(await q.claim.run(now(), id)).changes) throw new ValidationError('Cette annonce est déjà envoyée ou en cours d’envoi.');
 		try {
 			return await sendClaimed(id, actor);
 		}
 		catch (error) {
 			// Never left « sending »: it could not be sent again
-			db.prepare('UPDATE announcements SET status = \'failed\', updated_at = ? WHERE id = ? AND status = \'sending\'').run(now(), id);
+			await db.prepare('UPDATE announcements SET status = \'failed\', updated_at = ? WHERE id = ? AND status = \'sending\'').run(now(), id);
 			throw error;
 		}
 	}
 
 	async function sendClaimed(id, actor) {
-		const a = getOrThrow(id);
+		const a = await getOrThrow(id);
 		const results = [];
 		const guildCache = new Map();
 		for (const target of a.targets) {
 			try {
 				const { payload, options, files } = await render(a, target, guildCache);
 				const messageId = await executor.sendAnnouncement(target.channelId, payload, target, { ...options, files });
-				if (a.options.autoDeleteHours) q.addDeletion.run(target.channelId, messageId, now() + a.options.autoDeleteHours * 3_600_000, `announcement:${id}`);
+				if (a.options.autoDeleteHours) await q.addDeletion.run(target.channelId, messageId, now() + a.options.autoDeleteHours * 3_600_000, `announcement:${id}`);
 				results.push({ ...target, ok: true, messageId });
 			}
 			catch (error) {
@@ -296,9 +296,9 @@ export function createAnnouncements({ db, network, audit, executor, logs, upload
 		const next = a.recurrence && a.scheduledAt ? nextOccurrence(a.recurrence, Math.max(now(), a.scheduledAt), { previous: a.scheduledAt, runs }) : null;
 		const status = next ? 'scheduled' : okCount === results.length ? 'sent' : okCount ? 'partial' : 'failed';
 		const history = [{ at: now(), ok: okCount, total: results.length }, ...a.history].slice(0, 30);
-		q.sent.run({ id, status, next, at: now(), results: JSON.stringify(results), history: JSON.stringify(history) });
-		const sent = getOrThrow(id);
-		record(actor, 'announcements.send', sent, {
+		await q.sent.run({ id, status, next, at: now(), results: JSON.stringify(results), history: JSON.stringify(history) });
+		const sent = await getOrThrow(id);
+		await record(actor, 'announcements.send', sent, {
 			channels: results.map(r => `<#${r.channelId}> ${r.ok ? '✓' : `✗ ${r.error}`}`),
 			...(next ? { next: new Date(next).toISOString() } : {}),
 		});
@@ -307,10 +307,10 @@ export function createAnnouncements({ db, network, audit, executor, logs, upload
 
 	return {
 		recover: recoverInterrupted,
-		list({ status, limit = 100 } = {}) {
+		async list({ status, limit = 100 } = {}) {
 			const rows = status
-				? db.prepare('SELECT * FROM announcements WHERE status = ? ORDER BY id DESC LIMIT ?').all(status, limit)
-				: db.prepare('SELECT * FROM announcements ORDER BY id DESC LIMIT ?').all(limit);
+				? await db.prepare('SELECT * FROM announcements WHERE status = ? ORDER BY id DESC LIMIT ?').all(status, limit)
+				: await db.prepare('SELECT * FROM announcements ORDER BY id DESC LIMIT ?').all(limit);
 			return rows.map(toAnnouncement);
 		},
 
@@ -320,18 +320,18 @@ export function createAnnouncements({ db, network, audit, executor, logs, upload
 			requireManage(actor);
 			const c = { name: validateName(name), ...clean(payload, options), targets: normalizeTargets(targets ?? []) };
 			if (c.targets.length) await checkTargets(actor, c.targets);
-			const id = Number(q.insert.run({
+			const id = Number((await q.insert.run({
 				name: c.name, payload: JSON.stringify(c.payload), targets: JSON.stringify(c.targets), options: JSON.stringify(c.options),
 				status: 'draft', scheduledAt: null, createdBy: actor.id, at: now(),
-			}).lastInsertRowid);
-			const a = getOrThrow(id);
-			record(actor, 'announcements.create', a);
+			})).lastInsertRowid);
+			const a = await getOrThrow(id);
+			await record(actor, 'announcements.create', a);
 			return a;
 		},
 
 		async update(actor, id, { name, payload, targets, options }) {
 			requireManage(actor);
-			const current = getOrThrow(id);
+			const current = await getOrThrow(id);
 			if (!EDITABLE.has(current.status)) throw new ValidationError('Une annonce déjà envoyée ne se modifie plus : duplique-la.');
 			const c = {
 				name: name === undefined ? current.name : validateName(name),
@@ -339,13 +339,13 @@ export function createAnnouncements({ db, network, audit, executor, logs, upload
 				targets: targets === undefined ? current.targets : normalizeTargets(targets),
 			};
 			if (c.targets.length) await checkTargets(actor, c.targets);
-			q.update.run({ id, name: c.name, payload: JSON.stringify(c.payload), targets: JSON.stringify(c.targets), options: JSON.stringify(c.options), at: now() });
-			return getOrThrow(id);
+			await q.update.run({ id, name: c.name, payload: JSON.stringify(c.payload), targets: JSON.stringify(c.targets), options: JSON.stringify(c.options), at: now() });
+			return await getOrThrow(id);
 		},
 
 		async send(actor, id) {
 			requireManage(actor);
-			const a = getOrThrow(id);
+			const a = await getOrThrow(id);
 			await checkTargets(actor, a.targets);
 			return deliver(id, actor);
 		},
@@ -353,45 +353,45 @@ export function createAnnouncements({ db, network, audit, executor, logs, upload
 		// `at`: first send (for a recurrence, optional: its next date is used). `recurrence`: see recurrence.js, null = once.
 		async schedule(actor, id, at, recurrenceInput = null) {
 			requireManage(actor);
-			const a = getOrThrow(id);
+			const a = await getOrThrow(id);
 			if (!EDITABLE.has(a.status)) throw new ValidationError('Cette annonce est déjà envoyée.');
 			const recurrence = normalizeRecurrence(recurrenceInput);
 			const first = at ?? (recurrence ? nextOccurrence(recurrence, now() + 30_000) : null);
 			if (!Number.isInteger(first) || first < now() + 30_000) throw new ValidationError('Choisis une date dans le futur (au moins 30 secondes).');
 			if (recurrence?.endAt && recurrence.endAt < first) throw new ValidationError('La date de fin est avant le premier envoi.');
 			await checkTargets(actor, a.targets);
-			q.schedule.run(first, recurrence ? JSON.stringify(recurrence) : null, now(), id);
-			const scheduled = getOrThrow(id);
-			record(actor, 'announcements.schedule', scheduled, { at: new Date(first).toISOString(), ...(recurrence ? { recurrence: recurrence.type } : {}) });
+			await q.schedule.run(first, recurrence ? JSON.stringify(recurrence) : null, now(), id);
+			const scheduled = await getOrThrow(id);
+			await record(actor, 'announcements.schedule', scheduled, { at: new Date(first).toISOString(), ...(recurrence ? { recurrence: recurrence.type } : {}) });
 			return scheduled;
 		},
 
-		unschedule(actor, id) {
+		async unschedule(actor, id) {
 			requireManage(actor);
-			const a = getOrThrow(id);
+			const a = await getOrThrow(id);
 			if (a.status !== 'scheduled') throw new ValidationError('Cette annonce n’est pas programmée.');
-			q.status.run('draft', null, now(), id);
-			record(actor, 'announcements.unschedule', a);
-			return getOrThrow(id);
+			await q.status.run('draft', null, now(), id);
+			await record(actor, 'announcements.unschedule', a);
+			return await getOrThrow(id);
 		},
 
 		async duplicate(actor, id) {
 			requireManage(actor);
-			const a = getOrThrow(id);
-			const copyId = Number(q.insert.run({
+			const a = await getOrThrow(id);
+			const copyId = Number((await q.insert.run({
 				name: `${a.name} (copie)`.slice(0, 100), payload: JSON.stringify(a.payload), targets: JSON.stringify(a.targets), options: JSON.stringify(a.options),
 				status: 'draft', scheduledAt: null, createdBy: actor.id, at: now(),
-			}).lastInsertRowid);
-			return getOrThrow(copyId);
+			})).lastInsertRowid);
+			return await getOrThrow(copyId);
 		},
 
 		// Draft: removed. Sent: its Discord messages are deleted, the history is kept.
 		async remove(actor, id) {
 			requireManage(actor);
-			const a = getOrThrow(id);
+			const a = await getOrThrow(id);
 			if (EDITABLE.has(a.status)) {
-				q.delete.run(id);
-				record(actor, 'announcements.delete', a);
+				await q.delete.run(id);
+				await record(actor, 'announcements.delete', a);
 				return null;
 			}
 			const results = [];
@@ -408,46 +408,46 @@ export function createAnnouncements({ db, network, audit, executor, logs, upload
 					results.push({ ...r, deleteError: error.message });
 				}
 			}
-			q.results.run('deleted', JSON.stringify(results), now(), id);
-			record(actor, 'announcements.delete', a, { messages: results.filter(r => r.deleted).length });
-			return getOrThrow(id);
+			await q.results.run('deleted', JSON.stringify(results), now(), id);
+			await record(actor, 'announcements.delete', a, { messages: results.filter(r => r.deleted).length });
+			return await getOrThrow(id);
 		},
 
 		// Planned sends between two dates, recurring ones expanded
-		calendar(from, to) {
-			return q.planned.all(to).flatMap((row) => {
+		async calendar(from, to) {
+			return (await q.planned.all(to)).flatMap((row) => {
 				const a = toAnnouncement(row);
 				return occurrences(a.recurrence, a.scheduledAt, from, to, { runs: a.runCount }).map(at => ({ id: a.id, name: a.name, at, color: a.payload.embed.color, recurring: Boolean(a.recurrence) }));
 			}).sort((x, y) => x.at - y.at);
 		},
 
 		// --- Templates -----------------------------------------------------------------------------
-		templates: () => q.templates.all().map(toTemplate),
+		templates: async () => (await q.templates.all()).map(toTemplate),
 
-		saveTemplate(actor, { name, payload, options, targets }) {
+		async saveTemplate(actor, { name, payload, options, targets }) {
 			requireManage(actor);
 			const c = { name: validateName(name), ...clean(payload, options), targets: normalizeTargets(targets ?? []) };
-			const id = Number(q.addTemplate.run({ name: c.name, payload: JSON.stringify(c.payload), options: JSON.stringify(c.options), targets: JSON.stringify(c.targets), createdBy: actor.id, at: now() }).lastInsertRowid);
-			audit.record({ actorId: actor.id, source: 'panel', action: 'announcements.template', target: String(id), details: { name: c.name } });
-			return toTemplate(q.template.get(id));
+			const id = Number((await q.addTemplate.run({ name: c.name, payload: JSON.stringify(c.payload), options: JSON.stringify(c.options), targets: JSON.stringify(c.targets), createdBy: actor.id, at: now() })).lastInsertRowid);
+			await audit.record({ actorId: actor.id, source: 'panel', action: 'announcements.template', target: String(id), details: { name: c.name } });
+			return toTemplate(await q.template.get(id));
 		},
 
-		deleteTemplate(actor, id) {
+		async deleteTemplate(actor, id) {
 			requireManage(actor);
-			const row = q.template.get(id);
+			const row = await q.template.get(id);
 			if (!row) throw new NotFoundError('Modèle introuvable.');
-			q.dropTemplate.run(id);
-			audit.record({ actorId: actor.id, source: 'panel', action: 'announcements.template_delete', target: String(id), details: { name: row.name } });
+			await q.dropTemplate.run(id);
+			await audit.record({ actorId: actor.id, source: 'panel', action: 'announcements.template_delete', target: String(id), details: { name: row.name } });
 		},
 
 		// Scheduler: announcements whose date has come, messages to delete
 		async sendDue() {
 			const system = { id: 'system', source: 'system', isOwner: true, can: () => true };
-			const due = q.due.all(now());
+			const due = await q.due.all(now());
 			for (const { id } of due) await deliver(id, system).catch(error => logger.error(`Scheduled announcement #${id} failed:`, error));
-			for (const d of q.dueDeletions.all(now())) {
+			for (const d of await q.dueDeletions.all(now())) {
 				await executor.deleteMessage(d.channel_id, d.message_id).catch(error => logger.warn(`Auto-delete of ${d.message_id} failed:`, error.message));
-				q.dropDeletion.run(d.id);
+				await q.dropDeletion.run(d.id);
 			}
 			return due.length;
 		},

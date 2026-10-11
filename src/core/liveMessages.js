@@ -46,7 +46,7 @@ export function createLiveMessages({ db, network, audit, executor, stats, logger
 		refreshed: db.prepare('UPDATE live_messages SET refreshed_at = ? WHERE id = ?'),
 		remove: db.prepare('DELETE FROM live_messages WHERE id = ?'),
 		targets: db.prepare('SELECT * FROM live_message_targets WHERE message_id = ? ORDER BY id'),
-		insertTarget: db.prepare('INSERT OR IGNORE INTO live_message_targets (message_id, guild_id, channel_id) VALUES (?, ?, ?)'),
+		insertTarget: db.prepare('INSERT IGNORE INTO live_message_targets (message_id, guild_id, channel_id) VALUES (?, ?, ?)'),
 		deleteTarget: db.prepare('DELETE FROM live_message_targets WHERE id = ?'),
 		targetDone: db.prepare('UPDATE live_message_targets SET discord_id = ?, last_hash = ?, last_error = NULL, updated_at = ? WHERE id = ?'),
 		targetFailed: db.prepare('UPDATE live_message_targets SET last_error = ?, updated_at = ? WHERE id = ?'),
@@ -55,7 +55,7 @@ export function createLiveMessages({ db, network, audit, executor, stats, logger
 		openTickets: db.prepare('SELECT COUNT(*) AS n FROM tickets WHERE status = \'open\' AND guild_id = ?'),
 	};
 
-	function toMessage(row) {
+	async function toMessage(row) {
 		return {
 			id: row.id,
 			name: row.name,
@@ -67,14 +67,14 @@ export function createLiveMessages({ db, network, audit, executor, stats, logger
 			createdAt: row.created_at,
 			updatedAt: row.updated_at,
 			refreshedAt: row.refreshed_at,
-			targets: q.targets.all(row.id).map(t => ({ id: t.id, guildId: t.guild_id, channelId: t.channel_id, messageId: t.discord_id, error: t.last_error, updatedAt: t.updated_at })),
+			targets: (await q.targets.all(row.id)).map(t => ({ id: t.id, guildId: t.guild_id, channelId: t.channel_id, messageId: t.discord_id, error: t.last_error, updatedAt: t.updated_at })),
 		};
 	}
 
-	function getOrThrow(id) {
-		const row = q.get.get(id);
+	async function getOrThrow(id) {
+		const row = await q.get.get(id);
 		if (!row) throw new NotFoundError('Message introuvable.');
-		return toMessage(row);
+		return await toMessage(row);
 	}
 
 	function need(actor) {
@@ -93,14 +93,14 @@ export function createLiveMessages({ db, network, audit, executor, stats, logger
 			...custom,
 			'date': date.toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris' }),
 			'time': date.toLocaleTimeString('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit' }),
-			'tickets.open': q.openTickets.get(guildId).n,
+			'tickets.open': (await q.openTickets.get(guildId)).n,
 		};
 	}
 
 	async function networkVariables() {
 		let members = 0;
 		let voice = 0;
-		for (const id of network.activeIds()) {
+		for (const id of await network.activeIds()) {
 			const counts = await executor.getGuildCounts(id).catch(() => null);
 			members += counts?.members ?? 0;
 			voice += counts?.voice ?? 0;
@@ -110,8 +110,8 @@ export function createLiveMessages({ db, network, audit, executor, stats, logger
 		return {
 			'network.members': members.toLocaleString('fr-FR'),
 			'network.voice': voice.toLocaleString('fr-FR'),
-			'network.servers': network.activeIds().length,
-			'sanctions.today': q.sanctionsToday.get(midnight.getTime()).n,
+			'network.servers': (await network.activeIds()).length,
+			'sanctions.today': (await q.sanctionsToday.get(midnight.getTime())).n,
 		};
 	}
 
@@ -119,7 +119,7 @@ export function createLiveMessages({ db, network, audit, executor, stats, logger
 	async function sync(message, { force = false } = {}) {
 		const totals = await networkVariables();
 		const results = [];
-		for (const target of q.targets.all(message.id)) {
+		for (const target of await q.targets.all(message.id)) {
 			try {
 				const vars = await variablesFor(target.guild_id, message, totals);
 				const payload = fillPayload(message.payload, vars);
@@ -129,16 +129,16 @@ export function createLiveMessages({ db, network, audit, executor, stats, logger
 					continue;
 				}
 				const id = await executor.upsertMessage(target.channel_id, target.discord_id, payload, { repost: message.repost });
-				q.targetDone.run(id, h, now(), target.id);
+				await q.targetDone.run(id, h, now(), target.id);
 				results.push({ channelId: target.channel_id, ok: true });
 			}
 			catch (error) {
-				q.targetFailed.run(error.message ?? String(error), now(), target.id);
+				await q.targetFailed.run(error.message ?? String(error), now(), target.id);
 				results.push({ channelId: target.channel_id, ok: false, error: error.message });
 				logger.warn(`Live message #${message.id} in ${target.channel_id}:`, error.message);
 			}
 		}
-		q.refreshed.run(now(), message.id);
+		await q.refreshed.run(now(), message.id);
 		return results;
 	}
 
@@ -156,74 +156,74 @@ export function createLiveMessages({ db, network, audit, executor, stats, logger
 		};
 	}
 
-	function setTargets(id, targets) {
+	async function setTargets(id, targets) {
 		const wanted = normalizeTargets(targets);
 		for (const t of wanted) {
-			if (network.find(t.guildId)?.status !== 'active') throw new ValidationError('Un des serveurs ne fait pas partie du réseau.');
+			if ((await network.find(t.guildId))?.status !== 'active') throw new ValidationError('Un des serveurs ne fait pas partie du réseau.');
 		}
-		const current = q.targets.all(id);
-		db.transaction(() => {
-			for (const t of current.filter(c => !wanted.some(w => w.channelId === c.channel_id))) q.deleteTarget.run(t.id);
-			for (const t of wanted) q.insertTarget.run(id, t.guildId, t.channelId);
+		const current = await q.targets.all(id);
+		await db.transaction(async () => {
+			for (const t of current.filter(c => !wanted.some(w => w.channelId === c.channel_id))) await q.deleteTarget.run(t.id);
+			for (const t of wanted) await q.insertTarget.run(id, t.guildId, t.channelId);
 		})();
 		return current.filter(c => !wanted.some(w => w.channelId === c.channel_id));
 	}
 
 	const service = {
-		list: () => q.list.all().map(toMessage),
+		list: async () => Promise.all((await q.list.all()).map(toMessage)),
 		get: getOrThrow,
 
 		async create(actor, input) {
 			need(actor);
 			const values = validate(input);
-			const id = Number(q.insert.run({ ...values, by: actor.id, at: now() }).lastInsertRowid);
-			setTargets(id, input.targets);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'messages.create', target: String(id), details: { name: values.name } });
-			return getOrThrow(id);
+			const id = Number((await q.insert.run({ ...values, by: actor.id, at: now() })).lastInsertRowid);
+			await setTargets(id, input.targets);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'messages.create', target: String(id), details: { name: values.name } });
+			return await getOrThrow(id);
 		},
 
 		// Saved and pushed to every channel right away
 		async update(actor, id, input) {
 			need(actor);
-			getOrThrow(id);
+			await getOrThrow(id);
 			const values = validate(input);
-			q.update.run({ ...values, id, at: now() });
-			const removed = setTargets(id, input.targets ?? getOrThrow(id).targets);
+			await q.update.run({ ...values, id, at: now() });
+			const removed = await setTargets(id, input.targets ?? (await getOrThrow(id)).targets);
 			for (const t of removed) if (t.discord_id) await executor.deleteMessage(t.channel_id, t.discord_id).catch(() => null);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'messages.update', target: String(id), details: { name: values.name } });
-			const results = await sync(getOrThrow(id));
-			return { ...getOrThrow(id), results };
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'messages.update', target: String(id), details: { name: values.name } });
+			const results = await sync(await getOrThrow(id));
+			return { ...await getOrThrow(id), results };
 		},
 
 		async publish(actor, id) {
 			need(actor);
-			const results = await sync(getOrThrow(id), { force: true });
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'messages.publish', target: String(id), details: { channels: results.length } });
-			return { ...getOrThrow(id), results };
+			const results = await sync(await getOrThrow(id), { force: true });
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'messages.publish', target: String(id), details: { channels: results.length } });
+			return { ...await getOrThrow(id), results };
 		},
 
 		// Free variables ({var.xxx}) changed from the panel without editing the message
 		async setVariables(actor, id, values) {
 			need(actor);
-			const message = getOrThrow(id);
-			q.setVariables.run(JSON.stringify(normalizeVariables({ ...message.variables, ...values })), now(), id);
-			const results = await sync(getOrThrow(id));
-			return { ...getOrThrow(id), results };
+			const message = await getOrThrow(id);
+			await q.setVariables.run(JSON.stringify(normalizeVariables({ ...message.variables, ...values })), now(), id);
+			const results = await sync(await getOrThrow(id));
+			return { ...await getOrThrow(id), results };
 		},
 
 		async remove(actor, id, { deleteMessages = true } = {}) {
 			need(actor);
-			const message = getOrThrow(id);
+			const message = await getOrThrow(id);
 			if (deleteMessages) {
 				for (const t of message.targets) if (t.messageId) await executor.deleteMessage(t.channelId, t.messageId).catch(() => null);
 			}
-			q.remove.run(id);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'messages.delete', target: String(id), details: { name: message.name } });
+			await q.remove.run(id);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'messages.delete', target: String(id), details: { name: message.name } });
 		},
 
 		// Every minute: dynamic messages whose refresh is due
 		async tick() {
-			for (const row of q.due.all(now())) await sync(toMessage(row)).catch(error => logger.warn(`Live message #${row.id} failed:`, error.message));
+			for (const row of await q.due.all(now())) await sync(await toMessage(row)).catch(error => logger.warn(`Live message #${row.id} failed:`, error.message));
 		},
 
 		variablesPreview: async guildId => ({ ...await variablesFor(guildId, { variables: {} }, await networkVariables()) }),

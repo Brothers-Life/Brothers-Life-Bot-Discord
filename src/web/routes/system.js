@@ -32,13 +32,13 @@ export function registerSystemRoutes(app, { core, runtime, consoleLog, versions 
 	});
 
 	app.post('/api/system/restart', { config: { permission: 'console.control', confirm: true }, schema: { body: confirmBody } }, async (request) => {
-		core.audit.record({ actorId: request.actor.id, source: 'panel', action: 'system.restart' });
+		await core.audit.record({ actorId: request.actor.id, source: 'panel', action: 'system.restart' });
 		setTimeout(() => runtime.restart(), 300);
 		return { ok: true, supervised: runtime.info().supervised };
 	});
 
 	app.post('/api/system/stop', { config: { permission: 'console.control', confirm: true }, schema: { body: confirmBody } }, async (request) => {
-		core.audit.record({ actorId: request.actor.id, source: 'panel', action: 'system.stop' });
+		await core.audit.record({ actorId: request.actor.id, source: 'panel', action: 'system.stop' });
 		setTimeout(() => runtime.stop(), 300);
 		return { ok: true, supervised: runtime.info().supervised };
 	});
@@ -55,7 +55,7 @@ export function registerSystemRoutes(app, { core, runtime, consoleLog, versions 
 		config: { permission: 'versions.install' },
 		schema: { body: { type: 'object', properties: { version: { type: ['string', 'null'] } }, required: ['version'] } },
 	}, async (request) => {
-		versions.ignore(request.body.version);
+		await versions.ignore(request.body.version);
 		return { ok: true };
 	});
 
@@ -84,7 +84,7 @@ export function registerSystemRoutes(app, { core, runtime, consoleLog, versions 
 			});
 		}
 
-		core.audit.record({
+		await core.audit.record({
 			actorId: request.actor.id,
 			source: 'panel',
 			action: 'system.install',

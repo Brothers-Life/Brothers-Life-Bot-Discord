@@ -22,12 +22,12 @@ test('/kick defaults to this server, the network only when asked', () => {
 
 test('sanction DM names the server for a local sanction, the network otherwise; restriction without end', async () => {
 	const { core, owner, executor } = await withNetwork();
-	core.network.activate(owner, OTHER);
+	await core.network.activate(owner, OTHER);
 	await core.sanctions.create(owner, { type: 'warn', userId: TARGET, reason: 'Spam', scope: 'local', originGuildId: OTHER });
 	assert.match(executor.dms.at(-1)[1], /averti\*\* sur \*\*Other\*\*/);
 	await core.sanctions.create(owner, { type: 'warn', userId: TARGET, reason: 'Spam' });
 	assert.match(executor.dms.at(-1)[1], /sur le réseau Brothers Life/);
-	const profile = core.restrictions.profiles()[0].key;
+	const profile = (await core.restrictions.profiles())[0].key;
 	await core.sanctions.create(owner, { type: 'restrict', userId: TARGET, profile, scope: 'local', originGuildId: MAIN });
 	assert.match(executor.dms.at(-1)[1], /Durée : jusqu’à levée/);
 	assert.equal(formatDuration(null, 'jusqu’à levée'), 'jusqu’à levée');
@@ -44,7 +44,7 @@ test('lifting a sanction DMs the person once (not twice for an accepted appeal)'
 	await core.sanctions.revoke(owner, warn.id);
 	assert.match(executor.dms.at(-1)[1], new RegExp(`#${warn.id} \\(avertissement\\) sur le réseau a été levée`));
 
-	core.appeals.setConfig(owner, { enabled: true, guildId: MAIN, channelId: STAFF, types: ['timeout'] });
+	await core.appeals.setConfig(owner, { enabled: true, guildId: MAIN, channelId: STAFF, types: ['timeout'] });
 	const timeout = await core.sanctions.create(owner, { type: 'timeout', userId: TARGET, durationMs: 3_600_000 });
 	const appeal = await core.appeals.submit(TARGET, timeout.id, ['Malentendu']);
 	const before = executor.dms.length;
@@ -55,7 +55,7 @@ test('lifting a sanction DMs the person once (not twice for an accepted appeal)'
 
 test('an appeal on a sanction that ended meanwhile is closed as moot, never "refusé"', async () => {
 	const { core, owner, executor } = await withNetwork();
-	core.appeals.setConfig(owner, { enabled: true, guildId: MAIN, channelId: STAFF, types: ['ban'] });
+	await core.appeals.setConfig(owner, { enabled: true, guildId: MAIN, channelId: STAFF, types: ['ban'] });
 	const ban = await core.sanctions.create(owner, { type: 'ban', userId: TARGET, reason: 'Triche' });
 	const appeal = await core.appeals.submit(TARGET, ban.id, ['Pardon']);
 	await core.sanctions.revoke(owner, ban.id, 'Fin');
@@ -68,25 +68,25 @@ test('an appeal on a sanction that ended meanwhile is closed as moot, never "ref
 test('anti-raid kicks: neutral DM, not counted for applications, removable from the history', async () => {
 	const { core, owner, executor } = await withNetwork();
 	const antiraid = createAntiraid({ db: core.db, network: core.network, audit: core.audit, executor, sanctions: core.sanctions, logs: core.logs, logger: { warn: () => undefined } });
-	antiraid.save(owner, MAIN, { enabled: true, newAccount: { enabled: true, minAgeDays: 7, action: 'kick' } });
+	await antiraid.save(owner, MAIN, { enabled: true, newAccount: { enabled: true, minAgeDays: 7, action: 'kick' } });
 	executor.members.set(MAIN, new Set([TARGET]));
 	await antiraid.handleJoin(MAIN, { id: TARGET, username: 'new', bot: false, createdAt: Date.now() - 86_400_000 });
 	assert.ok(executor.calls.some(c => c[0] === 'kick' && c[2] === TARGET));
 	assert.equal(executor.dms.length, 1);
 	assert.match(executor.dms[0][1], /Ton compte est trop récent pour rejoindre \*\*Main\*\* pour le moment/);
 	assert.doesNotMatch(executor.dms[0][1], /expulsé/);
-	const [kick] = core.sanctions.list({ userId: TARGET });
+	const [kick] = await core.sanctions.list({ userId: TARGET });
 	assert.equal(kick.automatic, true);
 
 	const recruitment = createRecruitment({ db: core.db, network: core.network, ranks: core.ranks, audit: core.audit, executor, sanctions: core.sanctions, stats: core.stats, logger: { warn: () => undefined } });
 	executor.memberRoles.set(`${MAIN}:${TARGET}`, []);
-	const position = recruitment.savePosition(owner, MAIN, { name: 'Modo', config: { reviewChannelId: STAFF, requirements: { noSanctionDays: 30 } } });
+	const position = await recruitment.savePosition(owner, MAIN, { name: 'Modo', config: { reviewChannelId: STAFF, requirements: { noSanctionDays: 30 } } });
 	await recruitment.startApplication(position.id, TARGET, MAIN);
 
 	const removed = await core.sanctions.revoke(owner, kick.id, 'Faux positif');
 	assert.ok(removed.revokedAt);
 	assert.equal(executor.calls.filter(c => c[2] === TARGET).length, 1, 'no Discord action');
-	assert.equal(core.audit.query({ action: 'sanctions.unkick' }).length, 1);
+	assert.equal((await core.audit.query({ action: 'sanctions.unkick' })).length, 1);
 
 	// A kick by the staff still counts
 	await core.sanctions.create(owner, { type: 'kick', userId: TARGET, scope: 'local', originGuildId: MAIN });
@@ -97,8 +97,8 @@ test('verification: auto roles after verification, no kick for young accounts, w
 	const { core, owner, executor } = await withNetwork();
 	const VERIFIED = '800000000000000201';
 	const AUTO = '800000000000000202';
-	core.onboarding.save(owner, MAIN, { autoroles: { humanRoleIds: [AUTO], botRoleIds: [] } });
-	core.verification.setConfig(owner, MAIN, { enabled: true, mode: 'captcha', verifiedRoleId: VERIFIED, minAccountAgeDays: 7, kickAfterMinutes: 30 });
+	await core.onboarding.save(owner, MAIN, { autoroles: { humanRoleIds: [AUTO], botRoleIds: [] } });
+	await core.verification.setConfig(owner, MAIN, { enabled: true, mode: 'captcha', verifiedRoleId: VERIFIED, minAccountAgeDays: 7, kickAfterMinutes: 30 });
 	executor.members.set(MAIN, new Set([TARGET, ALICE]));
 
 	await core.onboarding.memberJoined(MAIN, { id: TARGET, username: 'lea', bot: false });
@@ -111,7 +111,7 @@ test('verification: auto roles after verification, no kick for young accounts, w
 	// Young account: clear message, then never kicked for it
 	await core.verification.memberJoined(MAIN, ALICE);
 	await assert.rejects(core.verification.start(MAIN, ALICE, { accountCreatedAt: Date.now() - 86_400_000 }), /au moins 7 jours[\s\S]*pas expulsé/);
-	core.db.prepare('UPDATE verification_pending SET joined_at = ?').run(Date.now() - 60 * 60_000);
+	await core.db.prepare('UPDATE verification_pending SET joined_at = ?').run(Date.now() - 60 * 60_000);
 	await core.verification.tick();
 	assert.equal(executor.calls.some(c => c[0] === 'kick' && c[2] === ALICE), false);
 

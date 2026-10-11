@@ -15,8 +15,8 @@ async function setup() {
 	const ctx = await withNetwork();
 	const { core, executor, owner } = ctx;
 	const absences = createAbsences({ db: core.db, network: core.network, ranks: core.ranks, audit: core.audit, executor, settings: core.settings, logger: { warn: () => undefined }, now: () => clock });
-	const helper = core.ranks.create(owner, { name: 'Helper', level: 10, permissions: ['panel.access', 'absences.declare'] });
-	const manager = core.ranks.create(owner, { name: 'Responsable', level: 40, permissions: ['absences.manage', 'absences.view'] });
+	const helper = await core.ranks.create(owner, { name: 'Helper', level: 10, permissions: ['panel.access', 'absences.declare'] });
+	const manager = await core.ranks.create(owner, { name: 'Responsable', level: 40, permissions: ['absences.manage', 'absences.view'] });
 	await core.ranks.assignDirect(owner, ALICE, manager.id);
 	await core.ranks.assignDirect(owner, BOB, helper.id);
 	executor.memberRoles.set(`${MAIN}:${BOB}`, []);
@@ -27,9 +27,9 @@ test('the list of absent staff (with reasons) needs absences.view', async () => 
 	const { absences, owner, bob, alice } = await setup();
 	await absences.declare(owner, { userId: BOB, endAt: Date.now() + 2 * DAY, reason: 'Vacances' });
 	const member = await bob();
-	assert.throws(() => absences.currentFor(member), ForbiddenError);
-	assert.throws(() => absences.currentFor({ id: '1', can: () => false }), /absences\.view/);
-	assert.equal(absences.currentFor(await alice()).length, 1);
+	await assert.rejects(async () => absences.currentFor(member), ForbiddenError);
+	await assert.rejects(async () => absences.currentFor({ id: '1', can: () => false }), /absences\.view/);
+	assert.equal((await absences.currentFor(await alice())).length, 1);
 });
 
 test('cancel: only an absence not started yet, one\'s own', async () => {
@@ -37,7 +37,7 @@ test('cancel: only an absence not started yet, one\'s own', async () => {
 	const me = await bob();
 	const later = await absences.declare(me, { startAt: at() + 3 * DAY, endAt: at() + 5 * DAY });
 	const sooner = await absences.declare(me, { startAt: at() + DAY, endAt: at() + 2 * DAY });
-	assert.deepEqual(absences.upcomingFor(BOB).map(a => a.id), [sooner.id, later.id], 'soonest first');
+	assert.deepEqual((await absences.upcomingFor(BOB)).map(a => a.id), [sooner.id, later.id], 'soonest first');
 	await assert.rejects(absences.cancel({ id: '100000000000000099', can: () => false }, later.id), ForbiddenError);
 	assert.equal((await absences.cancel(me, sooner.id)).status, 'cancelled');
 	await assert.rejects(absences.cancel(me, sooner.id), /déjà terminée ou annulée/);
@@ -46,12 +46,12 @@ test('cancel: only an absence not started yet, one\'s own', async () => {
 	const current = await absences.declare(me, { endAt: at() + DAY });
 	assert.equal(current.status, 'active');
 	await assert.rejects(absences.cancel(me, current.id), /déjà commencé/);
-	assert.equal(absences.upcomingFor(BOB).length, 0);
+	assert.equal((await absences.upcomingFor(BOB)).length, 0);
 });
 
 test('extending a validated absence when validation is required: a new request after it, overlap checked', async () => {
 	const { absences, owner, executor, at, advance, bob, alice } = await setup();
-	absences.setConfig(owner, { requireApproval: true, roleByGuild: { [MAIN]: ABS_ROLE }, nicknamePrefix: '[ABS]' });
+	await absences.setConfig(owner, { requireApproval: true, roleByGuild: { [MAIN]: ABS_ROLE }, nicknamePrefix: '[ABS]' });
 	const me = await bob();
 	const first = await absences.declare(me, { endAt: at() + 2 * DAY });
 	await absences.review(await alice(), first.id, true);
@@ -61,7 +61,7 @@ test('extending a validated absence when validation is required: a new request a
 	const request = await absences.extend(me, first.id, at() + 4 * DAY);
 	assert.notEqual(request.id, first.id);
 	assert.deepEqual([request.status, request.startAt, request.endAt], ['pending', first.endAt, at() + 4 * DAY]);
-	assert.equal(absences.list(owner, { userId: BOB }).find(a => a.id === first.id).endAt, first.endAt, 'the validated absence is unchanged');
+	assert.equal((await absences.list(owner, { userId: BOB })).find(a => a.id === first.id).endAt, first.endAt, 'the validated absence is unchanged');
 	await absences.review(await alice(), request.id, true);
 
 	// A manager extends directly
@@ -72,13 +72,13 @@ test('extending a validated absence when validation is required: a new request a
 	advance(2 * DAY + 60_000);
 	await absences.tick();
 	assert.ok(executor.memberRoles.get(`${MAIN}:${BOB}`).includes(ABS_ROLE));
-	assert.equal(absences.activeFor(BOB).id, request.id);
+	assert.equal((await absences.activeFor(BOB)).id, request.id);
 });
 
 test('validating an absence already over closes it silently; a refusal sends its reason and names the server', async () => {
 	const { core, absences, owner, executor, at, advance, bob } = await setup();
-	core.network.upsertSeen({ id: MAIN, name: 'Brothers Life' });
-	absences.setConfig(owner, { requireApproval: true, roleByGuild: { [MAIN]: ABS_ROLE }, announce: { guildId: MAIN, channelId: '610000000000000009' }, review: { guildId: MAIN, channelId: STAFF }, reviewerRoleIds: [REVIEWER_ROLE] });
+	await core.network.upsertSeen({ id: MAIN, name: 'Brothers Life' });
+	await absences.setConfig(owner, { requireApproval: true, roleByGuild: { [MAIN]: ABS_ROLE }, announce: { guildId: MAIN, channelId: '610000000000000009' }, review: { guildId: MAIN, channelId: STAFF }, reviewerRoleIds: [REVIEWER_ROLE] });
 	const me = await bob();
 	const late = await absences.declare(me, { endAt: at() + 2 * 3600_000 });
 	advance(3 * 3600_000);

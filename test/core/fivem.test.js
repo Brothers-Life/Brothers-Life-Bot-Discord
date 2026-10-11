@@ -34,7 +34,7 @@ test('servers: address checked, status polled, message kept up to date, offline 
 
 	await fivem.addStatusMessage(owner, server.id, MAIN, CHANNEL);
 	assert.equal(executor.fivemMessages.length, 1);
-	const first = fivem.get(server.id).messages[0].messageId;
+	const first = (await fivem.get(server.id)).messages[0].messageId;
 	world.up = false;
 	await fivem.tick();
 	const last = executor.fivemMessages.at(-1);
@@ -48,14 +48,14 @@ test('bot status rotates between servers, offline text when down; embed has a jo
 	const { fivem, owner, executor, world } = await setup();
 	const a = await fivem.save(owner, { name: 'Serveur A', address: '1.2.3.4:30120', joinCode: 'abcd12' });
 	const b = await fivem.save(owner, { name: 'Serveur B', address: '1.2.3.5:30120' });
-	fivem.setPresence(owner, { enabled: true, serverIds: [a.id, b.id] });
+	await fivem.setPresence(owner, { enabled: true, serverIds: [a.id, b.id] });
 	assert.equal(await fivem.presenceTick(), '2/64 joueurs sur Serveur A');
 	world.up = false;
 	await fivem.tick();
 	assert.equal(await fivem.presenceTick(), 'Serveur B est hors ligne');
 	assert.equal(executor.botStatus, 'Serveur B est hors ligne');
 
-	const current = fivem.get(a.id);
+	const current = await fivem.get(a.id);
 	const payload = fivemPayload({ server: current, status: current.status }).components[0].toJSON();
 	assert.equal(payload.components[0].url, 'https://cfx.re/join/abcd12');
 	await assert.rejects(fivem.save({ id: '1', can: () => false }, { name: 'x', address: '1.2.3.4:1' }), /fivem.manage/);

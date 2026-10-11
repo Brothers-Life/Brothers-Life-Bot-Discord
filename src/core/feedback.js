@@ -133,6 +133,8 @@ export function createFeedback({ db, network, ranks, audit, executor, logger = c
 			VALUES (@boxId, @guildId, @number, @authorId, @authorName, @anonymous, @title, @answers, @status, @history, @urgency, @approved, @at, @at)
 		`),
 		item: db.prepare('SELECT * FROM feedback_items WHERE id = ?'),
+		lockItem: db.prepare('SELECT id FROM feedback_items WHERE id = ? FOR UPDATE'),
+		lockBox: db.prepare('SELECT id FROM feedback_boxes WHERE id = ? FOR UPDATE'),
 		lastOf: db.prepare('SELECT MAX(created_at) AS at FROM feedback_items WHERE box_id = ? AND author_id = ?'),
 		setMessage: db.prepare('UPDATE feedback_items SET channel_id = ?, message_id = ?, thread_id = COALESCE(?, thread_id) WHERE id = ?'),
 		setStatus: db.prepare('UPDATE feedback_items SET status = ?, status_reason = ?, status_history = ?, duplicate_of = ?, updated_at = ? WHERE id = ?'),
@@ -140,15 +142,15 @@ export function createFeedback({ db, network, ranks, audit, executor, logger = c
 		approve: db.prepare('UPDATE feedback_items SET approved = 1, approved_by = ?, approved_at = ?, updated_at = ? WHERE id = ? AND approved = 0'),
 		removePending: db.prepare('DELETE FROM feedback_items WHERE id = ? AND approved = 0'),
 		remove: db.prepare('DELETE FROM feedback_items WHERE id = ?'),
-		reminded: db.prepare('UPDATE feedback_items SET reminded_at = ? WHERE id = ?'),
-		vote: db.prepare('INSERT INTO feedback_votes (item_id, user_id, value, at) VALUES (?, ?, ?, ?) ON CONFLICT(item_id, user_id) DO UPDATE SET value = excluded.value, at = excluded.at'),
+		reminded: db.prepare('UPDATE feedback_items SET reminded_at = ? WHERE id = ? AND reminded_at IS NULL'),
+		vote: db.prepare('INSERT INTO feedback_votes (item_id, user_id, value, at) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value), at = VALUES(at)'),
 		myVote: db.prepare('SELECT value FROM feedback_votes WHERE item_id = ? AND user_id = ?'),
 		unvote: db.prepare('DELETE FROM feedback_votes WHERE item_id = ? AND user_id = ?'),
-		voters: db.prepare('SELECT user_id, value, at FROM feedback_votes WHERE item_id = ? ORDER BY at'),
+		voters: db.prepare('SELECT user_id, value, at FROM feedback_votes WHERE item_id = ? ORDER BY at, user_id'),
 		score: db.prepare('SELECT SUM(value = 1) AS up, SUM(value = -1) AS down FROM feedback_votes WHERE item_id = ?'),
 		pendingStaff: db.prepare(`
 			SELECT i.*, b.config FROM feedback_items i JOIN feedback_boxes b ON b.id = i.box_id
-			WHERE b.kind = 'staff' AND i.assignee_id IS NULL AND i.reminded_at IS NULL AND i.approved = 1
+			WHERE b.kind = 'staff' AND i.assignee_id IS NULL AND i.reminded_at IS NULL AND i.approved = 1 ORDER BY i.id
 		`),
 	};
 	// `${boxId}:${userId}` -> answers of a multi-step form in progress
@@ -160,9 +162,9 @@ export function createFeedback({ db, network, ranks, audit, executor, logger = c
 		const type = typeOf(row, raw);
 		return { id: row.id, guildId: row.guild_id, name: row.name, kind: row.kind, config: normalizeBoxConfig({ ...raw, type }, presetOf(row.kind, type)), panelChannelId: row.panel_channel_id, panelMessageId: row.panel_message_id };
 	}
-	function toItem(row) {
+	async function toItem(row) {
 		if (!row) return null;
-		const score = q.score.get(row.id);
+		const score = await q.score.get(row.id);
 		return {
 			id: row.id, boxId: row.box_id, guildId: row.guild_id, number: row.number, authorId: row.author_id, authorName: row.author_name, anonymous: Boolean(row.anonymous),
 			title: row.title, answers: JSON.parse(row.answers), status: row.status, statusReason: row.status_reason, statusHistory: JSON.parse(row.status_history),
@@ -172,13 +174,13 @@ export function createFeedback({ db, network, ranks, audit, executor, logger = c
 		};
 	}
 
-	function getBox(id) {
-		const box = toBox(q.box.get(id));
+	async function getBox(id) {
+		const box = toBox(await q.box.get(id));
 		if (!box) throw new NotFoundError('Boîte introuvable.');
 		return box;
 	}
-	function getItem(id) {
-		const item = toItem(q.item.get(id));
+	async function getItem(id) {
+		const item = await toItem(await q.item.get(id));
 		if (!item) throw new NotFoundError('Élément introuvable.');
 		return item;
 	}
@@ -197,8 +199,8 @@ export function createFeedback({ db, network, ranks, audit, executor, logger = c
 	}
 
 	// " sur **Server**" for the DMs: the author may be on several servers of the network
-	function onServer(guildId) {
-		const name = network.find(guildId)?.name;
+	async function onServer(guildId) {
+		const name = (await network.find(guildId))?.name;
 		return name ? ` sur **${name}**` : '';
 	}
 
@@ -220,57 +222,57 @@ export function createFeedback({ db, network, ranks, audit, executor, logger = c
 			thread: box.config.thread,
 			pingRoleIds: box.kind === 'staff' ? urgency?.pingRoleIds ?? [] : [],
 		});
-		q.setMessage.run(channelId, messageId, threadId ?? null, item.id);
-		return getItem(item.id);
+		await q.setMessage.run(channelId, messageId, threadId ?? null, item.id);
+		return await getItem(item.id);
 	}
 
 	const service = {
 		presets: PRESETS,
-		boxes: guildId => (guildId ? q.boxes.all(guildId) : q.allBoxes.all()).map(toBox),
+		boxes: async guildId => (guildId ? await q.boxes.all(guildId) : await q.allBoxes.all()).map(toBox),
 
 		// Boxes of one type (suggestion / bug) a member may post in, for /proposer and /bug
 		async boxesFor(guildId, type, userId) {
 			const staff = (await ranks.resolve(userId)).can('feedback.staff');
-			return service.boxes(guildId).filter(b => b.config.type === type && (b.kind !== 'staff' || staff));
+			return (await service.boxes(guildId)).filter(b => b.config.type === type && (b.kind !== 'staff' || staff));
 		},
 		getBox,
 
-		createBox(actor, guildId, { preset = 'suggestions', name = null, config = {} } = {}) {
+		async createBox(actor, guildId, { preset = 'suggestions', name = null, config = {} } = {}) {
 			if (!actor.can('feedback.manage')) throw new ForbiddenError('Permission manquante : feedback.manage');
-			if (network.find(guildId)?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
+			if ((await network.find(guildId))?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
 			const base = PRESETS[preset] ?? PRESETS.suggestions;
-			const id = Number(q.insertBox.run(guildId, String(name ?? base.name).slice(0, 60), base.kind, JSON.stringify(normalizeBoxConfig(config, base)), now()).lastInsertRowid);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'feedback.box_create', guildId, target: String(id), details: { name: name ?? base.name } });
-			return getBox(id);
+			const id = Number((await q.insertBox.run(guildId, String(name ?? base.name).slice(0, 60), base.kind, JSON.stringify(normalizeBoxConfig(config, base)), now())).lastInsertRowid);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'feedback.box_create', guildId, target: String(id), details: { name: name ?? base.name } });
+			return await getBox(id);
 		},
 
-		updateBox(actor, id, { name, config, panelChannelId = null }) {
+		async updateBox(actor, id, { name, config, panelChannelId = null }) {
 			if (!actor.can('feedback.manage')) throw new ForbiddenError('Permission manquante : feedback.manage');
-			const box = getBox(id);
-			q.updateBox.run(String(name ?? box.name).slice(0, 60) || box.name, JSON.stringify(normalizeBoxConfig(config ?? box.config, presetOf(box.kind, (config ?? box.config).type ?? box.config.type))), snowflakeOrNull(panelChannelId), id);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'feedback.box_update', guildId: box.guildId, target: String(id), details: { name: name ?? box.name } });
-			return getBox(id);
+			const box = await getBox(id);
+			await q.updateBox.run(String(name ?? box.name).slice(0, 60) || box.name, JSON.stringify(normalizeBoxConfig(config ?? box.config, presetOf(box.kind, (config ?? box.config).type ?? box.config.type))), snowflakeOrNull(panelChannelId), id);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'feedback.box_update', guildId: box.guildId, target: String(id), details: { name: name ?? box.name } });
+			return await getBox(id);
 		},
 
-		deleteBox(actor, id) {
+		async deleteBox(actor, id) {
 			if (!actor.can('feedback.manage')) throw new ForbiddenError('Permission manquante : feedback.manage');
-			const box = getBox(id);
-			q.deleteBox.run(id);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'feedback.box_delete', guildId: box.guildId, target: String(id), details: { name: box.name } });
+			const box = await getBox(id);
+			await q.deleteBox.run(id);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'feedback.box_delete', guildId: box.guildId, target: String(id), details: { name: box.name } });
 		},
 
 		async publishPanel(actor, id) {
 			if (!actor.can('feedback.manage')) throw new ForbiddenError('Permission manquante : feedback.manage');
-			const box = getBox(id);
+			const box = await getBox(id);
 			if (!box.panelChannelId) throw new ValidationError('Choisis d’abord le salon du panneau.');
 			const messageId = await executor.publishFeedbackPanel(box.panelChannelId, box.panelMessageId, box);
-			q.setPanel.run(box.panelChannelId, messageId, id);
-			return getBox(id);
+			await q.setPanel.run(box.panelChannelId, messageId, id);
+			return await getBox(id);
 		},
 
 		// Before the form: allowed roles and delay between two posts
 		async startSubmit(boxId, userId, guildId, { anonymous = false } = {}) {
-			const box = getBox(boxId);
+			const box = await getBox(boxId);
 			if (box.guildId !== guildId) throw new NotFoundError('Boîte introuvable.');
 			if (box.kind === 'staff' && !(await ranks.resolve(userId)).can('feedback.staff')) throw new ForbiddenError('Réservé au staff.');
 			if (box.config.allowedRoleIds.length) {
@@ -278,7 +280,7 @@ export function createFeedback({ db, network, ranks, audit, executor, logger = c
 				if (!box.config.allowedRoleIds.some(r => roles.includes(r))) throw new ForbiddenError('Il te manque un rôle pour utiliser cette boîte.');
 			}
 			if (box.config.cooldownMinutes) {
-				const last = q.lastOf.get(boxId, userId).at;
+				const last = (await q.lastOf.get(boxId, userId)).at;
 				const wait = last ? last + box.config.cooldownMinutes * 60_000 - now() : 0;
 				if (wait > 0) throw new ValidationError(`Attends encore ${Math.ceil(wait / 60_000)} minute(s) avant de poster à nouveau.`);
 			}
@@ -287,8 +289,8 @@ export function createFeedback({ db, network, ranks, audit, executor, logger = c
 			return { box, step };
 		},
 
-		submitStep(boxId, userId, step, values) {
-			const box = getBox(boxId);
+		async submitStep(boxId, userId, step, values) {
+			const box = await getBox(boxId);
 			const key = `${boxId}:${userId}`;
 			const state = forms.get(key);
 			if (!state || state.step !== step || now() - state.at > FORM_TTL_MS) throw new ValidationError('Ce formulaire a expiré : recommence.');
@@ -304,147 +306,157 @@ export function createFeedback({ db, network, ranks, audit, executor, logger = c
 		},
 
 		async create({ boxId, guildId, userId, userName, answers, anonymous = false }) {
-			const box = getBox(boxId);
+			const box = await getBox(boxId);
 			const title = (answers.find(a => a.id === 'title')?.value ?? answers.find(a => a.type === 'short' || a.type === 'paragraph')?.value ?? answers[0]?.value ?? '').slice(0, 150);
 			if (!title) throw new ValidationError('Le titre est vide.');
 			const urgency = box.kind === 'staff' ? (answers.find(a => a.id === 'urgency')?.raw?.[0] ?? 'medium') : null;
 			const status = box.config.statuses[0].key;
-			const id = Number(q.insertItem.run({
-				boxId, guildId, number: q.nextNumber.get(boxId).n, authorId: userId, authorName: userName, anonymous: anonymous && box.config.anonymousAllowed ? 1 : 0,
-				title, answers: JSON.stringify(answers.filter(a => a.id !== 'title').map(({ id: aid, label, value }) => ({ id: aid, label, value }))),
-				status, history: JSON.stringify([{ key: status, by: userId, at: now() }]), urgency, approved: box.config.reviewChannelId ? 0 : 1, at: now(),
-			}).lastInsertRowid);
-			let item = getItem(id);
+			// The box row is locked while the next number is taken: two posts at once get two numbers
+			const id = await db.transaction(async () => {
+				if (!await q.lockBox.get(boxId)) throw new NotFoundError('Boîte introuvable.');
+				return Number((await q.insertItem.run({
+					boxId, guildId, number: (await q.nextNumber.get(boxId)).n, authorId: userId, authorName: userName, anonymous: anonymous && box.config.anonymousAllowed ? 1 : 0,
+					title, answers: JSON.stringify(answers.filter(a => a.id !== 'title').map(({ id: aid, label, value }) => ({ id: aid, label, value }))),
+					status, history: JSON.stringify([{ key: status, by: userId, at: now() }]), urgency, approved: box.config.reviewChannelId ? 0 : 1, at: now(),
+				})).lastInsertRowid);
+			})();
+			let item = await getItem(id);
 			if (box.config.reviewChannelId) {
 				const messageId = await executor.sendFeedbackReview(box.config.reviewChannelId, view(box, item)).catch(() => null);
-				if (messageId) q.setMessage.run(box.config.reviewChannelId, messageId, null, id);
+				if (messageId) await q.setMessage.run(box.config.reviewChannelId, messageId, null, id);
 			}
 			else {
 				item = await publish(box, item);
 			}
-			audit.record({ actorId: userId, source: 'bot', action: 'feedback.create', guildId, target: String(id), details: { box: box.name, number: item.number, title } });
-			return getItem(id);
+			await audit.record({ actorId: userId, source: 'bot', action: 'feedback.create', guildId, target: String(id), details: { box: box.name, number: item.number, title } });
+			return await getItem(id);
 		},
 
 		// Staff validation before the item goes public
 		async review(userId, itemId, approved, source = 'bot') {
-			const item = getItem(itemId);
-			const box = getBox(item.boxId);
+			const item = await getItem(itemId);
+			const box = await getBox(item.boxId);
 			if (!await isHandler(userId, box)) throw new ForbiddenError('Réservé au staff.');
 			if (item.approved) throw new ValidationError('Déjà validé.');
 			// Decided before any await: a double click (or two staff members) acts only once
-			if (!(approved ? q.approve.run(userId, now(), now(), itemId) : q.removePending.run(itemId)).changes) throw new ValidationError('Déjà traité.');
+			if (!(approved ? await q.approve.run(userId, now(), now(), itemId) : await q.removePending.run(itemId)).changes) throw new ValidationError('Déjà traité.');
 			if (item.messageId) await executor.deleteMessage(item.channelId, item.messageId).catch(() => null);
 			if (!approved) {
-				if (box.config.dmAuthor) await executor.sendDM(item.authorId, `Ta proposition « ${item.title} » (${box.name})${onServer(item.guildId)} n’a pas été retenue par le staff.`).catch(() => null);
-				audit.record({ actorId: userId, source, action: 'feedback.reject_review', guildId: item.guildId, target: String(itemId), details: { title: item.title } });
+				if (box.config.dmAuthor) await executor.sendDM(item.authorId, `Ta proposition « ${item.title} » (${box.name})${await onServer(item.guildId)} n’a pas été retenue par le staff.`).catch(() => null);
+				await audit.record({ actorId: userId, source, action: 'feedback.reject_review', guildId: item.guildId, target: String(itemId), details: { title: item.title } });
 				return null;
 			}
-			const published = await publish(box, getItem(itemId));
+			const published = await publish(box, await getItem(itemId));
 			if (box.config.dmAuthor && item.authorId !== userId) {
-				await executor.sendDM(item.authorId, `✅ Ta proposition « ${item.title} » (${box.name} #${item.number})${onServer(item.guildId)} a été validée par le staff et publiée.`).catch(() => null);
+				await executor.sendDM(item.authorId, `✅ Ta proposition « ${item.title} » (${box.name} #${item.number})${await onServer(item.guildId)} a été validée par le staff et publiée.`).catch(() => null);
 			}
-			audit.record({ actorId: userId, source, action: 'feedback.approve', guildId: item.guildId, target: String(itemId), details: { title: item.title } });
+			await audit.record({ actorId: userId, source, action: 'feedback.approve', guildId: item.guildId, target: String(itemId), details: { title: item.title } });
 			return published;
 		},
 
 		async vote(itemId, userId, value) {
-			const item = getItem(itemId);
-			const box = getBox(item.boxId);
+			const item = await getItem(itemId);
+			const box = await getBox(item.boxId);
 			if (!box.config.votes) throw new ValidationError('Les votes sont désactivés ici.');
 			if (statusOf(box, item.status).final) throw new ValidationError('Cette proposition est close.');
 			if (item.authorId === userId) throw new ValidationError('Tu ne peux pas voter pour ta propre proposition.');
-			const current = q.myVote.get(itemId, userId)?.value;
-			if (current === value) q.unvote.run(itemId, userId);
-			else q.vote.run(itemId, userId, value, now());
-			const updated = getItem(itemId);
+			// One vote of a member at a time (the item row is locked): a double click toggles twice, as before
+			const current = await db.transaction(async () => {
+				if (!await q.lockItem.get(itemId)) throw new NotFoundError('Élément introuvable.');
+				const mine = (await q.myVote.get(itemId, userId))?.value;
+				if (mine === value) await q.unvote.run(itemId, userId);
+				else await q.vote.run(itemId, userId, value, now());
+				return mine;
+			})();
+			const updated = await getItem(itemId);
 			await refresh(box, updated);
 			return { item: updated, removed: current === value };
 		},
 
 		async setStatus(userId, itemId, key, { reason = '', duplicateOf = null, source = 'bot' } = {}) {
-			const item = getItem(itemId);
-			const box = getBox(item.boxId);
+			const item = await getItem(itemId);
+			const box = await getBox(item.boxId);
 			if (!await isHandler(userId, box)) throw new ForbiddenError('Réservé au staff.');
 			const status = box.config.statuses.find(s => s.key === key);
 			if (!status) throw new ValidationError('Statut inconnu.');
-			if (duplicateOf !== null && !q.item.get(duplicateOf)) throw new ValidationError('L’élément original n’existe pas.');
+			if (duplicateOf !== null && !await q.item.get(duplicateOf)) throw new ValidationError('L’élément original n’existe pas.');
 			const history = JSON.stringify([...item.statusHistory, { key, by: userId, at: now(), reason: reason || null }].slice(-50));
-			q.setStatus.run(key, reason.slice(0, 500) || null, history, duplicateOf, now(), itemId);
-			let updated = getItem(itemId);
+			await q.setStatus.run(key, reason.slice(0, 500) || null, history, duplicateOf, now(), itemId);
+			let updated = await getItem(itemId);
 			// Accepted / rejected channels: the item moves there
 			const target = status.final && ['accepted', 'done', 'fixed', 'resolved'].includes(key) ? box.config.acceptedChannelId : status.final ? box.config.rejectedChannelId : null;
 			if (target && updated.channelId !== target && updated.messageId) {
 				await executor.deleteMessage(updated.channelId, updated.messageId).catch(() => null);
 				const { messageId } = await executor.upsertFeedbackMessage(target, null, view(box, updated), { thread: false }).catch(() => ({ messageId: null }));
-				if (messageId) q.setMessage.run(target, messageId, null, itemId);
-				updated = getItem(itemId);
+				if (messageId) await q.setMessage.run(target, messageId, null, itemId);
+				updated = await getItem(itemId);
 			}
 			else {
 				await refresh(box, updated);
 			}
 			if (status.final && updated.threadId) await executor.lockThread(updated.threadId).catch(() => null);
 			if (box.config.dmAuthor && updated.authorId !== userId) {
-				await executor.sendDM(updated.authorId, `${status.emoji} Ta proposition « ${updated.title} » (${box.name} #${updated.number})${onServer(updated.guildId)} est maintenant **${status.label}**.${reason ? `\nRaison : ${reason}` : ''}`).catch(() => null);
+				await executor.sendDM(updated.authorId, `${status.emoji} Ta proposition « ${updated.title} » (${box.name} #${updated.number})${await onServer(updated.guildId)} est maintenant **${status.label}**.${reason ? `\nRaison : ${reason}` : ''}`).catch(() => null);
 			}
-			audit.record({ actorId: userId, source, action: 'feedback.status', guildId: item.guildId, target: String(itemId), details: { box: box.name, number: item.number, status: status.label, reason: reason || null } });
+			await audit.record({ actorId: userId, source, action: 'feedback.status', guildId: item.guildId, target: String(itemId), details: { box: box.name, number: item.number, status: status.label, reason: reason || null } });
 			return updated;
 		},
 
 		async assign(userId, itemId, assigneeId = userId, source = 'bot') {
-			const item = getItem(itemId);
-			const box = getBox(item.boxId);
+			const item = await getItem(itemId);
+			const box = await getBox(item.boxId);
 			if (!await isHandler(userId, box)) throw new ForbiddenError('Réservé au staff.');
-			q.setAssignee.run(assigneeId, now(), itemId);
+			await q.setAssignee.run(assigneeId, now(), itemId);
 			const assigned = box.config.statuses.find(s => s.key === 'assigned');
 			if (assigned && item.status === box.config.statuses[0].key) return service.setStatus(userId, itemId, 'assigned', { source });
-			const updated = getItem(itemId);
+			const updated = await getItem(itemId);
 			await refresh(box, updated);
 			return updated;
 		},
 
 		async remove(actor, itemId) {
-			const item = getItem(itemId);
+			const item = await getItem(itemId);
 			if (!actor.can('feedback.manage')) throw new ForbiddenError('Permission manquante : feedback.manage');
 			if (item.messageId) await executor.deleteMessage(item.channelId, item.messageId).catch(() => null);
-			q.remove.run(itemId);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'feedback.delete', guildId: item.guildId, target: String(itemId), details: { title: item.title } });
+			await q.remove.run(itemId);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'feedback.delete', guildId: item.guildId, target: String(itemId), details: { title: item.title } });
 		},
 
 		// Who did what on an item: status changes for everyone who sees the box, voters for its handlers only
-		details(actor, itemId) {
-			const item = getItem(itemId);
-			const box = getBox(item.boxId);
+		async details(actor, itemId) {
+			const item = await getItem(itemId);
+			const box = await getBox(item.boxId);
 			if (!canSee(actor, box)) throw new ForbiddenError('Tu ne peux pas voir cette boîte.');
 			const handler = actor.can('feedback.manage') || (box.kind === 'staff' && actor.can('feedback.staff'));
 			const history = item.statusHistory.map(h => ({ ...h, status: statusOf(box, h.key) }));
-			const voters = handler ? q.voters.all(itemId).map(v => ({ userId: v.user_id, value: v.value, at: v.at })) : null;
+			const voters = handler ? (await q.voters.all(itemId)).map(v => ({ userId: v.user_id, value: v.value, at: v.at })) : null;
 			return { history, voters };
 		},
 
-		list(actor, { boxId, status, sort = 'recent', limit = 100 } = {}) {
-			const box = getBox(boxId);
+		async list(actor, { boxId, status, sort = 'recent', limit = 100 } = {}) {
+			const box = await getBox(boxId);
 			if (!canSee(actor, box)) throw new ForbiddenError('Tu ne peux pas voir cette boîte.');
 			const params = { boxId, status, limit: Math.min(Math.max(Number(limit) || 100, 1), 500) };
 			const order = sort === 'score'
 				? '(SELECT COALESCE(SUM(value), 0) FROM feedback_votes v WHERE v.item_id = i.id) DESC, i.id DESC'
 				: sort === 'urgency' ? 'CASE i.urgency WHEN \'critical\' THEN 0 WHEN \'high\' THEN 1 WHEN \'medium\' THEN 2 ELSE 3 END, i.id' : 'i.id DESC';
-			return db.prepare(`SELECT * FROM feedback_items i WHERE box_id = @boxId ${status ? 'AND status = @status' : ''} ORDER BY ${order} LIMIT @limit`).all(params).map(toItem);
+			return Promise.all((await db.prepare(`SELECT * FROM feedback_items i WHERE box_id = @boxId ${status ? 'AND status = @status' : ''} ORDER BY ${order} LIMIT @limit`).all(params)).map(toItem));
 		},
 
-		get(actor, itemId) {
-			const item = getItem(itemId);
-			if (!canSee(actor, getBox(item.boxId))) throw new ForbiddenError('Tu ne peux pas voir cette boîte.');
+		async get(actor, itemId) {
+			const item = await getItem(itemId);
+			if (!canSee(actor, await getBox(item.boxId))) throw new ForbiddenError('Tu ne peux pas voir cette boîte.');
 			return item;
 		},
 
 		// Every minute: staff bugs still unassigned after their urgency delay
 		async tick() {
-			for (const row of q.pendingStaff.all()) {
+			for (const row of await q.pendingStaff.all()) {
 				const config = normalizeBoxConfig(JSON.parse(row.config), PRESETS.staff);
 				const urgency = config.urgencies.find(u => u.key === row.urgency);
 				if (!urgency?.slaMinutes || row.created_at + urgency.slaMinutes * 60_000 > now()) continue;
-				q.reminded.run(now(), row.id);
+				// Another process reminded it meanwhile
+				if (!(await q.reminded.run(now(), row.id)).changes) continue;
 				if (row.channel_id) {
 					await executor.sendMessage(row.thread_id ?? row.channel_id, {
 						payload: { content: `${urgency.pingRoleIds.map(id => `<@&${id}>`).join(' ')} ⏰ Bug **${urgency.label}** #${row.number} « ${row.title} » toujours sans personne depuis ${urgency.slaMinutes} min.`.trim(), embed: { enabled: false } },

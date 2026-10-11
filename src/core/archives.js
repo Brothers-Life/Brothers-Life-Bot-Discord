@@ -73,7 +73,7 @@ export function createArchives({ db, network, audit, executor, dataDir, fetchImp
 			INSERT INTO channel_archives (guild_id, channel_id, channel_name, created_by, message_count, first_at, last_at, file, size, created_at)
 			VALUES (@guildId, @channelId, @channelName, @createdBy, @count, @firstAt, @lastAt, @file, @size, @at)
 		`),
-		list: db.prepare('SELECT * FROM channel_archives ORDER BY created_at DESC LIMIT 500'),
+		list: db.prepare('SELECT * FROM channel_archives ORDER BY created_at DESC, id DESC LIMIT 500'),
 		get: db.prepare('SELECT * FROM channel_archives WHERE id = ?'),
 		remove: db.prepare('DELETE FROM channel_archives WHERE id = ?'),
 	};
@@ -83,10 +83,10 @@ export function createArchives({ db, network, audit, executor, dataDir, fetchImp
 	});
 
 	const service = {
-		list: () => q.list.all().map(toArchive),
+		list: async () => (await q.list.all()).map(toArchive),
 
-		get(id) {
-			const archive = toArchive(q.get.get(id));
+		async get(id) {
+			const archive = toArchive(await q.get.get(id));
 			if (!archive) throw new NotFoundError('Archive introuvable.');
 			return archive;
 		},
@@ -99,7 +99,7 @@ export function createArchives({ db, network, audit, executor, dataDir, fetchImp
 		// limit: last N messages; from/to: only that period
 		async create(actor, { guildId, channelId, limit = 1000, from = null, to = null }) {
 			if (!actor.can('archives.manage')) throw new ForbiddenError('Permission manquante : archives.manage');
-			const guild = network.find(guildId);
+			const guild = await network.find(guildId);
 			if (guild?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
 			const max = Math.min(MAX_MESSAGES, Math.max(1, Math.round(Number(limit) || 1000)));
 			if (from && to && to <= from) throw new ValidationError('La fin de la période est avant son début.');
@@ -110,20 +110,20 @@ export function createArchives({ db, network, audit, executor, dataDir, fetchImp
 			const file = `${guildId}-${channelId}-${at}.html`;
 			fs.mkdirSync(dir, { recursive: true });
 			fs.writeFileSync(path.join(dir, file), html);
-			const id = Number(q.insert.run({
+			const id = Number((await q.insert.run({
 				guildId, channelId, channelName, createdBy: actor.id, count: messages.length,
 				firstAt: messages[0]?.createdAt ?? null, lastAt: messages.at(-1)?.createdAt ?? null, file, size: Buffer.byteLength(html), at,
-			}).lastInsertRowid);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'archives.create', guildId, target: channelId, details: { salon: `#${channelName}`, messages: messages.length } });
-			return service.get(id);
+			})).lastInsertRowid);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'archives.create', guildId, target: channelId, details: { salon: `#${channelName}`, messages: messages.length } });
+			return await service.get(id);
 		},
 
-		remove(actor, id) {
+		async remove(actor, id) {
 			if (!actor.can('archives.manage')) throw new ForbiddenError('Permission manquante : archives.manage');
-			const archive = service.get(id);
+			const archive = await service.get(id);
 			fs.rmSync(service.pathOf(archive), { force: true });
-			q.remove.run(id);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'archives.delete', guildId: archive.guildId, target: archive.channelId, details: { salon: `#${archive.channelName}` } });
+			await q.remove.run(id);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'archives.delete', guildId: archive.guildId, target: archive.channelId, details: { salon: `#${archive.channelName}` } });
 		},
 	};
 	return service;

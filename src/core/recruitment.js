@@ -90,22 +90,23 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 			VALUES (@positionId, @guildId, @userId, @userName, @answers, @history, @at, @at)
 		`),
 		get: db.prepare('SELECT * FROM recruit_applications WHERE id = ?'),
-		lastOf: db.prepare('SELECT * FROM recruit_applications WHERE position_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 1'),
+		lastOf: db.prepare('SELECT * FROM recruit_applications WHERE position_id = ? AND user_id = ? ORDER BY created_at DESC, id DESC LIMIT 1'),
 		// Last decision of the staff (a withdrawn application does not delay the next one)
-		lastDecided: db.prepare('SELECT * FROM recruit_applications WHERE position_id = ? AND user_id = ? AND status IN (\'accepted\', \'rejected\') ORDER BY COALESCE(decided_at, created_at) DESC LIMIT 1'),
-		setStatus: db.prepare('UPDATE recruit_applications SET status = ?, history = ?, decided_by = ?, decided_at = ?, updated_at = ? WHERE id = ?'),
+		lastDecided: db.prepare('SELECT * FROM recruit_applications WHERE position_id = ? AND user_id = ? AND status IN (\'accepted\', \'rejected\') ORDER BY COALESCE(decided_at, created_at) DESC, id DESC LIMIT 1'),
+		// Only from the status that was read: two decisions at once (double click, two staff members) apply once
+		setStatus: db.prepare('UPDATE recruit_applications SET status = ?, history = ?, decided_by = ?, decided_at = ?, updated_at = ? WHERE id = ? AND status = ?'),
 		setReview: db.prepare('UPDATE recruit_applications SET review_channel_id = ?, review_message_id = ?, thread_id = ? WHERE id = ?'),
 		setInterview: db.prepare('UPDATE recruit_applications SET interview_channel_id = ? WHERE id = ?'),
 		setNotes: db.prepare('UPDATE recruit_applications SET notes = ?, updated_at = ? WHERE id = ?'),
-		vote: db.prepare('INSERT INTO recruit_votes (application_id, user_id, vote, comment, at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(application_id, user_id) DO UPDATE SET vote = excluded.vote, comment = COALESCE(excluded.comment, recruit_votes.comment), at = excluded.at'),
-		votes: db.prepare('SELECT user_id AS userId, vote, comment, at FROM recruit_votes WHERE application_id = ? ORDER BY at'),
+		vote: db.prepare('INSERT INTO recruit_votes (application_id, user_id, vote, comment, at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE vote = VALUES(vote), comment = COALESCE(VALUES(comment), comment), at = VALUES(at)'),
+		votes: db.prepare('SELECT user_id AS userId, vote, comment, at FROM recruit_votes WHERE application_id = ? ORDER BY at, user_id'),
 	};
 	const forms = new Map();
 
 	const toPosition = row => row && ({ id: row.id, guildId: row.guild_id, name: row.name, description: row.description, config: normalizePosition({ name: row.name, config: JSON.parse(row.config) }).config, panelChannelId: row.panel_channel_id, panelMessageId: row.panel_message_id });
-	function toApplication(row) {
+	async function toApplication(row) {
 		if (!row) return null;
-		const votes = q.votes.all(row.id);
+		const votes = await q.votes.all(row.id);
 		return {
 			id: row.id, positionId: row.position_id, guildId: row.guild_id, userId: row.user_id, userName: row.user_name, answers: JSON.parse(row.answers), status: row.status,
 			history: JSON.parse(row.history), notes: JSON.parse(row.notes), reviewChannelId: row.review_channel_id, reviewMessageId: row.review_message_id, threadId: row.thread_id,
@@ -113,13 +114,13 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 			votes, score: { for: votes.filter(v => v.vote === 1).length, against: votes.filter(v => v.vote === -1).length, neutral: votes.filter(v => v.vote === 0).length },
 		};
 	}
-	function getPosition(id) {
-		const p = toPosition(q.position.get(id));
+	async function getPosition(id) {
+		const p = toPosition(await q.position.get(id));
 		if (!p) throw new NotFoundError('Poste introuvable.');
 		return p;
 	}
-	function getApplication(id) {
-		const a = toApplication(q.get.get(id));
+	async function getApplication(id) {
+		const a = await toApplication(await q.get.get(id));
 		if (!a) throw new NotFoundError('Candidature introuvable.');
 		return a;
 	}
@@ -139,7 +140,7 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 			const roles = await executor.getMemberRoleIds(guildId, userId) ?? [];
 			if (!r.requiredRoleIds.some(id => roles.includes(id))) reasons.push('Il te manque un rôle requis pour ce poste.');
 		}
-		if (r.noSanctionDays && sanctions.list({ userId, limit: 50 }).some(s => !s.revokedAt && !s.automatic && s.createdAt >= now() - r.noSanctionDays * DAY_MS)) {
+		if (r.noSanctionDays && (await sanctions.list({ userId, limit: 50 })).some(s => !s.revokedAt && !s.automatic && s.createdAt >= now() - r.noSanctionDays * DAY_MS)) {
 			reasons.push(`Aucune sanction ces ${r.noSanctionDays} derniers jours.`);
 		}
 		if (r.minMessages) {
@@ -159,73 +160,73 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 
 	async function refreshReview(application) {
 		if (!application.reviewChannelId || !application.reviewMessageId) return;
-		const position = getPosition(application.positionId);
+		const position = await getPosition(application.positionId);
 		await executor.upsertApplicationMessage(application.reviewChannelId, application.reviewMessageId, { position, application, status: STATUSES[application.status] })
 			.catch(error => logger.warn(`Application #${application.id} not refreshed:`, error.message));
 	}
 
 	const service = {
 		statuses: STATUSES,
-		positions: guildId => q.positions.all(guildId).map(toPosition),
+		positions: async guildId => (await q.positions.all(guildId)).map(toPosition),
 		getPosition,
 
-		savePosition(actor, guildId, input) {
+		async savePosition(actor, guildId, input) {
 			need(actor, 'recruitment.manage');
-			if (network.find(guildId)?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
+			if ((await network.find(guildId))?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
 			const p = normalizePosition(input);
-			assertFivemAllowed(actor, p.config?.dm ?? p, input.id ? q.position.get(input.id)?.config : null);
+			assertFivemAllowed(actor, p.config?.dm ?? p, input.id ? (await q.position.get(input.id))?.config : null);
 			const panelChannelId = SNOWFLAKE.test(input.panelChannelId) ? input.panelChannelId : null;
 			let id = input.id;
 			if (id) {
-				const existing = getPosition(id);
+				const existing = await getPosition(id);
 				if (existing.guildId !== guildId) throw new NotFoundError('Poste introuvable.');
-				q.updatePosition.run(p.name, p.description, JSON.stringify(p.config), panelChannelId, id);
+				await q.updatePosition.run(p.name, p.description, JSON.stringify(p.config), panelChannelId, id);
 			}
 			else {
-				id = Number(q.insertPosition.run(guildId, p.name, p.description, JSON.stringify(p.config), panelChannelId, now()).lastInsertRowid);
+				id = Number((await q.insertPosition.run(guildId, p.name, p.description, JSON.stringify(p.config), panelChannelId, now())).lastInsertRowid);
 			}
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'recruitment.position', guildId, target: String(id), details: { name: p.name, open: p.config.open } });
-			return getPosition(id);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'recruitment.position', guildId, target: String(id), details: { name: p.name, open: p.config.open } });
+			return await getPosition(id);
 		},
 
 		// Applications open or closed in one click; the Discord panel follows (button greyed out, 🔴 fermé)
 		async setOpen(actor, id, open) {
 			need(actor, 'recruitment.manage');
-			const p = getPosition(id);
-			q.updatePosition.run(p.name, p.description, JSON.stringify({ ...p.config, open: Boolean(open) }), p.panelChannelId, id);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: open ? 'recruitment.open' : 'recruitment.close', guildId: p.guildId, target: String(id), details: { name: p.name } });
+			const p = await getPosition(id);
+			await q.updatePosition.run(p.name, p.description, JSON.stringify({ ...p.config, open: Boolean(open) }), p.panelChannelId, id);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: open ? 'recruitment.open' : 'recruitment.close', guildId: p.guildId, target: String(id), details: { name: p.name } });
 			if (p.panelChannelId && p.panelMessageId) {
-				const positions = service.positions(p.guildId).filter(x => x.panelChannelId === p.panelChannelId);
+				const positions = (await service.positions(p.guildId)).filter(x => x.panelChannelId === p.panelChannelId);
 				await executor.publishRecruitmentPanel(p.panelChannelId, p.panelMessageId, positions).catch(error => logger.warn('Recruitment panel refresh failed:', error.message));
 			}
-			return getPosition(id);
+			return await getPosition(id);
 		},
 
-		deletePosition(actor, id) {
+		async deletePosition(actor, id) {
 			need(actor, 'recruitment.manage');
-			const p = getPosition(id);
-			q.deletePosition.run(id);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'recruitment.position_delete', guildId: p.guildId, target: String(id), details: { name: p.name } });
+			const p = await getPosition(id);
+			await q.deletePosition.run(id);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'recruitment.position_delete', guildId: p.guildId, target: String(id), details: { name: p.name } });
 		},
 
 		// One message per channel listing the open positions of that channel
 		async publishPanel(actor, guildId, channelId) {
 			need(actor, 'recruitment.manage');
-			const positions = service.positions(guildId).filter(p => p.panelChannelId === channelId);
+			const positions = (await service.positions(guildId)).filter(p => p.panelChannelId === channelId);
 			if (!positions.length) throw new ValidationError('Aucun poste n’a ce salon comme panneau.');
 			const messageId = await executor.publishRecruitmentPanel(channelId, positions.find(p => p.panelMessageId)?.panelMessageId ?? null, positions);
-			q.setPanel.run(messageId, guildId, channelId);
+			await q.setPanel.run(messageId, guildId, channelId);
 			return messageId;
 		},
 
 		async startApplication(positionId, userId, guildId) {
-			const position = getPosition(positionId);
+			const position = await getPosition(positionId);
 			if (position.guildId !== guildId) throw new NotFoundError('Poste introuvable.');
 			if (!position.config.open || (position.config.closesAt && position.config.closesAt <= now())) throw new ValidationError('Les candidatures pour ce poste sont fermées.');
-			const last = toApplication(q.lastOf.get(positionId, userId));
+			const last = await toApplication(await q.lastOf.get(positionId, userId));
 			if (last && ['received', 'review', 'interview'].includes(last.status)) throw new ValidationError('Tu as déjà une candidature en cours pour ce poste.');
 			// The delay counts from the decision; a withdrawn application does not count
-			const decided = position.config.cooldownDays ? toApplication(q.lastDecided.get(positionId, userId)) : null;
+			const decided = position.config.cooldownDays ? await toApplication(await q.lastDecided.get(positionId, userId)) : null;
 			const decidedAt = decided ? decided.decidedAt ?? decided.createdAt : null;
 			if (decided && decidedAt > now() - position.config.cooldownDays * DAY_MS) {
 				throw new ValidationError(`Tu pourras repostuler à ce poste dans ${Math.ceil((decidedAt + position.config.cooldownDays * DAY_MS - now()) / DAY_MS)} jour(s).`);
@@ -237,8 +238,8 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 			return { position, step };
 		},
 
-		submitStep(positionId, userId, step, values) {
-			const position = getPosition(positionId);
+		async submitStep(positionId, userId, step, values) {
+			const position = await getPosition(positionId);
 			const key = `${positionId}:${userId}`;
 			const state = forms.get(key);
 			if (!state || state.step !== step || now() - state.at > FORM_TTL_MS) throw new ValidationError('Ce formulaire a expiré : recommence depuis le panneau.');
@@ -254,49 +255,49 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 		},
 
 		async submit({ positionId, guildId, userId, userName, answers }) {
-			const position = getPosition(positionId);
-			const id = Number(q.insert.run({ positionId, guildId, userId, userName, answers: JSON.stringify(answers), history: JSON.stringify([{ status: 'received', by: userId, at: now() }]), at: now() }).lastInsertRowid);
-			let application = getApplication(id);
+			const position = await getPosition(positionId);
+			const id = Number((await q.insert.run({ positionId, guildId, userId, userName, answers: JSON.stringify(answers), history: JSON.stringify([{ status: 'received', by: userId, at: now() }]), at: now() })).lastInsertRowid);
+			let application = await getApplication(id);
 			if (position.config.reviewChannelId) {
 				const posted = await executor.upsertApplicationMessage(position.config.reviewChannelId, null, { position, application, status: STATUSES.received }, { thread: true, pingRoleIds: position.config.pingRoleIds })
 					.catch((error) => {
 						logger.warn(`Application #${id} not posted:`, error.message);
 						return null;
 					});
-				if (posted) q.setReview.run(position.config.reviewChannelId, posted.messageId, posted.threadId ?? null, id);
-				application = getApplication(id);
+				if (posted) await q.setReview.run(position.config.reviewChannelId, posted.messageId, posted.threadId ?? null, id);
+				application = await getApplication(id);
 			}
 			const text = await dmText(position, 'received', guildId, userId);
 			if (text) await executor.sendDM(userId, text).catch(() => null);
-			audit.record({ actorId: userId, source: 'bot', action: 'recruitment.apply', guildId, target: String(id), details: { position: position.name, member: `<@${userId}>` } });
+			await audit.record({ actorId: userId, source: 'bot', action: 'recruitment.apply', guildId, target: String(id), details: { position: position.name, member: `<@${userId}>` } });
 			return application;
 		},
 
 		async vote(userId, applicationId, value, comment = null) {
 			const principal = await ranks.resolve(userId);
 			if (!principal.can('recruitment.vote') && !principal.can('recruitment.manage')) throw new ForbiddenError('Tu ne peux pas voter sur les candidatures.');
-			const application = getApplication(applicationId);
+			const application = await getApplication(applicationId);
 			if (application.userId === userId) throw new ForbiddenError('Tu ne peux pas voter pour ta propre candidature.');
 			if (!['received', 'review', 'interview'].includes(application.status)) throw new ValidationError('Cette candidature est close.');
 			if (![-1, 0, 1].includes(value)) throw new ValidationError('Vote invalide.');
-			q.vote.run(applicationId, userId, value, comment ? String(comment).slice(0, 500) : null, now());
-			const updated = getApplication(applicationId);
+			await q.vote.run(applicationId, userId, value, comment ? String(comment).slice(0, 500) : null, now());
+			const updated = await getApplication(applicationId);
 			await refreshReview(updated);
 			return updated;
 		},
 
-		addNote(actor, applicationId, text) {
+		async addNote(actor, applicationId, text) {
 			need(actor, 'recruitment.vote');
-			const application = getApplication(applicationId);
+			const application = await getApplication(applicationId);
 			const clean = String(text ?? '').trim().slice(0, 1000);
 			if (!clean) throw new ValidationError('Note vide.');
-			q.setNotes.run(JSON.stringify([...application.notes, { by: actor.id, at: now(), text: clean }].slice(-100)), now(), applicationId);
-			return getApplication(applicationId);
+			await q.setNotes.run(JSON.stringify([...application.notes, { by: actor.id, at: now(), text: clean }].slice(-100)), now(), applicationId);
+			return await getApplication(applicationId);
 		},
 
 		// received -> review -> interview -> accepted / rejected (or withdrawn by the candidate)
 		async setStatus(actor, applicationId, status, { reason = '' } = {}) {
-			const application = getApplication(applicationId);
+			const application = await getApplication(applicationId);
 			if (status === 'withdrawn') {
 				if (actor.id !== application.userId) throw new ForbiddenError('Seul le candidat peut retirer sa candidature.');
 			}
@@ -305,10 +306,14 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 			}
 			if (!STATUSES[status]) throw new ValidationError('Statut inconnu.');
 			if (['accepted', 'rejected', 'withdrawn'].includes(application.status)) throw new ValidationError('Cette candidature est déjà close.');
-			const position = getPosition(application.positionId);
+			const position = await getPosition(application.positionId);
 			const history = JSON.stringify([...application.history, { status, by: actor.id, at: now(), reason: reason || null }]);
 			const final = ['accepted', 'rejected', 'withdrawn'].includes(status);
-			q.setStatus.run(status, history, final ? actor.id : null, final ? now() : null, now(), applicationId);
+			if (!(await q.setStatus.run(status, history, final ? actor.id : null, final ? now() : null, now(), applicationId, application.status)).changes) {
+				const current = await getApplication(applicationId);
+				if (['accepted', 'rejected', 'withdrawn'].includes(current.status)) throw new ValidationError('Cette candidature est déjà close.');
+				throw new ValidationError('Cette candidature vient de changer de statut : réessaie.');
+			}
 
 			if (status === 'interview' && !application.interviewChannelId) {
 				const channelId = await executor.createInterviewChannel(application.guildId, {
@@ -320,7 +325,7 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 					logger.warn(`Interview channel of #${applicationId} failed:`, error.message);
 					return null;
 				});
-				if (channelId) q.setInterview.run(channelId, applicationId);
+				if (channelId) await q.setInterview.run(channelId, applicationId);
 			}
 			// Interview over: the candidate no longer sees the channel (the staff keeps its history)
 			if (final && application.interviewChannelId) {
@@ -335,23 +340,23 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 					await ranks.assignDirect(actor, application.userId, position.config.acceptRankId).catch(error => logger.warn(`Rank of the new staff member not given: ${error.message}`));
 				}
 			}
-			const updated = getApplication(applicationId);
+			const updated = await getApplication(applicationId);
 			await refreshReview(updated);
 			const text = await dmText(position, status, application.guildId, application.userId);
 			if (text && status !== 'withdrawn') await executor.sendDM(application.userId, `${text}${reason ? `\n${reason}` : ''}`).catch(() => null);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'recruitment.status', guildId: application.guildId, target: String(applicationId), details: { position: position.name, member: `<@${application.userId}>`, status: STATUSES[status].label, reason: reason || null } });
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'recruitment.status', guildId: application.guildId, target: String(applicationId), details: { position: position.name, member: `<@${application.userId}>`, status: STATUSES[status].label, reason: reason || null } });
 			return updated;
 		},
 
-		list(actor, { guildId, positionId, status, userId } = {}) {
+		async list(actor, { guildId, positionId, status, userId } = {}) {
 			need(actor, 'recruitment.view');
 			const where = [guildId && 'guild_id = @guildId', positionId && 'position_id = @positionId', status && 'status = @status', userId && 'user_id = @userId'].filter(Boolean);
-			return db.prepare(`SELECT * FROM recruit_applications ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY id DESC LIMIT 500`).all({ guildId, positionId, status, userId }).map(toApplication);
+			return Promise.all((await db.prepare(`SELECT * FROM recruit_applications ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY id DESC LIMIT 500`).all({ guildId, positionId, status, userId })).map(toApplication));
 		},
 
-		get(actor, id) {
+		async get(actor, id) {
 			need(actor, 'recruitment.view');
-			return getApplication(id);
+			return await getApplication(id);
 		},
 	};
 	return service;

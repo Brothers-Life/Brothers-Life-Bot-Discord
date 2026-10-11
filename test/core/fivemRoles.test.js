@@ -35,7 +35,7 @@ async function setup() {
 	executor.memberRoles.set(`${MAIN}:${STRANGER}`, [LSPD, TOO_HIGH]);
 	executor.memberRoles.set(`${MAIN}:${ADMIN}`, []);
 	const roles = createFivemRoles({ fivemData: { memberships: async () => ACCOUNTS }, settings: core.settings, executor, network: core.network, audit: core.audit, logs: core.logs, logger: { warn: () => undefined } });
-	roles.setLinks(ctx.owner, [
+	await roles.setLinks(ctx.owner, [
 		{ kind: 'job', name: 'police', minGrade: 0, guildId: MAIN, roleId: LSPD },
 		{ kind: 'job', name: 'police', minGrade: 2, guildId: MAIN, roleId: SERGEANT },
 		{ kind: 'staff', name: 'admin', guildId: MAIN, roleId: STAFF },

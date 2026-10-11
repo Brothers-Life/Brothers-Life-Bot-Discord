@@ -6,16 +6,16 @@ const idParam = { type: 'object', properties: { id: { type: 'integer' } }, requi
 // Sanction appeals, channel opening hours, channel archives
 export function registerModerationToolRoutes(app, { core }) {
 	const { appeals, channelSchedules, archives, network, executor } = core;
-	const activeGuilds = () => network.list().filter(g => g.status === 'active' && g.botPresent);
+	const activeGuilds = async () => (await network.list()).filter(g => g.status === 'active' && g.botPresent);
 
 	// --- Appeals ------------------------------------------------------------------------------
 	app.get('/api/appeals', { config: { permission: 'appeals.view' } }, async (request) => {
-		const list = appeals.list(request.actor);
+		const list = await appeals.list(request.actor);
 		const names = await resolveNames(executor, list.flatMap(a => [a.userId, a.decidedBy, a.sanction?.moderatorId]));
 		return {
 			appeals: list.map(a => ({ ...a, user: names.get(a.userId) ?? null, decider: a.decidedBy ? names.get(a.decidedBy) ?? null : null, moderator: names.get(a.sanction?.moderatorId) ?? null })),
-			config: appeals.config(),
-			guilds: await Promise.all(activeGuilds().map(async g => ({ id: g.id, name: g.name, channels: await executor.listTextChannels(g.id), roles: (await executor.listRoles(g.id)).filter(r => r.id !== g.id).map(({ id, name, color }) => ({ id, name, color })) }))),
+			config: await appeals.config(),
+			guilds: await Promise.all((await activeGuilds()).map(async g => ({ id: g.id, name: g.name, channels: await executor.listTextChannels(g.id), roles: (await executor.listRoles(g.id)).filter(r => r.id !== g.id).map(({ id, name, color }) => ({ id, name, color })) }))),
 		};
 	});
 	app.put('/api/appeals/config', { config: { permission: 'appeals.manage' }, schema: { body: { type: 'object' } } }, async (request) => appeals.setConfig(request.actor, request.body));
@@ -26,8 +26,8 @@ export function registerModerationToolRoutes(app, { core }) {
 
 	// --- Opening hours of channels ------------------------------------------------------------
 	app.get('/api/channel-schedules', { config: { permission: 'schedules.view' } }, async () => ({
-		schedules: channelSchedules.list(),
-		guilds: await Promise.all(activeGuilds().map(async g => ({ id: g.id, name: g.name, icon: g.icon ?? null, channels: [...await executor.listTextChannels(g.id), ...(await executor.listVoiceChannels(g.id)).map(c => ({ ...c, voice: true, canSend: true }))] }))),
+		schedules: await channelSchedules.list(),
+		guilds: await Promise.all((await activeGuilds()).map(async g => ({ id: g.id, name: g.name, icon: g.icon ?? null, channels: [...await executor.listTextChannels(g.id), ...(await executor.listVoiceChannels(g.id)).map(c => ({ ...c, voice: true, canSend: true }))] }))),
 	}));
 	app.put('/api/channel-schedules', { config: { permission: 'schedules.manage' }, schema: { body: { type: 'object', required: ['guildId'], properties: { guildId: snowflake } } } }, async (request) => channelSchedules.save(request.actor, request.body));
 	app.delete('/api/channel-schedules/:id', { config: { permission: 'schedules.manage' }, schema: { params: idParam } }, async (request) => {
@@ -37,11 +37,12 @@ export function registerModerationToolRoutes(app, { core }) {
 
 	// --- Archives -----------------------------------------------------------------------------
 	app.get('/api/archives', { config: { permission: 'archives.view' } }, async () => {
-		const list = archives.list();
+		const list = await archives.list();
 		const names = await resolveNames(executor, list.map(a => a.createdBy));
+		const guildNames = new Map((await network.list()).map(g => [g.id, g.name]));
 		return {
-			archives: list.map(a => ({ ...a, author: names.get(a.createdBy) ?? null, guildName: network.find(a.guildId)?.name ?? a.guildId })),
-			guilds: await Promise.all(activeGuilds().map(async g => ({ id: g.id, name: g.name, channels: await executor.listTextChannels(g.id) }))),
+			archives: list.map(a => ({ ...a, author: names.get(a.createdBy) ?? null, guildName: guildNames.get(a.guildId) ?? a.guildId })),
+			guilds: await Promise.all((await activeGuilds()).map(async g => ({ id: g.id, name: g.name, channels: await executor.listTextChannels(g.id) }))),
 		};
 	});
 	app.post('/api/archives', {
@@ -52,14 +53,14 @@ export function registerModerationToolRoutes(app, { core }) {
 		config: { permission: 'archives.view' },
 		schema: { params: idParam, querystring: { type: 'object', properties: { download: { type: 'boolean' } } } },
 	}, async (request, reply) => {
-		const archive = archives.get(request.params.id);
+		const archive = await archives.get(request.params.id);
 		const name = `archive-${archive.channelName}-${new Date(archive.createdAt).toISOString().slice(0, 10)}.html`.replace(/[^\w.-]/g, '_');
 		return reply.type('text/html; charset=utf-8')
 			.header('Content-Disposition', `${request.query.download ? 'attachment' : 'inline'}; filename="${name}"`)
-			.send(fs.createReadStream(archives.pathOf(archive)));
+			.send(fs.createReadStream(await archives.pathOf(archive)));
 	});
 	app.delete('/api/archives/:id', { config: { permission: 'archives.manage' }, schema: { params: idParam } }, async (request) => {
-		archives.remove(request.actor, request.params.id);
+		await archives.remove(request.actor, request.params.id);
 		return { ok: true };
 	});
 }

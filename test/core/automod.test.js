@@ -13,7 +13,7 @@ const facts = (over = {}) => ({
 
 async function setup() {
 	const ctx = await withNetwork();
-	ctx.core.network.activate(ctx.owner, OTHER);
+	await ctx.core.network.activate(ctx.owner, OTHER);
 	ctx.executor.members.set(MAIN, new Set([SPAMMER]));
 	ctx.executor.calls.length = 0;
 	return ctx;
@@ -27,7 +27,7 @@ test('a scam link: message deleted and network ban', async () => {
 	assert.deepEqual(executor.calls.map(c => [c[0], c[1]]).sort(), [['ban', MAIN], ['ban', OTHER]]);
 	assert.equal(result.sanction.source, 'automod');
 	assert.equal(result.sanction.moderatorId, 'automod');
-	const entry = core.audit.query({ action: 'automod.trigger' })[0];
+	const entry = (await core.audit.query({ action: 'automod.trigger' }))[0];
 	assert.equal(entry.actorId, 'automod');
 	assert.equal(entry.details.rule, 'scam');
 });
@@ -47,11 +47,11 @@ test('spam: timeout on the server only, then a cooldown', async () => {
 
 test('staff with automod.bypass, exempt channels and roles are ignored', async () => {
 	const { core, owner, executor } = await setup();
-	const staff = core.ranks.create(owner, { name: 'Staff', level: 10, permissions: ['automod.bypass'] });
+	const staff = await core.ranks.create(owner, { name: 'Staff', level: 10, permissions: ['automod.bypass'] });
 	await core.ranks.assignDirect(owner, ALICE, staff.id);
 	assert.equal(await core.automod.handleMessage(facts({ userId: ALICE, content: 'https://dlscord-gift.com' })), null);
 
-	core.automod.setConfig(owner, MAIN, { exemptChannels: ['c-memes'], exemptRoles: ['r-vip'] });
+	await core.automod.setConfig(owner, MAIN, { exemptChannels: ['c-memes'], exemptRoles: ['r-vip'] });
 	assert.equal(await core.automod.handleMessage(facts({ channelId: 'c-memes', content: 'https://dlscord-gift.com' })), null);
 	assert.equal(await core.automod.handleMessage(facts({ roleIds: ['r-vip'], content: 'https://dlscord-gift.com' })), null);
 	assert.equal(executor.deleted.length, 0);
@@ -65,27 +65,27 @@ test('servers outside the network and bots are ignored', async () => {
 
 test('network defaults, server overrides and reset', async () => {
 	const { core, owner } = await setup();
-	core.automod.setConfig(owner, NETWORK, { scam: { action: 'kick' }, exemptRoles: ['ignored-at-network-level'] });
-	assert.equal(core.automod.getConfig(OTHER).scam.action, 'kick');
-	assert.deepEqual(core.automod.getConfig(OTHER).exemptRoles, []);
+	await core.automod.setConfig(owner, NETWORK, { scam: { action: 'kick' }, exemptRoles: ['ignored-at-network-level'] });
+	assert.equal((await core.automod.getConfig(OTHER)).scam.action, 'kick');
+	assert.deepEqual((await core.automod.getConfig(OTHER)).exemptRoles, []);
 
-	core.automod.setConfig(owner, OTHER, { scam: { action: 'delete' } });
-	assert.equal(core.automod.getConfig(OTHER).scam.action, 'delete');
-	assert.equal(core.automod.describe().guilds.find(g => g.id === OTHER).custom, true);
+	await core.automod.setConfig(owner, OTHER, { scam: { action: 'delete' } });
+	assert.equal((await core.automod.getConfig(OTHER)).scam.action, 'delete');
+	assert.equal((await core.automod.describe()).guilds.find(g => g.id === OTHER).custom, true);
 
-	core.automod.resetGuild(owner, OTHER);
-	assert.equal(core.automod.getConfig(OTHER).scam.action, 'kick');
+	await core.automod.resetGuild(owner, OTHER);
+	assert.equal((await core.automod.getConfig(OTHER)).scam.action, 'kick');
 });
 
 test('configuring needs automod.manage', async () => {
 	const { core } = await setup();
 	const alice = await core.ranks.resolve(ALICE);
-	assert.throws(() => core.automod.setConfig(alice, NETWORK, {}), ForbiddenError);
+	await assert.rejects(async () => core.automod.setConfig(alice, NETWORK, {}), ForbiddenError);
 });
 
 test('action "delete" only removes the message', async () => {
 	const { core, owner, executor } = await setup();
-	core.automod.setConfig(owner, NETWORK, { scam: { action: 'delete' } });
+	await core.automod.setConfig(owner, NETWORK, { scam: { action: 'delete' } });
 	const result = await core.automod.handleMessage(facts({ content: 'https://dlscord-gift.com' }));
 	assert.equal(result.sanction, null);
 	assert.equal(executor.deleted.length, 1);
@@ -97,7 +97,7 @@ test('invites: network servers allowed by default, extra codes allowed, others r
 	executor.invites.set('brotherslife', MAIN);
 	executor.invites.set('roleplay', OTHER);
 	executor.invites.set('ailleurs', '900000000000000099');
-	core.automod.setConfig(owner, NETWORK, { invites: { enabled: true, allowedCodes: ['https://discord.gg/partenaire'] } });
+	await core.automod.setConfig(owner, NETWORK, { invites: { enabled: true, allowedCodes: ['https://discord.gg/partenaire'] } });
 
 	assert.equal(await core.automod.handleMessage(facts({ content: 'rejoins discord.gg/brotherslife' })), null);
 	assert.equal(await core.automod.handleMessage(facts({ content: 'et https://discord.com/invite/roleplay' })), null);
@@ -105,7 +105,7 @@ test('invites: network servers allowed by default, extra codes allowed, others r
 	const blocked = await core.automod.handleMessage(facts({ userId: '300000000000000002', content: 'discord.gg/ailleurs' }));
 	assert.equal(blocked.rule, 'invite');
 
-	core.automod.setConfig(owner, NETWORK, { invites: { enabled: true, allowNetwork: false } });
+	await core.automod.setConfig(owner, NETWORK, { invites: { enabled: true, allowNetwork: false } });
 	const strict = await core.automod.handleMessage(facts({ userId: '300000000000000003', content: 'discord.gg/brotherslife' }));
 	assert.equal(strict.rule, 'invite', 'network invites blocked when the option is off');
 });

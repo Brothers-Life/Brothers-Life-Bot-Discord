@@ -9,9 +9,9 @@ const MEMBER = '300000000000000001';
 async function setup() {
 	const ctx = await withNetwork();
 	const { core, owner, executor } = ctx;
-	const modo = core.ranks.create(owner, { name: 'Modo', level: 20, permissions: ['tickets.handle'] });
-	core.ranks.setRoleLinks(owner, modo.id, ['800000000000000001']);
-	core.tickets.saveSettings(owner, MAIN, { panelChannelId: '610000000000000001', maxOpen: 1 });
+	const modo = await core.ranks.create(owner, { name: 'Modo', level: 20, permissions: ['tickets.handle'] });
+	await core.ranks.setRoleLinks(owner, modo.id, ['800000000000000001']);
+	await core.tickets.saveSettings(owner, MAIN, { panelChannelId: '610000000000000001', maxOpen: 1 });
 	const category = await core.tickets.saveCategory(owner, MAIN, { name: 'Support', emoji: '🛟', description: 'Une question', rankIds: [modo.id], roleIds: ['800000000000000009'] });
 	executor.channels.set('c-tickets', { guildId: MAIN, name: 'logs-tickets' });
 	await core.logs.setRoute(owner, MAIN, 'tickets', 'c-tickets');
@@ -27,7 +27,7 @@ test('opening a ticket creates a private channel with the category staff', async
 	assert.equal(channel.name, '🟢┃ticket-0001-bob');
 	assert.deepEqual(channel.staffRoleIds.sort(), ['800000000000000001', '800000000000000009']);
 	assert.deepEqual(channel.messages, ['welcome']);
-	assert.equal(core.audit.query({ action: 'tickets.open' }).length, 1);
+	assert.equal((await core.audit.query({ action: 'tickets.open' })).length, 1);
 });
 
 test('one open ticket per member by default', async () => {
@@ -54,12 +54,14 @@ test('only staff can claim or add members; the opener can close', async () => {
 
 	const closed = await core.tickets.close(MEMBER, ticket.id, 'Résolu');
 	assert.equal(closed.status, 'closed');
-	assert.match(core.tickets.get(ticket.id, { withTranscript: true }).transcript, /alice: bonjour/);
+	assert.match((await core.tickets.get(ticket.id, { withTranscript: true })).transcript, /alice: bonjour/);
 });
 
 test('closing: transcript to the logs and to the opener, channel deleted later', async () => {
 	const { core, executor, category } = await setup();
 	const ticket = await core.tickets.open({ guildId: MAIN, userId: MEMBER, userName: 'bob', categoryId: category.id });
+	// The opening logs are sent first
+	await core.logs.flush();
 	executor.sent.length = 0;
 	await core.tickets.close(MEMBER, ticket.id);
 	await core.logs.flush();
@@ -98,8 +100,8 @@ test('publishing a panel stores the message and reuses it', async () => {
 test('a manually deleted ticket channel closes the ticket', async () => {
 	const { core, category } = await setup();
 	const ticket = await core.tickets.open({ guildId: MAIN, userId: MEMBER, userName: 'bob', categoryId: category.id });
-	core.tickets.markChannelDeleted(ticket.channelId);
-	assert.equal(core.tickets.get(ticket.id).status, 'closed');
+	await core.tickets.markChannelDeleted(ticket.channelId);
+	assert.equal((await core.tickets.get(ticket.id)).status, 'closed');
 });
 
 test('each category can send its transcripts to its own channel', async () => {
@@ -110,6 +112,8 @@ test('each category can send its transcripts to its own channel', async () => {
 	assert.equal(support.transcriptChannelId, 'c-transcripts-support');
 
 	const ticket = await core.tickets.open({ guildId: MAIN, userId: MEMBER, userName: 'bob', categoryId: support.id });
+	// The opening logs are sent first
+	await core.logs.flush();
 	executor.sent.length = 0;
 	await core.tickets.close(MEMBER, ticket.id);
 	await core.logs.flush();
@@ -124,6 +128,8 @@ test('no duplicate when the category channel is the tickets log channel', async 
 	const { core, executor, owner } = await setup();
 	const cat = await core.tickets.saveCategory(owner, MAIN, { name: 'Same', transcriptChannelId: 'c-tickets' });
 	const ticket = await core.tickets.open({ guildId: MAIN, userId: MEMBER, userName: 'bob', categoryId: cat.id });
+	// The opening logs are sent first
+	await core.logs.flush();
 	executor.sent.length = 0;
 	await core.tickets.close(MEMBER, ticket.id);
 	await core.logs.flush();
@@ -144,7 +150,7 @@ test('ticket texts get member, form and linked FiveM account variables', async (
 	assert.equal(ticket.vars['user.id'], MEMBER);
 	assert.equal(ticket.vars['tickets.count'], 0);
 	assert.equal(executor.ticketChannels.get(ticket.channelId).name, '🟢┃support-42-0001');
-	const welcome = core.tickets.welcomeData(ticket);
+	const welcome = await core.tickets.welcomeData(ticket);
 	assert.equal(welcome.message, `<@${MEMBER}> dbid 42 · ABC123 · pseudo John_Doe · inconnu {nope}`);
 });
 
@@ -160,12 +166,14 @@ test('HTML transcript: Discord-like page, internal notes only in the panel copy'
 	const { core, owner, executor, category } = await setup();
 	const ticket = await core.tickets.open({ guildId: MAIN, userId: MEMBER, userName: 'bob', categoryId: category.id, answers: [{ id: 'pseudo', label: 'Pseudo', type: 'short', value: 'John <b>Doe</b>' }] });
 	await core.tickets.reply(owner, ticket.id, { content: 'Note secrète du staff', internal: true });
+	// The opening logs are sent first
+	await core.logs.flush();
 	executor.sent.length = 0;
 	await core.tickets.close(MEMBER, ticket.id, 'Réglé');
 	await core.logs.flush();
 	const logged = executor.sent.find(s => s.channelId === 'c-tickets').message.files[0].content;
 	const member = executor.dms.at(-1)[2][0].content;
-	const saved = core.tickets.transcriptFile(ticket.id);
+	const saved = await core.tickets.transcriptFile(ticket.id);
 	const staff = fs.readFileSync(saved.file, 'utf8');
 	assert.doesNotMatch(logged, /Note secrète du staff/, 'Discord copies never carry the internal notes');
 	assert.match(staff, /^<!doctype html>/);
@@ -180,13 +188,13 @@ test('HTML transcript: Discord-like page, internal notes only in the panel copy'
 
 test('the whole ticket system is copied to another server, without its channels and roles', async () => {
 	const { core, owner, executor, category } = await setup();
-	core.network.activate(owner, OTHER);
+	await core.network.activate(owner, OTHER);
 	executor.channels.set('610000000000000001', { guildId: MAIN, name: 'support' });
 	await core.tickets.saveCategory(owner, MAIN, { id: category.id, name: 'Support', emoji: '🛟', description: 'Une question', rankIds: category.rankIds, roleIds: ['800000000000000009'], config: { ping: 'roles', pingRoleIds: ['800000000000000009'], form: { steps: [{ questions: [{ id: 'pseudo', type: 'short', label: 'Pseudo' }] }] } } });
-	core.tickets.saveStatuses(owner, MAIN, [{ key: 'open', label: 'Ouvert' }, { key: 'claimed', label: 'Pris' }, { key: 'waiting', label: 'En attente', emoji: '⏳', color: '#e5b25d' }, { key: 'closed', label: 'Fermé' }]);
+	await core.tickets.saveStatuses(owner, MAIN, [{ key: 'open', label: 'Ouvert' }, { key: 'claimed', label: 'Pris' }, { key: 'waiting', label: 'En attente', emoji: '⏳', color: '#e5b25d' }, { key: 'closed', label: 'Fermé' }]);
 	await core.tickets.savePanel(owner, MAIN, { name: 'Support général', channelId: '610000000000000001', categoryIds: [category.id] });
 	assert.deepEqual(await core.tickets.copySystem(owner, MAIN, OTHER), { categories: 1, panels: 1, statuses: 4 });
-	const copied = core.tickets.describe(OTHER);
+	const copied = await core.tickets.describe(OTHER);
 	const type = copied.categories[0];
 	assert.equal(type.name, 'Support');
 	assert.deepEqual(type.roleIds, []);
@@ -200,7 +208,7 @@ test('the whole ticket system is copied to another server, without its channels 
 
 test('{fivem.*} in ticket texts needs fivemdata.view, existing ones can still be edited around', async () => {
 	const { core, owner, modo, category } = await setup();
-	const manager = core.ranks.create(owner, { name: 'Gestion tickets', level: 30, permissions: ['tickets.manage'] });
+	const manager = await core.ranks.create(owner, { name: 'Gestion tickets', level: 30, permissions: ['tickets.manage'] });
 	await core.ranks.assignDirect(owner, ALICE, manager.id);
 	const alice = await core.ranks.resolve(ALICE);
 	const withFivem = { welcome: { title: 'Ticket', message: 'tel {fivem.phone}' } };
@@ -208,5 +216,5 @@ test('{fivem.*} in ticket texts needs fivemdata.view, existing ones can still be
 	await core.tickets.saveCategory(owner, MAIN, { id: category.id, name: 'Support', rankIds: [modo.id], config: withFivem });
 	const saved = await core.tickets.saveCategory(alice, MAIN, { id: category.id, name: 'Support 2', rankIds: [modo.id], config: { welcome: { title: 'Nouveau titre', message: 'tel {fivem.phone}' } } });
 	assert.equal(saved.name, 'Support 2', 'an existing variable does not block the edit');
-	assert.ok(!core.tickets.describe(MAIN, alice).variables.some(g => g.title === 'Compte FiveM'));
+	assert.ok(!(await core.tickets.describe(MAIN, alice)).variables.some(g => g.title === 'Compte FiveM'));
 });

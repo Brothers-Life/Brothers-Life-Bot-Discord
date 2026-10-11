@@ -9,7 +9,7 @@ export async function execute(interaction) {
 	await runModeration(interaction, async (actor) => {
 		const { sanctions } = interaction.client.core;
 		const id = interaction.options.getInteger('id');
-		if (sanctions.get(id).type !== 'warn') throw new ValidationError(`La sanction #${id} n’est pas un avertissement.`);
+		if ((await sanctions.get(id)).type !== 'warn') throw new ValidationError(`La sanction #${id} n’est pas un avertissement.`);
 		const revoked = await sanctions.revoke(actor, id, interaction.options.getString('raison') ?? '');
 		return { embeds: [sanctionEmbed(revoked, { revoked: true })] };
 	});

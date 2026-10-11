@@ -59,10 +59,10 @@ export function changelogPayload(entry) {
 
 export function createChangelog({ db, network, audit, executor, logger = console, now = Date.now }) {
 	const q = {
-		list: db.prepare('SELECT * FROM changelog_entries ORDER BY COALESCE(published_at, created_at) DESC'),
+		list: db.prepare('SELECT * FROM changelog_entries ORDER BY COALESCE(published_at, created_at) DESC, id DESC'),
 		get: db.prepare('SELECT * FROM changelog_entries WHERE id = ?'),
-		byVersion: db.prepare('SELECT * FROM changelog_entries WHERE status = \'published\' AND version = ? ORDER BY published_at DESC LIMIT 1'),
-		latest: db.prepare('SELECT * FROM changelog_entries WHERE status = \'published\' ORDER BY published_at DESC LIMIT 1'),
+		byVersion: db.prepare('SELECT * FROM changelog_entries WHERE status = \'published\' AND version = ? ORDER BY published_at DESC, id DESC LIMIT 1'),
+		latest: db.prepare('SELECT * FROM changelog_entries WHERE status = \'published\' ORDER BY published_at DESC, id DESC LIMIT 1'),
 		insert: db.prepare(`
 			INSERT INTO changelog_entries (version, title, intro, items, image, color, targets, created_by, created_at, updated_at)
 			VALUES (@version, @title, @intro, @items, @image, @color, @targets, @by, @at, @at)
@@ -95,8 +95,8 @@ export function createChangelog({ db, network, audit, executor, logger = console
 		if (!actor.can('changelog.manage')) throw new ForbiddenError('Permission manquante : changelog.manage');
 	}
 
-	function getOrThrow(id) {
-		const entry = toEntry(q.get.get(id));
+	async function getOrThrow(id) {
+		const entry = toEntry(await q.get.get(id));
 		if (!entry) throw new NotFoundError('Entrée introuvable.');
 		return entry;
 	}
@@ -108,7 +108,7 @@ export function createChangelog({ db, network, audit, executor, logger = console
 		const messages = [];
 		const results = [];
 		for (const target of entry.targets) {
-			if (network.find(target.guildId)?.status !== 'active') continue;
+			if ((await network.find(target.guildId))?.status !== 'active') continue;
 			try {
 				const id = await executor.upsertMessage(target.channelId, previous.get(target.channelId)?.messageId ?? null, payload, { repost: true });
 				messages.push({ ...target, messageId: id });
@@ -123,50 +123,50 @@ export function createChangelog({ db, network, audit, executor, logger = console
 		for (const old of entry.messages.filter(m => !entry.targets.some(t => t.channelId === m.channelId))) {
 			await executor.deleteMessage(old.channelId, old.messageId).catch(() => null);
 		}
-		q.published.run(JSON.stringify(messages), now(), entry.id);
+		await q.published.run(JSON.stringify(messages), now(), entry.id);
 		return results;
 	}
 
 	return {
-		list: () => q.list.all().map(toEntry),
+		list: async () => (await q.list.all()).map(toEntry),
 		get: getOrThrow,
-		latest: version => toEntry(version ? q.byVersion.get(version) : q.latest.get()),
+		latest: async version => toEntry(version ? await q.byVersion.get(version) : await q.latest.get()),
 
-		create(actor, input) {
+		async create(actor, input) {
 			need(actor);
 			const values = normalize(input);
-			const id = Number(q.insert.run({ ...values, items: JSON.stringify(values.items), targets: JSON.stringify(values.targets), by: actor.id, at: now() }).lastInsertRowid);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'changelog.create', target: String(id), details: { title: values.title } });
-			return getOrThrow(id);
+			const id = Number((await q.insert.run({ ...values, items: JSON.stringify(values.items), targets: JSON.stringify(values.targets), by: actor.id, at: now() })).lastInsertRowid);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'changelog.create', target: String(id), details: { title: values.title } });
+			return await getOrThrow(id);
 		},
 
 		// A published entry is edited everywhere it was posted
 		async update(actor, id, input) {
 			need(actor);
-			const entry = getOrThrow(id);
+			const entry = await getOrThrow(id);
 			const values = normalize(input);
-			q.update.run({ ...values, items: JSON.stringify(values.items), targets: JSON.stringify(values.targets), id, at: now() });
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'changelog.update', target: String(id), details: { title: values.title } });
-			const results = entry.status === 'published' ? await sync(getOrThrow(id)) : [];
-			return { ...getOrThrow(id), results };
+			await q.update.run({ ...values, items: JSON.stringify(values.items), targets: JSON.stringify(values.targets), id, at: now() });
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'changelog.update', target: String(id), details: { title: values.title } });
+			const results = entry.status === 'published' ? await sync(await getOrThrow(id)) : [];
+			return { ...await getOrThrow(id), results };
 		},
 
 		async publish(actor, id) {
 			need(actor);
-			const entry = getOrThrow(id);
+			const entry = await getOrThrow(id);
 			if (!entry.targets.length) throw new ValidationError('Choisis au moins un salon.');
 			if (!entry.items.length && !entry.intro.trim()) throw new ValidationError('L’entrée est vide : ajoute un texte ou des éléments.');
 			const results = await sync(entry);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'changelog.publish', target: String(id), details: { title: entry.title, channels: results.filter(r => r.ok).length } });
-			return { ...getOrThrow(id), results };
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'changelog.publish', target: String(id), details: { title: entry.title, channels: results.filter(r => r.ok).length } });
+			return { ...await getOrThrow(id), results };
 		},
 
 		async remove(actor, id) {
 			need(actor);
-			const entry = getOrThrow(id);
+			const entry = await getOrThrow(id);
 			for (const m of entry.messages) await executor.deleteMessage(m.channelId, m.messageId).catch(() => null);
-			q.remove.run(id);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'changelog.delete', target: String(id), details: { title: entry.title } });
+			await q.remove.run(id);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'changelog.delete', target: String(id), details: { title: entry.title } });
 		},
 	};
 }

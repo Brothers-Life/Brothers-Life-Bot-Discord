@@ -15,28 +15,28 @@ export function createRoleImport({ db, network, ranks, staffSync, executor, audi
 	return {
 		// Roles of the main server, with the rank they already give or the rank of the same name
 		async candidates() {
-			const mainId = network.getMainId();
+			const mainId = await network.getMainId();
 			if (!mainId) return { mainGuildId: null, roles: [] };
-			const existing = ranks.list();
+			const existing = await ranks.list();
 			const roles = await executor.listRoles(mainId);
 			return {
 				mainGuildId: mainId,
-				roles: roles.map((role) => {
-					const linked = linkedOn.get(mainId, role.id);
+				roles: await Promise.all(roles.map(async (role) => {
+					const linked = await linkedOn.get(mainId, role.id);
 					const sameName = existing.find(r => normalize(r.name) === normalize(role.name));
 					return {
 						...role,
 						linkedRankId: linked?.rank_id ?? null,
 						sameNameRankId: sameName?.id ?? null,
 					};
-				}),
+				})),
 			};
 		},
 
 		// Highest role gets the highest level; every created rank starts without any permission
 		async importMainRoles(actor, roleIds) {
 			requireManage(actor);
-			const mainId = network.getMainId();
+			const mainId = await network.getMainId();
 			if (!mainId) throw new ValidationError('Choisis d’abord le serveur principal.');
 			if (!Array.isArray(roleIds) || !roleIds.length) throw new ValidationError('Choisis au moins un rôle.');
 
@@ -49,28 +49,28 @@ export function createRoleImport({ db, network, ranks, staffSync, executor, audi
 
 			const results = [];
 			for (const [index, role] of roles.entries()) {
-				const alreadyLinked = linkedOn.get(mainId, role.id);
+				const alreadyLinked = await linkedOn.get(mainId, role.id);
 				if (alreadyLinked) {
 					results.push({ roleId: role.id, name: role.name, status: 'already_linked', rankId: alreadyLinked.rank_id });
 					continue;
 				}
 				try {
-					let rank = ranks.list().find(r => normalize(r.name) === normalize(role.name));
+					let rank = (await ranks.list()).find(r => normalize(r.name) === normalize(role.name));
 					let status = 'linked';
 					if (!rank) {
 						const color = /^#[0-9a-f]{6}$/i.test(role.color) && role.color !== '#000000' ? role.color : null;
-						rank = ranks.create(actor, { name: role.name.slice(0, 50), level: Math.max(1, maxLevel - index * step), color, permissions: [] });
+						rank = await ranks.create(actor, { name: role.name.slice(0, 50), level: Math.max(1, maxLevel - index * step), color, permissions: [] });
 						status = 'created';
 					}
 					const mainLinks = rank.roles.filter(l => l.guildId === mainId).map(l => l.roleId);
-					ranks.setRoleLinks(actor, rank.id, [...new Set([...mainLinks, role.id])]);
+					await ranks.setRoleLinks(actor, rank.id, [...new Set([...mainLinks, role.id])]);
 					results.push({ roleId: role.id, name: role.name, status, rankId: rank.id });
 				}
 				catch (error) {
 					results.push({ roleId: role.id, name: role.name, status: 'error', error: error.message });
 				}
 			}
-			audit.record({
+			await audit.record({
 				actorId: actor.id,
 				source: actor.source ?? 'panel',
 				action: 'ranks.import',
@@ -86,12 +86,12 @@ export function createRoleImport({ db, network, ranks, staffSync, executor, audi
 		// On every other server: rank <-> role of the same name, when the rank has no role there yet
 		async linkByName(actor) {
 			requireManage(actor);
-			const mainId = network.getMainId();
+			const mainId = await network.getMainId();
 			const results = [];
-			for (const guild of network.list().filter(g => g.status === 'active' && g.botPresent && g.id !== mainId)) {
+			for (const guild of (await network.list()).filter(g => g.status === 'active' && g.botPresent && g.id !== mainId)) {
 				const roles = await executor.listRoles(guild.id);
-				const links = staffSync.linksOf(guild.id);
-				for (const rank of ranks.list()) {
+				const links = await staffSync.linksOf(guild.id);
+				for (const rank of await ranks.list()) {
 					if (links.get(rank.id)?.length) continue;
 					if (!actor.isOwner && rank.level >= actor.level) continue;
 					const role = roles.find(r => normalize(r.name) === normalize(rank.name));

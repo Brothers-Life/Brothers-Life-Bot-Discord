@@ -20,25 +20,25 @@ export function registerMusicRoutes(app, { core }) {
 	};
 
 	app.get('/api/music', { config: { permission: 'music.use' } }, async (request) => {
-		const guilds = network.list().filter(g => g.status === 'active' && g.botPresent);
+		const guilds = (await network.list()).filter(g => g.status === 'active' && g.botPresent);
 		const manage = request.actor.can('music.manage');
 		return {
 			guilds: await Promise.all(guilds.map(async g => ({
 				id: g.id, name: g.name, icon: g.icon ?? null,
 				voiceChannels: await executor.listVoiceChannels(g.id),
 				roles: manage ? (await executor.listRoles(g.id)).filter(r => r.id !== g.id).map(({ id, name, color }) => ({ id, name, color })) : [],
-				state: await withNames(music.state(g.id)),
+				state: await withNames(await music.state(g.id)),
 			}))),
-			config: music.config(),
+			config: await music.config(),
 			platforms: SEARCH_PLATFORMS,
-			spotify: manage ? music.spotify() : { clientId: '', hasSecret: music.spotify().hasSecret },
+			spotify: manage ? await music.spotify() : { clientId: '', hasSecret: (await music.spotify()).hasSecret },
 			filters: FILTERS,
 			speeds: SPEEDS,
 			cookies: fs.existsSync(cookiesFile),
 		};
 	});
 
-	app.get('/api/music/:guildId', { config: { permission: 'music.use' }, schema: { params: guildParam } }, async (request) => withNames(music.state(request.params.guildId)));
+	app.get('/api/music/:guildId', { config: { permission: 'music.use' }, schema: { params: guildParam } }, async (request) => withNames(await music.state(request.params.guildId)));
 
 	app.get('/api/music/search', {
 		config: { permission: 'music.use' },
@@ -89,14 +89,14 @@ export function registerMusicRoutes(app, { core }) {
 		case 'volume': await music.setVolume(ctx, guildId, number()); break;
 		case 'speed': await music.setSpeed(ctx, guildId, number()); break;
 		case 'filters': await music.setFilters(ctx, guildId, Array.isArray(value) ? value.map(String) : []); break;
-		case 'loop': music.setLoop(ctx, guildId, LOOPS.includes(value) ? value : undefined); break;
-		case 'shuffle': music.shuffle(ctx, guildId); break;
+		case 'loop': await music.setLoop(ctx, guildId, LOOPS.includes(value) ? value : undefined); break;
+		case 'shuffle': await music.shuffle(ctx, guildId); break;
 		case 'remove': await music.remove(ctx, guildId, number()); break;
-		case 'move': music.move(ctx, guildId, number(), to); break;
+		case 'move': await music.move(ctx, guildId, number(), to); break;
 		case 'jump': await music.jump(ctx, guildId, number()); break;
-		case 'clear': music.clear(ctx, guildId); break;
+		case 'clear': await music.clear(ctx, guildId); break;
 		}
-		return withNames(music.state(guildId));
+		return withNames(await music.state(guildId));
 	});
 
 	app.put('/api/music/cookies', {
@@ -110,7 +110,7 @@ export function registerMusicRoutes(app, { core }) {
 		}
 		fs.mkdirSync(path.dirname(cookiesFile), { recursive: true });
 		fs.writeFileSync(cookiesFile, content, { mode: 0o600 });
-		audit.record({ actorId: request.actor.id, source: 'panel', action: 'music.config', details: { cookies: 'ajoutés' } });
+		await audit.record({ actorId: request.actor.id, source: 'panel', action: 'music.config', details: { cookies: 'ajoutés' } });
 		return { ok: true };
 	});
 
@@ -124,7 +124,7 @@ export function registerMusicRoutes(app, { core }) {
 
 	app.delete('/api/music/cookies', { config: { permission: 'music.manage' } }, async (request) => {
 		fs.rmSync(cookiesFile, { force: true });
-		audit.record({ actorId: request.actor.id, source: 'panel', action: 'music.config', details: { cookies: 'retirés' } });
+		await audit.record({ actorId: request.actor.id, source: 'panel', action: 'music.config', details: { cookies: 'retirés' } });
 		return { ok: true };
 	});
 
@@ -142,9 +142,9 @@ export function registerPlaylistRoutes(app, { core }) {
 		return items.map(p => ({ ...p, owner: names.get(p.ownerId) ?? null }));
 	};
 
-	app.get('/api/music/playlists', { config: { permission: 'music.use' } }, async (request) => withOwners(lists.list(request.actor.id)));
+	app.get('/api/music/playlists', { config: { permission: 'music.use' } }, async (request) => withOwners(await lists.list(request.actor.id)));
 
-	app.get('/api/music/playlists/:id', { config: { permission: 'music.use' }, schema: { params: idParam } }, async (request) => (await withOwners([lists.get(request.params.id, request.actor.id)]))[0]);
+	app.get('/api/music/playlists/:id', { config: { permission: 'music.use' }, schema: { params: idParam } }, async (request) => (await withOwners([await lists.get(request.params.id, request.actor.id)]))[0]);
 
 	app.post('/api/music/playlists', {
 		config: { permission: 'music.use' },
@@ -160,7 +160,7 @@ export function registerPlaylistRoutes(app, { core }) {
 	}, async (request) => lists.update(ctxOf(request), request.params.id, request.body));
 
 	app.delete('/api/music/playlists/:id', { config: { permission: 'music.use' }, schema: { params: idParam } }, async (request) => {
-		lists.remove(ctxOf(request), request.params.id);
+		await lists.remove(ctxOf(request), request.params.id);
 		return { ok: true };
 	});
 

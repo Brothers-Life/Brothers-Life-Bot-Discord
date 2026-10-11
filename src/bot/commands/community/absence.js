@@ -21,7 +21,7 @@ const day = at => new Date(at).toLocaleDateString('fr-FR', { day: '2-digit', mon
 // One's own absences that have not started yet
 export async function autocomplete(interaction) {
 	const typed = String(interaction.options.getFocused() ?? '').toLowerCase();
-	const list = interaction.client.core.absences.upcomingFor(interaction.user.id).map(a => ({
+	const list = (await interaction.client.core.absences.upcomingFor(interaction.user.id)).map(a => ({
 		name: `Du ${day(a.startAt)} au ${day(a.endAt)}${a.status === 'pending' ? ' · en attente' : ''}${a.reason ? ` · ${a.reason}` : ''}`.slice(0, 100),
 		value: a.id,
 	}));
@@ -58,13 +58,13 @@ export async function execute(interaction) {
 				: `Absence enregistrée jusqu’au <t:${Math.round(absence.endAt / 1000)}:f>. Bonne pause !`);
 		}
 		case 'retour': {
-			const current = absences.activeFor(interaction.user.id);
+			const current = await absences.activeFor(interaction.user.id);
 			if (!current) throw new ValidationError('Tu n’as pas d’absence en cours.');
 			await absences.end(actor, current.id);
 			return await interaction.editReply('Bon retour parmi nous !');
 		}
 		case 'annuler': {
-			const upcoming = absences.upcomingFor(interaction.user.id);
+			const upcoming = await absences.upcomingFor(interaction.user.id);
 			const chosen = interaction.options.getInteger('absence');
 			const target = chosen ? upcoming.find(a => a.id === chosen) : upcoming[0];
 			if (!target) throw new ValidationError(chosen ? 'Absence introuvable parmi tes absences pas encore commencées.' : 'Tu n’as aucune absence à venir à annuler.');
@@ -72,7 +72,7 @@ export async function execute(interaction) {
 			return await interaction.editReply(`Absence du <t:${Math.round(target.startAt / 1000)}:d> au <t:${Math.round(target.endAt / 1000)}:d> annulée.`);
 		}
 		case 'liste': {
-			const list = absences.currentFor(actor);
+			const list = await absences.currentFor(actor);
 			const embed = new EmbedBuilder().setColor(0x5b9cf6).setTitle('Staff absent')
 				.setDescription(list.map(a => `<@${a.userId}> · retour <t:${Math.round(a.endAt / 1000)}:R>${a.reason ? ` · ${a.reason}` : ''}`).join('\n') || 'Personne n’est absent.');
 			return await interaction.editReply({ embeds: [embed], allowedMentions: { parse: [] } });

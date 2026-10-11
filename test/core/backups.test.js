@@ -42,8 +42,8 @@ test('backup of the main server, then a raid, then a full restore: channels, rol
 	g.roles = g.roles.filter(r => r.id !== HELPER);
 	executor.memberRoles.set(`${MAIN}:${MEMBER}`, []);
 
-	assert.throws(() => core.backups.restore(owner, backup.id, { mode: 'restore', confirmName: 'mauvais' }), /nom exact/);
-	core.backups.restore(owner, backup.id, { mode: 'restore', confirmName: 'main' });
+	await assert.rejects(async () => core.backups.restore(owner, backup.id, { mode: 'restore', confirmName: 'mauvais' }), /nom exact/);
+	await core.backups.restore(owner, backup.id, { mode: 'restore', confirmName: 'main' });
 	const job = await core.templates.settle();
 	assert.equal(job.status, 'done');
 
@@ -65,24 +65,24 @@ test('repair deletes nothing; nightly backups keep only the last ones; permissio
 	const { core, owner, executor } = ctx;
 	const { createBackups } = await import('../../src/core/backups.js');
 	const backups = createBackups({ db: core.db, network: core.network, audit: core.audit, executor, settings: core.settings, templates: core.templates, logs: core.logs, logger: { warn: () => undefined }, now: () => clock });
-	backups.setConfig(owner, { hour: 4, keep: 2 });
+	await backups.setConfig(owner, { hour: 4, keep: 2 });
 	for (let day = 0; day < 4; day++) {
 		assert.equal(await backups.tick(), 1);
 		assert.equal(await backups.tick(), 0, 'once a day');
 		clock += 86_400_000;
 	}
-	assert.equal(backups.list(MAIN).filter(b => b.kind === 'auto').length, 2);
+	assert.equal((await backups.list(MAIN)).filter(b => b.kind === 'auto').length, 2);
 	clock += 3_600_000 * 5;
 	assert.equal(await backups.tick(), 0, 'not the chosen hour');
 
 	const manual = await backups.create(owner, MAIN);
 	executor.model(MAIN).channels.push({ id: '840000000000000002', type: 'text', name: 'nouveau', position: 9, parentId: null, overwrites: [] });
-	backups.restore(owner, manual.id, { mode: 'repair' });
+	await backups.restore(owner, manual.id, { mode: 'repair' });
 	const job = await core.templates.settle();
 	assert.equal(job.report.deleted, 0);
 	assert.ok(executor.model(MAIN).channels.some(c => c.name === 'nouveau'));
 
 	const viewer = { id: '1', can: p => p === 'backups.view' };
 	await assert.rejects(backups.create(viewer, MAIN), ForbiddenError);
-	assert.throws(() => backups.restore(viewer, manual.id), ForbiddenError);
+	await assert.rejects(async () => backups.restore(viewer, manual.id), ForbiddenError);
 });

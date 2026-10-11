@@ -43,7 +43,8 @@ export function registerMemberRoutes(app, { core }) {
 			const [text, voice] = await Promise.all([executor.listTextChannels(id).catch(() => []), executor.listVoiceChannels(id).catch(() => [])]);
 			for (const c of [...text, ...voice]) channels.set(c.id, c.name);
 		}
-		const guildName = (id) => core.network.find(id)?.name ?? id;
+		const guildNames = new Map((await core.network.list()).map(g => [g.id, g.name]));
+		const guildName = id => guildNames.get(id) ?? id;
 		return {
 			...data,
 			activity: {
@@ -78,9 +79,9 @@ export function registerMemberRoutes(app, { core }) {
 
 	// Staff roles: which role each rank gives on each server
 	app.get('/api/staff-roles', { config: { permission: 'ranks.view' } }, async () => {
-		const guilds = staffSync.overview();
+		const guilds = await staffSync.overview();
 		return {
-			ranks: ranks.list().map(({ id, name, level, color }) => ({ id, name, level, color })),
+			ranks: (await ranks.list()).map(({ id, name, level, color }) => ({ id, name, level, color })),
 			guilds: await Promise.all(guilds.map(async g => ({ ...g, roles: await executor.listRoles(g.id) }))),
 		};
 	});

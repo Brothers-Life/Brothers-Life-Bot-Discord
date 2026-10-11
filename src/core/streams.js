@@ -56,7 +56,7 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 	const token = createTokenCache({ fetchImpl, now });
 
 	const q = {
-		all: db.prepare('SELECT * FROM stream_subscriptions ORDER BY platform, display_name COLLATE NOCASE'),
+		all: db.prepare('SELECT * FROM stream_subscriptions ORDER BY platform, display_name COLLATE utf8mb4_unicode_ci, id'),
 		get: db.prepare('SELECT * FROM stream_subscriptions WHERE id = ?'),
 		insert: db.prepare(`
 			INSERT INTO stream_subscriptions (platform, channel, display_name, targets, payloads, config, enabled, created_by, created_at, updated_at)
@@ -65,18 +65,18 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 		update: db.prepare('UPDATE stream_subscriptions SET channel = @channel, display_name = @displayName, targets = @targets, payloads = @payloads, config = @config, enabled = @enabled, updated_at = @at WHERE id = @id'),
 		delete: db.prepare('DELETE FROM stream_subscriptions WHERE id = ?'),
 		state: db.prepare('SELECT * FROM stream_state WHERE subscription_id = ?'),
-		ensureState: db.prepare('INSERT OR IGNORE INTO stream_state (subscription_id) VALUES (?)'),
+		ensureState: db.prepare('INSERT IGNORE INTO stream_state (subscription_id) VALUES (?)'),
 		history: db.prepare('INSERT INTO stream_history (subscription_id, kind, title, url, channels, at) VALUES (?, ?, ?, ?, ?, ?)'),
 		recent: db.prepare(`
 			SELECT h.*, s.display_name, s.platform FROM stream_history h JOIN stream_subscriptions s ON s.id = h.subscription_id
-			ORDER BY h.at DESC LIMIT ?
+			ORDER BY h.at DESC, h.id DESC LIMIT ?
 		`),
 	};
 
-	function setState(id, patch) {
-		q.ensureState.run(id);
+	async function setState(id, patch) {
+		await q.ensureState.run(id);
 		const keys = Object.keys(patch);
-		db.prepare(`UPDATE stream_state SET ${keys.map(k => `${k} = @${k}`).join(', ')} WHERE subscription_id = @id`).run({ ...patch, id });
+		await db.prepare(`UPDATE stream_state SET ${keys.map(k => `${k} = @${k}`).join(', ')} WHERE subscription_id = @id`).run({ ...patch, id });
 	}
 
 	function toState(row) {
@@ -88,17 +88,17 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 		};
 	}
 
-	function toSubscription(row) {
+	async function toSubscription(row) {
 		if (!row) return null;
 		return {
 			id: row.id, platform: row.platform, channel: row.channel, displayName: row.display_name, targets: JSON.parse(row.targets),
 			payloads: JSON.parse(row.payloads), config: normalizeStreamConfig(JSON.parse(row.config)), enabled: Boolean(row.enabled),
-			createdBy: row.created_by, createdAt: row.created_at, state: toState(q.state.get(row.id)),
+			createdBy: row.created_by, createdAt: row.created_at, state: toState(await q.state.get(row.id)),
 		};
 	}
 
-	function getOrThrow(id) {
-		const s = toSubscription(q.get.get(id));
+	async function getOrThrow(id) {
+		const s = await toSubscription(await q.get.get(id));
 		if (!s) throw new NotFoundError('Abonnement introuvable.');
 		return s;
 	}
@@ -107,12 +107,12 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 		if (!actor.can('notifications.manage')) throw new ForbiddenError('Permission manquante : notifications.manage');
 	}
 
-	function credentials() {
+	async function credentials() {
 		return settings.get('streams.credentials', {});
 	}
 
-	function record(actor, action, s, details = {}) {
-		audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action, target: String(s.id), details: { channel: `${PLATFORMS[s.platform]} · ${s.displayName}`, ...details } });
+	async function record(actor, action, s, details = {}) {
+		await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action, target: String(s.id), details: { channel: `${PLATFORMS[s.platform]} · ${s.displayName}`, ...details } });
 	}
 
 	const system = { id: 'system', source: 'system' };
@@ -144,7 +144,7 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 				logger.warn(`Stream notification #${s.id} not sent to ${target.channelId}:`, error.message);
 			}
 		}
-		q.history.run(s.id, logAs, data.title ?? null, data.url ?? null, messages.length, now());
+		await q.history.run(s.id, logAs, data.title ?? null, data.url ?? null, messages.length, now());
 		return { messages, payload };
 	}
 
@@ -153,16 +153,16 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 		const shown = s.config.lives && passes(s.config, live.title);
 		if (shown) {
 			({ messages } = await notify(s, 'live', live));
-			record(system, 'stream.live', s, { title: live.title, url: live.url });
+			await record(system, 'stream.live', s, { title: live.title, url: live.url });
 		}
 		const holders = [];
 		if (shown && s.config.liveRole.userId) {
 			for (const [guildId, roleId] of Object.entries(s.config.liveRole.roleByGuild)) {
-				if (network.find(guildId)?.status !== 'active') continue;
+				if ((await network.find(guildId))?.status !== 'active') continue;
 				await executor.addRole(guildId, s.config.liveRole.userId, roleId, `En live sur ${PLATFORMS[s.platform]}`).then(() => holders.push({ guildId, roleId })).catch(() => null);
 			}
 		}
-		setState(s.id, {
+		await setState(s.id, {
 			live_id: live.id, live_started_at: live.startedAt ?? now(), live_title: live.title, live_game: live.game, peak_viewers: live.viewers ?? 0,
 			live_messages: JSON.stringify(messages), role_holders: JSON.stringify(holders),
 		});
@@ -183,9 +183,9 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 			if (s.config.endAction === 'delete') await executor.deleteMessage(m.channelId, m.messageId).catch(() => null);
 		}
 		for (const h of st.roleHolders) await executor.removeRole(h.guildId, s.config.liveRole.userId, h.roleId, 'Fin du live').catch(() => null);
-		if (st.messages.length) q.history.run(s.id, 'end', st.title, null, st.messages.length, now());
+		if (st.messages.length) await q.history.run(s.id, 'end', st.title, null, st.messages.length, now());
 		// The live id is kept: the same live coming back (a short cut) is not announced twice
-		setState(s.id, { live_started_at: null, live_messages: '[]', role_holders: '[]' });
+		await setState(s.id, { live_started_at: null, live_messages: '[]', role_holders: '[]' });
 	}
 
 	async function handleLive(s, live) {
@@ -195,7 +195,7 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 		}
 		else if (live) {
 			// Same live: keep the peak, or it came back after a short cut (not announced again)
-			setState(s.id, s.state.live ? { peak_viewers: Math.max(s.state.peakViewers, live.viewers ?? 0), live_title: live.title } : { live_started_at: live.startedAt ?? now() });
+			await setState(s.id, s.state.live ? { peak_viewers: Math.max(s.state.peakViewers, live.viewers ?? 0), live_title: live.title } : { live_started_at: live.startedAt ?? now() });
 		}
 		else if (s.state.live) {
 			await liveEnded(s);
@@ -207,7 +207,7 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 		if (!newest) return;
 		// First look at the channel: only remember where it stands
 		if (s.state.lastVideoAt === null) {
-			setState(s.id, { last_video_id: newest.id, last_video_at: newest.publishedAt });
+			await setState(s.id, { last_video_id: newest.id, last_video_at: newest.publishedAt });
 			return;
 		}
 		const fresh = videos.filter(v => v.publishedAt > s.state.lastVideoAt && v.id !== s.state.lastVideoId).reverse().slice(-3);
@@ -215,9 +215,9 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 			if (v.short ? !s.config.shorts : !s.config.videos) continue;
 			if (!passes(s.config, v.title)) continue;
 			await notify(s, v.short ? 'short' : 'video', v);
-			record(system, 'stream.video', s, { title: v.title, url: v.url });
+			await record(system, 'stream.video', s, { title: v.title, url: v.url });
 		}
-		if (newest.publishedAt >= s.state.lastVideoAt) setState(s.id, { last_video_id: newest.id, last_video_at: newest.publishedAt });
+		if (newest.publishedAt >= s.state.lastVideoAt) await setState(s.id, { last_video_id: newest.id, last_video_at: newest.publishedAt });
 	}
 
 	async function validate(actor, input, current) {
@@ -230,7 +230,7 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 		const targets = normalizeTargets(input.targets ?? current?.targets ?? []);
 		if (!targets.length) throw new ValidationError('Choisis au moins un salon.');
 		for (const t of targets) {
-			if (network.find(t.guildId)?.status !== 'active') throw new ValidationError('Un des serveurs choisis ne fait pas partie du réseau.');
+			if ((await network.find(t.guildId))?.status !== 'active') throw new ValidationError('Un des serveurs choisis ne fait pas partie du réseau.');
 			if ((t.ping === 'everyone' || t.ping === 'here') && !actor.can('announcements.everyone')) throw new ForbiddenError('Permission manquante pour mentionner @everyone ou @here.');
 		}
 		const defaults = defaultPayloads(platform);
@@ -243,47 +243,47 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 	}
 
 	return {
-		list: () => q.all.all().map(toSubscription),
+		list: async () => Promise.all((await q.all.all()).map(toSubscription)),
 		get: getOrThrow,
-		history: (limit = 100) => q.recent.all(limit).map(h => ({ id: h.id, subscriptionId: h.subscription_id, displayName: h.display_name, platform: h.platform, kind: h.kind, title: h.title, url: h.url, channels: h.channels, at: h.at })),
+		history: async (limit = 100) => (await q.recent.all(limit)).map(h => ({ id: h.id, subscriptionId: h.subscription_id, displayName: h.display_name, platform: h.platform, kind: h.kind, title: h.title, url: h.url, channels: h.channels, at: h.at })),
 
 		async save(actor, input) {
 			requireManage(actor);
-			const current = input.id ? getOrThrow(input.id) : null;
+			const current = input.id ? await getOrThrow(input.id) : null;
 			const c = await validate(actor, input, current);
 			const row = { ...c, targets: JSON.stringify(c.targets), payloads: JSON.stringify(c.payloads), config: JSON.stringify(c.config), enabled: c.enabled ? 1 : 0, at: now() };
 			let id = current?.id;
-			if (current) q.update.run({ ...row, id });
-			else id = Number(q.insert.run({ ...row, by: actor.id }).lastInsertRowid);
-			const s = getOrThrow(id);
-			record(actor, current ? 'stream.update' : 'stream.create', s);
+			if (current) await q.update.run({ ...row, id });
+			else id = Number((await q.insert.run({ ...row, by: actor.id })).lastInsertRowid);
+			const s = await getOrThrow(id);
+			await record(actor, current ? 'stream.update' : 'stream.create', s);
 			return s;
 		},
 
 		async remove(actor, id) {
 			requireManage(actor);
-			const s = getOrThrow(id);
+			const s = await getOrThrow(id);
 			if (s.state.live) await liveEnded(s).catch(() => null);
-			q.delete.run(id);
-			record(actor, 'stream.delete', s);
+			await q.delete.run(id);
+			await record(actor, 'stream.delete', s);
 		},
 
 		// Sample message in the subscription's channels
 		async test(actor, id) {
 			requireManage(actor);
-			const s = getOrThrow(id);
+			const s = await getOrThrow(id);
 			const { messages } = await notify(s, 'live', {
 				name: s.displayName, title: 'Live de test · ceci est un exemple', game: 'Grand Theft Auto V', viewers: 42,
 				url: s.platform === 'youtube' ? `https://www.youtube.com/channel/${s.channel}` : `https://${s.platform === 'twitch' ? 'twitch.tv' : 'kick.com'}/${s.channel}`,
 				thumbnail: 'https://static-cdn.jtvnw.net/ttv-static/404_preview-1280x720.jpg',
 			}, 'test');
-			record(actor, 'stream.test', s, { channels: messages.length });
+			await record(actor, 'stream.test', s, { channels: messages.length });
 			return { sent: messages.length, total: s.targets.length };
 		},
 
 		// Keys are never sent back: only whether they are set
-		credentials() {
-			const c = credentials();
+		async credentials() {
+			const c = await credentials();
 			return {
 				twitch: { clientId: c.twitch?.clientId ?? '', hasSecret: Boolean(c.twitch?.clientSecret) },
 				kick: { clientId: c.kick?.clientId ?? '', hasSecret: Boolean(c.kick?.clientSecret) },
@@ -292,9 +292,9 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 		},
 
 		// Empty secret = keep the saved one; null = remove it
-		setCredentials(actor, input = {}) {
+		async setCredentials(actor, input = {}) {
 			requireManage(actor);
-			const c = credentials();
+			const c = await credentials();
 			const pair = (key) => {
 				const next = input[key];
 				if (next === undefined) return c[key];
@@ -304,44 +304,44 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 				return clientId ? { clientId, clientSecret: secret?.slice(0, 200) } : undefined;
 			};
 			const youtubeApiKey = input.youtubeApiKey === undefined ? c.youtubeApiKey : input.youtubeApiKey === null ? undefined : String(input.youtubeApiKey).trim().slice(0, 200) || c.youtubeApiKey;
-			settings.set('streams.credentials', { twitch: pair('twitch'), kick: pair('kick'), youtubeApiKey });
-			audit.record({ actorId: actor.id, source: 'panel', action: 'stream.credentials', target: 'streams', details: {} });
+			await settings.set('streams.credentials', { twitch: pair('twitch'), kick: pair('kick'), youtubeApiKey });
+			await audit.record({ actorId: actor.id, source: 'panel', action: 'stream.credentials', target: 'streams', details: {} });
 			return this.credentials();
 		},
 
 		// Every minute: Twitch and Kick in batches, YouTube every 5 minutes per channel
 		async tick() {
-			const subs = q.all.all().map(toSubscription).filter(s => s.enabled);
-			const c = credentials();
+			const subs = (await Promise.all((await q.all.all()).map(toSubscription))).filter(s => s.enabled);
+			const c = await credentials();
 			for (const [platform, check, pair] of [['twitch', twitchLive, c.twitch], ['kick', kickLive, c.kick]]) {
 				const list = subs.filter(s => s.platform === platform);
 				if (!list.length) continue;
 				if (!pair?.clientId || !pair?.clientSecret) {
-					for (const s of list) setState(s.id, { error: `Identifiants ${PLATFORMS[platform]} manquants.` });
+					for (const s of list) await setState(s.id, { error: `Identifiants ${PLATFORMS[platform]} manquants.` });
 					continue;
 				}
 				try {
 					const live = await check({ fetchImpl, token, ...pair }, [...new Set(list.map(s => s.channel))]);
 					for (const s of list) {
 						await handleLive(s, live.get(s.channel) ?? null);
-						setState(s.id, { checked_at: now(), error: null });
+						await setState(s.id, { checked_at: now(), error: null });
 					}
 				}
 				catch (error) {
 					logger.warn(`${platform} check failed:`, error.message);
-					for (const s of list) setState(s.id, { checked_at: now(), error: error.message });
+					for (const s of list) await setState(s.id, { checked_at: now(), error: error.message });
 				}
 			}
 			for (const s of subs.filter(x => x.platform === 'youtube')) {
-				const row = q.state.get(s.id);
+				const row = await q.state.get(s.id);
 				if (row?.videos_checked_at && now() - row.videos_checked_at < YOUTUBE_EVERY) continue;
 				try {
 					if (s.config.videos || s.config.shorts) await handleVideos(s, await youtubeVideos({ fetchImpl }, s.channel));
-					if (s.config.lives) await handleLive(getOrThrow(s.id), await youtubeLive({ fetchImpl, apiKey: c.youtubeApiKey }, s.channel));
-					setState(s.id, { videos_checked_at: now(), error: null });
+					if (s.config.lives) await handleLive(await getOrThrow(s.id), await youtubeLive({ fetchImpl, apiKey: c.youtubeApiKey }, s.channel));
+					await setState(s.id, { videos_checked_at: now(), error: null });
 				}
 				catch (error) {
-					setState(s.id, { videos_checked_at: now(), error: error.message });
+					await setState(s.id, { videos_checked_at: now(), error: error.message });
 				}
 			}
 		},

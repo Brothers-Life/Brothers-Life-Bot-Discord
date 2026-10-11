@@ -10,7 +10,7 @@ export async function execute(interaction) {
 	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 	try {
 		const result = action === 'claim'
-			? giveaways.claim(Number(rawId), interaction.user.id)
+			? await giveaways.claim(Number(rawId), interaction.user.id)
 			: await giveaways.toggleEntry(Number(rawId), interaction.user.id, interaction.guildId);
 		await interaction.editReply(result.message);
 	}

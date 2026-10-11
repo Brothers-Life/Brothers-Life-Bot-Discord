@@ -19,19 +19,19 @@ export function registerDmRoutes(app, { core }) {
 	}, async (request) => {
 		const { status, mine } = request.query;
 		const manage = request.actor.can('dm.manage');
-		const guilds = manage ? network.list().filter(g => g.status === 'active' && g.botPresent) : [];
+		const guilds = manage ? (await network.list()).filter(g => g.status === 'active' && g.botPresent) : [];
 		return {
-			threads: await withNames(dms.threads({ status, assignedTo: mine ? request.actor.id : null })),
-			snippets: dms.snippets(),
-			config: manage ? dms.config() : null,
-			blocklist: manage ? dms.blocklist() : [],
+			threads: await withNames(await dms.threads({ status, assignedTo: mine ? request.actor.id : null })),
+			snippets: await dms.snippets(),
+			config: manage ? await dms.config() : null,
+			blocklist: manage ? await dms.blocklist() : [],
 			guilds: await Promise.all(guilds.map(async g => ({ id: g.id, name: g.name, channels: await executor.listTextChannels(g.id) }))),
 		};
 	});
 
 	app.get('/api/dms/:id', { config: { permission: 'dm.view' }, schema: { params: idParam } }, async (request) => {
-		const [thread] = await withNames([dms.get(request.params.id)]);
-		const messages = dms.messages(thread.id);
+		const [thread] = await withNames([await dms.get(request.params.id)]);
+		const messages = await dms.messages(thread.id);
 		const names = await resolveNames(executor, messages.filter(m => m.direction !== 'in').map(m => m.authorId).filter(id => id !== 'bot'));
 		return { thread, messages, authors: Object.fromEntries(names) };
 	});
@@ -39,14 +39,14 @@ export function registerDmRoutes(app, { core }) {
 	app.post('/api/dms', {
 		config: { permission: 'dm.send' },
 		schema: { body: { type: 'object', required: ['userId'], properties: { userId: snowflake, userName: { type: ['string', 'null'], maxLength: 100 } } } },
-	}, async (request) => (await withNames([dms.open(request.actor, request.body.userId, request.body.userName ?? null)]))[0]);
+	}, async (request) => (await withNames([await dms.open(request.actor, request.body.userId, request.body.userName ?? null)]))[0]);
 
 	app.post('/api/dms/:id/messages', {
 		config: { permission: 'dm.send' },
 		schema: { params: idParam, body: { type: 'object', properties: { content: { type: 'string', maxLength: 1800 }, attachments: { type: 'array', maxItems: 5, items: { type: 'string' } }, signed: { type: 'boolean' } } } },
 	}, async (request) => {
 		const authorName = request.body.signed ? (await resolveNames(executor, [request.actor.id])).get(request.actor.id)?.name ?? null : null;
-		return dms.send(request.actor, request.params.id, { ...request.body, authorName });
+		return await dms.send(request.actor, request.params.id, { ...request.body, authorName });
 	});
 
 	app.post('/api/dms/:id/notes', {
@@ -70,18 +70,18 @@ export function registerDmRoutes(app, { core }) {
 		schema: { body: { type: 'object', required: ['name', 'content'], properties: { id: { type: ['integer', 'null'] }, name: { type: 'string', maxLength: 60 }, content: { type: 'string', maxLength: 1800 } } } },
 	}, async (request) => dms.saveSnippet(request.actor, request.body));
 	app.delete('/api/dms/snippets/:id', { config: { permission: 'dm.manage' }, schema: { params: idParam } }, async (request) => {
-		dms.deleteSnippet(request.actor, request.params.id);
+		await dms.deleteSnippet(request.actor, request.params.id);
 		return { ok: true };
 	});
 	app.post('/api/dms/blocklist', {
 		config: { permission: 'dm.manage' },
 		schema: { body: { type: 'object', required: ['userId'], properties: { userId: snowflake, reason: { type: 'string', maxLength: 300 } } } },
 	}, async (request) => {
-		dms.block(request.actor, request.body.userId, request.body.reason ?? '');
+		await dms.block(request.actor, request.body.userId, request.body.reason ?? '');
 		return { ok: true };
 	});
 	app.delete('/api/dms/blocklist/:userId', { config: { permission: 'dm.manage' }, schema: { params: { type: 'object', properties: { userId: snowflake }, required: ['userId'] } } }, async (request) => {
-		dms.unblock(request.actor, request.params.userId);
+		await dms.unblock(request.actor, request.params.userId);
 		return { ok: true };
 	});
 

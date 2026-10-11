@@ -25,7 +25,7 @@ export function normalizeLinks(input) {
 // The check lists who is missing a role and who holds one the game no longer justifies; a fix only applies what the check found.
 export function createFivemRoles({ fivemData, settings, executor, network, audit, logs, logger = console }) {
 	logs?.registerCategory('fivemroles', 'Rôles Discord selon le jeu (check et corrections)');
-	const links = () => settings.get('fivemroles.links', []);
+	const links = async () => settings.get('fivemroles.links', []);
 
 	function need(actor, permission) {
 		if (!actor.can(permission)) throw new ForbiddenError(`Permission manquante : ${permission}`);
@@ -51,11 +51,11 @@ export function createFivemRoles({ fivemData, settings, executor, network, audit
 	}
 
 	async function run() {
-		const list = links();
+		const list = await links();
 		const accounts = await fivemData.memberships();
 		const byDiscord = new Map(accounts.filter(a => a.discordId).map(a => [a.discordId, a]));
 		const guildIds = [...new Set(list.map(l => l.guildId))];
-		const known = new Map(network.list().map(g => [g.id, g]));
+		const known = new Map((await network.list()).map(g => [g.id, g]));
 		const issues = [];
 		const guilds = [];
 
@@ -106,18 +106,18 @@ export function createFivemRoles({ fivemData, settings, executor, network, audit
 	return {
 		links,
 
-		setLinks(actor, input) {
+		async setLinks(actor, input) {
 			need(actor, 'fivemdata.manage');
 			const next = normalizeLinks(input);
-			settings.set('fivemroles.links', next);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'fivemroles.links', details: { liaisons: next.length } });
+			await settings.set('fivemroles.links', next);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'fivemroles.links', details: { liaisons: next.length } });
 			return next;
 		},
 
 		async check(actor) {
 			need(actor, 'fivemdata.roles');
 			const result = await run();
-			return { ...result, links: links(), at: Date.now() };
+			return { ...result, links: await links(), at: Date.now() };
 		},
 
 		// Applies issues of a fresh check, by key: nothing outside what the check found can be changed
@@ -138,7 +138,7 @@ export function createFivemRoles({ fivemData, settings, executor, network, audit
 						? await executor.addRole(issue.guildId, issue.userId, issue.roleId, reason)
 						: await executor.removeRole(issue.guildId, issue.userId, issue.roleId, reason);
 					if (outcome === 'not_member') throw new Error('pas sur le serveur');
-					audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: issue.action === 'add' ? 'fivemroles.add' : 'fivemroles.remove', guildId: issue.guildId, target: issue.userId, details: { rôle: issue.roleId, raison: issue.reason } });
+					await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: issue.action === 'add' ? 'fivemroles.add' : 'fivemroles.remove', guildId: issue.guildId, target: issue.userId, details: { rôle: issue.roleId, raison: issue.reason } });
 					results.push({ key: issue.key, ok: true });
 				}
 				catch (error) {

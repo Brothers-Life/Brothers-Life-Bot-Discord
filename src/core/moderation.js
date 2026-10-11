@@ -49,16 +49,28 @@ export function createModeration({ db, network, ranks, audit, executor, settings
 	// Servers whose lockdown is in progress
 	const lockingDown = new Set();
 
+	// Runs fn after the previous call with the same key has finished (in this process)
+	const queues = new Map();
+	function serialized(key, fn) {
+		const run = (queues.get(key) ?? Promise.resolve()).then(() => fn());
+		const tail = run.catch(() => undefined);
+		queues.set(key, tail);
+		tail.then(() => {
+			if (queues.get(key) === tail) queues.delete(key);
+		});
+		return run;
+	}
+
 	function need(actor, permission) {
 		if (!actor.can(permission)) throw new ForbiddenError(`Permission manquante : ${permission}`);
 	}
 
-	function requireGuild(guildId) {
-		if (network.find(guildId)?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
+	async function requireGuild(guildId) {
+		if ((await network.find(guildId))?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
 	}
 
-	function record(actor, action, guildId, target, details = {}) {
-		audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action, guildId, target, details });
+	async function record(actor, action, guildId, target, details = {}) {
+		await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action, guildId, target, details });
 	}
 
 	// From Discord, a moderator can't hand out a role above their own highest role (the owner can)
@@ -71,56 +83,58 @@ export function createModeration({ db, network, ranks, audit, executor, settings
 	const service = {
 		async clear(actor, { guildId, channelId, count, userId = null, contains = null, botsOnly = false }) {
 			need(actor, 'commands.clear');
-			requireGuild(guildId);
+			await requireGuild(guildId);
 			if (!Number.isInteger(count) || count < 1 || count > 500) throw new ValidationError('Entre 1 et 500 messages.');
 			const deleted = await executor.purgeMessages(channelId, { count, userId, contains: contains?.slice(0, 100) || null, botsOnly });
-			record(actor, 'moderation.clear', guildId, channelId, { channel: `<#${channelId}>`, deleted, ...(userId ? { member: `<@${userId}>` } : {}) });
+			await record(actor, 'moderation.clear', guildId, channelId, { channel: `<#${channelId}>`, deleted, ...(userId ? { member: `<@${userId}>` } : {}) });
 			return deleted;
 		},
 
 		async lock(actor, { guildId, channelId, locked, reason = '' }) {
 			need(actor, 'commands.lock');
-			requireGuild(guildId);
+			await requireGuild(guildId);
 			await executor.setChannelLocked(channelId, locked, `${locked ? 'Verrouillage' : 'Déverrouillage'} par ${actor.id}${reason ? ` : ${reason}` : ''}`);
-			record(actor, locked ? 'moderation.lock' : 'moderation.unlock', guildId, channelId, { channel: `<#${channelId}>`, reason: reason || null });
+			await record(actor, locked ? 'moderation.lock' : 'moderation.unlock', guildId, channelId, { channel: `<#${channelId}>`, reason: reason || null });
 		},
 
 		// Locks every text channel where members can write; remembers them to unlock only those
 		async lockdown(actor, guildId, on, reason = '') {
 			need(actor, 'commands.lockdown');
-			requireGuild(guildId);
+			await requireGuild(guildId);
 			const key = `lockdown.${guildId}`;
 			if (on) {
-				if (settings.get(key) || lockingDown.has(guildId)) throw new ValidationError('Le serveur est déjà verrouillé.');
+				if (lockingDown.has(guildId)) throw new ValidationError('Le serveur est déjà verrouillé.');
 				// A second lockdown during the first one would find nothing left to lock and erase the list to reopen
+				// (taken before the settings are read, so two calls at once can't both pass)
 				lockingDown.add(guildId);
 				let channelIds;
 				try {
+					if (await settings.get(key)) throw new ValidationError('Le serveur est déjà verrouillé.');
 					channelIds = await executor.lockGuild(guildId, `Lockdown par ${actor.id}${reason ? ` : ${reason}` : ''}`);
 				}
 				finally {
 					lockingDown.delete(guildId);
 				}
-				settings.set(key, { channelIds, at: now(), by: actor.id });
-				record(actor, 'moderation.lockdown', guildId, guildId, { channels: channelIds.length, reason: reason || null });
+				await settings.set(key, { channelIds, at: now(), by: actor.id });
+				await record(actor, 'moderation.lockdown', guildId, guildId, { channels: channelIds.length, reason: reason || null });
 				return channelIds.length;
 			}
-			const state = settings.get(key);
+			const state = await settings.get(key);
 			if (!state) throw new ValidationError('Le serveur n’est pas verrouillé.');
 			await executor.unlockChannels(state.channelIds, `Fin du lockdown par ${actor.id}`);
-			settings.set(key, null);
-			record(actor, 'moderation.unlockdown', guildId, guildId, { channels: state.channelIds.length });
+			await settings.set(key, null);
+			await record(actor, 'moderation.unlockdown', guildId, guildId, { channels: state.channelIds.length });
 			return state.channelIds.length;
 		},
 
-		isLockedDown: guildId => Boolean(settings.get(`lockdown.${guildId}`)),
+		isLockedDown: async guildId => Boolean(await settings.get(`lockdown.${guildId}`)),
 
 		async slowmode(actor, { guildId, channelId, seconds }) {
 			need(actor, 'commands.slowmode');
-			requireGuild(guildId);
+			await requireGuild(guildId);
 			if (!Number.isInteger(seconds) || seconds < 0 || seconds > MAX_SLOWMODE) throw new ValidationError('Le mode lent va de 0 à 6 heures.');
 			await executor.setSlowmode(channelId, seconds, `Mode lent par ${actor.id}`);
-			record(actor, 'moderation.slowmode', guildId, channelId, { channel: `<#${channelId}>`, seconds });
+			await record(actor, 'moderation.slowmode', guildId, channelId, { channel: `<#${channelId}>`, seconds });
 		},
 
 		async nick(actor, guildId, userId, nickname) {
@@ -137,7 +151,7 @@ export function createModeration({ db, network, ranks, audit, executor, settings
 			else if (action === 'mute' || action === 'unmute') outcome = await executor.voiceMute(guildId, userId, action === 'mute', reason);
 			else throw new ValidationError('Action vocale inconnue.');
 			if (outcome === 'not_in_voice') throw new ValidationError('Cette personne n’est pas en vocal.');
-			record(actor, `moderation.voice_${action}`, guildId, userId, { member: `<@${userId}>`, ...(channelId ? { channel: `<#${channelId}>` } : {}) });
+			await record(actor, `moderation.voice_${action}`, guildId, userId, { member: `<@${userId}>`, ...(channelId ? { channel: `<#${channelId}>` } : {}) });
 		},
 
 		// --- Roles, possibly for a limited time -------------------------------------------------
@@ -152,21 +166,22 @@ export function createModeration({ db, network, ranks, audit, executor, settings
 			if (outcome === 'not_member') throw new ValidationError('Cette personne n’est pas sur ce serveur.');
 			let temp = null;
 			if (durationMs) {
-				const existing = q.activeTempFor.get(guildId, userId, roleId);
-				if (existing) {
-					q.extend.run(now() + durationMs, existing.id);
-					temp = toTemp(q.temp.get(existing.id));
-				}
-				else {
-					const id = Number(q.insertTemp.run({ guildId, userId, roleId, roleName: role.name, expiresAt: now() + durationMs, reason: reason || null, createdBy: actor.id, createdAt: now() }).lastInsertRowid);
-					temp = toTemp(q.temp.get(id));
-				}
+				// One active grant per member and role: two grants at once (double click) must not both insert
+				temp = await serialized(`${guildId}:${userId}:${roleId}`, async () => {
+					const existing = await q.activeTempFor.get(guildId, userId, roleId);
+					if (existing) {
+						await q.extend.run(now() + durationMs, existing.id);
+						return toTemp(await q.temp.get(existing.id));
+					}
+					const id = Number((await q.insertTemp.run({ guildId, userId, roleId, roleName: role.name, expiresAt: now() + durationMs, reason: reason || null, createdBy: actor.id, createdAt: now() })).lastInsertRowid);
+					return toTemp(await q.temp.get(id));
+				});
 			}
 			else {
 				// Given for good: an earlier temporary grant of the same role no longer expires it
-				q.closeFor.run(now(), actor.id, guildId, userId, roleId);
+				await q.closeFor.run(now(), actor.id, guildId, userId, roleId);
 			}
-			record(actor, durationMs ? 'temproles.add' : 'members.role_add', guildId, userId, {
+			await record(actor, durationMs ? 'temproles.add' : 'members.role_add', guildId, userId, {
 				member: `<@${userId}>`, role: role.name, ...(durationMs ? { duration: formatDuration(durationMs) } : {}), reason: reason || null,
 			});
 			return temp;
@@ -177,41 +192,41 @@ export function createModeration({ db, network, ranks, audit, executor, settings
 			const role = await members.assertGivableRole(actor, guildId, roleId);
 			await checkHierarchy(actor, guildId, role);
 			await executor.removeRole(guildId, userId, roleId, `Retiré par ${actor.id}${reason ? ` : ${reason}` : ''}`);
-			q.closeFor.run(now(), actor.id, guildId, userId, roleId);
-			record(actor, 'members.role_remove', guildId, userId, { member: `<@${userId}>`, role: role.name, reason: reason || null });
+			await q.closeFor.run(now(), actor.id, guildId, userId, roleId);
+			await record(actor, 'members.role_remove', guildId, userId, { member: `<@${userId}>`, role: role.name, reason: reason || null });
 		},
 
-		listTempRoles({ userId, guildId, active = true } = {}) {
+		async listTempRoles({ userId, guildId, active = true } = {}) {
 			const where = [userId && 'user_id = @userId', guildId && 'guild_id = @guildId', active && 'removed_at IS NULL'].filter(Boolean);
-			return db.prepare(`SELECT * FROM temp_roles ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY expires_at LIMIT 500`).all({ userId, guildId }).map(toTemp);
+			return (await db.prepare(`SELECT * FROM temp_roles ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY expires_at LIMIT 500`).all({ userId, guildId })).map(toTemp);
 		},
 
 		async extendTempRole(actor, id, durationMs) {
 			need(actor, 'commands.roles');
-			const temp = toTemp(q.temp.get(id));
+			const temp = toTemp(await q.temp.get(id));
 			if (!temp || temp.removedAt) throw new NotFoundError('Rôle temporaire introuvable ou déjà retiré.');
 			if (!Number.isFinite(durationMs) || durationMs < 60_000 || durationMs > MAX_TEMP_ROLE_MS) throw new ValidationError('Prolongation : entre 1 minute et 1 an.');
-			q.extend.run(Math.max(temp.expiresAt, now()) + durationMs, id);
-			record(actor, 'temproles.extend', temp.guildId, temp.userId, { member: `<@${temp.userId}>`, role: temp.roleName, duration: formatDuration(durationMs) });
-			return toTemp(q.temp.get(id));
+			await q.extend.run(Math.max(temp.expiresAt, now()) + durationMs, id);
+			await record(actor, 'temproles.extend', temp.guildId, temp.userId, { member: `<@${temp.userId}>`, role: temp.roleName, duration: formatDuration(durationMs) });
+			return toTemp(await q.temp.get(id));
 		},
 
 		async removeTempRole(actor, id) {
 			need(actor, 'commands.roles');
-			const temp = toTemp(q.temp.get(id));
+			const temp = toTemp(await q.temp.get(id));
 			if (!temp || temp.removedAt) throw new NotFoundError('Rôle temporaire introuvable ou déjà retiré.');
 			await executor.removeRole(temp.guildId, temp.userId, temp.roleId, `Rôle temporaire retiré par ${actor.id}`);
-			q.close.run(now(), actor.id, id);
-			record(actor, 'temproles.remove', temp.guildId, temp.userId, { member: `<@${temp.userId}>`, role: temp.roleName });
+			await q.close.run(now(), actor.id, id);
+			await record(actor, 'temproles.remove', temp.guildId, temp.userId, { member: `<@${temp.userId}>`, role: temp.roleName });
 		},
 
 		// Every 30 s: temporary roles reaching their end
 		async expireTempRoles() {
-			const due = q.due.all(now()).map(toTemp);
+			const due = (await q.due.all(now())).map(toTemp);
 			let expired = 0;
 			for (const temp of due) {
 				// Closed first: an overlapping tick (slow Discord calls) must not remove and audit it twice
-				if (!q.close.run(now(), 'system', temp.id).changes) continue;
+				if (!(await q.close.run(now(), 'system', temp.id)).changes) continue;
 				expired++;
 				try {
 					await executor.removeRole(temp.guildId, temp.userId, temp.roleId, 'Fin du rôle temporaire');
@@ -220,7 +235,7 @@ export function createModeration({ db, network, ranks, audit, executor, settings
 					// Deleted role or server gone: nothing left to remove
 					logger.warn(`Temporary role #${temp.id} not removed:`, error.message);
 				}
-				audit.record({ actorId: 'system', source: 'system', action: 'temproles.expire', guildId: temp.guildId, target: temp.userId, details: { member: `<@${temp.userId}>`, role: temp.roleName } });
+				await audit.record({ actorId: 'system', source: 'system', action: 'temproles.expire', guildId: temp.guildId, target: temp.userId, details: { member: `<@${temp.userId}>`, role: temp.roleName } });
 			}
 			return expired;
 		},
@@ -229,7 +244,7 @@ export function createModeration({ db, network, ranks, audit, executor, settings
 		async userInfo(actor, userId) {
 			need(actor, 'commands.userinfo');
 			const profile = await members.lookup(userId);
-			return { ...profile, tempRoles: service.listTempRoles({ userId }), principal: await ranks.resolve(userId) };
+			return { ...profile, tempRoles: await service.listTempRoles({ userId }), principal: await ranks.resolve(userId) };
 		},
 	};
 	return service;

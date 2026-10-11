@@ -182,7 +182,7 @@ export async function runCustomInteraction(interaction, command, { componentId =
 export async function runKeywordCommands(message) {
 	const { core } = message.client;
 	if (!message.guild || message.author.bot || !message.content) return;
-	for (const command of core.customCommands.matchKeywords(message.guild.id, message.channelId, message.content)) {
+	for (const command of await core.customCommands.matchKeywords(message.guild.id, message.channelId, message.content)) {
 		const respond = {
 			async reply(msg, { components, commandId }) {
 				await message.reply(customPayload(msg, components, commandId));
@@ -210,15 +210,15 @@ export async function syncCustomCommands(client) {
 	const { core } = client;
 	const { config, settings } = core;
 	const devGuild = config.ENV !== 'prod' && config.DEV_GUILD_ID ? config.DEV_GUILD_ID : null;
-	for (const guild of core.network.list().filter(g => g.status === 'active' && g.botPresent)) {
-		const custom = core.customCommands.guildCommands(guild.id).map(toApplicationCommand);
+	for (const guild of (await core.network.list()).filter(g => g.status === 'active' && g.botPresent)) {
+		const custom = (await core.customCommands.guildCommands(guild.id)).map(toApplicationCommand);
 		const list = guild.id === devGuild ? [...client.commands.values()].map(c => c.data.toJSON()).concat(custom) : custom;
 		const hash = createHash('sha256').update(JSON.stringify(list)).digest('hex');
 		const key = `commands.custom.${guild.id}`;
-		if (settings.get(key) === hash) continue;
+		if (await settings.get(key) === hash) continue;
 		try {
 			await client.application.commands.set(list, guild.id);
-			settings.set(key, hash);
+			await settings.set(key, hash);
 		}
 		catch (error) {
 			logger.warn(`Custom commands not registered on ${guild.name}:`, error.message);

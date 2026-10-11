@@ -29,7 +29,7 @@ export async function autocomplete(interaction) {
 	const actor = await actorOf(interaction);
 	const focused = interaction.options.getFocused(true);
 	if (focused.name === 'modele') {
-		const list = sanctionTemplates.suggest(actor, focused.value);
+		const list = await sanctionTemplates.suggest(actor, focused.value);
 		return interaction.respond(list.map(t => ({
 			name: `${TYPE_EMOJI[t.type]} ${t.name}${t.durationLabel ? ` · ${t.durationLabel}` : ''}`.slice(0, 100),
 			value: String(t.id),
@@ -40,8 +40,8 @@ export async function autocomplete(interaction) {
 	const typed = String(focused.value ?? '').toLowerCase().replace(/^#/, '');
 	// To lift: what is still running (ban, timeout, restriction) and the warns not yet removed
 	const list = interaction.options.getSubcommand() === 'lever'
-		? [...sanctions.list({ active: true, limit: 100 }), ...sanctions.list({ type: 'warn', limit: 100 }).filter(w => !w.revokedAt)].sort((a, b) => b.id - a.id)
-		: sanctions.list({ limit: 100 });
+		? [...await sanctions.list({ active: true, limit: 100 }), ...(await sanctions.list({ type: 'warn', limit: 100 })).filter(w => !w.revokedAt)].sort((a, b) => b.id - a.id)
+		: await sanctions.list({ limit: 100 });
 	const matches = list.filter(s => !typed || String(s.id).startsWith(typed) || (s.userName ?? '').toLowerCase().includes(typed) || s.userId === typed);
 	await interaction.respond(matches.slice(0, 25).map(sanctionChoice));
 }
@@ -50,21 +50,21 @@ export async function execute(interaction) {
 	await runModeration(interaction, async (actor) => {
 		const { sanctions, sanctionTemplates, restrictions } = interaction.client.core;
 		const id = interaction.options.getInteger('id');
-		const withProfile = s => ({ ...s, profileLabel: s.profile ? restrictions.getProfile(s.profile).label : null });
+		const withProfile = async s => ({ ...s, profileLabel: s.profile ? (await restrictions.getProfile(s.profile)).label : null });
 		switch (interaction.options.getSubcommand()) {
 		case 'modele': {
-			const input = sanctionTemplates.resolve(Number(interaction.options.getString('modele')), {
+			const input = await sanctionTemplates.resolve(Number(interaction.options.getString('modele')), {
 				extra: interaction.options.getString('precision') ?? '',
 				durationMs: durationOption(interaction, 'duree'),
 				scope: interaction.options.getBoolean('local') ? 'local' : undefined,
 			});
 			const sanction = await sanctions.create(actor, { ...input, userId: interaction.options.getUser('membre').id, originGuildId: interaction.guildId });
-			return { embeds: [sanctionEmbed(withProfile(sanction))] };
+			return { embeds: [sanctionEmbed(await withProfile(sanction))] };
 		}
 		case 'voir': {
 			if (!actor.can('sanctions.view')) throw new ForbiddenError('Permission manquante : sanctions.view');
-			const sanction = sanctions.get(id);
-			const embed = sanctionEmbed(withProfile(sanction));
+			const sanction = await sanctions.get(id);
+			const embed = sanctionEmbed(await withProfile(sanction));
 			embed.addFields(
 				{ name: 'Par', value: /^\d+$/.test(sanction.moderatorId) ? `<@${sanction.moderatorId}>` : sanction.moderatorId, inline: true },
 				{ name: 'Le', value: `<t:${Math.round(sanction.createdAt / 1000)}:f>`, inline: true },
@@ -74,11 +74,11 @@ export async function execute(interaction) {
 		}
 		case 'lever': {
 			const revoked = await sanctions.revoke(actor, id, interaction.options.getString('raison') ?? '');
-			return { embeds: [sanctionEmbed(withProfile(revoked), { revoked: true })] };
+			return { embeds: [sanctionEmbed(await withProfile(revoked), { revoked: true })] };
 		}
 		case 'raison': {
-			const updated = sanctions.setReason(actor, id, interaction.options.getString('texte'));
-			return { embeds: [sanctionEmbed(withProfile(updated))] };
+			const updated = await sanctions.setReason(actor, id, interaction.options.getString('texte'));
+			return { embeds: [sanctionEmbed(await withProfile(updated))] };
 		}
 		}
 		return { content: 'Sous-commande inconnue.' };

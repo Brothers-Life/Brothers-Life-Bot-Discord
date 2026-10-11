@@ -35,18 +35,18 @@ export async function autocomplete(interaction) {
 	const focused = interaction.options.getFocused(true);
 	const typed = String(focused.value ?? '').toLowerCase();
 	if (focused.name === 'nom') {
-		const ticket = interaction.client.core.tickets.findByChannel(interaction.channelId);
-		const replies = ticket ? interaction.client.core.tickets.ticketReplies(ticket.id) : [];
+		const ticket = await interaction.client.core.tickets.findByChannel(interaction.channelId);
+		const replies = ticket ? await interaction.client.core.tickets.ticketReplies(ticket.id) : [];
 		return interaction.respond(replies.filter(r => r.name.toLowerCase().includes(typed)).slice(0, 25).map(r => ({ name: r.name.slice(0, 100), value: String(r.id) })));
 	}
-	const statuses = interaction.client.core.tickets.statuses(interaction.guildId).filter(s => s.key !== 'closed');
+	const statuses = (await interaction.client.core.tickets.statuses(interaction.guildId)).filter(s => s.key !== 'closed');
 	await interaction.respond(statuses.filter(s => s.label.toLowerCase().includes(typed)).slice(0, 25).map(s => ({ name: `${s.emoji ?? ''} ${s.label}`.trim(), value: s.key })));
 }
 
 export async function execute(interaction) {
 	const { tickets } = interaction.client.core;
 	const sub = interaction.options.getSubcommand();
-	const ticket = tickets.findByChannel(interaction.channelId, { includeClosed: sub === 'rouvrir' });
+	const ticket = await tickets.findByChannel(interaction.channelId, { includeClosed: sub === 'rouvrir' });
 	if (!ticket) return interaction.reply({ content: 'Cette commande s’utilise dans le salon d’un ticket.', flags: MessageFlags.Ephemeral });
 	const me = interaction.user.id;
 	const member = interaction.options.getUser('membre');
@@ -71,7 +71,7 @@ export async function execute(interaction) {
 			return await interaction.editReply({ content: `Ticket confié à <@${member.id}>.`, allowedMentions: { users: [member.id] } });
 		case 'statut': {
 			const updated = await tickets.setStatus(me, ticket.id, interaction.options.getString('statut'));
-			const status = tickets.statuses(updated.guildId).find(s => s.key === updated.statusKey);
+			const status = (await tickets.statuses(updated.guildId)).find(s => s.key === updated.statusKey);
 			return await interaction.reply({ content: `Statut : ${status?.emoji ?? ''} **${status?.label}**`, allowedMentions: { parse: [] } });
 		}
 		case 'priorite': {

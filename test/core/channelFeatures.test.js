@@ -32,11 +32,11 @@ test('counting: the right number in turn, a mistake resets the count, a deleted 
 	await say(COUNT, ALICE, '1');
 	await say(COUNT, BOB, 'blabla');
 	assert.ok(executor.deleted.some(([c]) => c === COUNT), 'text without a number is removed');
-	const state = core.channelFeatures.list(MAIN).find(f => f.kind === 'counting').state;
+	const state = (await core.channelFeatures.list(MAIN)).find(f => f.kind === 'counting').state;
 	assert.deepEqual([state.count, state.best, state.fails], [1, 2, 1]);
 	await core.channelFeatures.onDelete(COUNT, state.lastMessageId);
 	assert.match(executor.messages.at(-1).payload.content, /prochain est \*\*2\*\*/);
-	core.channelFeatures.setCount(owner, COUNT, 50);
+	await core.channelFeatures.setCount(owner, COUNT, 50);
 	await say(COUNT, CAROL, '51');
 	assert.equal(executor.reactions.at(-1)[2], '✅');
 });
@@ -55,7 +55,7 @@ test('one word each: the story is told word by word, a sentence ends with a dot'
 	const sentence = executor.messages.at(-1).payload.embed;
 	assert.equal(sentence.description, '« Il était une fois. »');
 	assert.match(sentence.footerText, /4 mots · 3 participants/);
-	assert.equal(core.channelFeatures.list(MAIN)[0].state.words.length, 0);
+	assert.equal((await core.channelFeatures.list(MAIN))[0].state.words.length, 0);
 });
 
 test('media only, auto-publish, sticky message; one game per channel; permission', async () => {
@@ -75,7 +75,7 @@ test('media only, auto-publish, sticky message; one game per channel; permission
 	assert.equal(executor.crossposted.length, 1);
 
 	await core.channelFeatures.set(owner, { guildId: MAIN, channelId: STICKY, kind: 'sticky', config: { payload: { content: 'Lisez les règles 👆', embed: { enabled: false } }, delaySeconds: 3 } });
-	const first = core.channelFeatures.list(MAIN).find(f => f.kind === 'sticky').state.messageId;
+	const first = (await core.channelFeatures.list(MAIN)).find(f => f.kind === 'sticky').state.messageId;
 	assert.ok(first, 'posted at once');
 	await core.channelFeatures.remove(owner, STICKY, 'sticky');
 	assert.ok(executor.deleted.some(([c, m]) => c === STICKY && m === first), 'removed with its message');
@@ -88,8 +88,8 @@ test('verification: button or captcha, young accounts refused, slow newcomers ki
 	const { core, owner, executor } = ctx;
 	const VERIFIED = '800000000000000101';
 	const UNVERIFIED = '800000000000000102';
-	assert.throws(() => core.verification.setConfig(owner, MAIN, { enabled: true }), ValidationError);
-	core.verification.setConfig(owner, MAIN, { enabled: true, mode: 'captcha', channelId: '610000000000000200', verifiedRoleId: VERIFIED, unverifiedRoleId: UNVERIFIED, minAccountAgeDays: 7, kickAfterMinutes: 30 });
+	await assert.rejects(async () => core.verification.setConfig(owner, MAIN, { enabled: true }), ValidationError);
+	await core.verification.setConfig(owner, MAIN, { enabled: true, mode: 'captcha', channelId: '610000000000000200', verifiedRoleId: VERIFIED, unverifiedRoleId: UNVERIFIED, minAccountAgeDays: 7, kickAfterMinutes: 30 });
 	await core.verification.publish(owner, MAIN);
 	assert.equal(executor.verificationPanels[0].config.mode, 'captcha');
 
@@ -102,17 +102,17 @@ test('verification: button or captcha, young accounts refused, slow newcomers ki
 	await core.verification.answer(MAIN, ALICE, ` ${code.toLowerCase()} `);
 	const roles = executor.memberRoles.get(`${MAIN}:${ALICE}`);
 	assert.ok(roles.includes(VERIFIED) && !roles.includes(UNVERIFIED));
-	assert.equal(core.verification.pending(MAIN), 0);
+	assert.equal(await core.verification.pending(MAIN), 0);
 
 	// Not verified within 30 minutes: kicked
 	executor.members.set(MAIN, new Set([BOB]));
 	await core.verification.memberJoined(MAIN, BOB);
 	clock += 0;
-	core.db.prepare('UPDATE verification_pending SET joined_at = ? WHERE user_id = ?').run(clock - 31 * 60_000, BOB);
+	await core.db.prepare('UPDATE verification_pending SET joined_at = ? WHERE user_id = ?').run(clock - 31 * 60_000, BOB);
 	await core.verification.tick();
 	assert.ok(executor.calls.some(c => c[0] === 'kick' && c[2] === BOB));
 
-	core.verification.setConfig(owner, MAIN, { enabled: true, mode: 'button', verifiedRoleId: VERIFIED });
+	await core.verification.setConfig(owner, MAIN, { enabled: true, mode: 'button', verifiedRoleId: VERIFIED });
 	assert.deepEqual(await core.verification.start(MAIN, CAROL), { verified: true });
 });
 
@@ -129,7 +129,7 @@ test('embed builder: several embeds and link buttons, posted then edited in plac
 	await core.embedBuilder.post(owner, saved.id, { guildId: MAIN, channelId: '610000000000000301' });
 	assert.ok(executor.deleted.some(([c, m]) => c === '610000000000000300' && m === posted.messageId), 'moved: the old message is deleted');
 	await core.embedBuilder.remove(owner, saved.id);
-	assert.equal(core.embedBuilder.list().length, 0);
+	assert.equal((await core.embedBuilder.list()).length, 0);
 });
 
 test('embed builder: up to 3 stickers, only from the server where the message is posted', async () => {
@@ -139,6 +139,6 @@ test('embed builder: up to 3 stickers, only from the server where the message is
 	const saved = await core.embedBuilder.save(owner, { payload: { content: 'Salut', stickers: ['990000000000000001'] } });
 	await core.embedBuilder.post(owner, saved.id, { guildId: MAIN, channelId: '610000000000000300' });
 	assert.deepEqual(executor.builtMessages.at(-1).payload.stickers, ['990000000000000001']);
-	core.network.activate(owner, OTHER);
+	await core.network.activate(owner, OTHER);
 	await assert.rejects(core.embedBuilder.post(owner, saved.id, { guildId: OTHER, channelId: '620000000000000300' }), /autre serveur/);
 });

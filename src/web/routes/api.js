@@ -14,7 +14,7 @@ export function registerApiRoutes(app, { core, runtime, routes }) {
 		config: { permission: null, apiKey: false },
 		schema: { querystring: { type: 'object', properties: { all: { type: 'boolean' } } } },
 	}, async (request) => {
-		const keys = apiKeys.list(request.actor, { all: request.query.all });
+		const keys = await apiKeys.list(request.actor, { all: request.query.all });
 		const names = await resolveNames(executor, keys.map(k => k.ownerId));
 		return {
 			keys: keys.map(k => ({ ...k, owner: names.get(k.ownerId) ?? null })),
@@ -41,13 +41,13 @@ export function registerApiRoutes(app, { core, runtime, routes }) {
 		},
 	}, async (request, reply) => {
 		reply.code(201);
-		return apiKeys.create(request.actor, request.body);
+		return await apiKeys.create(request.actor, request.body);
 	});
 
 	app.delete('/api/api-keys/:id', {
 		config: { permission: null, apiKey: false },
 		schema: { params: { type: 'object', properties: { id: { type: 'integer' } }, required: ['id'] } },
-	}, async (request) => apiKeys.revoke(request.actor, request.params.id));
+	}, async (request) => await apiKeys.revoke(request.actor, request.params.id));
 
 	// Documentation: reachable from the panel and with any valid key
 	app.get('/api/api-docs', { config: { permission: null } }, async (request) => ({

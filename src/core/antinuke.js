@@ -94,15 +94,27 @@ export function createAntinuke({ db, network, ranks, audit, executor, settings, 
 		get: db.prepare('SELECT * FROM antinuke_incidents WHERE id = ?'),
 		open: db.prepare('SELECT * FROM antinuke_incidents WHERE user_id = ? AND status = \'open\' ORDER BY id DESC LIMIT 1'),
 		list: db.prepare('SELECT * FROM antinuke_incidents ORDER BY id DESC LIMIT ?'),
-		resolve: db.prepare('UPDATE antinuke_incidents SET status = ?, resolved_at = ?, resolved_by = ?, failures = ? WHERE id = ?'),
+		resolve: db.prepare('UPDATE antinuke_incidents SET status = ?, resolved_at = ?, resolved_by = ?, failures = ? WHERE id = ? AND status = \'open\''),
 	};
 
 	// userId -> [{ type, guildId, targetId, targetName, at }] of the recent actions (every server mixed)
 	const recent = new Map();
 	let cache = null;
+	// userId -> tail of the chain of their actions being handled
+	const locks = new Map();
 
-	function config() {
-		cache ??= normalizeAntinuke(settings.get(SETTINGS_KEY, {}));
+	function locked(userId, fn) {
+		const run = (locks.get(userId) ?? Promise.resolve()).catch(() => undefined).then(fn);
+		const tail = run.catch(() => undefined);
+		locks.set(userId, tail);
+		tail.then(() => {
+			if (locks.get(userId) === tail) locks.delete(userId);
+		});
+		return run;
+	}
+
+	async function config() {
+		cache ??= normalizeAntinuke(await settings.get(SETTINGS_KEY, {}));
 		return cache;
 	}
 
@@ -128,7 +140,7 @@ export function createAntinuke({ db, network, ranks, audit, executor, settings, 
 	}
 
 	async function isExempt(userId) {
-		const cfg = config();
+		const cfg = await config();
 		if (userId === ownerId || userId === executor.botUserId?.()) return true;
 		if (cfg.whitelistUserIds.includes(userId)) return true;
 		const principal = await ranks.resolve(userId).catch(() => null);
@@ -137,8 +149,8 @@ export function createAntinuke({ db, network, ranks, audit, executor, settings, 
 	}
 
 	// Actions of this user still inside the window of their type
-	function windowOf(userId, type, windowSeconds) {
-		const maxWindow = Math.max(...Object.values(config().actions).map(a => a.windowSeconds)) * 1000;
+	function windowOf(cfg, userId, type, windowSeconds) {
+		const maxWindow = Math.max(...Object.values(cfg.actions).map(a => a.windowSeconds)) * 1000;
 		const list = (recent.get(userId) ?? []).filter(a => now() - a.at <= maxWindow);
 		recent.set(userId, list);
 		return list.filter(a => a.type === type && now() - a.at <= windowSeconds * 1000);
@@ -154,11 +166,11 @@ export function createAntinuke({ db, network, ranks, audit, executor, settings, 
 
 	// Takes the roles away on every network server; returns { removed: { guildId: [roleId] }, failures, timedOut }
 	async function strip(userId, reason) {
-		const cfg = config();
+		const cfg = await config();
 		const removed = {};
 		const failures = [];
 		let timedOut = false;
-		for (const guildId of network.activeIds()) {
+		for (const guildId of await network.activeIds()) {
 			let memberRoleIds;
 			try {
 				memberRoleIds = await executor.getMemberRoleIds(guildId, userId);
@@ -198,7 +210,10 @@ export function createAntinuke({ db, network, ranks, audit, executor, settings, 
 
 	async function alert(incident) {
 		const removedCount = Object.values(incident.removedRoles).reduce((n, list) => n + list.length, 0);
-		const guildName = id => network.find(id)?.name ?? id;
+		const names = new Map();
+		for (const id of new Set([...Object.keys(incident.removedRoles), ...incident.failures.map(f => f.guildId)])) names.set(id, (await network.find(id))?.name ?? id);
+		const guildName = id => names.get(id) ?? id;
+		const cfg = await config();
 		const message = {
 			title: '☢️ Anti-nuke : compte mis en quarantaine',
 			description: `<@${incident.userId}> a dépassé la limite « ${label(incident.trigger)} ». Ses rôles dangereux ont été retirés sur le réseau. Rends-les depuis le panel (page Anti-nuke) si c’était légitime.`,
@@ -206,15 +221,15 @@ export function createAntinuke({ db, network, ranks, audit, executor, settings, 
 				{ name: 'Actions comptées', value: summary(incident.actions) || '—' },
 				{ name: 'Rôles retirés', value: removedCount ? Object.entries(incident.removedRoles).map(([g, list]) => `${guildName(g)} : ${list.map(id => `<@&${id}>`).join(' ')}`).join('\n') : 'aucun', inline: false },
 				...(incident.failures.length ? [{ name: 'Échecs', value: incident.failures.slice(0, 10).map(f => `${guildName(f.guildId)} · ${f.name ?? 'membre'} : ${f.reason}`).join('\n') }] : []),
-				...(incident.timedOut ? [{ name: 'Timeout', value: `${config().timeoutMinutes} min`, inline: true }] : []),
+				...(incident.timedOut ? [{ name: 'Timeout', value: `${cfg.timeoutMinutes} min`, inline: true }] : []),
 				{ name: 'Incident', value: `#${incident.id}`, inline: true },
 			],
 			color: 'danger',
 			authorId: incident.userId,
 			thumbnailUserId: incident.userId,
 		};
-		logs.log(incident.guildId, 'antinuke', message, 'quarantine');
-		if (config().dmOwner && ownerId && ownerId !== incident.userId) {
+		await logs.log(incident.guildId, 'antinuke', message, 'quarantine');
+		if (cfg.dmOwner && ownerId && ownerId !== incident.userId) {
 			const text = [
 				`☢️ **Anti-nuke** : <@${incident.userId}> (${incident.userId}) a été mis en quarantaine (incident #${incident.id}).`,
 				`Limite dépassée : ${label(incident.trigger)}.`,
@@ -225,16 +240,20 @@ export function createAntinuke({ db, network, ranks, audit, executor, settings, 
 		}
 	}
 
-	async function quarantine(userId, guildId, trigger, actions) {
-		// Synchronous claim: a burst of audit entries must not start two quarantines
-		const { lastInsertRowid } = q.insert.run({ userId, guildId, trigger, actions: JSON.stringify(actions), at: now() });
-		const id = Number(lastInsertRowid);
+	// The open incident is checked and created under a per-user lock (see record): a burst of audit entries
+	// must not start two quarantines
+	async function claim(userId, guildId, trigger, actions) {
+		const { lastInsertRowid } = await q.insert.run({ userId, guildId, trigger, actions: JSON.stringify(actions), at: now() });
 		recent.delete(userId);
+		return Number(lastInsertRowid);
+	}
+
+	async function quarantine(userId, guildId, trigger, id) {
 		const reason = `Anti-nuke : limite « ${label(trigger)} » dépassée (incident #${id})`;
 		const { removed, failures, timedOut } = await strip(userId, reason);
-		q.finish.run(JSON.stringify(removed), JSON.stringify(failures), timedOut ? 1 : 0, id);
-		const incident = toIncident(q.get.get(id));
-		audit.record({
+		await q.finish.run(JSON.stringify(removed), JSON.stringify(failures), timedOut ? 1 : 0, id);
+		const incident = toIncident(await q.get.get(id));
+		await audit.record({
 			actorId: 'antinuke', source: 'system', action: 'antinuke.quarantine', guildId, target: userId,
 			details: { trigger: label(trigger), roles: Object.values(removed).flat().length, failures: failures.length },
 		});
@@ -247,23 +266,23 @@ export function createAntinuke({ db, network, ranks, audit, executor, settings, 
 		get: config,
 		isExempt,
 
-		save(actor, input) {
+		async save(actor, input) {
 			requireManage(actor);
 			const next = normalizeAntinuke(input);
-			const known = new Set(ranks.list().map(r => r.id));
+			const known = new Set((await ranks.list()).map(r => r.id));
 			next.whitelistRankIds = next.whitelistRankIds.filter(id => known.has(id));
-			settings.set(SETTINGS_KEY, next);
+			await settings.set(SETTINGS_KEY, next);
 			cache = null;
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'antinuke.config', target: 'antinuke', details: { enabled: next.enabled } });
-			return config();
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'antinuke.config', target: 'antinuke', details: { enabled: next.enabled } });
+			return await config();
 		},
 
 		// One destructive action seen in the audit log of a network server.
 		// Returns { counted, exempt, incident } (incident: the quarantine it triggered, if any)
 		async record(guildId, { type, executorId, targetId = null, targetName = null }) {
-			const cfg = config();
+			const cfg = await config();
 			const rule = cfg.actions[type];
-			if (!cfg.enabled || !rule || !executorId || network.find(guildId)?.status !== 'active') return { counted: false };
+			if (!cfg.enabled || !rule || !executorId || (await network.find(guildId))?.status !== 'active') return { counted: false };
 			if (await isExempt(executorId)) return { counted: false, exempt: true };
 
 			const action = { type, guildId, targetId, targetName, at: now() };
@@ -272,37 +291,43 @@ export function createAntinuke({ db, network, ranks, audit, executor, settings, 
 			if (type === 'bot_add' && cfg.kickBots && targetId) {
 				try {
 					await executor.kick(guildId, targetId, 'Anti-nuke : bot ajouté par un compte non autorisé');
-					audit.record({ actorId: 'antinuke', source: 'system', action: 'antinuke.bot_kick', guildId, target: targetId, details: { bot: targetName ?? targetId, addedBy: `<@${executorId}>` } });
+					await audit.record({ actorId: 'antinuke', source: 'system', action: 'antinuke.bot_kick', guildId, target: targetId, details: { bot: targetName ?? targetId, addedBy: `<@${executorId}>` } });
 				}
 				catch (error) {
 					logger.warn(`Anti-nuke kick of bot ${targetId} on ${guildId} failed:`, error.message);
 				}
 			}
 
-			// Already in quarantine: the incident keeps track, nothing is taken twice
-			const open = q.open.get(executorId);
-			if (open) {
-				const actions = [...JSON.parse(open.actions), action].slice(-100);
-				q.actions.run(JSON.stringify(actions), open.id);
-				return { counted: true, incident: null };
-			}
-			if (!rule.enabled) return { counted: false };
+			// One action of a user at a time from here: the open incident is read then written
+			const outcome = await locked(executorId, async () => {
+				// Already in quarantine: the incident keeps track, nothing is taken twice
+				const open = await q.open.get(executorId);
+				if (open) {
+					const actions = [...JSON.parse(open.actions), action].slice(-100);
+					await q.actions.run(JSON.stringify(actions), open.id);
+					return { counted: true, incident: null };
+				}
+				if (!rule.enabled) return { counted: false };
 
-			const list = recent.get(executorId) ?? [];
-			list.push(action);
-			recent.set(executorId, list);
-			const inWindow = windowOf(executorId, type, rule.windowSeconds);
-			if (inWindow.length < rule.limit) return { counted: true, incident: null };
-			return { counted: true, incident: await quarantine(executorId, guildId, type, recent.get(executorId) ?? inWindow) };
+				const list = recent.get(executorId) ?? [];
+				list.push(action);
+				recent.set(executorId, list);
+				const inWindow = windowOf(cfg, executorId, type, rule.windowSeconds);
+				if (inWindow.length < rule.limit) return { counted: true, incident: null };
+				return { counted: true, claimed: await claim(executorId, guildId, type, recent.get(executorId) ?? inWindow) };
+			});
+			if (!outcome.claimed) return outcome;
+			return { counted: true, incident: await quarantine(executorId, guildId, type, outcome.claimed) };
 		},
 
 		// Counters still running (for the panel): [{ userId, actions: { type: count } }]
-		live() {
+		async live() {
 			const out = [];
+			const cfg = await config();
 			for (const [userId, list] of recent) {
 				const counts = {};
 				for (const a of list) {
-					const rule = config().actions[a.type];
+					const rule = cfg.actions[a.type];
 					if (rule && now() - a.at <= rule.windowSeconds * 1000) counts[a.type] = (counts[a.type] ?? 0) + 1;
 				}
 				if (Object.keys(counts).length) out.push({ userId, actions: counts });
@@ -310,12 +335,12 @@ export function createAntinuke({ db, network, ranks, audit, executor, settings, 
 			return out;
 		},
 
-		incidents(limit = 50) {
-			return q.list.all(limit).map(toIncident);
+		async incidents(limit = 50) {
+			return (await q.list.all(limit)).map(toIncident);
 		},
 
-		incident(id) {
-			const row = q.get.get(id);
+		async incident(id) {
+			const row = await q.get.get(id);
 			if (!row) throw new NotFoundError('Incident introuvable.');
 			return toIncident(row);
 		},
@@ -323,7 +348,7 @@ export function createAntinuke({ db, network, ranks, audit, executor, settings, 
 		// "Rendre les rôles": everything taken by the quarantine goes back (and the timeout is lifted)
 		async restore(actor, id) {
 			requireManage(actor);
-			const incident = service.incident(id);
+			const incident = await service.incident(id);
 			if (incident.status !== 'open') throw new ValidationError('Cet incident est déjà clos.');
 			const failures = [];
 			let given = 0;
@@ -341,21 +366,22 @@ export function createAntinuke({ db, network, ranks, audit, executor, settings, 
 				}
 			}
 			if (incident.timedOut) {
-				for (const guildId of network.activeIds()) await executor.timeout(guildId, incident.userId, null, reason).catch(() => undefined);
+				for (const guildId of await network.activeIds()) await executor.timeout(guildId, incident.userId, null, reason).catch(() => undefined);
 			}
-			q.resolve.run('restored', now(), actor.id, JSON.stringify([...incident.failures, ...failures]), id);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'antinuke.restore', guildId: incident.guildId, target: incident.userId, details: { incident: id, roles: given, failures: failures.length } });
-			return { ...service.incident(id), given, restoreFailures: failures };
+			// Two restores at the same time: only the first one closes the incident and is recorded
+			if (!(await q.resolve.run('restored', now(), actor.id, JSON.stringify([...incident.failures, ...failures]), id)).changes) throw new ValidationError('Cet incident est déjà clos.');
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'antinuke.restore', guildId: incident.guildId, target: incident.userId, details: { incident: id, roles: given, failures: failures.length } });
+			return { ...await service.incident(id), given, restoreFailures: failures };
 		},
 
 		// Closes the incident without giving anything back
-		dismiss(actor, id) {
+		async dismiss(actor, id) {
 			requireManage(actor);
-			const incident = service.incident(id);
+			const incident = await service.incident(id);
 			if (incident.status !== 'open') throw new ValidationError('Cet incident est déjà clos.');
-			q.resolve.run('dismissed', now(), actor.id, JSON.stringify(incident.failures), id);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'antinuke.dismiss', guildId: incident.guildId, target: incident.userId, details: { incident: id } });
-			return service.incident(id);
+			if (!(await q.resolve.run('dismissed', now(), actor.id, JSON.stringify(incident.failures), id)).changes) throw new ValidationError('Cet incident est déjà clos.');
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'antinuke.dismiss', guildId: incident.guildId, target: incident.userId, details: { incident: id } });
+			return await service.incident(id);
 		},
 	};
 	return service;

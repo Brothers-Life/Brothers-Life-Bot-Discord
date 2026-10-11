@@ -30,21 +30,21 @@ export function createBackups({ db, network, audit, executor, settings, template
 
 	const q = {
 		insert: db.prepare('INSERT INTO server_backups (guild_id, name, kind, data, roles, channels, members, size, created_by, created_at) VALUES (@guildId, @name, @kind, @data, @roles, @channels, @members, @size, @by, @at)'),
-		list: db.prepare('SELECT id, guild_id, name, kind, roles, channels, members, size, created_by, created_at FROM server_backups ORDER BY created_at DESC LIMIT 500'),
-		listGuild: db.prepare('SELECT id, guild_id, name, kind, roles, channels, members, size, created_by, created_at FROM server_backups WHERE guild_id = ? ORDER BY created_at DESC'),
+		list: db.prepare('SELECT id, guild_id, name, kind, roles, channels, members, size, created_by, created_at FROM server_backups ORDER BY created_at DESC, id DESC LIMIT 500'),
+		listGuild: db.prepare('SELECT id, guild_id, name, kind, roles, channels, members, size, created_by, created_at FROM server_backups WHERE guild_id = ? ORDER BY created_at DESC, id DESC'),
 		get: db.prepare('SELECT * FROM server_backups WHERE id = ?'),
 		delete: db.prepare('DELETE FROM server_backups WHERE id = ?'),
-		autos: db.prepare('SELECT id FROM server_backups WHERE guild_id = ? AND kind = \'auto\' ORDER BY created_at DESC'),
+		autos: db.prepare('SELECT id FROM server_backups WHERE guild_id = ? AND kind = \'auto\' ORDER BY created_at DESC, id DESC'),
 		lastAuto: db.prepare('SELECT created_at FROM server_backups WHERE guild_id = ? AND kind = \'auto\' ORDER BY created_at DESC LIMIT 1'),
 	};
 
-	const toSummary = row => ({
-		id: row.id, guildId: row.guild_id, guildName: network.find(row.guild_id)?.name ?? row.guild_id, name: row.name, kind: row.kind,
+	const toSummary = async row => ({
+		id: row.id, guildId: row.guild_id, guildName: (await network.find(row.guild_id))?.name ?? row.guild_id, name: row.name, kind: row.kind,
 		roles: row.roles, channels: row.channels, members: row.members, size: row.size, createdBy: row.created_by, createdAt: row.created_at,
 	});
 
-	function getOrThrow(id) {
-		const row = q.get.get(id);
+	async function getOrThrow(id) {
+		const row = await q.get.get(id);
 		if (!row) throw new NotFoundError('Sauvegarde introuvable.');
 		return row;
 	}
@@ -53,8 +53,8 @@ export function createBackups({ db, network, audit, executor, settings, template
 		if (!actor.can(permission)) throw new ForbiddenError(`Permission manquante : ${permission}`);
 	}
 
-	function config() {
-		return normalizeBackupConfig(settings.get('backups.config', DEFAULT_BACKUP_CONFIG));
+	async function config() {
+		return normalizeBackupConfig(await settings.get('backups.config', DEFAULT_BACKUP_CONFIG));
 	}
 
 	function dataOf(row) {
@@ -62,7 +62,7 @@ export function createBackups({ db, network, audit, executor, settings, template
 	}
 
 	async function take(guildId, { name, kind, by }) {
-		const guild = network.find(guildId);
+		const guild = await network.find(guildId);
 		if (guild?.status !== 'active' || !guild.botPresent) throw new ValidationError('Serveur inactif ou sans le bot.');
 		const snapshot = await templates.photo(guildId);
 		const memberRoles = await executor.snapshotMemberRoles(guildId).catch((error) => {
@@ -70,13 +70,13 @@ export function createBackups({ db, network, audit, executor, settings, template
 			return [];
 		});
 		const data = gzipSync(Buffer.from(JSON.stringify({ version: 1, snapshot, memberRoles })));
-		const id = Number(q.insert.run({
+		const id = Number((await q.insert.run({
 			guildId, name, kind, data, roles: snapshot.guild.roles.filter(r => !r.everyone).length, channels: snapshot.guild.channels.length,
 			members: memberRoles.length, size: data.length, by, at: now(),
-		}).lastInsertRowid);
+		})).lastInsertRowid);
 		// Automatic ones: only the last N are kept; manual ones stay until deleted
-		if (kind === 'auto') for (const old of q.autos.all(guildId).slice(config().keep)) q.delete.run(old.id);
-		return toSummary(getOrThrow(id));
+		if (kind === 'auto') for (const old of (await q.autos.all(guildId)).slice((await config()).keep)) await q.delete.run(old.id);
+		return await toSummary(await getOrThrow(id));
 	}
 
 	function dateName(at) {
@@ -85,69 +85,69 @@ export function createBackups({ db, network, audit, executor, settings, template
 
 	return {
 		config,
-		list: guildId => (guildId ? q.listGuild.all(guildId) : q.list.all()).map(toSummary),
-		get: id => toSummary(getOrThrow(id)),
+		list: async guildId => Promise.all((guildId ? await q.listGuild.all(guildId) : await q.list.all()).map(toSummary)),
+		get: async id => toSummary(await getOrThrow(id)),
 
 		// Content of a backup (download)
-		content(actor, id) {
+		async content(actor, id) {
 			need(actor, 'backups.manage');
-			return dataOf(getOrThrow(id));
+			return dataOf(await getOrThrow(id));
 		},
 
-		setConfig(actor, input) {
+		async setConfig(actor, input) {
 			need(actor, 'backups.manage');
 			const c = normalizeBackupConfig(input);
-			settings.set('backups.config', c);
-			audit.record({ actorId: actor.id, source: 'panel', action: 'backups.config', target: 'backups', details: { enabled: c.enabled, hour: c.hour, keep: c.keep } });
+			await settings.set('backups.config', c);
+			await audit.record({ actorId: actor.id, source: 'panel', action: 'backups.config', target: 'backups', details: { enabled: c.enabled, hour: c.hour, keep: c.keep } });
 			return c;
 		},
 
 		async create(actor, guildId, name = '') {
 			need(actor, 'backups.manage');
 			const backup = await take(guildId, { name: String(name).trim().slice(0, 80) || `Manuelle du ${dateName(now())}`, kind: 'manual', by: actor.id });
-			audit.record({ actorId: actor.id, source: 'panel', action: 'backups.create', guildId, target: String(backup.id), details: { name: backup.name, roles: backup.roles, channels: backup.channels, members: backup.members } });
+			await audit.record({ actorId: actor.id, source: 'panel', action: 'backups.create', guildId, target: String(backup.id), details: { name: backup.name, roles: backup.roles, channels: backup.channels, members: backup.members } });
 			return backup;
 		},
 
-		remove(actor, id) {
+		async remove(actor, id) {
 			need(actor, 'backups.manage');
-			const row = getOrThrow(id);
-			q.delete.run(id);
-			audit.record({ actorId: actor.id, source: 'panel', action: 'backups.delete', guildId: row.guild_id, target: String(id), details: { name: row.name } });
+			const row = await getOrThrow(id);
+			await q.delete.run(id);
+			await audit.record({ actorId: actor.id, source: 'panel', action: 'backups.delete', guildId: row.guild_id, target: String(id), details: { name: row.name } });
 		},
 
 		// mode: "repair" (puts back what is missing, deletes nothing) or "restore" (also removes what the backup did not have)
-		restore(actor, id, { mode = 'repair', panel = true, memberRoles = true, confirmName = '' } = {}) {
+		async restore(actor, id, { mode = 'repair', panel = true, memberRoles = true, confirmName = '' } = {}) {
 			need(actor, 'backups.restore');
-			const row = getOrThrow(id);
+			const row = await getOrThrow(id);
 			if (!['repair', 'restore'].includes(mode)) throw new ValidationError('Action inconnue.');
-			const guild = network.find(row.guild_id);
+			const guild = await network.find(row.guild_id);
 			if (guild?.status !== 'active' || !guild.botPresent) throw new ValidationError('Le serveur n’est plus actif ou le bot n’y est plus.');
 			if (mode === 'restore' && String(confirmName).trim().toLowerCase() !== String(guild.name).trim().toLowerCase()) {
 				throw new ValidationError('Tape le nom exact du serveur pour confirmer la restauration complète.');
 			}
 			const data = dataOf(row);
-			return templates.restoreBackup(actor, { backupId: row.id, name: row.name, snapshot: data.snapshot, guildId: row.guild_id, mode, panel, memberRoles: memberRoles ? data.memberRoles : null });
+			return await templates.restoreBackup(actor, { backupId: row.id, name: row.name, snapshot: data.snapshot, guildId: row.guild_id, mode, panel, memberRoles: memberRoles ? data.memberRoles : null });
 		},
 
 		// Every 10 minutes: the nightly backup of each server, once a day at the chosen hour (Paris time)
 		async tick() {
-			const c = config();
+			const c = await config();
 			if (!c.enabled || running) return 0;
 			const parts = zonedParts(now(), TIME_ZONE);
 			if (parts.hour !== c.hour) return 0;
 			running = true;
 			let done = 0;
 			try {
-				const guilds = network.list().filter(g => g.status === 'active' && g.botPresent && (!c.guildIds.length || c.guildIds.includes(g.id)));
+				const guilds = (await network.list()).filter(g => g.status === 'active' && g.botPresent && (!c.guildIds.length || c.guildIds.includes(g.id)));
 				for (const g of guilds) {
-					const last = q.lastAuto.get(g.id)?.created_at;
+					const last = (await q.lastAuto.get(g.id))?.created_at;
 					if (last && now() - last < 20 * 3_600_000) continue;
 					await take(g.id, { name: `Automatique du ${dateName(now())}`, kind: 'auto', by: 'system' })
 						.then(() => done++)
 						.catch(error => logger.warn(`Backup of ${g.name} failed:`, error.message));
 				}
-				if (done) audit.record({ actorId: 'system', source: 'system', action: 'backups.auto', target: 'backups', details: { servers: done } });
+				if (done) await audit.record({ actorId: 'system', source: 'system', action: 'backups.auto', target: 'backups', details: { servers: done } });
 			}
 			finally {
 				running = false;

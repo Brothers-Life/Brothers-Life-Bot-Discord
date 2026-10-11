@@ -32,7 +32,7 @@ export async function playOrPick(interaction, ctx, text, when = 'end', platform 
 		const first = result.tracks[0];
 		return { content: result.playlist ? `📃 **${result.playlist.title}** : ${result.tracks.length} titre(s) ajouté(s).` : result.startedNow ? `🎶 Lecture de **${first.title}**.` : `➕ **${first.title}** ajouté à la file.`, components: [] };
 	}
-	const { platform: where, text: query } = parseSearch(text, { platform, fallback: music.config().searchPlatform });
+	const { platform: where, text: query } = parseSearch(text, { platform, fallback: (await music.config()).searchPlatform });
 	return pickPayload(await music.search(query, 10, where), query, when, where);
 }
 
@@ -43,10 +43,10 @@ export async function execute(interaction) {
 	const privately = (payload) => interaction.reply({ ...payload, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
 	try {
 		const ctx = await musicContext(interaction);
-		const state = music.state(guildId);
+		const state = await music.state(guildId);
 		switch (action) {
 		case 'queue': return await privately({ embeds: [queuePayload(state)] });
-		case 'add': return await interaction.showModal(addModal(music.config().searchPlatform));
+		case 'add': return await interaction.showModal(addModal((await music.config()).searchPlatform));
 		case 'save': return await interaction.showModal(saveModal());
 		case 'addform': {
 			await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -59,17 +59,17 @@ export async function execute(interaction) {
 			return await interaction.editReply({ content: result.startedNow ? `🎶 Lecture de **${result.tracks[0].title}**.` : `➕ **${result.tracks[0].title}** ajouté à la file.`, components: [] });
 		}
 		case 'saveform': {
-			const list = music.saveQueue(ctx, guildId, { name: interaction.fields.getTextInputValue('name') });
+			const list = await music.saveQueue(ctx, guildId, { name: interaction.fields.getTextInputValue('name') });
 			return await privately({ content: `💾 Playlist **${list.name}** enregistrée (${list.count} titres). Relance-la avec \`/musique playlist jouer\`.` });
 		}
 		case 'prev': await music.previous(ctx, guildId); break;
 		case 'toggle': await music.pause(ctx, guildId); break;
 		case 'skip': await music.skip(ctx, guildId); break;
 		case 'stop': await music.stop(ctx, guildId); break;
-		case 'shuffle': music.shuffle(ctx, guildId); break;
+		case 'shuffle': await music.shuffle(ctx, guildId); break;
 		case 'voldown': await music.setVolume(ctx, guildId, (state.volume ?? 100) - 10); break;
 		case 'volup': await music.setVolume(ctx, guildId, (state.volume ?? 100) + 10); break;
-		case 'loop': music.setLoop(ctx, guildId); break;
+		case 'loop': await music.setLoop(ctx, guildId); break;
 		case 'filters': await music.setFilters(ctx, guildId, interaction.values); break;
 		case 'speed': await music.setSpeed(ctx, guildId, Number(interaction.values[0])); break;
 		default: return await privately({ content: 'Bouton inconnu.' });

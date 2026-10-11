@@ -67,10 +67,13 @@ export function createFivemData({ audit, settings, logger = console, now = Date.
 	let poolKey = null;
 	let tables = null;
 
-	const config = () => normalizeDbConfig(settings.get('fivemdb.config', {}), settings.get('fivemdb.config', {}));
+	const config = async () => {
+		const saved = await settings.get('fivemdb.config', {});
+		return normalizeDbConfig(saved, saved);
+	};
 
-	function connection() {
-		const cfg = config();
+	async function connection() {
+		const cfg = await config();
 		if (!cfg.enabled) throw new ValidationError('La base de données FiveM n’est pas configurée (page Joueurs FiveM, réglages).');
 		const key = JSON.stringify([cfg.host, cfg.port, cfg.database, cfg.user, cfg.password]);
 		if (!pool || poolKey !== key) {
@@ -84,7 +87,7 @@ export function createFivemData({ audit, settings, logger = console, now = Date.
 
 	async function query(sql, params = []) {
 		try {
-			const [rows] = await connection().query({ sql, timeout: 10_000 }, params);
+			const [rows] = await (await connection()).query({ sql, timeout: 10_000 }, params);
 			return rows;
 		}
 		catch (error) {
@@ -254,7 +257,7 @@ export function createFivemData({ audit, settings, logger = console, now = Date.
 	// Settings typed in the panel, before saving. The saved password is reused only for the same host and user,
 	// so it can never be sent to another server.
 	async function testDraft(input) {
-		const saved = settings.get('fivemdb.config', {});
+		const saved = await settings.get('fivemdb.config', {});
 		const sameServer = String(input.host ?? '').trim() === saved.host && String(input.user ?? '').trim() === saved.user;
 		const cfg = normalizeDbConfig({ ...input, enabled: true }, sameServer ? saved : {});
 		const draft = createPool({ host: cfg.host, port: cfg.port, user: cfg.user, password: cfg.password, database: cfg.database, connectionLimit: 1, connectTimeout: 8000, charset: 'utf8mb4' });
@@ -275,18 +278,18 @@ export function createFivemData({ audit, settings, logger = console, now = Date.
 
 	const service = {
 		// What the panel shows of the settings (never the password)
-		settingsView() {
-			const cfg = config();
+		async settingsView() {
+			const cfg = await config();
 			return { ...cfg, password: undefined, hasPassword: Boolean(cfg.password) };
 		},
 
 		async setConfig(actor, input) {
 			need(actor, 'fivemdata.manage');
-			const cfg = normalizeDbConfig(input, settings.get('fivemdb.config', {}));
-			settings.set('fivemdb.config', cfg);
+			const cfg = normalizeDbConfig(input, await settings.get('fivemdb.config', {}));
+			await settings.set('fivemdb.config', cfg);
 			pool?.end().catch(() => undefined);
 			pool = null;
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'fivemdata.config', details: { hôte: cfg.host, base: cfg.database } });
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'fivemdata.config', details: { hôte: cfg.host, base: cfg.database } });
 			return service.settingsView();
 		},
 
@@ -358,7 +361,7 @@ export function createFivemData({ audit, settings, logger = console, now = Date.
 		// The account of a Tebex buyer: FiveM (CFX.re) id first, Rockstar license next, else a unique exact name.
 		// null when the database is off or nothing matches. Returns { userId, username, discordId, method }.
 		async findByTebexPlayer({ uuid = '', name = '' } = {}) {
-			if (!config().enabled) return null;
+			if (!(await config()).enabled) return null;
 			const id = String(uuid ?? '').trim().replace(/^(fivem|license):/i, '');
 			const found = (row, method) => row && { userId: row.userid, username: row.username, discordId: row.discord?.replace(/^discord:/, '') || null, method };
 			if (/^\d{1,12}$/.test(id)) {
@@ -380,7 +383,7 @@ export function createFivemData({ audit, settings, logger = console, now = Date.
 		// Variables {fivem.*} of a Discord member for message templates (tickets…). No IP, token or money.
 		// null when the database is off; every key set to "inconnu" when the account is not linked.
 		async discordVars(discordId) {
-			if (!config().enabled) return null;
+			if (!(await config()).enabled) return null;
 			const empty = Object.fromEntries(FIVEM_VARIABLES.map(v => [v.key, 'inconnu']));
 			const userId = await service.findByDiscord(discordId);
 			if (!userId) return { ...empty, 'fivem.linked': 'Non' };
@@ -503,7 +506,7 @@ export function createFivemData({ audit, settings, logger = console, now = Date.
 			};
 			Object.assign(result, shapeExtras(extras, charOf));
 			// Who looked at whom: these sheets hold personal data
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'fivemdata.view', target: String(userId), details: { joueur: u.username } });
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'fivemdata.view', target: String(userId), details: { joueur: u.username } });
 			return result;
 		},
 

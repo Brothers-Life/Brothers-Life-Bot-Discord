@@ -10,14 +10,14 @@ const HELPER_OTHER = '810000000000000002';
 async function setup() {
 	const ctx = await withNetwork();
 	const { core, owner, executor } = ctx;
-	core.network.activate(owner, OTHER);
+	await core.network.activate(owner, OTHER);
 	executor.roles.set(OTHER, [
 		{ id: MODO_OTHER, name: 'Modo', editable: true },
 		{ id: HELPER_OTHER, name: 'Helper', editable: true },
 		{ id: '810000000000000009', name: 'Admin', editable: false },
 	]);
-	const modo = core.ranks.create(owner, { name: 'Modo', level: 40, permissions: [] });
-	core.ranks.setRoleLinks(owner, modo.id, [MODO_MAIN]);
+	const modo = await core.ranks.create(owner, { name: 'Modo', level: 40, permissions: [] });
+	await core.ranks.setRoleLinks(owner, modo.id, [MODO_MAIN]);
 	await core.staffSync.setLinks(owner, modo.id, OTHER, [MODO_OTHER]);
 	executor.calls.length = 0;
 	return { ...ctx, modo };
@@ -35,7 +35,7 @@ test('a rank holder gets the linked role on the other servers, and loses it with
 	core.ranks.invalidate(ALICE);
 	await core.staffSync.syncUser(ALICE);
 	assert.deepEqual(executor.memberRoles.get(`${OTHER}:${ALICE}`), []);
-	assert.equal(core.audit.query({ action: 'staff_sync.member' }).length, 2);
+	assert.equal((await core.audit.query({ action: 'staff_sync.member' })).length, 2);
 });
 
 test('roles not linked to a rank are never touched', async () => {
@@ -75,7 +75,7 @@ test('links: roles above the bot, @everyone and unknown roles are refused', asyn
 
 test('links need ranks.manage and a rank below your level', async () => {
 	const { core, owner, modo } = await setup();
-	const admin = core.ranks.create(owner, { name: 'Admin', level: 40, permissions: ['ranks.manage'] });
+	const admin = await core.ranks.create(owner, { name: 'Admin', level: 40, permissions: ['ranks.manage'] });
 	await core.ranks.assignDirect(owner, ALICE, admin.id);
 	const alice = await core.ranks.resolve(ALICE);
 	await assert.rejects(core.staffSync.setLinks(alice, modo.id, OTHER, [HELPER_OTHER]), ForbiddenError);
@@ -102,7 +102,7 @@ test('members: role changes are guarded', async () => {
 		{ id: '810000000000000007', name: 'Admin', editable: true, dangerous: true },
 	]);
 	executor.memberRoles.set(`${OTHER}:${BOB}`, []);
-	const manager = core.ranks.create(owner, { name: 'Gérant', level: 50, permissions: ['members.manage'] });
+	const manager = await core.ranks.create(owner, { name: 'Gérant', level: 50, permissions: ['members.manage'] });
 	await core.ranks.assignDirect(owner, ALICE, manager.id);
 	const alice = await core.ranks.resolve(ALICE);
 
@@ -113,13 +113,13 @@ test('members: role changes are guarded', async () => {
 	await assert.rejects(core.members.addRole(alice, OTHER, ALICE, HELPER_OTHER), ForbiddenError);
 	await core.members.addRole(owner, OTHER, BOB, '810000000000000007');
 	await core.members.setNickname(alice, OTHER, BOB, 'Bobby');
-	assert.equal(core.audit.query({ action: 'members' }).length, 3);
+	assert.equal((await core.audit.query({ action: 'members' })).length, 3);
 });
 
 test('only the owner can link a dangerous role to a rank', async () => {
 	const { core, owner, modo, executor } = await setup();
 	executor.roles.set(OTHER, [{ id: '810000000000000007', name: 'Admin', editable: true, dangerous: true }]);
-	const manager = core.ranks.create(owner, { name: 'Gérant', level: 80, permissions: ['ranks.manage'] });
+	const manager = await core.ranks.create(owner, { name: 'Gérant', level: 80, permissions: ['ranks.manage'] });
 	await core.ranks.assignDirect(owner, ALICE, manager.id);
 	const alice = await core.ranks.resolve(ALICE);
 	await assert.rejects(core.staffSync.setLinks(alice, modo.id, OTHER, ['810000000000000007']), ForbiddenError);

@@ -10,10 +10,10 @@ const THIRD = '900000000000000003';
 async function setup() {
 	const ctx = await withNetwork();
 	const { core, owner } = ctx;
-	core.network.activate(owner, OTHER);
-	core.network.upsertSeen({ id: THIRD, name: 'Third' });
-	const modo = core.ranks.create(owner, { name: 'Modo', level: 40, permissions: ['sanctions.warn', 'sanctions.timeout', 'sanctions.kick'] });
-	const admin = core.ranks.create(owner, { name: 'Admin', level: 80, permissions: ['sanctions.warn', 'sanctions.ban', 'sanctions.revoke', 'sanctions.kick'] });
+	await core.network.activate(owner, OTHER);
+	await core.network.upsertSeen({ id: THIRD, name: 'Third' });
+	const modo = await core.ranks.create(owner, { name: 'Modo', level: 40, permissions: ['sanctions.warn', 'sanctions.timeout', 'sanctions.kick'] });
+	const admin = await core.ranks.create(owner, { name: 'Admin', level: 80, permissions: ['sanctions.warn', 'sanctions.ban', 'sanctions.revoke', 'sanctions.kick'] });
 	await core.ranks.assignDirect(owner, ALICE, modo.id);
 	await core.ranks.assignDirect(owner, BOB, admin.id);
 	const alice = { ...(await core.ranks.resolve(ALICE)), source: 'bot' };
@@ -42,8 +42,8 @@ test('a network ban applies on every active server, DMs first, and is audited', 
 	assert.equal(executor.calls.some(c => c[1] === THIRD), false, 'pending servers are not touched');
 	assert.equal(executor.dms[0][0], TARGET);
 	assert.ok(ban.active);
-	assert.equal(core.sanctions.isBanned(TARGET), true);
-	const entry = core.audit.query({ action: 'sanctions.ban' })[0];
+	assert.equal(await core.sanctions.isBanned(TARGET), true);
+	const entry = (await core.audit.query({ action: 'sanctions.ban' }))[0];
 	assert.equal(entry.details.reason, 'Arnaque');
 	assert.equal(Object.keys(entry.results).length, 2);
 });
@@ -113,11 +113,11 @@ test('unbanning a user without known ban still unbans on the network', async () 
 test('temporary bans expire', async () => {
 	const { core, executor, bob } = await setup();
 	const ban = await core.sanctions.create(bob, { type: 'ban', userId: TARGET, durationMs: 1000 });
-	core.db.prepare('UPDATE sanctions SET expires_at = ? WHERE id = ?').run(Date.now() - 1, ban.id);
+	await core.db.prepare('UPDATE sanctions SET expires_at = ? WHERE id = ?').run(Date.now() - 1, ban.id);
 	executor.calls.length = 0;
 	assert.equal(await core.sanctions.expireDue(), 1);
 	assert.deepEqual(executor.calls.map(c => c[0]), ['unban', 'unban']);
-	assert.equal(core.sanctions.get(ban.id).revokedBy, 'system');
+	assert.equal((await core.sanctions.get(ban.id)).revokedBy, 'system');
 });
 
 test('a native ban by an allowed staff member is propagated to the other servers', async () => {
@@ -141,7 +141,7 @@ test('a native unban by an allowed member lifts the network ban', async () => {
 	await core.sanctions.create(bob, { type: 'ban', userId: TARGET });
 	executor.calls.length = 0;
 	await core.sanctions.handleNative({ kind: 'unban', guildId: OTHER, userId: TARGET, executorId: BOB });
-	assert.equal(core.sanctions.isBanned(TARGET), false);
+	assert.equal(await core.sanctions.isBanned(TARGET), false);
 	assert.deepEqual(executor.calls.map(c => [c[0], c[1]]), [['unban', MAIN]]);
 });
 
@@ -156,52 +156,52 @@ test('a server joining the network receives network bans and hands over its own'
 	executor.bans.set(THIRD, [{ userId: '300000000000000009', username: 'raider', reason: 'Raid' }]);
 	executor.calls.length = 0;
 
-	core.network.activate(owner, THIRD);
+	await core.network.activate(owner, THIRD);
 	await new Promise(r => setTimeout(r, 20));
 
 	assert.deepEqual(executor.calls.map(c => [c[0], c[1], c[2]]), [['ban', THIRD, TARGET]]);
-	const imported = core.sanctions.list({ userId: '300000000000000009' })[0];
+	const imported = (await core.sanctions.list({ userId: '300000000000000009' }))[0];
 	assert.equal(imported.scope, 'local');
 	assert.equal(imported.originGuildId, THIRD);
-	assert.equal(core.audit.query({ action: 'sanctions.sync' })[0].details.imported, 1);
+	assert.equal((await core.audit.query({ action: 'sanctions.sync' }))[0].details.imported, 1);
 });
 
 test('list filters', async () => {
 	const { core, alice, bob } = await setup();
 	await core.sanctions.create(alice, { type: 'warn', userId: TARGET });
 	await core.sanctions.create(bob, { type: 'ban', userId: TARGET });
-	assert.equal(core.sanctions.list({ userId: TARGET }).length, 2);
-	assert.equal(core.sanctions.list({ type: 'warn' }).length, 1);
-	assert.equal(core.sanctions.list({ active: true }).length, 1);
+	assert.equal((await core.sanctions.list({ userId: TARGET })).length, 2);
+	assert.equal((await core.sanctions.list({ type: 'warn' })).length, 1);
+	assert.equal((await core.sanctions.list({ active: true })).length, 1);
 });
 
 test('templates: a base the moderator adjusts; suggestions limited to what one may apply; checks on save', async () => {
 	const { core, owner, alice, executor } = await setup();
 	const T = core.sanctionTemplates;
-	const insult = T.save(owner, { name: 'Insultes', type: 'timeout', reason: 'Insultes envers un membre', durationMs: 3_600_000 });
-	const cheat = T.save(owner, { name: 'Triche', type: 'ban', reason: 'Triche / exploit', durationMs: null, deleteMessageSeconds: 86400 });
+	const insult = await T.save(owner, { name: 'Insultes', type: 'timeout', reason: 'Insultes envers un membre', durationMs: 3_600_000 });
+	const cheat = await T.save(owner, { name: 'Triche', type: 'ban', reason: 'Triche / exploit', durationMs: null, deleteMessageSeconds: 86400 });
 	assert.equal(insult.durationLabel, formatDuration(3_600_000));
-	assert.throws(() => T.save(owner, { name: 'insultes', type: 'warn', reason: 'x' }), ValidationError, 'names are unique');
-	assert.throws(() => T.save(owner, { name: 'Vide', type: 'warn', reason: '' }), ValidationError, 'a warn needs a reason');
-	assert.throws(() => T.save(owner, { name: 'Long', type: 'timeout', durationMs: 40 * 86_400_000 }), ValidationError);
-	assert.throws(() => T.save(alice, { name: 'Nope', type: 'warn', reason: 'x' }), ForbiddenError);
+	await assert.rejects(async () => T.save(owner, { name: 'insultes', type: 'warn', reason: 'x' }), ValidationError, 'names are unique');
+	await assert.rejects(async () => T.save(owner, { name: 'Vide', type: 'warn', reason: '' }), ValidationError, 'a warn needs a reason');
+	await assert.rejects(async () => T.save(owner, { name: 'Long', type: 'timeout', durationMs: 40 * 86_400_000 }), ValidationError);
+	await assert.rejects(async () => T.save(alice, { name: 'Nope', type: 'warn', reason: 'x' }), ForbiddenError);
 
-	assert.deepEqual(T.suggest(alice).map(t => t.name), ['Insultes'], 'alice cannot ban');
-	assert.deepEqual(T.suggest(owner, 'exploit').map(t => t.name), ['Triche'], 'search in the reason too');
+	assert.deepEqual((await T.suggest(alice)).map(t => t.name), ['Insultes'], 'alice cannot ban');
+	assert.deepEqual((await T.suggest(owner, 'exploit')).map(t => t.name), ['Triche'], 'search in the reason too');
 
 	// Used as-is, then adjusted: extra reason appended, duration and scope replaced
-	const base = T.resolve(insult.id);
+	const base = await T.resolve(insult.id);
 	assert.deepEqual([base.type, base.reason, base.durationMs, base.scope], ['timeout', 'Insultes envers un membre', 3_600_000, 'network']);
-	const tuned = T.resolve(insult.id, { extra: 'en vocal', durationMs: 7_200_000, scope: 'local' });
+	const tuned = await T.resolve(insult.id, { extra: 'en vocal', durationMs: 7_200_000, scope: 'local' });
 	assert.deepEqual([tuned.reason, tuned.durationMs, tuned.scope], ['Insultes envers un membre · en vocal', 7_200_000, 'local']);
 	executor.members.set(MAIN, new Set([TARGET]));
 	const sanction = await core.sanctions.create(alice, { ...tuned, userId: TARGET, originGuildId: MAIN });
 	assert.equal(sanction.reason, 'Insultes envers un membre · en vocal');
-	assert.equal(T.resolve(cheat.id).deleteMessageSeconds, 86400);
+	assert.equal((await T.resolve(cheat.id)).deleteMessageSeconds, 86400);
 
-	assert.deepEqual(T.reorder(owner, [cheat.id, insult.id]).map(t => t.name), ['Triche', 'Insultes']);
-	T.remove(owner, cheat.id);
-	assert.deepEqual(T.list().map(t => t.name), ['Insultes']);
+	assert.deepEqual((await T.reorder(owner, [cheat.id, insult.id])).map(t => t.name), ['Triche', 'Insultes']);
+	await T.remove(owner, cheat.id);
+	assert.deepEqual((await T.list()).map(t => t.name), ['Insultes']);
 });
 
 test('a native ban of a protected person (owner, higher staff) is never propagated to the network', async () => {
@@ -221,7 +221,7 @@ test('durations: invalid, negative or absurd values are refused', async () => {
 	await assert.rejects(core.sanctions.create(bob, { type: 'ban', userId: TARGET, durationMs: -60_000 }), ValidationError);
 	await assert.rejects(core.sanctions.create(bob, { type: 'ban', userId: TARGET, durationMs: Infinity }), ValidationError);
 	await assert.rejects(core.sanctions.create(bob, { type: 'ban', userId: TARGET, durationMs: 1.5 }), ValidationError);
-	assert.equal(core.sanctions.list({ userId: TARGET }).length, 0);
+	assert.equal((await core.sanctions.list({ userId: TARGET })).length, 0);
 });
 
 test('a staff member cannot lift their own sanction', async () => {
@@ -232,5 +232,5 @@ test('a staff member cannot lift their own sanction', async () => {
 	await assert.rejects(core.sanctions.unbanUser(bob, BOB), ForbiddenError);
 	await assert.rejects(core.sanctions.untimeoutUser(bob, BOB), ForbiddenError);
 	await assert.rejects(core.sanctions.unrestrictUser(bob, BOB), ForbiddenError);
-	assert.equal(core.sanctions.isBanned(BOB), true);
+	assert.equal(await core.sanctions.isBanned(BOB), true);
 });

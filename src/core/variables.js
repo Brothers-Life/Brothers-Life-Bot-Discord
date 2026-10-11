@@ -118,7 +118,7 @@ export function createVariables({ executor, fivemVars = async () => null, fivemE
 
 		// Groups shown by the panel "Variables" button; FiveM only when its database is set up
 		// actor: the FiveM group is only offered to people allowed to see that data
-		catalog(scope = 'member', actor = null) {
+		async catalog(scope = 'member', actor = null) {
 			const list = scope === 'member' ? [...MEMBER_VARIABLES, ...SERVER_VARIABLES] : SERVER_VARIABLES;
 			const groups = new Map();
 			for (const v of list) {
@@ -126,7 +126,7 @@ export function createVariables({ executor, fivemVars = async () => null, fivemE
 				groups.get(v.group).items.push({ key: v.key, label: v.label });
 			}
 			const out = [...groups.values()];
-			if (scope === 'member' && fivemEnabled() && (!actor || actor.can('fivemdata.view'))) {
+			if (scope === 'member' && await fivemEnabled() && (!actor || actor.can('fivemdata.view'))) {
 				out.push({ title: 'Compte FiveM', hint: 'Rempli si le compte Discord du membre est lié en jeu, sinon « inconnu ».', items: FIVEM_VARIABLES });
 			}
 			return out;

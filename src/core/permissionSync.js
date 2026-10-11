@@ -70,32 +70,32 @@ export function createPermissionSync({ db, network, ranks, audit, executor, logs
 		get: db.prepare('SELECT * FROM permission_profiles WHERE rank_id = ?'),
 		upsert: db.prepare(`
 			INSERT INTO permission_profiles (rank_id, permissions, updated_at, updated_by) VALUES (?, ?, ?, ?)
-			ON CONFLICT(rank_id) DO UPDATE SET permissions = excluded.permissions, updated_at = excluded.updated_at, updated_by = excluded.updated_by
+			ON DUPLICATE KEY UPDATE permissions = VALUES(permissions), updated_at = VALUES(updated_at), updated_by = VALUES(updated_by)
 		`),
 		delete: db.prepare('DELETE FROM permission_profiles WHERE rank_id = ?'),
 		links: db.prepare('SELECT guild_id, role_id FROM rank_roles WHERE rank_id = ?'),
 	};
 
-	function profiles() {
-		return Object.fromEntries(q.all.all().map(r => [r.rank_id, { permissions: JSON.parse(r.permissions), updatedAt: r.updated_at, updatedBy: r.updated_by }]));
+	async function profiles() {
+		return Object.fromEntries((await q.all.all()).map(r => [r.rank_id, { permissions: JSON.parse(r.permissions), updatedAt: r.updated_at, updatedBy: r.updated_by }]));
 	}
 
-	function requireManage(actor, rankId) {
+	async function requireManage(actor, rankId) {
 		if (!actor.can('permsync.manage')) throw new ForbiddenError('Permission manquante : permsync.manage');
-		const rank = ranks.get(rankId);
+		const rank = await ranks.get(rankId);
 		if (!actor.isOwner && rank.level >= actor.level) throw new ForbiddenError('Tu ne peux gérer que des rangs de niveau inférieur au tien.');
 		return rank;
 	}
 
 	// Every (rank, server, role) with a profile, and how the role differs from it
 	async function preview(rankId = null) {
-		const active = new Map(network.list().filter(g => g.status === 'active' && g.botPresent).map(g => [g.id, g.name]));
+		const active = new Map((await network.list()).filter(g => g.status === 'active' && g.botPresent).map(g => [g.id, g.name]));
 		const rows = [];
-		for (const [id, profile] of Object.entries(profiles())) {
+		for (const [id, profile] of Object.entries(await profiles())) {
 			if (rankId && Number(id) !== Number(rankId)) continue;
-			const rank = ranks.get(Number(id));
+			const rank = await ranks.get(Number(id));
 			const wanted = new Set(profile.permissions);
-			for (const { guild_id: guildId, role_id: roleId } of q.links.all(Number(id))) {
+			for (const { guild_id: guildId, role_id: roleId } of await q.links.all(Number(id))) {
 				if (!active.has(guildId)) continue;
 				const role = await executor.getRolePermissions(guildId, roleId).catch(() => null);
 				if (!role) {
@@ -124,10 +124,10 @@ export function createPermissionSync({ db, network, ranks, audit, executor, logs
 		profiles,
 		preview,
 
-		setProfile(actor, rankId, permissions) {
-			const rank = requireManage(actor, rankId);
+		async setProfile(actor, rankId, permissions) {
+			const rank = await requireManage(actor, rankId);
 			if (permissions === null) {
-				q.delete.run(rankId);
+				await q.delete.run(rankId);
 			}
 			else {
 				if (!Array.isArray(permissions)) throw new ValidationError('permissions doit être une liste.');
@@ -137,22 +137,22 @@ export function createPermissionSync({ db, network, ranks, audit, executor, logs
 				if (reserved.length && !actor.isOwner) {
 					throw new ForbiddenError(`Seul le chef du réseau peut donner ces permissions : ${reserved.join(', ')}`);
 				}
-				q.upsert.run(rankId, JSON.stringify([...new Set(permissions)]), now(), actor.id);
+				await q.upsert.run(rankId, JSON.stringify([...new Set(permissions)]), now(), actor.id);
 			}
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'permissions.profile', target: String(rankId), details: { rank: rank.name, permissions: permissions ?? 'profil supprimé' } });
-			return profiles()[rankId] ?? null;
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'permissions.profile', target: String(rankId), details: { rank: rank.name, permissions: permissions ?? 'profil supprimé' } });
+			return (await profiles())[rankId] ?? null;
 		},
 
 		// Applies the profile(s) to every linked role that differs
 		async apply(actor, rankId = null) {
 			if (!actor.can('permsync.manage')) throw new ForbiddenError('Permission manquante : permsync.manage');
-			if (rankId) requireManage(actor, rankId);
-			const all = profiles();
+			if (rankId) await requireManage(actor, rankId);
+			const all = await profiles();
 			const rows = (await preview(rankId)).filter(r => r.roleName && (r.missing.length || r.extra.length));
 			const results = {};
 			let applied = 0;
 			for (const row of rows) {
-				if (!actor.isOwner && ranks.get(row.rankId).level >= actor.level) continue;
+				if (!actor.isOwner && (await ranks.get(row.rankId)).level >= actor.level) continue;
 				const key = `${row.guildId}:${row.roleId}`;
 				try {
 					await executor.setRolePermissions(row.guildId, row.roleId, all[row.rankId].permissions, `Profil du rang ${row.rankName}`);
@@ -163,7 +163,7 @@ export function createPermissionSync({ db, network, ranks, audit, executor, logs
 					results[key] = { ok: false, error: error.message };
 				}
 			}
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'permissions.apply', target: rankId ? String(rankId) : 'tous', details: { roles: applied }, results });
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'permissions.apply', target: rankId ? String(rankId) : 'tous', details: { roles: applied }, results });
 			return { applied, failed: Object.values(results).filter(r => !r.ok).length, results };
 		},
 
@@ -171,12 +171,12 @@ export function createPermissionSync({ db, network, ranks, audit, executor, logs
 		async checkDrift() {
 			const drift = (await preview()).filter(r => r.missing.length || r.extra.length);
 			const fingerprint = createHash('sha256').update(JSON.stringify(drift.map(r => [r.guildId, r.roleId, r.missing, r.extra]))).digest('hex');
-			if (!drift.length || settings.get('permissions.lastDrift') === fingerprint) {
-				if (!drift.length) settings.set('permissions.lastDrift', null);
+			if (!drift.length || await settings.get('permissions.lastDrift') === fingerprint) {
+				if (!drift.length) await settings.set('permissions.lastDrift', null);
 				return drift;
 			}
-			settings.set('permissions.lastDrift', fingerprint);
-			audit.record({
+			await settings.set('permissions.lastDrift', fingerprint);
+			await audit.record({
 				actorId: 'system',
 				source: 'system',
 				action: 'permissions.drift',
@@ -189,8 +189,8 @@ export function createPermissionSync({ db, network, ranks, audit, executor, logs
 		},
 
 		// Rank deleted: its profile goes with it (ON DELETE CASCADE); nothing else to do
-		get(rankId) {
-			const row = q.get.get(rankId);
+		async get(rankId) {
+			const row = await q.get.get(rankId);
 			if (!row) throw new NotFoundError('Aucun profil pour ce rang.');
 			return JSON.parse(row.permissions);
 		},

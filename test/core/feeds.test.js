@@ -63,8 +63,8 @@ test('RSS: what the feed holds when added is not announced, then new items once 
 	advance(10 * 60_000);
 	await feeds.tick();
 	assert.equal(executor.announcements.length, 3, 'already seen items are never announced again');
-	assert.deepEqual(feeds.history().map(h => h.title), ['Cinq', 'Quatre', 'Trois']);
-	assert.equal(feeds.get(sub.id).state.error, null);
+	assert.deepEqual((await feeds.history()).map(h => h.title), ['Cinq', 'Quatre', 'Trois']);
+	assert.equal((await feeds.get(sub.id)).state.error, null);
 });
 
 test('words filter, template variables (item, server), HTTP cache and backoff on errors', async () => {
@@ -90,19 +90,19 @@ test('words filter, template variables (item, server), HTTP cache and backoff on
 	world.status = 503;
 	advance(5 * 60_000);
 	await feeds.tick();
-	let state = feeds.get(sub.id).state;
+	let state = (await feeds.get(sub.id)).state;
 	assert.match(state.error, /HTTP 503/);
 	assert.equal(state.failures, 1);
 	assert.equal(state.nextCheckAt - now(), 10 * 60_000, 'interval doubled after an error');
 	advance(10 * 60_000);
 	await feeds.tick();
-	state = feeds.get(sub.id).state;
+	state = (await feeds.get(sub.id)).state;
 	assert.equal(state.failures, 2);
 	assert.equal(state.nextCheckAt - now(), 20 * 60_000);
 	world.status = 200;
 	advance(20 * 60_000);
 	await feeds.tick();
-	state = feeds.get(sub.id).state;
+	state = (await feeds.get(sub.id)).state;
 	assert.equal(state.error, null);
 	assert.equal(state.failures, 0);
 });
@@ -169,5 +169,5 @@ test('preview, permissions, removal', async () => {
 	await assert.rejects(feeds.preview(nobody, FEED_URL), /notifications.manage/);
 	const sub = await feeds.save(owner, { kind: 'rss', url: FEED_URL, targets: [target] });
 	await feeds.remove(owner, sub.id);
-	assert.equal(feeds.list().length, 0);
+	assert.equal((await feeds.list()).length, 0);
 });

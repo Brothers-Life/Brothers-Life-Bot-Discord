@@ -36,7 +36,7 @@ export function normalizeBuilt(input = {}) {
 // Messages composed in the panel (or with /embed), posted anywhere, and edited in place afterwards
 export function createEmbedBuilder({ db, network, audit, executor, now = Date.now }) {
 	const q = {
-		list: db.prepare('SELECT * FROM built_messages ORDER BY updated_at DESC'),
+		list: db.prepare('SELECT * FROM built_messages ORDER BY updated_at DESC, id DESC'),
 		get: db.prepare('SELECT * FROM built_messages WHERE id = ?'),
 		insert: db.prepare('INSERT INTO built_messages (name, payload, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'),
 		update: db.prepare('UPDATE built_messages SET name = ?, payload = ?, updated_at = ? WHERE id = ?'),
@@ -53,10 +53,10 @@ export function createEmbedBuilder({ db, network, audit, executor, now = Date.no
 	const cleanName = (name, payload) => (String(name ?? '').trim() || payload.embeds[0]?.title || payload.content.slice(0, 40) || 'Sans nom').slice(0, 80);
 
 	const service = {
-		list: () => q.list.all().map(toMessage),
+		list: async () => (await q.list.all()).map(toMessage),
 
-		get(id) {
-			const message = toMessage(q.get.get(id));
+		async get(id) {
+			const message = toMessage(await q.get.get(id));
 			if (!message) throw new NotFoundError('Message introuvable.');
 			return message;
 		},
@@ -67,22 +67,22 @@ export function createEmbedBuilder({ db, network, audit, executor, now = Date.no
 			const clean = normalizeBuilt(payload);
 			let saved;
 			if (id) {
-				service.get(id);
-				q.update.run(cleanName(name, clean), JSON.stringify(clean), now(), id);
-				saved = service.get(id);
+				await service.get(id);
+				await q.update.run(cleanName(name, clean), JSON.stringify(clean), now(), id);
+				saved = await service.get(id);
 				if (saved.messageId) await service.post(actor, id, { guildId: saved.guildId, channelId: saved.channelId });
 			}
 			else {
-				saved = service.get(Number(q.insert.run(cleanName(name, clean), JSON.stringify(clean), actor.id, now(), now()).lastInsertRowid));
+				saved = await service.get(Number((await q.insert.run(cleanName(name, clean), JSON.stringify(clean), actor.id, now(), now())).lastInsertRowid));
 			}
-			return service.get(saved.id);
+			return await service.get(saved.id);
 		},
 
 		// Posted in a channel; posting it in another channel moves it (the old message is deleted)
 		async post(actor, id, { guildId, channelId }) {
 			need(actor);
-			const message = service.get(id);
-			if (network.find(guildId)?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
+			const message = await service.get(id);
+			if ((await network.find(guildId))?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
 			if (!SNOWFLAKE.test(channelId)) throw new ValidationError('Salon invalide.');
 			// A sticker can only be sent on the server it belongs to
 			if (message.payload.stickers?.length) {
@@ -92,17 +92,17 @@ export function createEmbedBuilder({ db, network, audit, executor, now = Date.no
 			const sameChannel = message.channelId === channelId && message.messageId;
 			const messageId = await executor.upsertBuiltMessage(channelId, sameChannel ? message.messageId : null, message.payload);
 			if (!sameChannel && message.messageId) await executor.deleteMessage(message.channelId, message.messageId).catch(() => undefined);
-			q.posted.run(guildId, channelId, messageId, now(), id);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: sameChannel ? 'embeds.edit' : 'embeds.post', guildId, target: String(id), details: { message: message.name, salon: `<#${channelId}>` } });
-			return service.get(id);
+			await q.posted.run(guildId, channelId, messageId, now(), id);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: sameChannel ? 'embeds.edit' : 'embeds.post', guildId, target: String(id), details: { message: message.name, salon: `<#${channelId}>` } });
+			return await service.get(id);
 		},
 
 		async remove(actor, id, { deleteMessage = true } = {}) {
 			need(actor);
-			const message = service.get(id);
+			const message = await service.get(id);
 			if (deleteMessage && message.messageId) await executor.deleteMessage(message.channelId, message.messageId).catch(() => undefined);
-			q.remove.run(id);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'embeds.delete', guildId: message.guildId, target: String(id), details: { message: message.name } });
+			await q.remove.run(id);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'embeds.delete', guildId: message.guildId, target: String(id), details: { message: message.name } });
 		},
 	};
 	return service;

@@ -33,14 +33,14 @@ export async function execute(interaction) {
 		case 'apply':
 			return await startApplication(interaction, id);
 		case 'next': {
-			const position = recruitment.getPosition(id);
+			const position = await recruitment.getPosition(id);
 			const step = Number(extra);
 			return await showFormModal(interaction, `rc:form:${id}:${step}`, title(position, step), position.config.form.steps[step]);
 		}
 		case 'form': {
-			const position = recruitment.getPosition(id);
+			const position = await recruitment.getPosition(id);
 			const step = Number(extra);
-			const result = recruitment.submitStep(id, me, step, readModal(interaction, position.config.form.steps[step]));
+			const result = await recruitment.submitStep(id, me, step, readModal(interaction, position.config.form.steps[step]));
 			if (!result.done) {
 				const payload = nextStepPayload('rc', id, result.next, result.total);
 				if (fromEphemeralMessage(interaction)) return await interaction.update(payload);

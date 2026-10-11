@@ -7,12 +7,12 @@ export async function syncCommands(client, { config, settings }) {
 	const commands = [...client.commands.values()].map(c => c.data.toJSON());
 	const target = config.ENV === 'prod' || !config.DEV_GUILD_ID ? 'global' : config.DEV_GUILD_ID;
 	const hash = createHash('sha256').update(JSON.stringify({ target, commands })).digest('hex');
-	if (settings.get('commands.hash') === hash) return false;
+	if (await settings.get('commands.hash') === hash) return false;
 
 	try {
 		if (target === 'global') await client.application.commands.set(commands);
 		else await client.application.commands.set(commands, target);
-		settings.set('commands.hash', hash);
+		await settings.set('commands.hash', hash);
 		logger.success(`${commands.length} slash commands registered (${target === 'global' ? 'all servers' : `server ${target}`})`);
 		return true;
 	}

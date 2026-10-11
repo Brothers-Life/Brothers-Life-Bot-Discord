@@ -6,12 +6,12 @@ const idParam = { type: 'object', properties: { id: { type: 'integer' } }, requi
 // Automatic channels, newcomers verification, embed builder
 export function registerChannelRoutes(app, { core }) {
 	const { channelFeatures, verification, embedBuilder, network, executor } = core;
-	const activeGuilds = () => network.list().filter(g => g.status === 'active' && g.botPresent);
+	const activeGuilds = async () => (await network.list()).filter(g => g.status === 'active' && g.botPresent);
 
 	// --- Automatic channels -------------------------------------------------------------------
 	app.get('/api/channel-features', { config: { permission: 'channelfeatures.view' } }, async () => ({
 		kinds: channelFeatures.kinds,
-		guilds: await Promise.all(activeGuilds().map(async g => ({ id: g.id, name: g.name, icon: g.icon ?? null, channels: await executor.listTextChannels(g.id), features: channelFeatures.list(g.id) }))),
+		guilds: await Promise.all((await activeGuilds()).map(async g => ({ id: g.id, name: g.name, icon: g.icon ?? null, channels: await executor.listTextChannels(g.id), features: await channelFeatures.list(g.id) }))),
 	}));
 
 	app.put('/api/channel-features', {
@@ -34,10 +34,10 @@ export function registerChannelRoutes(app, { core }) {
 
 	// --- Verification -------------------------------------------------------------------------
 	app.get('/api/verification', { config: { permission: 'verification.view' } }, async () => ({
-		guilds: await Promise.all(activeGuilds().map(async g => ({
+		guilds: await Promise.all((await activeGuilds()).map(async g => ({
 			id: g.id, name: g.name, icon: g.icon ?? null,
-			config: verification.config(g.id),
-			pending: verification.pending(g.id),
+			config: await verification.config(g.id),
+			pending: await verification.pending(g.id),
 			channels: await executor.listTextChannels(g.id),
 			roles: (await executor.listRoles(g.id)).filter(r => r.id !== g.id).map(({ id, name, color, editable }) => ({ id, name, color, editable })),
 		}))),
@@ -48,8 +48,8 @@ export function registerChannelRoutes(app, { core }) {
 
 	// --- Embed builder ------------------------------------------------------------------------
 	app.get('/api/embeds', { config: { permission: 'embeds.view' } }, async () => ({
-		messages: embedBuilder.list(),
-		guilds: await Promise.all(activeGuilds().map(async g => ({ id: g.id, name: g.name, channels: await executor.listTextChannels(g.id) }))),
+		messages: await embedBuilder.list(),
+		guilds: await Promise.all((await activeGuilds()).map(async g => ({ id: g.id, name: g.name, channels: await executor.listTextChannels(g.id) }))),
 	}));
 
 	app.post('/api/embeds', {

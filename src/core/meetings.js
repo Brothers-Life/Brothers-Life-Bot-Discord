@@ -54,28 +54,29 @@ export function createMeetings({ db, network, ranks, audit, executor, logs, logg
 				announce_channel_id = @announceChannelId, invites = @invites, reminders = @reminders, recurrence = @recurrence, updated_at = @at WHERE id = @id
 		`),
 		get: db.prepare('SELECT * FROM meetings WHERE id = ?'),
-		list: db.prepare('SELECT * FROM meetings ORDER BY CASE status WHEN \'live\' THEN 0 WHEN \'scheduled\' THEN 1 ELSE 2 END, CASE WHEN status IN (\'live\', \'scheduled\') THEN starts_at END ASC, starts_at DESC LIMIT 300'),
+		list: db.prepare('SELECT * FROM meetings ORDER BY CASE status WHEN \'live\' THEN 0 WHEN \'scheduled\' THEN 1 ELSE 2 END, CASE WHEN status IN (\'live\', \'scheduled\') THEN starts_at END ASC, starts_at DESC, id DESC LIMIT 300'),
 		active: db.prepare('SELECT * FROM meetings WHERE status IN (\'scheduled\', \'live\')'),
-		status: db.prepare('UPDATE meetings SET status = ?, started_at = COALESCE(?, started_at), ended_at = COALESCE(?, ended_at), updated_at = ? WHERE id = ?'),
+		// Only from the expected status (the last argument): two starts (tick and button) or two ends cannot both go through
+		status: db.prepare('UPDATE meetings SET status = ?, started_at = COALESCE(?, started_at), ended_at = COALESCE(?, ended_at), updated_at = ? WHERE id = ? AND status IN (?, ?)'),
 		reminded: db.prepare('UPDATE meetings SET reminded = ? WHERE id = ?'),
 		message: db.prepare('UPDATE meetings SET message_id = ? WHERE id = ?'),
 		notes: db.prepare('UPDATE meetings SET notes = ?, agenda = ?, updated_at = ? WHERE id = ?'),
 		invites: db.prepare('SELECT * FROM meeting_invites WHERE meeting_id = ?'),
-		invite: db.prepare('INSERT OR IGNORE INTO meeting_invites (meeting_id, user_id) VALUES (?, ?)'),
+		invite: db.prepare('INSERT IGNORE INTO meeting_invites (meeting_id, user_id) VALUES (?, ?)'),
 		uninvite: db.prepare('DELETE FROM meeting_invites WHERE meeting_id = ? AND user_id = ? AND rsvp = \'pending\''),
 		rsvp: db.prepare('UPDATE meeting_invites SET rsvp = ?, reason = ?, responded_at = ? WHERE meeting_id = ? AND user_id = ?'),
-		attendance: db.prepare('SELECT * FROM meeting_attendance WHERE meeting_id = ? ORDER BY joined_at'),
+		attendance: db.prepare('SELECT * FROM meeting_attendance WHERE meeting_id = ? ORDER BY joined_at, id'),
 		join: db.prepare('INSERT INTO meeting_attendance (meeting_id, user_id, joined_at) VALUES (?, ?, ?)'),
 		open: db.prepare('SELECT * FROM meeting_attendance WHERE meeting_id = ? AND user_id = ? AND left_at IS NULL'),
 		leave: db.prepare('UPDATE meeting_attendance SET left_at = ? WHERE meeting_id = ? AND user_id = ? AND left_at IS NULL'),
 		closeAll: db.prepare('UPDATE meeting_attendance SET left_at = ? WHERE meeting_id = ? AND left_at IS NULL'),
 		actions: db.prepare('SELECT * FROM meeting_actions WHERE meeting_id = ? ORDER BY id'),
-		allActions: db.prepare('SELECT a.*, m.title AS meeting_title FROM meeting_actions a JOIN meetings m ON m.id = a.meeting_id WHERE a.done_at IS NULL ORDER BY COALESCE(a.due_at, 9e15)'),
+		allActions: db.prepare('SELECT a.*, m.title AS meeting_title FROM meeting_actions a JOIN meetings m ON m.id = a.meeting_id WHERE a.done_at IS NULL ORDER BY COALESCE(a.due_at, 9e15), a.id'),
 		action: db.prepare('SELECT * FROM meeting_actions WHERE id = ?'),
 		addAction: db.prepare('INSERT INTO meeting_actions (meeting_id, text, assignee_id, due_at, created_at) VALUES (?, ?, ?, ?, ?)'),
 		doneAction: db.prepare('UPDATE meeting_actions SET done_at = ? WHERE id = ?'),
 		removeAction: db.prepare('DELETE FROM meeting_actions WHERE id = ?'),
-		history: db.prepare('SELECT * FROM meetings WHERE status = \'ended\' AND started_at >= ? ORDER BY started_at'),
+		history: db.prepare('SELECT * FROM meetings WHERE status = \'ended\' AND started_at >= ? ORDER BY started_at, id'),
 		// Validated staff absences (planned, in progress or over) covering a moment
 		onLeave: db.prepare('SELECT user_id, reason FROM absences WHERE status IN (\'approved\', \'active\', \'ended\') AND start_at <= ? AND end_at >= ?'),
 		resetAnswers: db.prepare('UPDATE meeting_invites SET rsvp = \'pending\', reason = NULL, responded_at = NULL WHERE meeting_id = ?'),
@@ -89,8 +90,8 @@ export function createMeetings({ db, network, ranks, audit, executor, logs, logg
 	});
 	const toAction = row => ({ id: row.id, meetingId: row.meeting_id, text: row.text, assigneeId: row.assignee_id, dueAt: row.due_at, doneAt: row.done_at, meetingTitle: row.meeting_title });
 
-	function getOrThrow(id) {
-		const meeting = toMeeting(q.get.get(id));
+	async function getOrThrow(id) {
+		const meeting = toMeeting(await q.get.get(id));
 		if (!meeting) throw new NotFoundError('Réunion introuvable.');
 		return meeting;
 	}
@@ -111,14 +112,14 @@ export function createMeetings({ db, network, ranks, audit, executor, logs, logg
 	}
 
 	// userId -> reason of the validated absence covering the start of the meeting
-	function onLeave(meeting) {
-		return new Map(q.onLeave.all(meeting.startsAt, meeting.startsAt).map(row => [row.user_id, row.reason]));
+	async function onLeave(meeting) {
+		return new Map((await q.onLeave.all(meeting.startsAt, meeting.startsAt)).map(row => [row.user_id, row.reason]));
 	}
 
 	// Who came, how long, late or not, excused (answered "absent" or on a validated absence) or not
-	function report(meeting) {
-		const invites = q.invites.all(meeting.id);
-		const stays = q.attendance.all(meeting.id);
+	async function report(meeting) {
+		const invites = await q.invites.all(meeting.id);
+		const stays = await q.attendance.all(meeting.id);
 		const reference = Math.max(meeting.startsAt, meeting.startedAt ?? meeting.startsAt);
 		const end = meeting.endedAt ?? now();
 		const byUser = new Map();
@@ -130,7 +131,7 @@ export function createMeetings({ db, network, ranks, audit, executor, logs, logg
 			entry.inVoice ||= s.left_at === null;
 			byUser.set(s.user_id, entry);
 		}
-		const leave = onLeave(meeting);
+		const leave = await onLeave(meeting);
 		const people = invites.map((i) => {
 			const presence = byUser.get(i.user_id);
 			let status = 'absent';
@@ -154,25 +155,25 @@ export function createMeetings({ db, network, ranks, audit, executor, logs, logg
 		return { people, counts: { present: count('present'), late: count('late'), excused: count('excused'), absent: count('absent'), guest: count('guest'), invited: invites.length } };
 	}
 
-	function view(meeting) {
-		const invites = q.invites.all(meeting.id);
+	async function view(meeting) {
+		const invites = await q.invites.all(meeting.id);
 		const answers = Object.fromEntries(['yes', 'maybe', 'no', 'pending'].map(a => [a, invites.filter(i => i.rsvp === a).length]));
-		const leave = onLeave(meeting);
+		const leave = await onLeave(meeting);
 		return {
 			...meeting,
 			endsAt: meeting.startsAt + meeting.durationMinutes * MINUTE,
 			answers,
 			invitees: invites.map(i => ({ userId: i.user_id, rsvp: i.rsvp, reason: i.reason, respondedAt: i.responded_at, onLeave: leave.has(i.user_id) })),
-			report: meeting.status === 'scheduled' ? null : report(meeting),
-			actions: q.actions.all(meeting.id).map(toAction),
+			report: meeting.status === 'scheduled' ? null : await report(meeting),
+			actions: (await q.actions.all(meeting.id)).map(toAction),
 		};
 	}
 
 	async function refreshMessage(meeting) {
 		if (!meeting.announceChannelId) return;
 		try {
-			const messageId = await executor.upsertMeetingMessage(meeting.announceChannelId, meeting.messageId, view(meeting));
-			if (messageId !== meeting.messageId) q.message.run(messageId, meeting.id);
+			const messageId = await executor.upsertMeetingMessage(meeting.announceChannelId, meeting.messageId, await view(meeting));
+			if (messageId !== meeting.messageId) await q.message.run(messageId, meeting.id);
 		}
 		catch (error) {
 			logger.warn(`Meeting #${meeting.id} message failed:`, error.message);
@@ -180,144 +181,156 @@ export function createMeetings({ db, network, ranks, audit, executor, logs, logg
 	}
 
 	async function dmAll(meeting, kind, text, { answers = ['yes', 'maybe', 'pending'] } = {}) {
-		const v = view(meeting);
-		for (const invite of q.invites.all(meeting.id).filter(i => answers.includes(i.rsvp))) {
+		const v = await view(meeting);
+		for (const invite of (await q.invites.all(meeting.id)).filter(i => answers.includes(i.rsvp))) {
 			await executor.sendMeetingDM(invite.user_id, v, { kind, text }).catch(() => undefined);
 		}
 	}
 
-	function log(meeting, type, title, description, color = 'info') {
-		logs.log(meeting.guildId, 'meetings', { title, description, color }, type);
+	async function log(meeting, type, title, description, color = 'info') {
+		await logs.log(meeting.guildId, 'meetings', { title, description, color }, type);
 	}
 
+	// Voice changes are applied one after the other (see voiceChanged)
+	let voiceQueue = Promise.resolve();
+
 	const service = {
-		list() {
-			return q.list.all().map(toMeeting).map(view);
+		async list() {
+			return Promise.all((await q.list.all()).map(toMeeting).map(view));
 		},
 
-		get: id => view(getOrThrow(id)),
+		get: async id => view(await getOrThrow(id)),
 
 		async create(actor, input, { notify = true } = {}) {
 			need(actor);
-			if (network.find(input.guildId)?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
+			if ((await network.find(input.guildId))?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
 			const data = normalizeMeeting(input, { now: now() });
-			const id = Number(q.insert.run({
+			const id = Number((await q.insert.run({
 				...data, guildId: input.guildId, agenda: JSON.stringify(data.agenda), invites: JSON.stringify(data.invites), reminders: JSON.stringify(data.reminders),
 				recurrence: data.recurrence ? JSON.stringify(data.recurrence) : null, createdBy: actor.id, at: now(),
-			}).lastInsertRowid);
+			})).lastInsertRowid);
 			const people = await resolveInvitees(input.guildId, data.invites);
-			db.transaction(() => people.forEach(userId => q.invite.run(id, userId)))();
-			const meeting = getOrThrow(id);
+			await db.transaction(async () => {
+				for (const userId of people) await q.invite.run(id, userId);
+			})();
+			const meeting = await getOrThrow(id);
 			await refreshMessage(meeting);
 			if (notify) await dmAll(meeting, 'invite', null, { answers: ['pending'] });
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'meetings.create', guildId: meeting.guildId, target: String(id), details: { réunion: meeting.title, invités: people.length, date: new Date(meeting.startsAt).toISOString() } });
-			log(meeting, 'planned', 'Réunion programmée', `**${meeting.title}** · <t:${Math.round(meeting.startsAt / 1000)}:F> · ${people.length} invité(s)`);
-			return service.get(id);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'meetings.create', guildId: meeting.guildId, target: String(id), details: { réunion: meeting.title, invités: people.length, date: new Date(meeting.startsAt).toISOString() } });
+			await log(meeting, 'planned', 'Réunion programmée', `**${meeting.title}** · <t:${Math.round(meeting.startsAt / 1000)}:F> · ${people.length} invité(s)`);
+			return await service.get(id);
 		},
 
 		// Changing the date resets the reminders and tells the people; new invitees get the convocation
 		async update(actor, id, input) {
 			need(actor);
-			const before = getOrThrow(id);
+			const before = await getOrThrow(id);
 			if (before.status !== 'scheduled') throw new ValidationError('Seule une réunion pas encore commencée peut être modifiée.');
 			const data = normalizeMeeting({ ...input, startsAt: input.startsAt ?? before.startsAt }, { creating: input.startsAt !== undefined && input.startsAt !== before.startsAt, now: now() });
-			q.update.run({ ...data, id, agenda: JSON.stringify(data.agenda), invites: JSON.stringify(data.invites), reminders: JSON.stringify(data.reminders), recurrence: data.recurrence ? JSON.stringify(data.recurrence) : null, at: now() });
+			await q.update.run({ ...data, id, agenda: JSON.stringify(data.agenda), invites: JSON.stringify(data.invites), reminders: JSON.stringify(data.reminders), recurrence: data.recurrence ? JSON.stringify(data.recurrence) : null, at: now() });
 			const moved = data.startsAt !== before.startsAt;
 			// New date: the answers given for the old one no longer hold
 			if (moved) {
-				q.reminded.run('[]', id);
-				q.resetAnswers.run(id);
+				await q.reminded.run('[]', id);
+				await q.resetAnswers.run(id);
 			}
 			const people = await resolveInvitees(before.guildId, data.invites);
-			const known = new Set(q.invites.all(id).map(i => i.user_id));
+			const known = new Set((await q.invites.all(id)).map(i => i.user_id));
 			const added = people.filter(p => !known.has(p));
-			db.transaction(() => {
-				added.forEach(userId => q.invite.run(id, userId));
-				[...known].filter(p => !people.includes(p)).forEach(userId => q.uninvite.run(id, userId));
+			await db.transaction(async () => {
+				for (const userId of added) await q.invite.run(id, userId);
+				for (const userId of [...known].filter(p => !people.includes(p))) await q.uninvite.run(id, userId);
 			})();
-			const meeting = getOrThrow(id);
+			const meeting = await getOrThrow(id);
 			await refreshMessage(meeting);
-			for (const userId of added) await executor.sendMeetingDM(userId, view(meeting), { kind: 'invite' }).catch(() => undefined);
+			for (const userId of added) await executor.sendMeetingDM(userId, await view(meeting), { kind: 'invite' }).catch(() => undefined);
 			// Everyone already invited (even those who had said no) is asked again
 			if (moved) {
 				const text = `La réunion **${meeting.title}** est déplacée au <t:${Math.round(meeting.startsAt / 1000)}:F>. Redonne ta réponse avec les boutons ci-dessous.`;
-				const v = view(meeting);
-				for (const invite of q.invites.all(id).filter(i => !added.includes(i.user_id))) {
+				const v = await view(meeting);
+				for (const invite of (await q.invites.all(id)).filter(i => !added.includes(i.user_id))) {
 					await executor.sendMeetingDM(invite.user_id, v, { kind: 'moved', text }).catch(() => undefined);
 				}
 			}
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'meetings.update', guildId: meeting.guildId, target: String(id), details: { réunion: meeting.title } });
-			return service.get(id);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'meetings.update', guildId: meeting.guildId, target: String(id), details: { réunion: meeting.title } });
+			return await service.get(id);
 		},
 
 		async cancel(actor, id, reason = '') {
 			need(actor);
-			const meeting = getOrThrow(id);
+			const meeting = await getOrThrow(id);
 			if (!['scheduled', 'live'].includes(meeting.status)) throw new ValidationError('Cette réunion est déjà terminée.');
-			q.status.run('cancelled', null, now(), now(), id);
-			q.closeAll.run(now(), id);
-			const done = getOrThrow(id);
+			if (!(await q.status.run('cancelled', null, now(), now(), id, 'scheduled', 'live')).changes) throw new ValidationError('Cette réunion est déjà terminée.');
+			await q.closeAll.run(now(), id);
+			const done = await getOrThrow(id);
 			await refreshMessage(done);
 			await dmAll(done, 'cancelled', `❌ La réunion **${done.title}** du <t:${Math.round(done.startsAt / 1000)}:f> est annulée.${reason ? `\nRaison : ${clean(reason, 300)}` : ''}`);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'meetings.cancel', guildId: done.guildId, target: String(id), details: { réunion: done.title, raison: reason || null } });
-			log(done, 'cancelled', 'Réunion annulée', `**${done.title}**${reason ? ` · ${reason}` : ''}`, 'warning');
-			return service.get(id);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'meetings.cancel', guildId: done.guildId, target: String(id), details: { réunion: done.title, raison: reason || null } });
+			await log(done, 'cancelled', 'Réunion annulée', `**${done.title}**${reason ? ` · ${reason}` : ''}`, 'warning');
+			return await service.get(id);
 		},
 
 		// Answer of an invitee (from the buttons); "absent" needs a reason
 		async rsvp(userId, id, answer, reason = '') {
-			const meeting = getOrThrow(id);
+			const meeting = await getOrThrow(id);
 			if (!ANSWERS.includes(answer)) throw new ValidationError('Réponse inconnue.');
 			if (!['scheduled', 'live'].includes(meeting.status)) throw new ValidationError('Cette réunion est terminée.');
-			if (!q.invites.all(id).some(i => i.user_id === String(userId))) throw new ForbiddenError('Tu n’es pas invité à cette réunion.');
+			if (!(await q.invites.all(id)).some(i => i.user_id === String(userId))) throw new ForbiddenError('Tu n’es pas invité à cette réunion.');
 			const why = clean(reason, 300);
 			if (answer === 'no' && !why) throw new ValidationError('Dis pourquoi tu ne peux pas venir.');
-			q.rsvp.run(answer, answer === 'no' ? why : null, now(), id, String(userId));
+			await q.rsvp.run(answer, answer === 'no' ? why : null, now(), id, String(userId));
 			await refreshMessage(meeting);
-			return { meeting: service.get(id), label: ANSWER_LABEL[answer] };
+			return { meeting: await service.get(id), label: ANSWER_LABEL[answer] };
 		},
 
 		// The meeting begins: everyone already in the voice channel is counted present
 		async start(actor, id) {
 			if (actor) need(actor);
-			const meeting = getOrThrow(id);
+			const meeting = await getOrThrow(id);
 			if (meeting.status !== 'scheduled') throw new ValidationError('Cette réunion a déjà commencé ou est terminée.');
 			const at = now();
-			q.status.run('live', at, null, at, id);
+			if (!(await q.status.run('live', at, null, at, id, 'scheduled', 'scheduled')).changes) throw new ValidationError('Cette réunion a déjà commencé ou est terminée.');
 			const inVoice = await executor.voiceMembers(meeting.voiceChannelId).catch(() => []);
-			db.transaction(() => inVoice.forEach(userId => q.join.run(id, userId, at)))();
-			const live = getOrThrow(id);
+			await db.transaction(async () => {
+				for (const userId of inVoice) await q.join.run(id, userId, at);
+			})();
+			const live = await getOrThrow(id);
 			await refreshMessage(live);
 			if (live.announceChannelId) {
-				const waiting = q.invites.all(id).filter(i => i.rsvp !== 'no' && !inVoice.includes(i.user_id)).map(i => i.user_id);
+				const waiting = (await q.invites.all(id)).filter(i => i.rsvp !== 'no' && !inVoice.includes(i.user_id)).map(i => i.user_id);
 				await executor.sendMessage(live.announceChannelId, {
 					payload: { content: `🔴 La réunion **${live.title}** commence dans <#${live.voiceChannelId}> !${waiting.length ? `\n${waiting.slice(0, 50).map(u => `<@${u}>`).join(' ')}` : ''}`, embed: { enabled: false } },
 					files: [], mentionUserIds: waiting.slice(0, 50),
 				}).catch(() => undefined);
 			}
-			audit.record({ actorId: actor?.id ?? 'system', source: actor?.source ?? 'system', action: 'meetings.start', guildId: live.guildId, target: String(id), details: { réunion: live.title } });
-			log(live, 'started', 'Réunion commencée', `**${live.title}** dans <#${live.voiceChannelId}>`);
-			return service.get(id);
+			await audit.record({ actorId: actor?.id ?? 'system', source: actor?.source ?? 'system', action: 'meetings.start', guildId: live.guildId, target: String(id), details: { réunion: live.title } });
+			await log(live, 'started', 'Réunion commencée', `**${live.title}** dans <#${live.voiceChannelId}>`);
+			return await service.get(id);
 		},
 
-		// The bot reports people coming and going in voice channels
+		// The bot reports people coming and going in voice channels. One change at a time, in the order they came:
+		// a quick join then leave must not be read and written interleaved (an open stay left behind)
 		voiceChanged(guildId, userId, fromChannelId, toChannelId) {
-			for (const meeting of q.active.all().map(toMeeting).filter(m => m.status === 'live' && m.guildId === guildId)) {
-				if (fromChannelId === meeting.voiceChannelId && toChannelId !== meeting.voiceChannelId) q.leave.run(now(), meeting.id, userId);
-				if (toChannelId === meeting.voiceChannelId && fromChannelId !== meeting.voiceChannelId && !q.open.get(meeting.id, userId)) q.join.run(meeting.id, userId, now());
-			}
+			const run = voiceQueue.then(async () => {
+				for (const meeting of (await q.active.all()).map(toMeeting).filter(m => m.status === 'live' && m.guildId === guildId)) {
+					if (fromChannelId === meeting.voiceChannelId && toChannelId !== meeting.voiceChannelId) await q.leave.run(now(), meeting.id, userId);
+					if (toChannelId === meeting.voiceChannelId && fromChannelId !== meeting.voiceChannelId && !await q.open.get(meeting.id, userId)) await q.join.run(meeting.id, userId, now());
+				}
+			});
+			voiceQueue = run.catch(() => undefined);
+			return run;
 		},
 
 		// Over: attendance closed, summary posted, tasks sent to their owners, next meeting of a series planned
 		async end(actor, id) {
 			if (actor) need(actor);
-			const meeting = getOrThrow(id);
+			const meeting = await getOrThrow(id);
 			if (meeting.status !== 'live') throw new ValidationError('Cette réunion n’est pas en cours.');
 			const at = now();
-			q.closeAll.run(at, id);
-			q.status.run('ended', null, at, at, id);
-			const done = getOrThrow(id);
-			const v = view(done);
+			if (!(await q.status.run('ended', null, at, at, id, 'live', 'live')).changes) throw new ValidationError('Cette réunion n’est pas en cours.');
+			await q.closeAll.run(at, id);
+			const done = await getOrThrow(id);
+			const v = await view(done);
 			await refreshMessage(done);
 			if (done.announceChannelId) await executor.sendMeetingSummary(done.announceChannelId, v).catch(error => logger.warn('Meeting summary failed:', error.message));
 			for (const action of v.actions.filter(a => a.assigneeId && !a.doneAt)) {
@@ -332,63 +345,63 @@ export function createMeetings({ db, network, ranks, audit, executor, logs, logg
 					}).catch(error => logger.warn('Next meeting not planned:', error.message));
 				}
 			}
-			audit.record({ actorId: actor?.id ?? 'system', source: actor?.source ?? 'system', action: 'meetings.end', guildId: done.guildId, target: String(id), details: { réunion: done.title, présents: v.report.counts.present + v.report.counts.late, absents: v.report.counts.absent } });
-			log(done, 'ended', 'Réunion terminée', `**${done.title}** · ${v.report.counts.present + v.report.counts.late} présent(s), ${v.report.counts.absent} absent(s) non excusé(s)`, 'success');
-			return { meeting: service.get(id), next };
+			await audit.record({ actorId: actor?.id ?? 'system', source: actor?.source ?? 'system', action: 'meetings.end', guildId: done.guildId, target: String(id), details: { réunion: done.title, présents: v.report.counts.present + v.report.counts.late, absents: v.report.counts.absent } });
+			await log(done, 'ended', 'Réunion terminée', `**${done.title}** · ${v.report.counts.present + v.report.counts.late} présent(s), ${v.report.counts.absent} absent(s) non excusé(s)`, 'success');
+			return { meeting: await service.get(id), next };
 		},
 
 		// Minutes and agenda (ticked points, notes) during or after the meeting
-		saveNotes(actor, id, { notes, agenda }) {
+		async saveNotes(actor, id, { notes, agenda }) {
 			need(actor);
-			const meeting = getOrThrow(id);
+			const meeting = await getOrThrow(id);
 			const items = agenda === undefined ? meeting.agenda : normalizeMeeting({ ...meeting, agenda }, { creating: false }).agenda;
-			q.notes.run(notes === undefined ? meeting.notes : clean(notes, 20_000), JSON.stringify(items), now(), id);
-			return service.get(id);
+			await q.notes.run(notes === undefined ? meeting.notes : clean(notes, 20_000), JSON.stringify(items), now(), id);
+			return await service.get(id);
 		},
 
 		// A line added to the minutes (/reunion note)
-		addNote(actor, id, text) {
+		async addNote(actor, id, text) {
 			need(actor);
-			const meeting = getOrThrow(id);
+			const meeting = await getOrThrow(id);
 			const line = `- ${clean(text, 1000)}`;
-			return service.saveNotes(actor, id, { notes: meeting.notes ? `${meeting.notes}\n${line}` : line });
+			return await service.saveNotes(actor, id, { notes: meeting.notes ? `${meeting.notes}\n${line}` : line });
 		},
 
-		addAction(actor, meetingId, { text, assigneeId = null, dueAt = null }) {
+		async addAction(actor, meetingId, { text, assigneeId = null, dueAt = null }) {
 			need(actor);
-			getOrThrow(meetingId);
+			await getOrThrow(meetingId);
 			const task = clean(text, 300);
 			if (!task) throw new ValidationError('Décris la tâche.');
 			if (assigneeId && !SNOWFLAKE.test(assigneeId)) throw new ValidationError('Personne invalide.');
-			q.addAction.run(meetingId, task, assigneeId, Number.isFinite(dueAt) ? dueAt : null, now());
-			return service.get(meetingId);
+			await q.addAction.run(meetingId, task, assigneeId, Number.isFinite(dueAt) ? dueAt : null, now());
+			return await service.get(meetingId);
 		},
 
-		setActionDone(actor, actionId, done) {
-			const action = q.action.get(actionId);
+		async setActionDone(actor, actionId, done) {
+			const action = await q.action.get(actionId);
 			if (!action) throw new NotFoundError('Tâche introuvable.');
 			// The person in charge may tick their own task
 			if (action.assignee_id !== String(actor.id)) need(actor);
-			q.doneAction.run(done ? now() : null, actionId);
-			return service.get(action.meeting_id);
+			await q.doneAction.run(done ? now() : null, actionId);
+			return await service.get(action.meeting_id);
 		},
 
-		removeAction(actor, actionId) {
+		async removeAction(actor, actionId) {
 			need(actor);
-			const action = q.action.get(actionId);
+			const action = await q.action.get(actionId);
 			if (!action) throw new NotFoundError('Tâche introuvable.');
-			q.removeAction.run(actionId);
-			return service.get(action.meeting_id);
+			await q.removeAction.run(actionId);
+			return await service.get(action.meeting_id);
 		},
 
-		openActions: () => q.allActions.all().map(toAction),
+		openActions: async () => (await q.allActions.all()).map(toAction),
 
 		// Attendance of each person over the last `days` (meetings they were invited to)
-		stats(days = 90) {
+		async stats(days = 90) {
 			const people = new Map();
-			const meetings = q.history.all(now() - days * 86_400_000).map(toMeeting);
+			const meetings = (await q.history.all(now() - days * 86_400_000)).map(toMeeting);
 			for (const meeting of meetings) {
-				for (const p of report(meeting).people.filter(x => x.invited)) {
+				for (const p of (await report(meeting)).people.filter(x => x.invited)) {
 					const s = people.get(p.userId) ?? { userId: p.userId, invited: 0, present: 0, late: 0, excused: 0, absent: 0, minutes: 0 };
 					s.invited += 1;
 					s[p.status] += 1;
@@ -407,13 +420,13 @@ export function createMeetings({ db, network, ranks, audit, executor, logs, logg
 		// Every minute: reminders, start at the set time, end once the time is over and the channel is empty
 		async tick() {
 			const at = now();
-			for (const meeting of q.active.all().map(toMeeting)) {
-				if (network.find(meeting.guildId)?.status !== 'active') continue;
+			for (const meeting of (await q.active.all()).map(toMeeting)) {
+				if ((await network.find(meeting.guildId))?.status !== 'active') continue;
 				try {
 					if (meeting.status === 'scheduled') {
 						const due = meeting.reminders.filter(r => r > 0 && !meeting.reminded.includes(r) && at >= meeting.startsAt - r * MINUTE && at < meeting.startsAt);
 						if (due.length) {
-							q.reminded.run(JSON.stringify([...meeting.reminded, ...due]), meeting.id);
+							await q.reminded.run(JSON.stringify([...meeting.reminded, ...due]), meeting.id);
 							await dmAll(meeting, 'reminder', `⏰ Rappel : réunion **${meeting.title}** <t:${Math.round(meeting.startsAt / 1000)}:R> dans <#${meeting.voiceChannelId}>.`);
 						}
 						if (at >= meeting.startsAt) await service.start(null, meeting.id);

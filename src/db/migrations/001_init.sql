@@ -625,7 +625,7 @@ CREATE TABLE `stream_state` (
 	`role_holders` LONGTEXT NOT NULL DEFAULT '[]',
 	`last_video_id` LONGTEXT,
 	`last_video_at` BIGINT,
-	checked_at      INTEGER,
+	`checked_at` BIGINT,
 	`videos_checked_at` BIGINT,
 	`error` LONGTEXT,
 	FOREIGN KEY (`subscription_id`) REFERENCES `stream_subscriptions` (`id`) ON DELETE CASCADE
@@ -1076,7 +1076,7 @@ CREATE TABLE `feed_state` (
 	`subscription_id` BIGINT PRIMARY KEY,
 	`feed_title` LONGTEXT,
 	`initialized_at` BIGINT,
-	checked_at      INTEGER,
+	`checked_at` BIGINT,
 	`next_check_at` BIGINT,
 	`failures` BIGINT NOT NULL DEFAULT 0,
 	`error` LONGTEXT,

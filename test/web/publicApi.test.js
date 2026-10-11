@@ -24,15 +24,15 @@ async function setup() {
 
 test('a key reads and writes without cookie nor CSRF header', async () => {
 	const { core, owner, bearer } = await setup();
-	const call = bearer(core.apiKeys.create(owner, { name: 'Full' }).secret);
+	const call = bearer((await core.apiKeys.create(owner, { name: 'Full' })).secret);
 	const me = (await call('GET', '/api/me')).json();
 	assert.equal(me.isOwner, true);
 	assert.equal(me.apiKey.name, 'Full');
 
 	const created = await call('POST', '/api/ranks', { name: 'Via API', level: 5 });
 	assert.equal(created.statusCode, 201, created.body);
-	assert.ok(core.ranks.list().some(r => r.name === 'Via API'));
-	const entry = core.audit.query({ action: 'ranks.create' })[0];
+	assert.ok((await core.ranks.list()).some(r => r.name === 'Via API'));
+	const entry = (await core.audit.query({ action: 'ranks.create' }))[0];
 	assert.equal(entry.actorId, owner.id);
 	assert.equal(entry.details['Clé d’API'], 'Full');
 });
@@ -40,7 +40,7 @@ test('a key reads and writes without cookie nor CSRF header', async () => {
 test('invalid, revoked or panel-only: refused', async () => {
 	const { core, owner, bearer } = await setup();
 	assert.equal((await bearer('brl_' + 'a'.repeat(43))('GET', '/api/me')).json().error.code, 'INVALID_API_KEY');
-	const key = core.apiKeys.create(owner, { name: 'K' });
+	const key = await core.apiKeys.create(owner, { name: 'K' });
 	const call = bearer(key.secret);
 	assert.equal((await call('GET', '/api/sessions')).json().error.code, 'PANEL_ONLY');
 	assert.equal((await call('POST', '/api/api-keys', { name: 'escalade' })).json().error.code, 'PANEL_ONLY');
@@ -51,7 +51,7 @@ test('invalid, revoked or panel-only: refused', async () => {
 
 test('route permissions apply to the key scope', async () => {
 	const { core, owner, bearer } = await setup();
-	const call = bearer(core.apiKeys.create(owner, { name: 'Lecture', permissions: ['network.view'] }).secret);
+	const call = bearer((await core.apiKeys.create(owner, { name: 'Lecture', permissions: ['network.view'] })).secret);
 	assert.equal((await call('GET', '/api/network')).statusCode, 200);
 	const res = await call('GET', '/api/ranks');
 	assert.equal(res.statusCode, 403);
@@ -60,19 +60,19 @@ test('route permissions apply to the key scope', async () => {
 
 test('a key stops working when its owner loses api.use', async () => {
 	const { core, owner, bearer } = await setup();
-	const rank = core.ranks.create(owner, { name: 'Dev', level: 10, permissions: ['panel.access', 'api.use', 'network.view'] });
+	const rank = await core.ranks.create(owner, { name: 'Dev', level: 10, permissions: ['panel.access', 'api.use', 'network.view'] });
 	await core.ranks.assignDirect(owner, ALICE, rank.id);
 	const alice = await core.ranks.resolve(ALICE);
-	const call = bearer(core.apiKeys.create(alice, { name: 'A' }).secret);
+	const call = bearer((await core.apiKeys.create(alice, { name: 'A' })).secret);
 	assert.equal((await call('GET', '/api/network')).statusCode, 200);
-	core.ranks.update(owner, rank.id, { permissions: ['panel.access', 'network.view'] });
+	await core.ranks.update(owner, rank.id, { permissions: ['panel.access', 'network.view'] });
 	core.ranks.invalidate(ALICE);
 	assert.equal((await call('GET', '/api/network')).statusCode, 403);
 });
 
 test('requests are limited per key', async () => {
 	const { core, owner, bearer } = await setup();
-	const call = bearer(core.apiKeys.create(owner, { name: 'Spam' }).secret);
+	const call = bearer((await core.apiKeys.create(owner, { name: 'Spam' })).secret);
 	let last;
 	for (let i = 0; i <= API_RATE_LIMIT; i++) last = await call('GET', '/api/api-docs');
 	// The window may roll over during the loop: one more call settles it
@@ -83,7 +83,7 @@ test('requests are limited per key', async () => {
 
 test('docs: catalogue, OpenAPI and Bruno collection', async () => {
 	const { core, owner, bearer } = await setup();
-	const call = bearer(core.apiKeys.create(owner, { name: 'Docs' }).secret);
+	const call = bearer((await core.apiKeys.create(owner, { name: 'Docs' })).secret);
 	const docs = (await call('GET', '/api/api-docs')).json();
 	assert.equal(docs.baseUrl, 'https://10.0.0.1:3000');
 	assert.ok(docs.routes.length > 200);
@@ -123,7 +123,7 @@ test('Bruno files are well formed', async () => {
 
 test('the panel manages keys with its session', async () => {
 	const { core, owner, app } = await setup();
-	const sid = core.sessions.create({ discordId: owner.id });
+	const sid = await core.sessions.create({ discordId: owner.id });
 	const headers = { 'x-requested-with': 'panel' };
 	const created = await app.inject({ method: 'POST', url: '/api/api-keys', cookies: { sid }, headers, payload: { name: 'Bot externe', permissions: ['network.view'], expiresInDays: 30 } });
 	assert.equal(created.statusCode, 201, created.body);

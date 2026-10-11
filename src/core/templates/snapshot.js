@@ -11,8 +11,14 @@ export const PANEL_TABLES = {
 	rank_roles: { key: ['rank_id', 'role_id'] },
 };
 
-export function panelSnapshot(db, guildId) {
-	return Object.fromEntries(Object.keys(PANEL_TABLES).map(table => [table, db.prepare(`SELECT * FROM ${table} WHERE guild_id = ?`).all(guildId)]));
+export async function panelSnapshot(db, guildId) {
+	const out = {};
+	for (const [table, { key, autoId }] of Object.entries(PANEL_TABLES)) {
+		// Stable order: by id (creation order) or by primary key
+		const order = (autoId ? ['id'] : key).map(c => `\`${c}\``).join(', ');
+		out[table] = await db.prepare(`SELECT * FROM ${table} WHERE guild_id = ? ORDER BY ${order}`).all(guildId);
+	}
+	return out;
 }
 
 // Keeps what a template needs: roles the bot can recreate (not managed, below its own), role overwrites only

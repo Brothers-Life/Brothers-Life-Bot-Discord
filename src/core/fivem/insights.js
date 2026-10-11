@@ -222,7 +222,7 @@ export async function insightsReport({ query, when, groupsMap, canMoney, discord
 	// --- Discord crossing (linked accounts only)
 	const linked = users.filter(u => u.discord).map(u => ({ userId: u.userid, username: u.username, discordId: u.discord.replace(/^discord:/, '') }));
 	const sinceDay = dayOf(from30);
-	const discordRows = discordActivity ? discordActivity(sinceDay) : [];
+	const discordRows = discordActivity ? await discordActivity(sinceDay) : [];
 	const discordByUser = new Map();
 	const discordByDay = new Map();
 	for (const r of discordRows) {

@@ -28,14 +28,14 @@ function toCsv(rows, columns) {
 export function registerStatsRoutes(app, { core }) {
 	const { stats, executor, network } = core;
 
-	function parse(query) {
+	async function parse(query) {
 		const guildIds = !query.guildId || query.guildId === 'all' ? null : [query.guildId];
-		if (guildIds && !network.find(guildIds[0])) throw new NotFoundError('Serveur introuvable.');
+		if (guildIds && !await network.find(guildIds[0])) throw new NotFoundError('Serveur introuvable.');
 		return { guildIds, from: query.from, to: query.to, days: query.days ?? 30, channelId: query.channelId, userId: query.userId, staffOnly: query.staffOnly };
 	}
 
 	async function channelNames(guildIds) {
-		const ids = guildIds ?? network.activeIds();
+		const ids = guildIds ?? await network.activeIds();
 		const names = new Map();
 		for (const id of ids) {
 			const [text, voice] = await Promise.all([executor.listTextChannels(id), executor.listVoiceChannels(id)]);
@@ -52,7 +52,7 @@ export function registerStatsRoutes(app, { core }) {
 	const view = { permission: 'stats.view' };
 
 	app.get('/api/stats/options', { config: view, schema: { querystring: filters } }, async (request) => {
-		const { guildIds } = parse(request.query);
+		const { guildIds } = await parse(request.query);
 		if (!guildIds) return { textChannels: [], voiceChannels: [], categories: [] };
 		const [textChannels, voiceChannels, categories] = await Promise.all([
 			executor.listTextChannels(guildIds[0]), executor.listVoiceChannels(guildIds[0]), executor.listCategoryChannels(guildIds[0]),
@@ -62,26 +62,26 @@ export function registerStatsRoutes(app, { core }) {
 
 	app.get('/api/stats/overview', { config: view, schema: { querystring: filters } }, async (request) => {
 		await stats.flush();
-		return stats.overview(parse(request.query));
+		return stats.overview(await parse(request.query));
 	});
 
-	app.get('/api/stats/heatmap', { config: view, schema: { querystring: filters } }, async (request) => stats.heatmap(parse(request.query)));
+	app.get('/api/stats/heatmap', { config: view, schema: { querystring: filters } }, async (request) => stats.heatmap(await parse(request.query)));
 
 	app.get('/api/stats/members', { config: view, schema: { querystring: filters } }, async (request) => {
-		return withUsers(await stats.topMembers(parse(request.query), { metric: request.query.metric, limit: request.query.limit ?? 50 }));
+		return withUsers(await stats.topMembers(await parse(request.query), { metric: request.query.metric, limit: request.query.limit ?? 50 }));
 	});
 
 	app.get('/api/stats/channels', { config: view, schema: { querystring: filters } }, async (request) => {
-		const f = parse(request.query);
+		const f = await parse(request.query);
 		const [rows, names] = await Promise.all([stats.topChannels(f, { limit: request.query.limit ?? 50 }), channelNames(f.guildIds)]);
-		const guilds = new Map(network.list().map(g => [g.id, g.name]));
+		const guilds = new Map((await network.list()).map(g => [g.id, g.name]));
 		return rows.map(r => ({ ...r, name: names.get(r.channelId) ?? 'salon supprimé', guildName: guilds.get(r.guildId) ?? r.guildId }));
 	});
 
-	app.get('/api/stats/staff', { config: view, schema: { querystring: filters } }, async (request) => withUsers(await stats.staff(parse(request.query))));
+	app.get('/api/stats/staff', { config: view, schema: { querystring: filters } }, async (request) => withUsers(await stats.staff(await parse(request.query))));
 
 	app.get('/api/stats/export', { config: view, schema: { querystring: { ...filters, required: ['kind'] } } }, async (request, reply) => {
-		const f = parse(request.query);
+		const f = await parse(request.query);
 		let csv;
 		switch (request.query.kind) {
 		case 'days': {
@@ -129,7 +129,7 @@ export function registerStatsRoutes(app, { core }) {
 	});
 
 	// --- Counter channels ----------------------------------------------------------------------
-	app.get('/api/stats/counters', { config: view, schema: { querystring: filters } }, async (request) => stats.counters(parse(request.query).guildIds?.[0] ?? null));
+	app.get('/api/stats/counters', { config: view, schema: { querystring: filters } }, async (request) => stats.counters((await parse(request.query)).guildIds?.[0] ?? null));
 
 	app.post('/api/stats/counters', {
 		config: { permission: 'stats.manage' },

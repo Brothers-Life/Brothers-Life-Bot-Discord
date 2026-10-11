@@ -29,7 +29,7 @@ const ts = (ms, style = 'f') => `<t:${Math.round(ms / 1000)}:${style}>`;
 export async function autocomplete(interaction) {
 	const typed = interaction.options.getFocused().toLowerCase();
 	const sub = interaction.options.getSubcommand();
-	const list = interaction.client.core.meetings.list()
+	const list = (await interaction.client.core.meetings.list())
 		.filter(m => m.guildId === interaction.guildId && (sub === 'demarrer' ? m.status === 'scheduled' : m.status !== 'cancelled'))
 		.filter(m => m.title.toLowerCase().includes(typed))
 		.slice(0, 25);
@@ -37,10 +37,10 @@ export async function autocomplete(interaction) {
 }
 
 // The meeting chosen, or the one in progress on this server
-function pick(interaction, meetings) {
+async function pick(interaction, meetings) {
 	const chosen = interaction.options.getString('reunion');
 	if (chosen) return meetings.get(Number(chosen));
-	const live = meetings.list().find(m => m.status === 'live' && m.guildId === interaction.guildId);
+	const live = (await meetings.list()).find(m => m.status === 'live' && m.guildId === interaction.guildId);
 	if (!live) throw new ValidationError('Aucune réunion en cours : choisis-en une.');
 	return live;
 }
@@ -65,12 +65,12 @@ export async function execute(interaction) {
 		let reply;
 		switch (interaction.options.getSubcommand()) {
 		case 'liste': {
-			const next = meetings.list().filter(m => m.guildId === interaction.guildId && (m.status === 'scheduled' || m.status === 'live')).slice(0, 10);
+			const next = (await meetings.list()).filter(m => m.guildId === interaction.guildId && (m.status === 'scheduled' || m.status === 'live')).slice(0, 10);
 			reply = { embeds: [new EmbedBuilder().setColor(0xff9628).setTitle('Prochaines réunions').setDescription(next.map(m => `${m.status === 'live' ? '🔴 **en cours** · ' : ''}**${m.title}** · ${ts(m.startsAt)} (${ts(m.startsAt, 'R')}) · <#${m.voiceChannelId}> · ${m.answers.yes}/${m.invitees.length} présents`).join('\n') || 'Aucune réunion prévue.')] };
 			break;
 		}
 		case 'presence': {
-			const m = pick(interaction, meetings);
+			const m = await pick(interaction, meetings);
 			if (!m.report) throw new ValidationError('La réunion n’a pas commencé.');
 			const lines = m.report.people.map(p => `${p.inVoice ? '🟢' : p.status === 'excused' ? '📝' : p.minutes ? '⚪' : '🔴'} <@${p.userId}> · ${p.minutes} min${p.status === 'late' ? ' · en retard' : ''}${p.status === 'excused' ? ' · excusé' : ''}${!p.invited ? ' · de passage' : ''}`);
 			reply = { embeds: [new EmbedBuilder().setColor(0xed4245).setTitle(`Présences · ${m.title}`).setDescription(lines.join('\n').slice(0, 4000) || 'Personne.').setFooter({ text: '🟢 en vocal · ⚪ parti · 🔴 pas venu · 📝 excusé' })] };
@@ -82,12 +82,12 @@ export async function execute(interaction) {
 			break;
 		}
 		case 'terminer': {
-			const { meeting, next } = await meetings.end(actor, pick(interaction, meetings).id);
+			const { meeting, next } = await meetings.end(actor, (await pick(interaction, meetings)).id);
 			reply = { content: `✅ Réunion **${meeting.title}** terminée, compte rendu publié.${next ? ` Prochaine : ${ts(next.startsAt)}.` : ''}` };
 			break;
 		}
 		case 'note': {
-			const m = meetings.addNote(actor, pick(interaction, meetings).id, interaction.options.getString('texte'));
+			const m = await meetings.addNote(actor, (await pick(interaction, meetings)).id, interaction.options.getString('texte'));
 			reply = { content: `📝 Note ajoutée au compte rendu de **${m.title}**.` };
 			break;
 		}
@@ -95,7 +95,7 @@ export async function execute(interaction) {
 			const raw = interaction.options.getString('echeance');
 			const dueAt = raw ? dueDate(raw) : null;
 			if (raw && !dueAt) throw new ValidationError('Échéance invalide : utilise JJ/MM.');
-			const m = meetings.addAction(actor, pick(interaction, meetings).id, { text: interaction.options.getString('texte'), assigneeId: interaction.options.getUser('pour')?.id ?? null, dueAt });
+			const m = await meetings.addAction(actor, (await pick(interaction, meetings)).id, { text: interaction.options.getString('texte'), assigneeId: interaction.options.getUser('pour')?.id ?? null, dueAt });
 			reply = { content: `📋 Tâche ajoutée à **${m.title}**.` };
 			break;
 		}

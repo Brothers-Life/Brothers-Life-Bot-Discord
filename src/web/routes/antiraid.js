@@ -8,11 +8,11 @@ export function registerAntiraidRoutes(app, { core }) {
 
 	app.get('/api/antiraid/:guildId', { config: { permission: 'antiraid.view' }, schema: { params: guildParam } }, async (request) => {
 		const { guildId } = request.params;
-		if (!network.find(guildId)) throw new NotFoundError('Serveur introuvable.');
+		if (!await network.find(guildId)) throw new NotFoundError('Serveur introuvable.');
 		return {
-			config: antiraid.get(guildId),
-			state: antiraid.state(guildId),
-			lockedDown: moderation.isLockedDown(guildId),
+			config: await antiraid.get(guildId),
+			state: await antiraid.state(guildId),
+			lockedDown: await moderation.isLockedDown(guildId),
 			roles: await executor.listRoles(guildId),
 		};
 	});
@@ -27,7 +27,7 @@ export function registerAntiraidRoutes(app, { core }) {
 		schema: { params: guildParam, body: { type: 'object', required: ['on'], properties: { on: { type: 'boolean' }, confirm: { type: 'boolean' } } } },
 	}, async (request) => {
 		await antiraid.setRaid(request.actor, request.params.guildId, request.body.on);
-		return antiraid.state(request.params.guildId);
+		return await antiraid.state(request.params.guildId);
 	});
 
 	// Locks every text channel of the server (same as /lockdown)

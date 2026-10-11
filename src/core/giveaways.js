@@ -89,21 +89,23 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 		end: db.prepare('UPDATE giveaways SET status = \'ended\', ended_at = ?, draw = ?, updated_at = ? WHERE id = ? AND status = \'open\''),
 		setDraw: db.prepare('UPDATE giveaways SET draw = ? WHERE id = ?'),
 		remove: db.prepare('DELETE FROM giveaways WHERE id = ?'),
-		dueStart: db.prepare('SELECT * FROM giveaways WHERE status = \'scheduled\' AND starts_at <= ?'),
-		dueEnd: db.prepare('SELECT * FROM giveaways WHERE status = \'open\' AND ends_at <= ?'),
+		dueStart: db.prepare('SELECT * FROM giveaways WHERE status = \'scheduled\' AND starts_at <= ? ORDER BY id'),
+		dueEnd: db.prepare('SELECT * FROM giveaways WHERE status = \'open\' AND ends_at <= ? ORDER BY id'),
 		entry: db.prepare('SELECT * FROM giveaway_entries WHERE giveaway_id = ? AND user_id = ?'),
-		entries: db.prepare('SELECT * FROM giveaway_entries WHERE giveaway_id = ? ORDER BY at'),
+		entries: db.prepare('SELECT * FROM giveaway_entries WHERE giveaway_id = ? ORDER BY at, user_id'),
 		entryCount: db.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(entries), 0) AS tickets FROM giveaway_entries WHERE giveaway_id = ?'),
-		addEntry: db.prepare('INSERT INTO giveaway_entries (giveaway_id, user_id, guild_id, entries, at) VALUES (?, ?, ?, ?, ?)'),
+		// Only while the giveaway is open, once per member (double click, or the draw running meanwhile)
+		addEntry: db.prepare('INSERT IGNORE INTO giveaway_entries (giveaway_id, user_id, guild_id, entries, at) SELECT id, ?, ?, ?, ? FROM giveaways WHERE id = ? AND status = \'open\''),
 		removeEntry: db.prepare('DELETE FROM giveaway_entries WHERE giveaway_id = ? AND user_id = ?'),
 		winners: db.prepare('SELECT * FROM giveaway_winners WHERE giveaway_id = ? ORDER BY id'),
 		addWinner: db.prepare('INSERT INTO giveaway_winners (giveaway_id, user_id, drawn_at) VALUES (?, ?, ?)'),
-		setWinnerStatus: db.prepare('UPDATE giveaway_winners SET status = ? WHERE id = ?'),
+		// The second parameter (1) keeps a claimed prize from expiring
+		setWinnerStatus: db.prepare('UPDATE giveaway_winners SET status = ? WHERE id = ? AND status = \'winner\' AND (? = 0 OR claimed_at IS NULL)'),
 		claim: db.prepare('UPDATE giveaway_winners SET claimed_at = ? WHERE giveaway_id = ? AND user_id = ? AND status = \'winner\' AND claimed_at IS NULL'),
 		recentWin: db.prepare('SELECT 1 FROM giveaway_winners WHERE user_id = ? AND status = \'winner\' AND drawn_at >= ? LIMIT 1'),
 		unclaimed: db.prepare(`
 			SELECT w.*, g.settings FROM giveaway_winners w JOIN giveaways g ON g.id = w.giveaway_id
-			WHERE w.status = 'winner' AND w.claimed_at IS NULL AND g.status = 'ended'
+			WHERE w.status = 'winner' AND w.claimed_at IS NULL AND g.status = 'ended' ORDER BY w.id
 		`),
 	};
 	const refreshes = new Map();
@@ -142,8 +144,8 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 		};
 	}
 
-	function getOrThrow(id) {
-		const g = toGiveaway(q.get.get(id));
+	async function getOrThrow(id) {
+		const g = toGiveaway(await q.get.get(id));
 		if (!g) throw new NotFoundError('Giveaway introuvable.');
 		return g;
 	}
@@ -152,17 +154,17 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 		if (!actor.can('giveaways.manage')) throw new ForbiddenError('Permission manquante : giveaways.manage');
 	}
 
-	function counts(id) {
-		const c = q.entryCount.get(id);
+	async function counts(id) {
+		const c = await q.entryCount.get(id);
 		return { participants: c.n, entries: c.tickets };
 	}
 
-	function view(g) {
-		return { giveaway: g, ...counts(g.id), winners: q.winners.all(g.id).filter(w => w.status === 'winner').map(w => ({ userId: w.user_id, claimedAt: w.claimed_at })) };
+	async function view(g) {
+		return { giveaway: g, ...await counts(g.id), winners: (await q.winners.all(g.id)).filter(w => w.status === 'winner').map(w => ({ userId: w.user_id, claimedAt: w.claimed_at })) };
 	}
 
 	async function refreshMessages(g) {
-		const data = view(g);
+		const data = await view(g);
 		for (const m of g.messages) await executor.upsertGiveawayMessage(m.channelId, m.messageId, data).catch(error => logger.warn(`Giveaway #${g.id} not refreshed:`, error.message));
 	}
 
@@ -170,8 +172,9 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 		if (refreshes.has(id)) return;
 		const timer = setTimeout(() => {
 			refreshes.delete(id);
-			const g = toGiveaway(q.get.get(id));
-			if (g) refreshMessages(g).catch(() => null);
+			q.get.get(id)
+				.then(row => (row ? refreshMessages(toGiveaway(row)) : null))
+				.catch(error => logger.warn(`Giveaway #${id} not refreshed:`, error.message));
 		}, 10_000);
 		timer.unref?.();
 		refreshes.set(id, timer);
@@ -199,37 +202,37 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 			if (s.minVoiceHours && activity.voiceHours < s.minVoiceHours) reasons.push(`Il faut ${s.minVoiceHours} h de vocal sur ${s.activityDays} jours (tu en as ${activity.voiceHours}).`);
 		}
 		for (const other of s.requiredGuildIds) {
-			if (await executor.getMemberRoleIds(other, userId).catch(() => null) === null) reasons.push(`Il faut aussi être sur ${network.find(other)?.name ?? 'un autre serveur du réseau'}.`);
+			if (await executor.getMemberRoleIds(other, userId).catch(() => null) === null) reasons.push(`Il faut aussi être sur ${(await network.find(other))?.name ?? 'un autre serveur du réseau'}.`);
 		}
-		if (s.noActiveSanction && sanctions.list({ userId, active: true, limit: 1 }).length) reasons.push('Tu as une sanction en cours.');
-		if (s.noWarnDays && sanctions.list({ userId, type: 'warn', limit: 20 }).some(w => !w.revokedAt && w.createdAt >= now() - s.noWarnDays * DAY_MS)) reasons.push(`Pas d’avertissement dans les ${s.noWarnDays} derniers jours.`);
+		if (s.noActiveSanction && (await sanctions.list({ userId, active: true, limit: 1 })).length) reasons.push('Tu as une sanction en cours.');
+		if (s.noWarnDays && (await sanctions.list({ userId, type: 'warn', limit: 20 })).some(w => !w.revokedAt && w.createdAt >= now() - s.noWarnDays * DAY_MS)) reasons.push(`Pas d’avertissement dans les ${s.noWarnDays} derniers jours.`);
 		if (s.excludeStaff) {
 			const principal = await ranks.resolve(userId);
 			if (principal.isOwner || principal.can('giveaways.join_exempt') || principal.level > 0) reasons.push('Le staff ne participe pas à ce giveaway.');
 		}
 		if (s.excludeHost !== false && g.createdBy && userId === g.createdBy) reasons.push('Tu organises ce giveaway : tu ne peux pas y participer.');
-		if (s.excludeRecentWinnersDays && q.recentWin.get(userId, now() - s.excludeRecentWinnersDays * DAY_MS)) reasons.push(`Tu as déjà gagné un giveaway ces ${s.excludeRecentWinnersDays} derniers jours.`);
+		if (s.excludeRecentWinnersDays && await q.recentWin.get(userId, now() - s.excludeRecentWinnersDays * DAY_MS)) reasons.push(`Tu as déjà gagné un giveaway ces ${s.excludeRecentWinnersDays} derniers jours.`);
 		const bonuses = s.bonusRoles.filter(b => roles.includes(b.roleId)).map(b => b.entries);
 		const bonus = !bonuses.length ? 0 : s.bonusMode === 'max' ? Math.max(...bonuses) - 1 : bonuses.reduce((a, b) => a + b - 1, 0);
 		return { reasons, entries: Math.min(1 + bonus, s.maxEntries) };
 	}
 
-	function values(input) {
+	async function values(input) {
 		const v = normalizeGiveaway(input);
 		const startsAt = Number.isFinite(input.startsAt) ? input.startsAt : null;
 		const endsAt = Number.isFinite(input.endsAt) ? input.endsAt : null;
 		if (!endsAt || endsAt < (startsAt ?? now()) + 60_000) throw new ValidationError('La fin doit être au moins une minute après le début.');
-		for (const t of v.targets) if (network.find(t.guildId)?.status !== 'active') throw new ValidationError('Un des serveurs ne fait pas partie du réseau.');
+		for (const t of v.targets) if ((await network.find(t.guildId))?.status !== 'active') throw new ValidationError('Un des serveurs ne fait pas partie du réseau.');
 		return { prize: v.prize, description: v.description, winnersCount: v.winnersCount, settings: JSON.stringify(v.settings), targets: JSON.stringify(v.targets), startsAt, endsAt };
 	}
 
 	async function openGiveaway(g) {
 		// Opened meanwhile (by an earlier tick or the panel)
-		if (!['draft', 'scheduled'].includes(getOrThrow(g.id).status)) return getOrThrow(g.id);
+		if (!['draft', 'scheduled'].includes((await getOrThrow(g.id)).status)) return await getOrThrow(g.id);
 		const messages = [];
 		for (const target of g.targets) {
 			try {
-				const messageId = await executor.upsertGiveawayMessage(target.channelId, null, view({ ...g, status: 'open' }), { target });
+				const messageId = await executor.upsertGiveawayMessage(target.channelId, null, await view({ ...g, status: 'open' }), { target });
 				messages.push({ guildId: target.guildId, channelId: target.channelId, messageId });
 			}
 			catch (error) {
@@ -237,8 +240,8 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 			}
 		}
 		if (!messages.length) throw new ValidationError('Le giveaway n’a pu être posté dans aucun salon : vérifie les permissions du bot.');
-		q.open.run(JSON.stringify(messages), now(), g.id);
-		return getOrThrow(g.id);
+		await q.open.run(JSON.stringify(messages), now(), g.id);
+		return await getOrThrow(g.id);
 	}
 
 	// Draws `count` winners among eligible entries (re-checked now), never someone already drawn.
@@ -246,7 +249,7 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 	async function drawWinners(g, count, exclude = new Set()) {
 		const pool = [];
 		const skipped = [];
-		for (const e of q.entries.all(g.id)) {
+		for (const e of await q.entries.all(g.id)) {
 			if (exclude.has(e.user_id)) continue;
 			const { reasons } = await check(g, e.user_id, e.guild_id);
 			if (reasons.length) skipped.push({ userId: e.user_id, reason: reasons[0] });
@@ -257,13 +260,13 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 	}
 
 	// Server of a winner's entry, its name and the link to the giveaway message there
-	function placeOf(g, userId) {
-		const guildId = q.entry.get(g.id, userId)?.guild_id ?? null;
+	async function placeOf(g, userId) {
+		const guildId = (await q.entry.get(g.id, userId))?.guild_id ?? null;
 		const message = g.messages.find(m => m.guildId === guildId) ?? g.messages[0] ?? null;
 		const serverId = guildId ?? message?.guildId ?? null;
 		return {
 			guildId,
-			serverName: (serverId && network.find(serverId)?.name) || null,
+			serverName: (serverId && (await network.find(serverId))?.name) || null,
 			link: message ? `https://discord.com/channels/${message.guildId}/${message.channelId}/${message.messageId}` : null,
 		};
 	}
@@ -271,7 +274,7 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 	// A winner who lost the prize (not claimed in time, or replaced by a reroll): the winner role goes away
 	async function unreward(g, userId, reason) {
 		const s = g.settings;
-		const { guildId, serverName } = placeOf(g, userId);
+		const { guildId, serverName } = await placeOf(g, userId);
 		if (s.winnerRoleId && guildId) {
 			await moderation.takeRole(GIVEAWAY, { guildId, userId, roleId: s.winnerRoleId, reason: `Lot du giveaway #${g.id} perdu` })
 				.catch(error => logger.warn(`Winner role of giveaway #${g.id} not removed:`, error.message));
@@ -285,7 +288,7 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 	async function reward(g, userIds) {
 		const s = g.settings;
 		for (const userId of userIds) {
-			const { guildId, serverName, link } = placeOf(g, userId);
+			const { guildId, serverName, link } = await placeOf(g, userId);
 			if (s.winnerRoleId) {
 				if (guildId) {
 					await moderation.giveRole(GIVEAWAY, { guildId, userId, roleId: s.winnerRoleId, durationMs: s.winnerRoleDays ? s.winnerRoleDays * DAY_MS : null, reason: `Gagnant du giveaway #${g.id}` })
@@ -311,7 +314,7 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 	}
 
 	async function endGiveaway(g, by) {
-		if (getOrThrow(g.id).status !== 'open') return getOrThrow(g.id);
+		if ((await getOrThrow(g.id)).status !== 'open') return await getOrThrow(g.id);
 		const result = await drawWinners(g, g.winnersCount);
 		const draw = {
 			at: now(),
@@ -320,126 +323,142 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 			picks: result.chosen.map(c => ({ userId: c.userId, entries: c.entries, of: c.ticket })),
 			method: 'crypto.randomInt, pondéré par les entrées, sans remise',
 		};
-		if (!q.end.run(now(), JSON.stringify(draw), now(), g.id).changes) return getOrThrow(g.id);
-		for (const c of result.chosen) q.addWinner.run(g.id, c.userId, now());
-		const ended = getOrThrow(g.id);
+		// Ended and its winners saved together: only the call whose conditional update wins stores winners
+		const saved = await db.transaction(async () => {
+			if (!(await q.end.run(now(), JSON.stringify(draw), now(), g.id)).changes) return false;
+			for (const c of result.chosen) await q.addWinner.run(g.id, c.userId, now());
+			return true;
+		})();
+		if (!saved) return await getOrThrow(g.id);
+		const ended = await getOrThrow(g.id);
 		const winners = result.chosen.map(c => c.userId);
 		await refreshMessages(ended);
 		await announce(ended, winners);
 		await reward(ended, winners);
-		audit.record({ actorId: by, source: by === 'system' ? 'system' : 'panel', action: 'giveaways.end', target: String(g.id), details: { prize: g.prize, winners: winners.map(id => `<@${id}>`).join(', ') || 'aucun', participants: counts(g.id).participants } });
+		await audit.record({ actorId: by, source: by === 'system' ? 'system' : 'panel', action: 'giveaways.end', target: String(g.id), details: { prize: g.prize, winners: winners.map(id => `<@${id}>`).join(', ') || 'aucun', participants: (await counts(g.id)).participants } });
 		return ended;
 	}
 
 	async function redraw(g, { userId = null, count = 1, by, reason = 'reroll' }) {
-		const current = q.winners.all(g.id);
+		const current = await q.winners.all(g.id);
 		const replaced = userId ? current.filter(w => w.user_id === userId && w.status === 'winner') : [];
 		if (userId && !replaced.length) throw new ValidationError('Cette personne n’est pas gagnante de ce giveaway.');
-		for (const w of replaced) q.setWinnerStatus.run(reason === 'expired' ? 'expired' : 'rerolled', w.id);
-		for (const w of replaced) await unreward(g, w.user_id, reason);
+		// Conditional: a prize claimed meanwhile is not taken back by the expiry
+		const lost = [];
+		for (const w of replaced) {
+			if ((await q.setWinnerStatus.run(reason === 'expired' ? 'expired' : 'rerolled', w.id, reason === 'expired' ? 1 : 0)).changes) lost.push(w);
+		}
+		if (userId && !lost.length) return [];
+		for (const w of lost) await unreward(g, w.user_id, reason);
 		const exclude = new Set(current.map(w => w.user_id));
-		const result = await drawWinners(g, userId ? replaced.length : count, exclude);
+		const result = await drawWinners(g, userId ? lost.length : count, exclude);
 		const winners = result.chosen.map(c => c.userId);
-		for (const c of result.chosen) q.addWinner.run(g.id, c.userId, now());
-		const draw = { ...(g.draw ?? {}), rerolls: [...(g.draw?.rerolls ?? []), { at: now(), replaced: replaced.map(w => w.user_id), picks: winners, reason }] };
-		q.setDraw.run(JSON.stringify(draw), g.id);
-		await refreshMessages(getOrThrow(g.id));
-		await announce(getOrThrow(g.id), winners, { reroll: true });
+		const draw = { ...(g.draw ?? {}), rerolls: [...(g.draw?.rerolls ?? []), { at: now(), replaced: lost.map(w => w.user_id), picks: winners, reason }] };
+		await db.transaction(async () => {
+			for (const c of result.chosen) await q.addWinner.run(g.id, c.userId, now());
+			await q.setDraw.run(JSON.stringify(draw), g.id);
+		})();
+		await refreshMessages(await getOrThrow(g.id));
+		await announce(await getOrThrow(g.id), winners, { reroll: true });
 		await reward(g, winners);
-		audit.record({ actorId: by, source: by === 'system' ? 'system' : 'panel', action: 'giveaways.reroll', target: String(g.id), details: { prize: g.prize, winners: winners.map(id => `<@${id}>`).join(', ') || 'aucun', reason } });
+		await audit.record({ actorId: by, source: by === 'system' ? 'system' : 'panel', action: 'giveaways.reroll', target: String(g.id), details: { prize: g.prize, winners: winners.map(id => `<@${id}>`).join(', ') || 'aucun', reason } });
 		return winners;
 	}
 
 	const service = {
-		list: () => q.list.all().map(toGiveaway).map(g => ({ ...g, ...counts(g.id), winners: q.winners.all(g.id).filter(w => w.status === 'winner').map(w => w.user_id) })),
-		get: (id) => {
-			const g = getOrThrow(id);
-			return { ...g, ...counts(id), winners: q.winners.all(id).map(w => ({ userId: w.user_id, status: w.status, drawnAt: w.drawn_at, claimedAt: w.claimed_at })) };
+		list: async () => Promise.all((await q.list.all()).map(toGiveaway).map(async g => ({ ...g, ...await counts(g.id), winners: (await q.winners.all(g.id)).filter(w => w.status === 'winner').map(w => w.user_id) }))),
+		get: async (id) => {
+			const g = await getOrThrow(id);
+			return { ...g, ...await counts(id), winners: (await q.winners.all(id)).map(w => ({ userId: w.user_id, status: w.status, drawnAt: w.drawn_at, claimedAt: w.claimed_at })) };
 		},
-		entries: id => q.entries.all(id).map(e => ({ userId: e.user_id, guildId: e.guild_id, entries: e.entries, at: e.at })),
+		entries: async id => (await q.entries.all(id)).map(e => ({ userId: e.user_id, guildId: e.guild_id, entries: e.entries, at: e.at })),
 
-		create(actor, input) {
+		async create(actor, input) {
 			need(actor);
-			const v = values(input);
-			const id = Number(q.insert.run({ ...v, by: actor.id, at: now() }).lastInsertRowid);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'giveaways.create', target: String(id), details: { prize: v.prize } });
-			return getOrThrow(id);
+			const v = await values(input);
+			const id = Number((await q.insert.run({ ...v, by: actor.id, at: now() })).lastInsertRowid);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'giveaways.create', target: String(id), details: { prize: v.prize } });
+			return await getOrThrow(id);
 		},
 
 		async update(actor, id, input) {
 			need(actor);
-			const g = getOrThrow(id);
+			const g = await getOrThrow(id);
 			if (g.status === 'ended' || g.status === 'cancelled') throw new ValidationError('Ce giveaway est terminé : duplique-le.');
-			q.update.run({ ...values(input), id, at: now() });
-			const updated = getOrThrow(id);
+			await q.update.run({ ...await values(input), id, at: now() });
+			const updated = await getOrThrow(id);
 			if (updated.status === 'open') await refreshMessages(updated);
 			return updated;
 		},
 
 		async publish(actor, id) {
 			need(actor);
-			const g = getOrThrow(id);
+			const g = await getOrThrow(id);
 			if (g.status !== 'draft') throw new ValidationError('Ce giveaway est déjà publié.');
 			if (!g.targets.length) throw new ValidationError('Choisis au moins un salon.');
 			if (g.startsAt && g.startsAt > now() + 30_000) {
-				q.setStatus.run('scheduled', now(), id);
-				return getOrThrow(id);
+				await q.setStatus.run('scheduled', now(), id);
+				return await getOrThrow(id);
 			}
 			const opened = await exclusive(id, () => openGiveaway(g));
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'giveaways.publish', target: String(id), details: { prize: g.prize } });
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'giveaways.publish', target: String(id), details: { prize: g.prize } });
 			return opened;
 		},
 
 		async end(actor, id) {
 			need(actor);
-			const g = getOrThrow(id);
+			const g = await getOrThrow(id);
 			if (g.status !== 'open') throw new ValidationError('Ce giveaway n’est pas en cours.');
 			return exclusive(id, () => endGiveaway(g, actor.id));
 		},
 
 		async reroll(actor, id, { userId = null, count = 1 } = {}) {
 			need(actor);
-			const g = getOrThrow(id);
+			const g = await getOrThrow(id);
 			if (g.status !== 'ended') throw new ValidationError('Le giveaway doit être terminé pour relancer un tirage.');
-			return exclusive(id, () => redraw(getOrThrow(id), { userId, count: int(count, 1, 50, 1), by: actor.id }));
+			return exclusive(id, async () => redraw(await getOrThrow(id), { userId, count: int(count, 1, 50, 1), by: actor.id }));
 		},
 
 		async cancel(actor, id) {
 			need(actor);
-			const g = getOrThrow(id);
+			const g = await getOrThrow(id);
 			if (g.status === 'ended' || g.status === 'cancelled') throw new ValidationError('Ce giveaway est déjà terminé.');
-			q.setStatus.run('cancelled', now(), id);
-			await refreshMessages(getOrThrow(id));
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'giveaways.cancel', target: String(id), details: { prize: g.prize } });
-			return getOrThrow(id);
+			await q.setStatus.run('cancelled', now(), id);
+			await refreshMessages(await getOrThrow(id));
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'giveaways.cancel', target: String(id), details: { prize: g.prize } });
+			return await getOrThrow(id);
 		},
 
-		duplicate(actor, id) {
-			const g = getOrThrow(id);
+		async duplicate(actor, id) {
+			const g = await getOrThrow(id);
 			const duration = Math.max((g.endsAt ?? 0) - (g.startsAt ?? g.createdAt), 3600_000);
-			return service.create(actor, { ...g, startsAt: null, endsAt: now() + duration });
+			return await service.create(actor, { ...g, startsAt: null, endsAt: now() + duration });
 		},
 
 		async remove(actor, id) {
 			need(actor);
-			const g = getOrThrow(id);
+			const g = await getOrThrow(id);
 			for (const m of g.messages) await executor.deleteMessage(m.channelId, m.messageId).catch(() => null);
-			q.remove.run(id);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'giveaways.delete', target: String(id), details: { prize: g.prize } });
+			await q.remove.run(id);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'giveaways.delete', target: String(id), details: { prize: g.prize } });
 		},
 
 		// The "Participate" button: joins, or leaves when already in
 		async toggleEntry(id, userId, guildId) {
-			const g = getOrThrow(id);
+			const g = await getOrThrow(id);
 			if (g.status !== 'open') throw new ValidationError('Ce giveaway n’est pas ouvert.');
-			if (q.entry.get(id, userId)) {
-				q.removeEntry.run(id, userId);
+			if (await q.entry.get(id, userId)) {
+				// Removed by a concurrent click: same answer
+				await q.removeEntry.run(id, userId);
 				scheduleRefresh(id);
 				return { joined: false, message: 'Participation retirée.' };
 			}
 			const { reasons, entries } = await check(g, userId, guildId);
 			if (reasons.length) throw new ValidationError(`Tu ne peux pas participer :\n• ${reasons.join('\n• ')}`);
-			q.addEntry.run(id, userId, guildId, entries, now());
+			if (!(await q.addEntry.run(userId, guildId, entries, now(), id)).changes) {
+				if ((await getOrThrow(id)).status !== 'open') throw new ValidationError('Ce giveaway n’est pas ouvert.');
+				return { joined: true, entries, message: 'Tu participes déjà. Clique à nouveau pour te retirer.' };
+			}
 			scheduleRefresh(id);
 			return { joined: true, entries, message: `Tu participes${entries > 1 ? ` avec ${entries} entrées` : ''} ! Clique à nouveau pour te retirer.` };
 		},
@@ -447,39 +466,39 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 		// Eligibility of everyone, for the panel (why someone would be skipped at the draw)
 		async participants(actor, id) {
 			if (!actor.can('giveaways.view')) throw new ForbiddenError('Permission manquante : giveaways.view');
-			const g = getOrThrow(id);
+			const g = await getOrThrow(id);
 			const list = [];
-			for (const e of q.entries.all(id)) {
+			for (const e of await q.entries.all(id)) {
 				const { reasons } = g.status === 'open' ? await check(g, e.user_id, e.guild_id) : { reasons: [] };
 				list.push({ userId: e.user_id, guildId: e.guild_id, entries: e.entries, at: e.at, eligible: !reasons.length, reason: reasons[0] ?? null });
 			}
 			return list;
 		},
 
-		claim(id, userId) {
-			const g = getOrThrow(id);
-			if (!q.claim.run(now(), id, userId).changes) throw new ValidationError('Rien à réclamer : tu n’es pas gagnant, ou c’est déjà fait.');
-			audit.record({ actorId: userId, source: 'bot', action: 'giveaways.claim', target: String(id), details: { prize: g.prize, member: `<@${userId}>` } });
+		async claim(id, userId) {
+			const g = await getOrThrow(id);
+			if (!(await q.claim.run(now(), id, userId)).changes) throw new ValidationError('Rien à réclamer : tu n’es pas gagnant, ou c’est déjà fait.');
+			await audit.record({ actorId: userId, source: 'bot', action: 'giveaways.claim', target: String(id), details: { prize: g.prize, member: `<@${userId}>` } });
 			return { message: `Lot réclamé ! Le staff va te contacter pour **${g.prize}**.` };
 		},
 
 		// Every 30 s: scheduled giveaways to open, ended ones to draw, unclaimed prizes to reroll
 		async tick() {
 			// A giveaway already being handled is left to the next tick
-			for (const row of q.dueStart.all(now())) {
+			for (const row of await q.dueStart.all(now())) {
 				if (!busy.has(row.id)) await exclusive(row.id, () => openGiveaway(toGiveaway(row))).catch(error => logger.warn(`Giveaway #${row.id} failed to open:`, error.message));
 			}
-			for (const row of q.dueEnd.all(now())) {
+			for (const row of await q.dueEnd.all(now())) {
 				if (!busy.has(row.id)) await exclusive(row.id, () => endGiveaway(toGiveaway(row), 'system')).catch(error => logger.warn(`Giveaway #${row.id} failed to end:`, error.message));
 			}
-			for (const w of q.unclaimed.all()) {
+			for (const w of await q.unclaimed.all()) {
 				const settings = JSON.parse(w.settings);
 				if (settings.claimMinutes && w.drawn_at + settings.claimMinutes * 60_000 <= now() && !busy.has(w.giveaway_id)) {
 					await exclusive(w.giveaway_id, async () => {
 						// Claimed or rerolled meanwhile
-						const still = q.winners.all(w.giveaway_id).find(x => x.id === w.id);
+						const still = (await q.winners.all(w.giveaway_id)).find(x => x.id === w.id);
 						if (still?.status !== 'winner' || still.claimed_at) return;
-						await redraw(getOrThrow(w.giveaway_id), { userId: w.user_id, by: 'system', reason: 'expired' });
+						await redraw(await getOrThrow(w.giveaway_id), { userId: w.user_id, by: 'system', reason: 'expired' });
 					}).catch(error => logger.warn(`Reroll of giveaway #${w.giveaway_id} failed:`, error.message));
 				}
 			}

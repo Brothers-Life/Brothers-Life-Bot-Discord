@@ -86,7 +86,7 @@ export function describeSlot(slot) {
 // closed (writing blocked, or hidden) for @everyone, with an optional message in the channel.
 export function createChannelSchedules({ db, network, audit, executor, logger = console, now = Date.now }) {
 	const q = {
-		all: db.prepare('SELECT * FROM channel_schedules ORDER BY guild_id, name'),
+		all: db.prepare('SELECT * FROM channel_schedules ORDER BY guild_id, name, id'),
 		get: db.prepare('SELECT * FROM channel_schedules WHERE id = ?'),
 		insert: db.prepare(`
 			INSERT INTO channel_schedules (guild_id, name, channel_ids, mode, lock_type, weekly, dates, announce, enabled, created_at, updated_at)
@@ -96,7 +96,8 @@ export function createChannelSchedules({ db, network, audit, executor, logger = 
 			UPDATE channel_schedules SET name = @name, channel_ids = @channelIds, mode = @mode, lock_type = @lockType, weekly = @weekly, dates = @dates,
 				announce = @announce, enabled = @enabled, applied = NULL, updated_at = @at WHERE id = @id
 		`),
-		applied: db.prepare('UPDATE channel_schedules SET applied = ? WHERE id = ?'),
+		// Conditional: only the caller that saw the previous state applies the change
+		applied: db.prepare('UPDATE channel_schedules SET applied = ? WHERE id = ? AND applied <=> ?'),
 		remove: db.prepare('DELETE FROM channel_schedules WHERE id = ?'),
 	};
 	const toRule = row => row && ({
@@ -106,8 +107,8 @@ export function createChannelSchedules({ db, network, audit, executor, logger = 
 	const need = (actor) => {
 		if (!actor.can('schedules.manage')) throw new ForbiddenError('Permission manquante : schedules.manage');
 	};
-	function getOrThrow(id) {
-		const rule = toRule(q.get.get(id));
+	async function getOrThrow(id) {
+		const rule = toRule(await q.get.get(id));
 		if (!rule) throw new NotFoundError('Horaire introuvable.');
 		return rule;
 	}
@@ -115,8 +116,8 @@ export function createChannelSchedules({ db, network, audit, executor, logger = 
 	// `record`: false for channels taken out of the rule (its own state does not change)
 	async function apply(rule, state, { announce = rule.announce, record = true } = {}) {
 		const closed = state === 'closed';
-		// Recorded first: a tick running at the same time (save, slow Discord) does not apply it twice
-		if (record) q.applied.run(state, rule.id);
+		// Recorded first, only if still in the state read: a tick running at the same time (save, slow Discord) does not apply it twice
+		if (record && !(await q.applied.run(state, rule.id, rule.applied ?? null)).changes) return;
 		const next = nextChange(rule, now());
 		for (const channelId of rule.channelIds) {
 			try {
@@ -133,47 +134,47 @@ export function createChannelSchedules({ db, network, audit, executor, logger = 
 	}
 
 	const service = {
-		list(guildId = null) {
-			return q.all.all().map(toRule).filter(r => !guildId || r.guildId === guildId).map(r => ({ ...r, state: stateAt(r, now()), next: nextChange(r, now()) }));
+		async list(guildId = null) {
+			return (await q.all.all()).map(toRule).filter(r => !guildId || r.guildId === guildId).map(r => ({ ...r, state: stateAt(r, now()), next: nextChange(r, now()) }));
 		},
 
 		async save(actor, input) {
 			need(actor);
-			if (network.find(input.guildId)?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
+			if ((await network.find(input.guildId))?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
 			const rule = normalizeSchedule(input);
 			const row = { ...rule, guildId: input.guildId, channelIds: JSON.stringify(rule.channelIds), weekly: JSON.stringify(rule.weekly), dates: JSON.stringify(rule.dates), announce: rule.announce ? 1 : 0, enabled: rule.enabled ? 1 : 0, at: now() };
 			let id = input.id;
 			if (id) {
-				const previous = getOrThrow(id);
-				q.update.run({ ...row, id });
+				const previous = await getOrThrow(id);
+				await q.update.run({ ...row, id });
 				// Channels taken out of the rule get their access back
 				const dropped = previous.channelIds.filter(c => !rule.channelIds.includes(c));
 				if (previous.applied === 'closed' && dropped.length) await apply({ ...previous, channelIds: dropped }, 'open', { announce: false, record: false });
 			}
 			else {
-				id = Number(q.insert.run(row).lastInsertRowid);
+				id = Number((await q.insert.run(row)).lastInsertRowid);
 			}
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'schedules.save', guildId: input.guildId, target: String(id), details: { horaire: rule.name, salons: rule.channelIds.length } });
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'schedules.save', guildId: input.guildId, target: String(id), details: { horaire: rule.name, salons: rule.channelIds.length } });
 			await service.tick();
-			return service.list().find(r => r.id === id);
+			return (await service.list()).find(r => r.id === id);
 		},
 
 		// Deleted (or disabled): the channels are opened again
 		async remove(actor, id) {
 			need(actor);
-			const rule = getOrThrow(id);
+			const rule = await getOrThrow(id);
 			if (rule.applied === 'closed') await apply(rule, 'open', { announce: false });
-			q.remove.run(id);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'schedules.delete', guildId: rule.guildId, target: String(id), details: { horaire: rule.name } });
+			await q.remove.run(id);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'schedules.delete', guildId: rule.guildId, target: String(id), details: { horaire: rule.name } });
 		},
 
 		// Every minute: channels whose state should change
 		async tick() {
-			for (const { id } of q.all.all()) {
+			for (const { id } of await q.all.all()) {
 				// Read again: another tick may have applied it meanwhile
-				const rule = toRule(q.get.get(id));
+				const rule = toRule(await q.get.get(id));
 				if (!rule) continue;
-				if (network.find(rule.guildId)?.status !== 'active') continue;
+				if ((await network.find(rule.guildId))?.status !== 'active') continue;
 				if (!rule.enabled) {
 					if (rule.applied === 'closed') await apply(rule, 'open', { announce: false });
 					continue;

@@ -13,7 +13,7 @@ const CAT_ARCHIVE = '620000000000000003';
 async function setup(config = {}) {
 	const ctx = await withNetwork();
 	const { core, owner } = ctx;
-	const modo = core.ranks.create(owner, { name: 'Modo', level: 20, permissions: ['tickets.handle'] });
+	const modo = await core.ranks.create(owner, { name: 'Modo', level: 20, permissions: ['tickets.handle'] });
 	await core.ranks.assignDirect(owner, ALICE, modo.id);
 	const category = await core.tickets.saveCategory(owner, MAIN, { name: 'Support', parentChannelId: CAT_OPEN, rankIds: [modo.id], config });
 	return { ...ctx, category };
@@ -24,10 +24,10 @@ async function openWithForm(core, category, values) {
 	let step = start.step;
 	let result;
 	for (const stepValues of values) {
-		result = core.tickets.submitFormStep({ guildId: MAIN, userId: MEMBER, categoryId: category.id, step, values: stepValues });
+		result = await core.tickets.submitFormStep({ guildId: MAIN, userId: MEMBER, categoryId: category.id, step, values: stepValues });
 		step = result.next;
 	}
-	return core.tickets.open({ guildId: MAIN, userId: MEMBER, userName: 'bob', categoryId: category.id, answers: result.answers });
+	return await core.tickets.open({ guildId: MAIN, userId: MEMBER, userName: 'bob', categoryId: category.id, answers: result.answers });
 }
 
 test('forms: several steps, choices and conditional steps', async () => {
@@ -66,7 +66,7 @@ test('a multi-step form fills the answers of the ticket and its welcome message'
 
 test('an expired or skipped form step is refused', async () => {
 	const { core, category } = await setup();
-	assert.throws(() => core.tickets.submitFormStep({ guildId: MAIN, userId: MEMBER, categoryId: category.id, step: 0, values: { subject: 'x' } }), /expiré/);
+	await assert.rejects(async () => core.tickets.submitFormStep({ guildId: MAIN, userId: MEMBER, categoryId: category.id, step: 0, values: { subject: 'x' } }), /expiré/);
 });
 
 test('access rules: blocked roles, per-type limit and cooldown', async () => {
@@ -74,7 +74,7 @@ test('access rules: blocked roles, per-type limit and cooldown', async () => {
 	executor.memberRoles.set(`${MAIN}:${MEMBER}`, ['800000000000000066']);
 	await assert.rejects(core.tickets.startOpening({ guildId: MAIN, userId: MEMBER, categoryId: category.id }), /ne peux pas/);
 	executor.memberRoles.set(`${MAIN}:${MEMBER}`, []);
-	core.tickets.saveSettings(owner, MAIN, { maxOpen: 5 });
+	await core.tickets.saveSettings(owner, MAIN, { maxOpen: 5 });
 	const ticket = await core.tickets.open({ guildId: MAIN, userId: MEMBER, userName: 'bob', categoryId: category.id });
 	await assert.rejects(core.tickets.startOpening({ guildId: MAIN, userId: MEMBER, categoryId: category.id }), /déjà 1 ticket/);
 	await core.tickets.close(MEMBER, ticket.id);
@@ -90,7 +90,7 @@ test('opening hours, with a range spanning midnight', () => {
 
 test('statuses move the channel to their Discord category and keep a history', async () => {
 	const { core, executor, category, owner } = await setup({ statusParents: { waiting: CAT_WAIT } });
-	core.tickets.saveStatuses(owner, MAIN, [{ key: 'waiting', label: 'En attente du membre', emoji: '⏳' }]);
+	await core.tickets.saveStatuses(owner, MAIN, [{ key: 'waiting', label: 'En attente du membre', emoji: '⏳' }]);
 	const ticket = await core.tickets.open({ guildId: MAIN, userId: MEMBER, userName: 'bob', categoryId: category.id });
 	assert.equal(executor.ticketChannels.get(ticket.channelId).parentId, CAT_OPEN);
 	await assert.rejects(core.tickets.setStatus(MEMBER, ticket.id, 'waiting'), ForbiddenError);
@@ -102,7 +102,7 @@ test('statuses move the channel to their Discord category and keep a history', a
 	assert.equal(channel.parentId, CAT_WAIT);
 	assert.equal(channel.name, '⏳┃ticket-0001-bob');
 	// Built-in statuses are always there
-	assert.deepEqual(core.tickets.statuses(MAIN).map(s => s.key), ['waiting', 'open', 'claimed', 'closed']);
+	assert.deepEqual((await core.tickets.statuses(MAIN)).map(s => s.key), ['waiting', 'open', 'claimed', 'closed']);
 });
 
 test('claim with exclusive writing, priority and transfer', async () => {
@@ -112,7 +112,7 @@ test('claim with exclusive writing, priority and transfer', async () => {
 	assert.equal(claimed.statusKey, 'claimed');
 	assert.ok(executor.calls.some(c => c[0] === 'writers' && c[2] === ALICE));
 	await core.tickets.setPriority(ALICE, ticket.id, 'urgent');
-	assert.equal(core.tickets.get(ticket.id).priority, 'urgent');
+	assert.equal((await core.tickets.get(ticket.id)).priority, 'urgent');
 	await assert.rejects(core.tickets.transfer(ALICE, ticket.id, MEMBER), /staff/);
 	const transferred = await core.tickets.transfer(ALICE, ticket.id, owner.id);
 	assert.equal(transferred.claimedBy, owner.id);
@@ -145,32 +145,32 @@ test('close rules: required reason, opener not allowed, archive then reopen', as
 test('rating: only the opener, once, after closing', async () => {
 	const { core, category } = await setup();
 	const ticket = await core.tickets.open({ guildId: MAIN, userId: MEMBER, userName: 'bob', categoryId: category.id });
-	assert.throws(() => core.tickets.rate(MEMBER, ticket.id, 5), /pas fermé/);
+	await assert.rejects(async () => core.tickets.rate(MEMBER, ticket.id, 5), /pas fermé/);
 	await core.tickets.close(MEMBER, ticket.id);
-	assert.throws(() => core.tickets.rate(ALICE, ticket.id, 5), ForbiddenError);
-	core.tickets.rate(MEMBER, ticket.id, 4);
-	assert.throws(() => core.tickets.rate(MEMBER, ticket.id, 5), /déjà noté/);
-	assert.equal(core.tickets.rateComment(MEMBER, ticket.id, 'Rapide').ratingComment, 'Rapide');
+	await assert.rejects(async () => core.tickets.rate(ALICE, ticket.id, 5), ForbiddenError);
+	await core.tickets.rate(MEMBER, ticket.id, 4);
+	await assert.rejects(async () => core.tickets.rate(MEMBER, ticket.id, 5), /déjà noté/);
+	assert.equal((await core.tickets.rateComment(MEMBER, ticket.id, 'Rapide')).ratingComment, 'Rapide');
 });
 
 test('inactivity: reminder then automatic close', async () => {
 	let clock = Date.now();
 	const ctx = await withNetwork();
 	const { core, owner, executor } = ctx;
-	core.tickets.saveSettings(owner, MAIN, {});
+	await core.tickets.saveSettings(owner, MAIN, {});
 	// A service with a controllable clock, on the same database
 	const { createTickets } = await import('../../src/core/tickets.js');
 	const tickets = createTickets({ db: core.db, network: core.network, ranks: core.ranks, audit: core.audit, executor, logs: core.logs, logger: { warn: () => undefined, error: () => undefined }, now: () => clock });
 	const category = await tickets.saveCategory(owner, MAIN, { name: 'Support', config: { inactivity: { reminderHours: 2, closeHours: 5 } } });
 	const ticket = await tickets.open({ guildId: MAIN, userId: MEMBER, userName: 'bob', categoryId: category.id });
 	// The member is waiting for the staff: never reminded nor closed
-	tickets.recordMessage(ticket.channelId, { id: 'w1', authorId: MEMBER, content: 'Bonjour ?', createdAt: clock });
+	await tickets.recordMessage(ticket.channelId, { id: 'w1', authorId: MEMBER, content: 'Bonjour ?', createdAt: clock });
 	clock += 6 * 3600_000;
 	await tickets.sweep();
 	assert.equal(executor.notices.length, 0);
-	assert.equal(tickets.get(ticket.id).status, 'open');
+	assert.equal((await tickets.get(ticket.id)).status, 'open');
 	// The staff answered last: now the member is reminded, then the ticket closes
-	tickets.recordMessage(ticket.channelId, { id: 'w2', authorId: ALICE, content: 'Toujours besoin ?', createdAt: clock });
+	await tickets.recordMessage(ticket.channelId, { id: 'w2', authorId: ALICE, content: 'Toujours besoin ?', createdAt: clock });
 	clock += 3 * 3600_000;
 	await tickets.sweep();
 	assert.deepEqual(executor.notices.map(n => n.kind), ['reminder']);
@@ -178,8 +178,8 @@ test('inactivity: reminder then automatic close', async () => {
 	assert.equal(executor.notices.length, 1, 'only one reminder');
 	clock += 3 * 3600_000;
 	await tickets.sweep();
-	assert.equal(tickets.get(ticket.id).status, 'closed');
-	assert.match(tickets.get(ticket.id).closeReason, /Inactif/);
+	assert.equal((await tickets.get(ticket.id)).status, 'closed');
+	assert.match((await tickets.get(ticket.id)).closeReason, /Inactif/);
 });
 
 test('live conversation: messages recorded, edited, deleted, panel reply and internal note', async () => {
@@ -188,16 +188,16 @@ test('live conversation: messages recorded, edited, deleted, panel reply and int
 	const events = [];
 	const unsubscribe = core.tickets.subscribe(e => events.push(e.type));
 
-	core.tickets.recordMessage(ticket.channelId, { id: '1', authorId: MEMBER, authorName: 'bob', content: 'Bonjour', createdAt: Date.now() });
-	assert.equal(core.tickets.recordMessage('999', { id: '2', content: 'autre salon' }), null);
-	core.tickets.updateMessage(ticket.channelId, { id: '1', content: 'Bonjour !' });
+	await core.tickets.recordMessage(ticket.channelId, { id: '1', authorId: MEMBER, authorName: 'bob', content: 'Bonjour', createdAt: Date.now() });
+	assert.equal(await core.tickets.recordMessage('999', { id: '2', content: 'autre salon' }), null);
+	await core.tickets.updateMessage(ticket.channelId, { id: '1', content: 'Bonjour !' });
 	await assert.rejects(core.tickets.reply({ id: MEMBER }, ticket.id, { content: 'x' }), ForbiddenError);
 	const alice = await core.ranks.resolve(ALICE);
 	await core.tickets.reply(alice, ticket.id, { content: 'On regarde' });
 	await core.tickets.reply(alice, ticket.id, { content: 'Joueur connu', internal: true });
-	core.tickets.removeMessage(ticket.channelId, '1');
+	await core.tickets.removeMessage(ticket.channelId, '1');
 
-	const messages = core.tickets.messages(ticket.id);
+	const messages = await core.tickets.messages(ticket.id);
 	assert.equal(messages.length, 3);
 	assert.equal(messages[0].content, 'Bonjour !');
 	assert.ok(messages[0].deletedAt);

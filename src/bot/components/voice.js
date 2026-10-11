@@ -21,7 +21,7 @@ export async function execute(interaction) {
 	};
 
 	try {
-		const room = voiceRooms.getRoom(channelId);
+		const room = await voiceRooms.getRoom(channelId);
 		switch (action) {
 		case 'rename':
 			if (room.ownerId !== me) return await ephemeral('Seul le propriétaire du salon peut faire ça.');
@@ -49,7 +49,7 @@ export async function execute(interaction) {
 		}
 		case 'reset': {
 			const updated = await voiceRooms.reset(me, channelId);
-			await refreshPanel(updated?.state ?? voiceRooms.getRoom(channelId).state);
+			await refreshPanel(updated?.state ?? (await voiceRooms.getRoom(channelId)).state);
 			return await ephemeral('Réglages remis par défaut.');
 		}
 		case 'permit':
@@ -75,7 +75,7 @@ export async function execute(interaction) {
 			return await interaction.reply({ content: `👑 <@${me}> est maintenant propriétaire du salon.`, allowedMentions: { parse: [] } });
 		case 'more': {
 			if (room.ownerId !== me) return await ephemeral('Seul le propriétaire du salon peut faire ça.');
-			const hub = voiceRooms.hubs(room.guildId).find(h => h.id === room.hubId);
+			const hub = (await voiceRooms.hubs(room.guildId)).find(h => h.id === room.hubId);
 			return await interaction.reply({
 				components: qualityMenus(channelId, { maxBitrate: interaction.guild.maximumBitrate, options: hub?.config.options ?? { bitrate: true, region: true } }),
 				flags: MessageFlags.Ephemeral,

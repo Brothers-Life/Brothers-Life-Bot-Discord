@@ -116,16 +116,24 @@ export function fillPayload(payload, vars) {
 export function createOnboarding({ db, network, audit, executor, uploads, logger = console, now = Date.now, fetchImpl = fetch, variables = createVariables({ executor, logger, now }) }) {
 	const q = {
 		get: db.prepare('SELECT * FROM onboarding_config WHERE guild_id = ?'),
+		lock: db.prepare('SELECT * FROM onboarding_config WHERE guild_id = ? FOR UPDATE'),
 		upsert: db.prepare(`
 			INSERT INTO onboarding_config (guild_id, config, updated_at, updated_by) VALUES (?, ?, ?, ?)
-			ON CONFLICT(guild_id) DO UPDATE SET config = excluded.config, updated_at = excluded.updated_at, updated_by = excluded.updated_by
+			ON DUPLICATE KEY UPDATE config = VALUES(config), updated_at = VALUES(updated_at), updated_by = VALUES(updated_by)
 		`),
 	};
 	const cache = new Map();
+	// Bumped when a config is saved: a read started before is not cached (it may be the old config)
+	let generation = 0;
+	const invalidate = (guildId) => {
+		generation += 1;
+		cache.delete(guildId);
+	};
 
-	function configOf(guildId) {
+	async function configOf(guildId) {
 		if (!cache.has(guildId)) {
-			const row = q.get.get(guildId);
+			const started = generation;
+			const row = await q.get.get(guildId);
 			let config;
 			try {
 				config = normalizeOnboarding(row ? JSON.parse(row.config) : {});
@@ -134,13 +142,14 @@ export function createOnboarding({ db, network, audit, executor, uploads, logger
 				logger.warn(`Onboarding config of ${guildId} is invalid, defaults used:`, error.message);
 				config = normalizeOnboarding({});
 			}
+			if (started !== generation) return config;
 			cache.set(guildId, config);
 		}
 		return cache.get(guildId);
 	}
 
-	function active(guildId) {
-		return network.find(guildId)?.status === 'active';
+	async function active(guildId) {
+		return (await network.find(guildId))?.status === 'active';
 	}
 
 	// Shared member variables (+ {fivem.*} only when `uses` mentions them) and the welcome ones
@@ -196,18 +205,18 @@ export function createOnboarding({ db, network, audit, executor, uploads, logger
 
 		// Verification passed: the automatic roles held back on arrival (unless the rules acceptance gives them)
 		async verified(guildId, userId) {
-			if (!active(guildId)) return;
-			const config = configOf(guildId);
+			if (!await active(guildId)) return;
+			const config = await configOf(guildId);
 			if (rulesGiveAutoroles(config)) return;
 			for (const roleId of config.autoroles.humanRoleIds) {
 				await executor.addRole(guildId, userId, roleId, 'Rôle automatique (vérifié)').catch(error => logger.warn(`Auto role ${roleId} on ${guildId} failed:`, error.message));
 			}
 		},
 
-		save(actor, guildId, input) {
+		async save(actor, guildId, input) {
 			if (!actor.can('onboarding.manage')) throw new ForbiddenError('Permission manquante : onboarding.manage');
-			if (!active(guildId)) throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
-			const current = configOf(guildId);
+			if (!await active(guildId)) throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
+			const current = await configOf(guildId);
 			assertFivemAllowed(actor, input, current);
 			const config = normalizeOnboarding({ ...input, rules: { ...input.rules, messageId: current.rules.messageId } });
 			for (const [key, value] of [['welcome', config.welcome.card.design], ['leave', config.leave.card.design], ['boost', config.boost.card.design]]) {
@@ -215,10 +224,10 @@ export function createOnboarding({ db, network, audit, executor, uploads, logger
 					if (source?.startsWith('upload:') && !uploads.exists(source.slice(7))) throw new ValidationError(`Carte ${key} : une image envoyée n’existe plus, renvoie-la.`);
 				}
 			}
-			q.upsert.run(guildId, JSON.stringify(config), now(), actor.id);
-			cache.delete(guildId);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'onboarding.save', guildId, target: guildId });
-			return configOf(guildId);
+			await q.upsert.run(guildId, JSON.stringify(config), now(), actor.id);
+			invalidate(guildId);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'onboarding.save', guildId, target: guildId });
+			return await configOf(guildId);
 		},
 
 		// Rendered card for the panel preview (a sample member, or someone real)
@@ -230,7 +239,7 @@ export function createOnboarding({ db, network, audit, executor, uploads, logger
 		async sendTest(actor, guildId, kind) {
 			if (!actor.can('onboarding.manage')) throw new ForbiddenError('Permission manquante : onboarding.manage');
 			if (!KINDS.includes(kind)) throw new ValidationError('Message inconnu.');
-			const section = configOf(guildId)[kind];
+			const section = (await configOf(guildId))[kind];
 			if (!section.channelId) throw new ValidationError('Choisis d’abord le salon de ce message.');
 			const user = await executor.getUser(actor.id);
 			await sendSection(guildId, kind, section, { id: actor.id, username: user?.username, globalName: user?.globalName, avatarUrl: user?.avatar });
@@ -238,10 +247,10 @@ export function createOnboarding({ db, network, audit, executor, uploads, logger
 
 		// Someone joins: automatic roles, welcome message (+ DM)
 		async memberJoined(guildId, member, { inviterId = null } = {}) {
-			if (!active(guildId)) return;
-			const config = configOf(guildId);
+			if (!await active(guildId)) return;
+			const config = await configOf(guildId);
 			// Humans wait for the rules acceptance or the verification when the server asks for one
-			const roles = member.bot ? config.autoroles.botRoleIds : rulesGiveAutoroles(config) || verifying(guildId) ? [] : config.autoroles.humanRoleIds;
+			const roles = member.bot ? config.autoroles.botRoleIds : rulesGiveAutoroles(config) || await verifying(guildId) ? [] : config.autoroles.humanRoleIds;
 			for (const roleId of roles) {
 				await executor.addRole(guildId, member.id, roleId, 'Rôle automatique').catch(error => logger.warn(`Auto role ${roleId} on ${guildId} failed:`, error.message));
 			}
@@ -255,16 +264,16 @@ export function createOnboarding({ db, network, audit, executor, uploads, logger
 		},
 
 		async memberLeft(guildId, member) {
-			if (!active(guildId)) return;
-			const config = configOf(guildId);
+			if (!await active(guildId)) return;
+			const config = await configOf(guildId);
 			if (config.leave.enabled && !member.bot) {
 				await sendSection(guildId, 'leave', config.leave, member).catch(error => logger.warn(`Leave message on ${guildId} failed:`, error.message));
 			}
 		},
 
 		async boostStarted(guildId, member) {
-			if (!active(guildId)) return;
-			const config = configOf(guildId);
+			if (!await active(guildId)) return;
+			const config = await configOf(guildId);
 			for (const roleId of config.boost.bonusRoleIds) {
 				await executor.addRole(guildId, member.id, roleId, 'Boost du serveur').catch(error => logger.warn(`Boost role on ${guildId} failed:`, error.message));
 			}
@@ -273,12 +282,12 @@ export function createOnboarding({ db, network, audit, executor, uploads, logger
 				const vars = await varsFor(guildId, member, {}, config.boost.dm.payload);
 				await executor.sendDMPayload(member.id, fillPayload(config.boost.dm.payload, vars)).catch(() => null);
 			}
-			audit.record({ actorId: member.id, source: 'bot', action: 'onboarding.boost', guildId, target: member.id, details: { member: `<@${member.id}>` } });
+			await audit.record({ actorId: member.id, source: 'bot', action: 'onboarding.boost', guildId, target: member.id, details: { member: `<@${member.id}>` } });
 		},
 
 		async boostEnded(guildId, member) {
-			if (!active(guildId)) return;
-			const config = configOf(guildId);
+			if (!await active(guildId)) return;
+			const config = await configOf(guildId);
 			for (const roleId of config.boost.bonusRoleIds) {
 				await executor.removeRole(guildId, member.id, roleId, 'Fin du boost').catch(() => null);
 			}
@@ -291,7 +300,7 @@ export function createOnboarding({ db, network, audit, executor, uploads, logger
 		// Posts the rules (or updates the message already posted)
 		async publishRules(actor, guildId) {
 			if (!actor.can('onboarding.manage')) throw new ForbiddenError('Permission manquante : onboarding.manage');
-			const config = configOf(guildId);
+			const config = await configOf(guildId);
 			const { rules } = config;
 			if (!rules.channelId) throw new ValidationError('Choisis d’abord le salon du règlement.');
 			if (!await executor.getTextChannel(guildId, rules.channelId)) throw new ValidationError('Le bot ne peut pas écrire dans le salon du règlement.');
@@ -299,18 +308,21 @@ export function createOnboarding({ db, network, audit, executor, uploads, logger
 				payload: rules.payload,
 				button: rules.enabled ? { label: rules.buttonLabel, emoji: rules.buttonEmoji, style: rules.buttonStyle } : null,
 			});
-			const raw = q.get.get(guildId);
-			const stored = raw ? JSON.parse(raw.config) : {};
-			stored.rules = { ...stored.rules, ...rules, messageId };
-			q.upsert.run(guildId, JSON.stringify(stored), now(), actor.id);
-			cache.delete(guildId);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'onboarding.rules_publish', guildId, target: rules.channelId });
-			return configOf(guildId);
+			// Read and written in one transaction: a save at the same time is not overwritten
+			await db.transaction(async () => {
+				const raw = await q.lock.get(guildId);
+				const stored = raw ? JSON.parse(raw.config) : {};
+				stored.rules = { ...stored.rules, ...rules, messageId };
+				await q.upsert.run(guildId, JSON.stringify(stored), now(), actor.id);
+			})();
+			invalidate(guildId);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'onboarding.rules_publish', guildId, target: rules.channelId });
+			return await configOf(guildId);
 		},
 
 		// The "I accept" button of the rules
 		async acceptRules(guildId, userId) {
-			const { rules, autoroles } = configOf(guildId);
+			const { rules, autoroles } = await configOf(guildId);
 			if (!rules.enabled) throw new NotFoundError('Le règlement n’est plus à valider ici.');
 			if (rules.minAccountAgeDays && now() - accountCreatedAt(userId) < rules.minAccountAgeDays * 86_400_000) {
 				throw new ValidationError(`Ton compte Discord doit avoir au moins ${rules.minAccountAgeDays} jour(s) pour accéder au serveur. Reviens un peu plus tard.`);
@@ -321,7 +333,7 @@ export function createOnboarding({ db, network, audit, executor, uploads, logger
 			if (!toAdd.length && !toRemove.length && rules.acceptRoleIds.every(r => current.includes(r))) return { already: true, message: 'Tu as déjà accepté le règlement.' };
 			for (const roleId of toAdd) await executor.addRole(guildId, userId, roleId, 'Règlement accepté');
 			for (const roleId of toRemove) await executor.removeRole(guildId, userId, roleId, 'Règlement accepté');
-			audit.record({ actorId: userId, source: 'bot', action: 'onboarding.rules_accept', guildId, target: userId, details: { member: `<@${userId}>` } });
+			await audit.record({ actorId: userId, source: 'bot', action: 'onboarding.rules_accept', guildId, target: userId, details: { member: `<@${userId}>` } });
 			return { already: false, message: rules.acceptedMessage };
 		},
 	};

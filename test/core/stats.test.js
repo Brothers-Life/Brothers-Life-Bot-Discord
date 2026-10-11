@@ -17,14 +17,14 @@ async function setup() {
 
 test('messages are counted per member, channel and day; bots and other servers are ignored', async () => {
 	const { stats, advance } = await setup();
-	stats.message(MAIN, 'c1', ALICE, false);
-	stats.message(MAIN, 'c1', ALICE, false);
-	stats.message(MAIN, 'c2', BOB, false);
-	stats.message(MAIN, 'c1', '999999999999999999', true);
-	stats.message(OTHER, 'c9', ALICE, false);
+	await stats.message(MAIN, 'c1', ALICE, false);
+	await stats.message(MAIN, 'c1', ALICE, false);
+	await stats.message(MAIN, 'c2', BOB, false);
+	await stats.message(MAIN, 'c1', '999999999999999999', true);
+	await stats.message(OTHER, 'c9', ALICE, false);
 	await stats.flush();
 	advance(86_400_000);
-	stats.message(MAIN, 'c1', BOB, false);
+	await stats.message(MAIN, 'c1', BOB, false);
 	await stats.flush();
 
 	const overview = await stats.overview({ guildIds: [MAIN], from: START - 86_400_000, to: START + 86_400_000 });
@@ -39,13 +39,13 @@ test('messages are counted per member, channel and day; bots and other servers a
 
 test('voice time only counts with someone else, AFK excluded, peak recorded', async () => {
 	const { stats, advance } = await setup();
-	stats.voiceState(MAIN, ALICE, 'v1');
+	await stats.voiceState(MAIN, ALICE, 'v1');
 	advance(10 * 60_000);
 	// Alone for 10 minutes: nothing
-	stats.voiceState(MAIN, BOB, 'v1');
+	await stats.voiceState(MAIN, BOB, 'v1');
 	advance(30 * 60_000);
-	stats.voiceState(MAIN, BOB, null);
-	stats.voiceState(MAIN, ALICE, 'afk', { afk: true });
+	await stats.voiceState(MAIN, BOB, null);
+	await stats.voiceState(MAIN, ALICE, 'afk', { afk: true });
 	advance(30 * 60_000);
 	await stats.flush();
 	const alice = await stats.member(ALICE, { guildIds: [MAIN], from: START, to: START + 3600_000 });
@@ -57,12 +57,12 @@ test('voice time only counts with someone else, AFK excluded, peak recorded', as
 
 test('heat map in Paris time; joins and leaves per day', async () => {
 	const { stats } = await setup();
-	stats.message(MAIN, 'c1', ALICE, false);
-	stats.memberJoined(MAIN);
-	stats.memberJoined(MAIN);
-	stats.memberLeft(MAIN);
+	await stats.message(MAIN, 'c1', ALICE, false);
+	await stats.memberJoined(MAIN);
+	await stats.memberJoined(MAIN);
+	await stats.memberLeft(MAIN);
 	await stats.flush();
-	const grid = stats.heatmap({ guildIds: [MAIN], from: START, to: START + 3600_000 });
+	const grid = await stats.heatmap({ guildIds: [MAIN], from: START, to: START + 3600_000 });
 	// 30/09/2026 is a Wednesday, 10:00 in Paris
 	assert.equal(grid[2][10].messages, 1);
 	const overview = await stats.overview({ guildIds: [MAIN], from: START, to: START });
@@ -72,7 +72,7 @@ test('heat map in Paris time; joins and leaves per day', async () => {
 
 test('staff statistics: sanctions per moderator and tickets handled', async () => {
 	const { core, stats, owner, executor } = await setup();
-	const modo = core.ranks.create(owner, { name: 'Modo', level: 20, permissions: ['sanctions.warn', 'tickets.handle'] });
+	const modo = await core.ranks.create(owner, { name: 'Modo', level: 20, permissions: ['sanctions.warn', 'tickets.handle'] });
 	await core.ranks.assignDirect(owner, ALICE, modo.id);
 	const alice = await core.ranks.resolve(ALICE);
 	executor.channels.set('610000000000000001', { guildId: MAIN, name: 'x' });
@@ -100,6 +100,6 @@ test('counter channels: created, renamed only when the text changes, permission 
 	stats.addVariables(async () => ({ 'fivem.players': 42 }));
 	await stats.updateCounter(owner, counter.id, 'En jeu : {fivem.players}');
 	assert.deepEqual(executor.renamed.at(-1), [counter.channelId, 'En jeu : 42']);
-	stats.counterDeleted(counter.channelId);
-	assert.equal(stats.counters(MAIN).length, 0);
+	await stats.counterDeleted(counter.channelId);
+	assert.equal((await stats.counters(MAIN)).length, 0);
 });

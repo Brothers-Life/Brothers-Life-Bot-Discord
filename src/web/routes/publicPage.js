@@ -16,11 +16,11 @@ export function registerPublicPageRoutes(app, { core }) {
 	});
 
 	app.get('/api/public-page/config', { config: { permission: 'public.manage' } }, async () => ({
-		config: publicPage.config(),
+		config: await publicPage.config(),
 		options: {
-			servers: fivem.list().map(s => ({ id: s.id, name: s.name })),
-			ranks: ranks.list().map(({ id, name, color, level }) => ({ id, name, color, level })),
-			guilds: network.list().filter(g => g.status === 'active' && g.botPresent).map(g => ({ id: g.id, name: g.name, icon: g.icon, isMain: g.isMain })),
+			servers: (await fivem.list()).map(s => ({ id: s.id, name: s.name })),
+			ranks: (await ranks.list()).map(({ id, name, color, level }) => ({ id, name, color, level })),
+			guilds: (await network.list()).filter(g => g.status === 'active' && g.botPresent).map(g => ({ id: g.id, name: g.name, icon: g.icon, isMain: g.isMain })),
 			maintenanceAvailable: typeof core.fivemEvents?.publicState === 'function',
 		},
 	}));

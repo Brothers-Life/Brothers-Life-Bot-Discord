@@ -17,34 +17,34 @@ test('appeals: button in the sanction DM, one appeal at a time, accepted lifts t
 	const before = await core.sanctions.create(owner, { type: 'timeout', userId: TARGET, reason: 'Spam', durationMs: 3_600_000 });
 	assert.equal(executor.dms.at(-1)[3], undefined, 'appeals closed: plain DM');
 
-	assert.throws(() => core.appeals.setConfig(owner, { enabled: true }), /salon/);
-	core.appeals.setConfig(owner, { enabled: true, guildId: MAIN, channelId: STAFF, types: ['ban', 'timeout'], cooldownDays: 7 });
+	await assert.rejects(async () => core.appeals.setConfig(owner, { enabled: true }), /salon/);
+	await core.appeals.setConfig(owner, { enabled: true, guildId: MAIN, channelId: STAFF, types: ['ban', 'timeout'], cooldownDays: 7 });
 	const sanction = await core.sanctions.create(owner, { type: 'ban', userId: TARGET, reason: 'Triche', durationMs: null });
 	assert.equal(executor.dms.at(-1)[3].appealSanctionId, sanction.id, 'DM with the appeal button');
 	assert.match(executor.dms.at(-1)[1], /faire appel/);
 
-	assert.throws(() => core.appeals.start(ALICE, sanction.id), ForbiddenError, 'only the sanctioned person');
-	const { questions } = core.appeals.start(TARGET, sanction.id);
+	await assert.rejects(async () => core.appeals.start(ALICE, sanction.id), ForbiddenError, 'only the sanctioned person');
+	const { questions } = await core.appeals.start(TARGET, sanction.id);
 	assert.equal(questions.length, 3);
 	await assert.rejects(core.appeals.submit(TARGET, sanction.id, ['', 'x']), /première question/);
 	const appeal = await core.appeals.submit(TARGET, sanction.id, ['Je ne trichais pas', 'Regardez la vidéo', '']);
 	assert.equal(executor.appealMessages.at(-1).channelId, STAFF);
-	assert.throws(() => core.appeals.start(TARGET, sanction.id), /en cours d’examen/);
+	await assert.rejects(async () => core.appeals.start(TARGET, sanction.id), /en cours d’examen/);
 
 	await assert.rejects(core.appeals.decide({ id: ALICE, can: () => false }, appeal.id, true), ForbiddenError);
 	const refused = await core.appeals.decide(owner, appeal.id, false, 'Preuves claires');
 	assert.equal(refused.status, 'rejected');
 	assert.match(executor.dms.at(-1)[1], /refusé[\s\S]*Preuves claires[\s\S]*7 jours/);
 	assert.equal(executor.appealMessages.at(-1).view.status, 'rejected', 'staff message updated');
-	assert.throws(() => core.appeals.start(TARGET, sanction.id), /pourras en refaire un/);
+	await assert.rejects(async () => core.appeals.start(TARGET, sanction.id), /pourras en refaire un/);
 
 	// Another sanction, accepted: lifted
 	const timeout = await core.sanctions.create(owner, { type: 'timeout', userId: TARGET, reason: 'Insultes', durationMs: 3_600_000 });
 	const second = await core.appeals.submit(TARGET, timeout.id, ['Malentendu']);
 	await core.appeals.decide(owner, second.id, true, 'Ok pour cette fois');
-	assert.ok(core.sanctions.get(timeout.id).revokedAt, 'sanction lifted');
+	assert.ok((await core.sanctions.get(timeout.id)).revokedAt, 'sanction lifted');
 	assert.match(executor.dms.at(-1)[1], /accepté/);
-	assert.equal(core.appeals.list(owner).length, 2);
+	assert.equal((await core.appeals.list(owner)).length, 2);
 	assert.ok(before.id, 'earlier sanctions untouched');
 });
 
@@ -101,7 +101,7 @@ test('archives: the channel saved as an HTML page (escaped), downloadable, delet
 	assert.ok(!html.includes('<script>alert'), 'escaped');
 	assert.match(html, /doc\.pdf/);
 	assert.match(html, /archivé le .* par Pedro/);
-	core.archives.remove(owner, archive.id);
+	await core.archives.remove(owner, archive.id);
 	assert.equal(fs.existsSync(core.archives.pathOf(archive)), false);
 	assert.match(renderArchive({ guildName: 'G', channelName: 'c', messages: [], createdAt: Date.now(), createdBy: 'x' }), /Aucun message/);
 });

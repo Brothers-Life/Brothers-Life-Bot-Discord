@@ -81,8 +81,8 @@ export function createVersionService({ config, settings, audit, appVersion, dbSc
 	}
 
 	// What installing `version` implies for the database
-	function plan(release) {
-		const dbVersion = dbSchemaVersion();
+	async function plan(release) {
+		const dbVersion = await dbSchemaVersion();
 		if (release.schemaVersion === null || release.schemaVersion >= dbVersion) {
 			return { compatible: true, restoreBackup: null };
 		}
@@ -100,9 +100,9 @@ export function createVersionService({ config, settings, audit, appVersion, dbSc
 			const cur = current();
 			return {
 				current: cur,
-				schemaVersion: dbSchemaVersion(),
-				ignored: settings.get('versions.ignored', null),
-				releases: releases.error ? [] : releases.map(r => ({ ...r, ...plan(r), isCurrent: r.version === cur.version })),
+				schemaVersion: await dbSchemaVersion(),
+				ignored: await settings.get('versions.ignored', null),
+				releases: releases.error ? [] : await Promise.all(releases.map(async r => ({ ...r, ...await plan(r), isCurrent: r.version === cur.version }))),
 				error: releases.error ? { code: releases.error.code ?? 'GITHUB', message: releases.error.message } : null,
 				backups: backups(),
 			};
@@ -111,15 +111,15 @@ export function createVersionService({ config, settings, audit, appVersion, dbSc
 		async prepareInstall(version) {
 			const release = (await listReleases(true)).find(r => r.version === version);
 			if (!release) throw new ValidationError(`Version inconnue : ${version}.`);
-			const target = plan(release);
+			const target = await plan(release);
 			if (!target.compatible && !target.restoreBackup) {
 				throw new ValidationError(`${version} attend une base plus ancienne (schéma ${release.schemaVersion}) et aucune sauvegarde compatible n’existe.`);
 			}
 			return { release, ...target };
 		},
 
-		ignore(version) {
-			settings.set('versions.ignored', version);
+		async ignore(version) {
+			await settings.set('versions.ignored', version);
 		},
 
 		// Periodic check: announces a new version once in the system log channel
@@ -128,9 +128,9 @@ export function createVersionService({ config, settings, audit, appVersion, dbSc
 			const latest = releases.find(r => !r.prerelease);
 			const cur = current();
 			if (!latest || compareVersions(latest.version, cur.version) <= 0) return null;
-			if ([settings.get('versions.ignored'), settings.get('versions.notified')].includes(latest.version)) return latest;
-			settings.set('versions.notified', latest.version);
-			audit.record({
+			if ([await settings.get('versions.ignored'), await settings.get('versions.notified')].includes(latest.version)) return latest;
+			await settings.set('versions.notified', latest.version);
+			await audit.record({
 				actorId: 'system',
 				source: 'system',
 				action: 'system.version_available',

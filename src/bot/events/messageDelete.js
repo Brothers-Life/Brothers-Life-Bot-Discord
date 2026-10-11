@@ -2,6 +2,6 @@ import { Events } from 'discord.js';
 import { messageDeleted } from '../eventLog.js';
 
 export const name = Events.MessageDelete;
-export function execute(message) {
-	messageDeleted(message);
+export async function execute(message) {
+	await messageDeleted(message);
 }

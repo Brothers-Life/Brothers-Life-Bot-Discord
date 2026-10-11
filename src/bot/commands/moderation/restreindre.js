@@ -9,7 +9,7 @@ export const data = moderationCommand('restreindre', 'Restreindre un membre : mu
 
 export async function autocomplete(interaction) {
 	const typed = interaction.options.getFocused().toLowerCase();
-	const profiles = interaction.client.core.restrictions.profiles();
+	const profiles = await interaction.client.core.restrictions.profiles();
 	await interaction.respond(profiles.filter(p => p.label.toLowerCase().includes(typed)).slice(0, 25).map(p => ({ name: p.label, value: p.key })));
 }
 
@@ -25,6 +25,6 @@ export async function execute(interaction) {
 			scope: scopeOf(interaction),
 			originGuildId: interaction.guildId,
 		});
-		return { embeds: [sanctionEmbed({ ...sanction, profileLabel: restrictions.getProfile(sanction.profile).label })] };
+		return { embeds: [sanctionEmbed({ ...sanction, profileLabel: (await restrictions.getProfile(sanction.profile)).label })] };
 	});
 }

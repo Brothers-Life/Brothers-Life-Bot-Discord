@@ -17,11 +17,11 @@ export function registerStreamRoutes(app, { core }) {
 	const { streams, network, executor } = core;
 
 	app.get('/api/streams', { config: { permission: 'notifications.view' } }, async () => {
-		const guilds = network.list().filter(g => g.status === 'active' && g.botPresent);
+		const guilds = (await network.list()).filter(g => g.status === 'active' && g.botPresent);
 		return {
-			subscriptions: streams.list(),
-			history: streams.history(100),
-			credentials: streams.credentials(),
+			subscriptions: await streams.list(),
+			history: await streams.history(100),
+			credentials: await streams.credentials(),
 			// Where to post and whom to ping, as for announcements
 			guilds: await Promise.all(guilds.map(async g => ({
 				id: g.id, name: g.name, isMain: g.isMain,

@@ -78,7 +78,7 @@ export function nowPlaying(state) {
 export async function autocomplete(interaction) {
 	if (interaction.options.getSubcommandGroup(false) === 'playlist') {
 		const ownOnly = interaction.options.getSubcommand() !== 'jouer';
-		const lists = interaction.client.core.music.playlists.suggest(interaction.user.id, interaction.options.getFocused(), { ownOnly });
+		const lists = await interaction.client.core.music.playlists.suggest(interaction.user.id, interaction.options.getFocused(), { ownOnly });
 		return interaction.respond(lists.map(p => ({ name: `${p.name} · ${p.count} titre${p.count > 1 ? 's' : ''}${p.ownerId === interaction.user.id ? '' : ' (partagée)'}`.slice(0, 100), value: String(p.id) })));
 	}
 	const typed = interaction.options.getFocused().trim();
@@ -106,7 +106,7 @@ export function parsePosition(text, from) {
 
 export async function execute(interaction) {
 	const { music, network } = interaction.client.core;
-	if (network.find(interaction.guildId)?.status !== 'active') {
+	if ((await network.find(interaction.guildId))?.status !== 'active') {
 		return interaction.reply({ content: 'Ce serveur ne fait pas partie du réseau.', flags: MessageFlags.Ephemeral });
 	}
 	const group = interaction.options.getSubcommandGroup(false);
@@ -121,8 +121,8 @@ export async function execute(interaction) {
 		const ctx = await musicContext(interaction);
 		const state = () => music.state(guildId);
 		// Positions shown to people ("À suivre" 1 = next) -> index in the whole queue
-		const upcomingIndex = (n) => {
-			const s = state();
+		const upcomingIndex = async (n) => {
+			const s = await state();
 			if (!s.connected || n > s.upcoming.length) throw new ValidationError(`Il n’y a que ${s.upcoming?.length ?? 0} titre(s) à suivre.`);
 			return s.index + n;
 		};
@@ -145,9 +145,9 @@ export async function execute(interaction) {
 			await music.stop(ctx, guildId);
 			reply = '⏹️ Musique arrêtée.';
 			break;
-		case 'file': return await interaction.editReply({ embeds: [queuePayload(state(), (interaction.options.getInteger('page') ?? 1) - 1)] });
+		case 'file': return await interaction.editReply({ embeds: [queuePayload(await state(), (interaction.options.getInteger('page') ?? 1) - 1)] });
 		case 'maintenant': {
-			const s = state();
+			const s = await state();
 			if (!s.connected) throw new ValidationError('Aucune musique en cours.');
 			const payload = musicPayload(s);
 			return await interaction.editReply({ embeds: payload.embeds });
@@ -155,35 +155,35 @@ export async function execute(interaction) {
 		case 'volume': reply = `🔊 Volume : ${(await music.setVolume(ctx, guildId, interaction.options.getInteger('niveau'))).volume} %.`; break;
 		case 'vitesse': reply = `⏩ Vitesse : ×${(await music.setSpeed(ctx, guildId, interaction.options.getNumber('valeur'))).speed}.`; break;
 		case 'position': {
-			const target = parsePosition(interaction.options.getString('position'), state().position ?? 0);
+			const target = parsePosition(interaction.options.getString('position'), (await state()).position ?? 0);
 			if (target === null) throw new ValidationError('Position invalide. Exemples : 1:30, 90, +30, -10.');
 			await music.seek(ctx, guildId, target);
 			reply = `⏩ Direction ${clock(target)}.`;
 			break;
 		}
-		case 'boucle': reply = { off: '🔁 Boucle coupée.', track: '🔂 Le titre se répète.', queue: '🔁 Toute la file se répète.' }[music.setLoop(ctx, guildId, interaction.options.getString('mode')).loop]; break;
+		case 'boucle': reply = { off: '🔁 Boucle coupée.', track: '🔂 Le titre se répète.', queue: '🔁 Toute la file se répète.' }[(await music.setLoop(ctx, guildId, interaction.options.getString('mode'))).loop]; break;
 		case 'melanger':
-			music.shuffle(ctx, guildId);
+			await music.shuffle(ctx, guildId);
 			reply = '🔀 File mélangée.';
 			break;
 		case 'filtre': {
 			const effect = interaction.options.getString('effet');
-			const current = state().filters ?? [];
+			const current = (await state()).filters ?? [];
 			const next = effect === 'none' ? [] : current.includes(effect) ? current.filter(f => f !== effect) : [...current, effect];
 			const s = await music.setFilters(ctx, guildId, next);
 			reply = s.filters.length ? `🎛️ Effets : ${s.filters.map(f => FILTERS[f]).join(', ')}.` : '🎛️ Aucun effet.';
 			break;
 		}
-		case 'retirer': reply = `🗑️ **${(await music.remove(ctx, guildId, upcomingIndex(interaction.options.getInteger('numero')))).removed.title}** retiré.`; break;
+		case 'retirer': reply = `🗑️ **${(await music.remove(ctx, guildId, await upcomingIndex(interaction.options.getInteger('numero')))).removed.title}** retiré.`; break;
 		case 'deplacer':
-			music.move(ctx, guildId, upcomingIndex(interaction.options.getInteger('numero')), upcomingIndex(interaction.options.getInteger('vers')));
+			await music.move(ctx, guildId, await upcomingIndex(interaction.options.getInteger('numero')), await upcomingIndex(interaction.options.getInteger('vers')));
 			reply = '↕️ File réorganisée.';
 			break;
 		case 'jouer-numero':
-			reply = `⏭️ ${nowPlaying(await music.jump(ctx, guildId, upcomingIndex(interaction.options.getInteger('numero'))))}`;
+			reply = `⏭️ ${nowPlaying(await music.jump(ctx, guildId, await upcomingIndex(interaction.options.getInteger('numero'))))}`;
 			break;
 		case 'vider':
-			music.clear(ctx, guildId);
+			await music.clear(ctx, guildId);
 			reply = '🧹 File vidée (le titre en cours continue).';
 			break;
 		}
@@ -203,7 +203,7 @@ async function openPlayer(interaction, ctx) {
 	// This reply is private: the panel link is only for those who may pilot the music from there
 	const panel = ctx.can?.('music.use') && musicPanelUrl(interaction.guildId);
 	const panelLine = panel ? `\n🖥️ [Gérer sur le panel](${panel})` : '';
-	if (!music.config().announce) {
+	if (!(await music.config()).announce) {
 		const payload = musicPayload(state);
 		return { content: joined || panel ? `${joined ? `🎧 Je suis dans <#${state.channelId}>.` : ''}${panelLine}`.trim() : null, ...payload };
 	}
@@ -226,25 +226,25 @@ async function playlistCommand(interaction, sub) {
 			break;
 		}
 		case 'creer': {
-			const list = music.saveQueue(ctx, guildId, { name: interaction.options.getString('nom'), shared: !interaction.options.getBoolean('privee') });
+			const list = await music.saveQueue(ctx, guildId, { name: interaction.options.getString('nom'), shared: !interaction.options.getBoolean('privee') });
 			reply = `💾 Playlist **${list.name}** enregistrée (${list.count} titres${list.shared ? ', partagée' : ', privée'}).`;
 			break;
 		}
 		case 'ajouter': {
-			const list = music.addCurrentTo(ctx, guildId, id);
+			const list = await music.addCurrentTo(ctx, guildId, id);
 			reply = `➕ Ajouté à **${list.name}** (${list.count} titres).`;
 			break;
 		}
 		case 'liste': {
-			const lists = music.playlists.list(interaction.user.id);
+			const lists = await music.playlists.list(interaction.user.id);
 			reply = lists.length
 				? lists.slice(0, 25).map(p => `• **${p.name}** · ${p.count} titre${p.count > 1 ? 's' : ''} · ${clock(p.durationMs)}${p.ownerId === interaction.user.id ? (p.shared ? '' : ' · privée') : ` · de <@${p.ownerId}>`}`).join('\n')
 				: 'Aucune playlist. Enregistre la file avec `/musique playlist creer` ou le bouton 💾.';
 			break;
 		}
 		case 'supprimer': {
-			const list = music.playlists.get(id, interaction.user.id);
-			music.playlists.remove(ctx, id);
+			const list = await music.playlists.get(id, interaction.user.id);
+			await music.playlists.remove(ctx, id);
 			reply = `🗑️ Playlist **${list.name}** supprimée.`;
 			break;
 		}

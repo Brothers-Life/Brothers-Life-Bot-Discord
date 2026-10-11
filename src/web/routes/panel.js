@@ -41,11 +41,11 @@ export function registerPanelRoutes(app, { core, runtime }) {
 	app.get('/api/variables', {
 		config: { permission: null },
 		schema: { querystring: { type: 'object', properties: { scope: { type: 'string', enum: ['member', 'server'] } } } },
-	}, async request => ({ groups: core.variables.catalog(request.query.scope ?? 'member', request.actor) }));
+	}, async request => ({ groups: await core.variables.catalog(request.query.scope ?? 'member', request.actor) }));
 
 	// Custom emojis of the network servers, for the emoji picker
 	app.get('/api/emojis', { config: { permission: null } }, async () => ({
-		guilds: await Promise.all(network.list().filter(g => g.status === 'active' && g.botPresent).map(async g => ({
+		guilds: await Promise.all((await network.list()).filter(g => g.status === 'active' && g.botPresent).map(async g => ({
 			id: g.id, name: g.name, icon: g.icon ?? null, isMain: g.isMain,
 			emojis: await executor.listEmojis(g.id).catch(() => []),
 			stickers: await executor.listStickers(g.id).catch(() => []),
@@ -53,18 +53,18 @@ export function registerPanelRoutes(app, { core, runtime }) {
 	}));
 
 	app.get('/api/overview', { config: { permission: null } }, async (request) => {
-		const guilds = network.list();
+		const guilds = await network.list();
 		return {
 			bot: executor.status(),
 			app: runtime.info(),
 			network: {
-				main: network.getMain(),
+				main: await network.getMain(),
 				active: guilds.filter(g => g.status === 'active').length,
 				pending: guilds.filter(g => g.status === 'pending' && g.botPresent).length,
 				removed: guilds.filter(g => g.status === 'removed').length,
 			},
-			ranks: ranks.list().length,
-			recent: request.actor.can('audit.view') ? await withActorNames(audit.query({ limit: 8 })) : null,
+			ranks: (await ranks.list()).length,
+			recent: request.actor.can('audit.view') ? await withActorNames(await audit.query({ limit: 8 })) : null,
 		};
 	});
 
@@ -73,7 +73,7 @@ export function registerPanelRoutes(app, { core, runtime }) {
 	// the dates of the network history stay behind network.view
 	app.get('/api/network', { config: { permission: null } }, async (request) => {
 		const full = request.actor.can('network.view');
-		return network.list().map((g) => {
+		return (await network.list()).map((g) => {
 			const guild = { ...g, icon: executor.guildIcon(g.id) ?? g.icon };
 			if (full) return guild;
 			const { id, name, icon, status, isMain, botPresent } = guild;
@@ -94,19 +94,19 @@ export function registerPanelRoutes(app, { core, runtime }) {
 	});
 
 	app.post('/api/network/:id/activate', { config: { permission: 'network.manage' }, schema: { params: idParam } }, async (request) => {
-		return network.activate(request.actor, request.params.id);
+		return await network.activate(request.actor, request.params.id);
 	});
 
 	app.post('/api/network/:id/remove', { config: { permission: 'network.manage', confirm: true }, schema: { params: idParam, body: confirmBody } }, async (request) => {
-		return network.remove(request.actor, request.params.id);
+		return await network.remove(request.actor, request.params.id);
 	});
 
 	app.post('/api/network/:id/main', { config: { permission: 'network.manage', confirm: true }, schema: { params: idParam, body: confirmBody } }, async (request) => {
-		return network.setMain(request.actor, request.params.id);
+		return await network.setMain(request.actor, request.params.id);
 	});
 
 	app.get('/api/network/:id/channels', { config: { permission: 'logs.manage' }, schema: { params: idParam } }, async (request) => {
-		if (!network.find(request.params.id)) throw new NotFoundError('Serveur introuvable.');
+		if (!await network.find(request.params.id)) throw new NotFoundError('Serveur introuvable.');
 		return executor.listTextChannels(request.params.id);
 	});
 
@@ -126,9 +126,9 @@ export function registerPanelRoutes(app, { core, runtime }) {
 	const rankIdParam = { type: 'object', properties: { id: { type: 'integer' } }, required: ['id'] };
 
 	app.get('/api/ranks', { config: { permission: 'ranks.view' } }, async () => {
-		const mainId = network.getMainId();
+		const mainId = await network.getMainId();
 		return {
-			ranks: ranks.list(),
+			ranks: await ranks.list(),
 			permissions: listPermissions(),
 			mainGuildId: mainId,
 			roles: mainId ? await executor.listRoles(mainId) : [],
@@ -137,11 +137,11 @@ export function registerPanelRoutes(app, { core, runtime }) {
 
 	app.post('/api/ranks', { config: { permission: 'ranks.manage' }, schema: { body: { ...rankBody, required: ['name', 'level'] } } }, async (request, reply) => {
 		reply.code(201);
-		return ranks.create(request.actor, request.body);
+		return await ranks.create(request.actor, request.body);
 	});
 
 	app.patch('/api/ranks/:id', { config: { permission: 'ranks.manage' }, schema: { params: rankIdParam, body: rankBody } }, async (request) => {
-		return ranks.update(request.actor, request.params.id, request.body);
+		return await ranks.update(request.actor, request.params.id, request.body);
 	});
 
 	app.post('/api/ranks/:id/duplicate', {
@@ -149,7 +149,7 @@ export function registerPanelRoutes(app, { core, runtime }) {
 		schema: { params: rankIdParam, body: { type: 'object', properties: { name: { type: 'string', maxLength: 50 }, level: { type: 'integer', minimum: 0, maximum: 100 } } } },
 	}, async (request, reply) => {
 		reply.code(201);
-		return ranks.duplicate(request.actor, request.params.id, request.body ?? {});
+		return await ranks.duplicate(request.actor, request.params.id, request.body ?? {});
 	});
 
 	// The rank's role copied (created if needed) and linked on every other server
@@ -160,7 +160,7 @@ export function registerPanelRoutes(app, { core, runtime }) {
 	});
 
 	app.delete('/api/ranks/:id', { config: { permission: 'ranks.manage', confirm: true }, schema: { params: rankIdParam } }, async (request) => {
-		ranks.remove(request.actor, request.params.id);
+		await ranks.remove(request.actor, request.params.id);
 		return { ok: true };
 	});
 
@@ -168,11 +168,11 @@ export function registerPanelRoutes(app, { core, runtime }) {
 		config: { permission: 'ranks.manage' },
 		schema: { params: rankIdParam, body: { type: 'object', properties: { roleIds: { type: 'array', items: SNOWFLAKE, maxItems: 50 } }, required: ['roleIds'] } },
 	}, async (request) => {
-		return ranks.setRoleLinks(request.actor, request.params.id, request.body.roleIds);
+		return await ranks.setRoleLinks(request.actor, request.params.id, request.body.roleIds);
 	});
 
 	// --- Panel members: who has which rank, and how ------------------------------------------
-	app.get('/api/members', { config: { permission: 'ranks.view' } }, async () => listStaff({ ranks, network, executor }));
+	app.get('/api/members', { config: { permission: 'ranks.view' } }, async () => await listStaff({ ranks, network, executor }));
 
 	const memberParams = { type: 'object', properties: { userId: SNOWFLAKE, rankId: { type: 'integer' } }, required: ['userId'] };
 
@@ -197,13 +197,13 @@ export function registerPanelRoutes(app, { core, runtime }) {
 
 	// --- Log routing -------------------------------------------------------------------------
 	app.get('/api/logs', { config: { permission: 'logs.manage' } }, async () => {
-		const guilds = network.list().filter(g => g.botPresent && g.status !== 'removed');
+		const guilds = (await network.list()).filter(g => g.botPresent && g.status !== 'removed');
 		return {
 			categories: logs.categories(),
 			packs: logs.packs(),
-			mainGuildId: network.getMainId(),
-			guilds: guilds.map(g => ({ id: g.id, name: g.name, isMain: g.isMain, status: g.status, routes: logs.routes(g.id) })),
-			mirror: logs.routes(MIRROR),
+			mainGuildId: await network.getMainId(),
+			guilds: await Promise.all(guilds.map(async g => ({ id: g.id, name: g.name, isMain: g.isMain, status: g.status, routes: await logs.routes(g.id) }))),
+			mirror: await logs.routes(MIRROR),
 		};
 	});
 
@@ -216,7 +216,7 @@ export function registerPanelRoutes(app, { core, runtime }) {
 		},
 	}, async (request) => {
 		const { guildId, category } = request.params;
-		return logs.setRoute(request.actor, guildId, category, request.body.channelId, request.body.enabled ?? true);
+		return await logs.setRoute(request.actor, guildId, category, request.body.channelId, request.body.enabled ?? true);
 	});
 
 	// Ready-made layout: private "Logs" category and its channels, readable by the ranks that see logs
@@ -228,9 +228,9 @@ export function registerPanelRoutes(app, { core, runtime }) {
 		},
 	}, async (request) => {
 		const { guildId } = request.params;
-		const readers = new Set(ranks.list().filter(r => ['logs.manage', 'events.view', 'audit.view'].some(p => r.effectivePermissions.includes(p))).map(r => r.id));
-		const staffRoleIds = [...new Set([...core.staffSync.linksOf(guildId)].filter(([rankId]) => readers.has(rankId)).flatMap(([, roleIds]) => roleIds))];
-		return logs.applyPack(request.actor, guildId, request.body.pack, { categoryName: request.body.categoryName, staffRoleIds });
+		const readers = new Set((await ranks.list()).filter(r => ['logs.manage', 'events.view', 'audit.view'].some(p => r.effectivePermissions.includes(p))).map(r => r.id));
+		const staffRoleIds = [...new Set([...await core.staffSync.linksOf(guildId)].filter(([rankId]) => readers.has(rankId)).flatMap(([, roleIds]) => roleIds))];
+		return await logs.applyPack(request.actor, guildId, request.body.pack, { categoryName: request.body.categoryName, staffRoleIds });
 	});
 
 	app.post('/api/logs/:guildId/all', {
@@ -239,7 +239,7 @@ export function registerPanelRoutes(app, { core, runtime }) {
 			params: { type: 'object', properties: { guildId: { type: 'string', pattern: '^(\\d{17,20}|\\*)$' } }, required: ['guildId'] },
 			body: { type: 'object', required: ['channelId'], properties: { channelId: SNOWFLAKE } },
 		},
-	}, async (request) => logs.routeAll(request.actor, request.params.guildId, request.body.channelId));
+	}, async (request) => await logs.routeAll(request.actor, request.params.guildId, request.body.channelId));
 
 	// --- Audit -------------------------------------------------------------------------------
 	app.get('/api/audit', {
@@ -254,25 +254,25 @@ export function registerPanelRoutes(app, { core, runtime }) {
 			},
 		},
 	}, async (request) => {
-		return withActorNames(audit.query(request.query));
+		return withActorNames(await audit.query(request.query));
 	});
 
 	// --- Sessions ----------------------------------------------------------------------------
 	app.get('/api/sessions', { config: { permission: null, apiKey: false }, schema: { querystring: { type: 'object', properties: { all: { type: 'boolean' } } } } }, async (request) => {
 		const all = request.query.all && request.actor.can('sessions.manage');
-		return sessions.list(all ? undefined : request.actor.id).map(s => ({ ...s, id: undefined, key: sessionKey(s.id), current: s.id === request.session.id }));
+		return (await sessions.list(all ? undefined : request.actor.id)).map(s => ({ ...s, id: undefined, key: sessionKey(s.id), current: s.id === request.session.id }));
 	});
 
 	app.delete('/api/sessions/:key', { config: { permission: null, apiKey: false } }, async (request) => {
-		const target = sessions.list().find(s => sessionKey(s.id) === request.params.key);
+		const target = (await sessions.list()).find(s => sessionKey(s.id) === request.params.key);
 		if (!target) throw new NotFoundError('Session introuvable.');
 		if (target.discordId !== request.actor.id) {
 			if (!request.actor.can('sessions.manage')) throw new ForbiddenError('Permission manquante : sessions.manage');
 			const owner = await ranks.resolve(target.discordId);
 			if (!request.actor.isOwner && owner.level >= request.actor.level) throw new ForbiddenError('Tu ne peux pas révoquer les sessions de quelqu’un de niveau égal ou supérieur au tien.');
 		}
-		sessions.revoke(target.id);
-		audit.record({ actorId: request.actor.id, source: 'panel', action: 'panel.session_revoked', target: target.discordId, details: { username: target.username } });
+		await sessions.revoke(target.id);
+		await audit.record({ actorId: request.actor.id, source: 'panel', action: 'panel.session_revoked', target: target.discordId, details: { username: target.username } });
 		return { ok: true };
 	});
 

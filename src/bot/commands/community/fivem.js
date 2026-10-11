@@ -11,13 +11,13 @@ export const data = new SlashCommandBuilder()
 
 export async function autocomplete(interaction) {
 	const typed = interaction.options.getFocused().toLowerCase();
-	const servers = interaction.client.core.fivem.list();
+	const servers = await interaction.client.core.fivem.list();
 	await interaction.respond(servers.filter(s => s.name.toLowerCase().includes(typed)).slice(0, 25).map(s => ({ name: s.name, value: String(s.id) })));
 }
 
 export async function execute(interaction) {
 	const { fivem } = interaction.client.core;
-	const servers = fivem.list();
+	const servers = await fivem.list();
 	const chosen = interaction.options.getString('serveur');
 	const server = chosen ? servers.find(s => String(s.id) === chosen) : servers[0];
 	if (!server) {

@@ -85,10 +85,10 @@ export function normalizePublicPage(input = {}, { strict = false } = {}) {
 export function createPublicPage({ settings, audit, network, ranks, executor, fivem, rpEvents, recruitment, maintenance = () => null, logger = console, now = Date.now }) {
 	let cache = null;
 
-	const config = () => normalizePublicPage(settings.get(SETTINGS_KEY, {}));
+	const config = async () => normalizePublicPage(await settings.get(SETTINGS_KEY, {}));
 
 	async function serverStatus(cfg) {
-		const all = fivem.list();
+		const all = await fivem.list();
 		const chosen = cfg.serverIds.length ? all.filter(s => cfg.serverIds.includes(s.id)) : all;
 		return chosen.map((s) => {
 			const st = s.status;
@@ -106,8 +106,8 @@ export function createPublicPage({ settings, audit, network, ranks, executor, fi
 		});
 	}
 
-	function maintenanceState() {
-		const state = maintenance();
+	async function maintenanceState() {
+		const state = await maintenance();
 		if (!state || typeof state !== 'object') return null;
 		const m = state.maintenance ?? {};
 		const next = state.nextRestart?.at;
@@ -118,10 +118,10 @@ export function createPublicPage({ settings, audit, network, ranks, executor, fi
 	}
 
 	async function staffTeam(cfg) {
-		const mainId = network.getMainId();
-		const shown = ranks.list().filter(r => cfg.rankIds.includes(r.id)).sort((a, b) => b.level - a.level);
+		const mainId = await network.getMainId();
+		const shown = (await ranks.list()).filter(r => cfg.rankIds.includes(r.id)).sort((a, b) => b.level - a.level);
 		if (!shown.length) return [];
-		const direct = ranks.listDirectAssignments();
+		const direct = await ranks.listDirectAssignments();
 		const placed = new Set();
 		const out = [];
 		for (const rank of shown) {
@@ -150,7 +150,7 @@ export function createPublicPage({ settings, audit, network, ranks, executor, fi
 	}
 
 	async function discordGuilds(cfg) {
-		const active = network.list().filter(g => g.status === 'active' && g.botPresent);
+		const active = (await network.list()).filter(g => g.status === 'active' && g.botPresent);
 		const chosen = cfg.guildIds.length ? active.filter(g => cfg.guildIds.includes(g.id)) : active;
 		const guilds = await Promise.all(chosen.map(async (g) => {
 			const info = await executor.getGuildInfo(g.id).catch(() => null);
@@ -161,8 +161,8 @@ export function createPublicPage({ settings, audit, network, ranks, executor, fi
 		return { guilds: list, total: list.reduce((n, g) => n + g.members, 0) };
 	}
 
-	function upcomingEvents(cfg) {
-		return rpEvents.upcoming()
+	async function upcomingEvents(cfg) {
+		return (await rpEvents.upcoming())
 			.filter(e => (e.endsAt ?? e.startsAt) > now())
 			.slice(0, cfg.limit)
 			.map(e => ({
@@ -179,10 +179,10 @@ export function createPublicPage({ settings, audit, network, ranks, executor, fi
 			}));
 	}
 
-	function openPositions() {
+	async function openPositions() {
 		const out = [];
-		for (const g of network.list().filter(x => x.status === 'active')) {
-			for (const p of recruitment.positions(g.id)) {
+		for (const g of (await network.list()).filter(x => x.status === 'active')) {
+			for (const p of await recruitment.positions(g.id)) {
 				if (!p.config.open || (p.config.closesAt && p.config.closesAt <= now())) continue;
 				out.push({
 					name: p.name,
@@ -208,7 +208,7 @@ export function createPublicPage({ settings, audit, network, ranks, executor, fi
 	}
 
 	async function build() {
-		const cfg = config();
+		const cfg = await config();
 		const view = { title: cfg.title, tagline: cfg.tagline || null, generatedAt: now() };
 		if (cfg.status.enabled) view.status = await section('status', () => serverStatus(cfg.status));
 		if (cfg.maintenance.enabled) view.maintenance = await section('maintenance', maintenanceState);
@@ -225,21 +225,21 @@ export function createPublicPage({ settings, audit, network, ranks, executor, fi
 	}
 
 	return {
-		enabled: () => config().enabled,
+		enabled: async () => (await config()).enabled,
 		config,
 
-		save(actor, input) {
+		async save(actor, input) {
 			if (!actor.can('public.manage')) throw new ForbiddenError('Permission manquante : public.manage');
 			const next = normalizePublicPage(input, { strict: true });
-			settings.set(SETTINGS_KEY, next);
+			await settings.set(SETTINGS_KEY, next);
 			cache = null;
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'publicpage.settings', details: { active: next.enabled ? 'oui' : 'non' } });
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'publicpage.settings', details: { active: next.enabled ? 'oui' : 'non' } });
 			return next;
 		},
 
 		// What the public endpoint sends; null when the page is off
 		async view() {
-			if (!config().enabled) return null;
+			if (!(await config()).enabled) return null;
 			if (cache && now() - cache.at < CACHE_MS) return cache.promise;
 			const promise = build();
 			cache = { at: now(), promise };

@@ -89,7 +89,7 @@ test('login is refused without panel.access and audited', async () => {
 	const res = await login(app, ALICE);
 	assert.equal(res.headers.location, '/login?error=denied');
 	assert.equal(cookiesOf(res).sid, undefined);
-	assert.equal(core.audit.query({ action: 'panel.login_denied' }).length, 1);
+	assert.equal((await core.audit.query({ action: 'panel.login_denied' })).length, 1);
 });
 
 test('login fails on a wrong state', async () => {
@@ -117,7 +117,7 @@ test('401 without session, JSON 404 on unknown API routes', async () => {
 
 test('permissions are enforced per route', async () => {
 	const { app, core, owner } = await setup();
-	const viewer = core.ranks.create(owner, { name: 'Viewer', level: 10, permissions: ['panel.access', 'network.view'] });
+	const viewer = await core.ranks.create(owner, { name: 'Viewer', level: 10, permissions: ['panel.access', 'network.view'] });
 	await core.ranks.assignDirect(owner, ALICE, viewer.id);
 	const call = api(app, await sessionFor(app, ALICE));
 
@@ -130,12 +130,12 @@ test('permissions are enforced per route', async () => {
 
 test('losing panel.access locks out an open session immediately', async () => {
 	const { app, core, owner } = await setup();
-	const viewer = core.ranks.create(owner, { name: 'Viewer', level: 10, permissions: ['panel.access'] });
+	const viewer = await core.ranks.create(owner, { name: 'Viewer', level: 10, permissions: ['panel.access'] });
 	await core.ranks.assignDirect(owner, ALICE, viewer.id);
 	const call = api(app, await sessionFor(app, ALICE));
 	assert.equal((await call('GET', '/api/me')).statusCode, 200);
 
-	core.ranks.update(owner, viewer.id, { permissions: [] });
+	await core.ranks.update(owner, viewer.id, { permissions: [] });
 	assert.equal((await call('GET', '/api/me')).statusCode, 403);
 });
 
@@ -154,12 +154,12 @@ test('sensitive actions need confirm: true', async () => {
 	assert.equal(res.statusCode, 400);
 	assert.equal(res.json().error.code, 'CONFIRMATION_REQUIRED');
 	assert.equal((await call('POST', `/api/network/${OTHER}/main`, { confirm: true })).statusCode, 200);
-	assert.equal(core.network.getMainId(), OTHER);
+	assert.equal(await core.network.getMainId(), OTHER);
 });
 
 test('rank CRUD and anti-escalation through the API', async () => {
 	const { app, core, owner } = await setup();
-	const admin = core.ranks.create(owner, { name: 'Admin', level: 50, permissions: ['panel.access', 'ranks.view', 'ranks.manage', 'members.assign'] });
+	const admin = await core.ranks.create(owner, { name: 'Admin', level: 50, permissions: ['panel.access', 'ranks.view', 'ranks.manage', 'members.assign'] });
 	await core.ranks.assignDirect(owner, ALICE, admin.id);
 	const call = api(app, await sessionFor(app, ALICE));
 
@@ -205,7 +205,7 @@ test('restart goes through the runtime and is audited', async () => {
 	assert.equal((await call('POST', '/api/system/restart', { confirm: true })).statusCode, 200);
 	await new Promise(r => setTimeout(r, 400));
 	assert.deepEqual(runtimeCalls, ['restart']);
-	assert.equal(core.audit.query({ action: 'system.restart' }).length, 1);
+	assert.equal((await core.audit.query({ action: 'system.restart' })).length, 1);
 });
 
 test('logout revokes the session', async () => {
@@ -241,12 +241,12 @@ test('sanctions through the API: create with a duration, list, revoke', async ()
 
 	assert.equal((await call('POST', `/api/sanctions/${ban.id}/revoke`, {})).statusCode, 400, 'needs confirmation');
 	assert.equal((await call('POST', `/api/sanctions/${ban.id}/revoke`, { confirm: true, reason: 'Appel' })).statusCode, 200);
-	assert.equal(core.sanctions.isBanned('300000000000000001'), false);
+	assert.equal(await core.sanctions.isBanned('300000000000000001'), false);
 });
 
 test('sanction permissions are checked per type through the API', async () => {
 	const { app, core, owner } = await setup();
-	const modo = core.ranks.create(owner, { name: 'Modo', level: 10, permissions: ['panel.access', 'sanctions.warn'] });
+	const modo = await core.ranks.create(owner, { name: 'Modo', level: 10, permissions: ['panel.access', 'sanctions.warn'] });
 	await core.ranks.assignDirect(owner, ALICE, modo.id);
 	const call = api(app, await sessionFor(app, ALICE));
 	assert.equal((await call('POST', '/api/sanctions', { type: 'ban', userId: '300000000000000001' })).statusCode, 403);
@@ -288,7 +288,7 @@ test('invite link carries the application id, the bot permissions and both scope
 
 test('announcements through the API: create, send with confirmation', async () => {
 	const { app, core, executor } = await setup();
-	core.network.activate(await core.ranks.resolve(OWNER), OTHER);
+	await core.network.activate(await core.ranks.resolve(OWNER), OTHER);
 	executor.channels.set('610000000000000001', { guildId: MAIN, name: 'annonces' });
 	const call = api(app, await sessionFor(app, OWNER));
 	const created = await call('POST', '/api/announcements', {
@@ -306,7 +306,7 @@ test('announcements through the API: create, send with confirmation', async () =
 
 test('uploads: images only, served back to the panel; card preview is a PNG', async () => {
 	const { app, core, owner } = await setup();
-	const viewer = core.ranks.create(owner, { name: 'Lecteur', level: 5, permissions: ['panel.access'] });
+	const viewer = await core.ranks.create(owner, { name: 'Lecteur', level: 5, permissions: ['panel.access'] });
 	await core.ranks.assignDirect(owner, BOB, viewer.id);
 	const call = api(app, await sessionFor(app, OWNER));
 	const svg = await call('POST', '/api/uploads', { data: Buffer.from('<svg/>').toString('base64') });
@@ -329,7 +329,7 @@ test('uploads: images only, served back to the panel; card preview is a PNG', as
 
 test('stats: overview for the network, CSV export with a French header', async () => {
 	const { app, core } = await setup();
-	core.stats.message(MAIN, '610000000000000001', ALICE, false);
+	await core.stats.message(MAIN, '610000000000000001', ALICE, false);
 	const call = api(app, await sessionFor(app, OWNER));
 	const overview = await call('GET', '/api/stats/overview?guildId=all&days=7');
 	assert.equal(overview.statusCode, 200);

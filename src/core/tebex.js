@@ -59,11 +59,12 @@ export function normalizePayment(raw) {
 	};
 }
 
-export function normalizeConfig(input = {}, network = null) {
+// activeGuildIds: ids of the active servers of the network (checked when saving), null = not checked
+export function normalizeConfig(input = {}, activeGuildIds = null) {
 	const thanks = input.thanks ?? {};
 	const mappings = Array.isArray(input.mappings) ? input.mappings : [];
 	if (mappings.length > MAX_MAPPINGS) throw new ValidationError(`${MAX_MAPPINGS} liaisons au maximum.`);
-	const activeGuild = id => !network || network.find(id)?.status === 'active';
+	const activeGuild = id => !activeGuildIds || activeGuildIds.has(id);
 	const out = {
 		enabled: input.enabled !== false,
 		showPrice: Boolean(input.showPrice),
@@ -106,7 +107,7 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 	const q = {
 		get: db.prepare('SELECT * FROM tebex_payments WHERE id = ?'),
 		insert: db.prepare(`
-			INSERT OR IGNORE INTO tebex_payments (id, status, amount, currency, player_uuid, player_name, packages, paid_at, seen_at, baseline)
+			INSERT IGNORE INTO tebex_payments (id, status, amount, currency, player_uuid, player_name, packages, paid_at, seen_at, baseline)
 			VALUES (@id, @status, @amount, @currency, @playerUuid, @playerName, @packages, @paidAt, @seenAt, @baseline)
 		`),
 		setStatus: db.prepare('UPDATE tebex_payments SET status = ? WHERE id = ?'),
@@ -135,7 +136,7 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 		knownLink: db.prepare('SELECT discord_id FROM tebex_links WHERE player_uuid = ?'),
 		remember: db.prepare(`
 			INSERT INTO tebex_links (player_uuid, discord_id, created_by, created_at) VALUES (?, ?, ?, ?)
-			ON CONFLICT (player_uuid) DO UPDATE SET discord_id = excluded.discord_id, created_by = excluded.created_by, created_at = excluded.created_at
+			ON DUPLICATE KEY UPDATE discord_id = VALUES(discord_id), created_by = VALUES(created_by), created_at = VALUES(created_at)
 		`),
 		// Temporary roles share the table of /role: moderation.expireTempRoles takes them off when due
 		activeTemp: db.prepare('SELECT * FROM temp_roles WHERE guild_id = ? AND user_id = ? AND role_id = ? AND removed_at IS NULL'),
@@ -146,15 +147,16 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 		closeTempsFor: db.prepare('UPDATE temp_roles SET removed_at = ?, removed_by = ? WHERE guild_id = ? AND user_id = ? AND role_id = ? AND removed_at IS NULL'),
 	};
 
-	const secret = () => settings.get('tebex.secret', '');
-	const config = () => normalizeConfig(settings.get('tebex.config', {}));
-	const state = () => settings.get('tebex.state', {});
+	const secret = async () => settings.get('tebex.secret', '');
+	const config = async () => normalizeConfig(await settings.get('tebex.config', {}));
+	const state = async () => settings.get('tebex.state', {});
 
 	function need(actor, permission) {
 		if (!actor?.can(permission)) throw new ForbiddenError(`Permission manquante : ${permission}`);
 	}
 
-	async function call(path, key = secret()) {
+	async function call(path, key = null) {
+		key ??= await secret();
 		if (!key) throw new ValidationError('La boutique Tebex n’est pas configurée : ajoute la clé secrète du serveur de jeu.');
 		let response;
 		try {
@@ -181,62 +183,63 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 	async function tryLink(row, force = false) {
 		if (row.discord_id) return row;
 		if (!force && row.link_checked_at && now() - row.link_checked_at < RELINK_MS) return row;
-		q.checked.run(now(), row.id);
-		const known = row.player_uuid ? q.knownLink.get(row.player_uuid) : null;
+		await q.checked.run(now(), row.id);
+		const known = row.player_uuid ? await q.knownLink.get(row.player_uuid) : null;
 		if (known) {
-			q.setLink.run(known.discord_id, 'known', row.id);
+			await q.setLink.run(known.discord_id, 'known', row.id);
 			return q.get.get(row.id);
 		}
 		const account = fivemData ? await fivemData.findByTebexPlayer({ uuid: row.player_uuid, name: row.player_name }).catch((error) => {
 			logger.warn('Tebex: FiveM lookup failed:', error.message);
 			return null;
 		}) : null;
-		if (account?.discordId && SNOWFLAKE.test(account.discordId)) q.setLink.run(account.discordId, account.method, row.id);
+		if (account?.discordId && SNOWFLAKE.test(account.discordId)) await q.setLink.run(account.discordId, account.method, row.id);
 		return q.get.get(row.id);
 	}
 
 	// Gives the roles of the articles; returns { given: [names], errors: [text] }
 	async function apply(row, { refreshTemp = false } = {}) {
 		const ids = new Set(packagesOf(row).map(p => p.id));
-		const maps = config().mappings.filter(m => ids.has(m.packageId));
+		const maps = (await config()).mappings.filter(m => ids.has(m.packageId));
 		const given = [];
 		const errors = [];
 		const roleNames = new Map();
+		const multiServer = (await network.list()).length > 1;
 		const roleName = async (guildId, roleId) => {
 			if (!roleNames.has(guildId)) roleNames.set(guildId, new Map((await executor.listRoles(guildId).catch(() => [])).map(r => [r.id, r.name])));
 			return roleNames.get(guildId).get(roleId) ?? roleId;
 		};
 		for (const m of maps) {
-			const guild = network.find(m.guildId);
+			const guild = await network.find(m.guildId);
 			const name = await roleName(m.guildId, m.roleId);
 			try {
 				if (guild?.status !== 'active') throw new Error(`serveur ${guild?.name ?? m.guildId} hors réseau`);
-				const already = q.activeGrant.get(row.id, m.guildId, m.roleId);
+				const already = await q.activeGrant.get(row.id, m.guildId, m.roleId);
 				const outcome = await executor.addRole(m.guildId, row.discord_id, m.roleId, `Boutique Tebex : paiement #${row.id}${m.days ? ` (${m.days} j)` : ''}`);
 				if (outcome === 'not_member') throw new Error(`pas sur ${guild.name}`);
 				let tempId = already?.temp_role_id ?? null;
 				if (m.days && (!already || refreshTemp)) {
-					const temp = q.activeTemp.get(m.guildId, row.discord_id, m.roleId);
+					const temp = await q.activeTemp.get(m.guildId, row.discord_id, m.roleId);
 					// A second purchase adds its days on top of what is left
 					if (temp) {
-						q.extendTemp.run(Math.max(temp.expires_at, now()) + m.days * DAY, temp.id);
+						await q.extendTemp.run(Math.max(temp.expires_at, now()) + m.days * DAY, temp.id);
 						tempId = temp.id;
 					}
 					else {
-						tempId = Number(q.insertTemp.run(m.guildId, row.discord_id, m.roleId, name, now() + m.days * DAY, `Boutique Tebex : paiement #${row.id}`, 'system', now()).lastInsertRowid);
+						tempId = Number((await q.insertTemp.run(m.guildId, row.discord_id, m.roleId, name, now() + m.days * DAY, `Boutique Tebex : paiement #${row.id}`, 'system', now())).lastInsertRowid);
 					}
 				}
 				// Bought for good: an earlier temporary grant of the same role no longer expires it
-				if (!m.days) q.closeTempsFor.run(now(), 'system', m.guildId, row.discord_id, m.roleId);
-				if (!already) q.addGrant.run(row.id, m.guildId, row.discord_id, m.roleId, tempId, now());
-				given.push(`@${name}${m.days ? ` (${m.days} j)` : ''}${network.list().length > 1 ? ` · ${guild.name}` : ''}`);
+				if (!m.days) await q.closeTempsFor.run(now(), 'system', m.guildId, row.discord_id, m.roleId);
+				if (!already) await q.addGrant.run(row.id, m.guildId, row.discord_id, m.roleId, tempId, now());
+				given.push(`@${name}${m.days ? ` (${m.days} j)` : ''}${multiServer ? ` · ${guild.name}` : ''}`);
 			}
 			catch (error) {
 				logger.warn(`Tebex payment #${row.id}: role not given:`, error.message);
 				errors.push(`@${name} : ${error.message}`);
 			}
 		}
-		q.applied.run(now(), errors.length ? errors.join(' · ').slice(0, 500) : null, row.id);
+		await q.applied.run(now(), errors.length ? errors.join(' · ').slice(0, 500) : null, row.id);
 		return { given, errors };
 	}
 
@@ -244,29 +247,29 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 	async function revokeGrants(row) {
 		const removed = [];
 		const packageIds = new Set(packagesOf(row).map(p => p.id));
-		for (const grant of q.grantsOf.all(row.id).filter(g => !g.removed_at)) {
-			q.closeGrant.run(now(), grant.id);
+		for (const grant of (await q.grantsOf.all(row.id)).filter(g => !g.removed_at)) {
+			await q.closeGrant.run(now(), grant.id);
 			// Temporary role ended by this refund: the other purchases cumulated on it are spent too
 			let endedTemp = -1;
-			const temp = grant.temp_role_id ? q.tempById.get(grant.temp_role_id) : null;
+			const temp = grant.temp_role_id ? await q.tempById.get(grant.temp_role_id) : null;
 			if (temp && !temp.removed_at) {
-				if (q.sharedTemp.get(temp.id, grant.id)) {
+				if (await q.sharedTemp.get(temp.id, grant.id)) {
 					// Cumulated with another purchase: only the days of this one are taken off
-					const days = config().mappings.find(m => packageIds.has(m.packageId) && m.guildId === grant.guild_id && m.roleId === grant.role_id && m.days)?.days ?? 0;
+					const days = (await config()).mappings.find(m => packageIds.has(m.packageId) && m.guildId === grant.guild_id && m.roleId === grant.role_id && m.days)?.days ?? 0;
 					const left = temp.expires_at - days * DAY;
 					if (left > now()) {
-						q.extendTemp.run(left, temp.id);
+						await q.extendTemp.run(left, temp.id);
 					}
 					else {
-						q.closeTemp.run(now(), 'system', temp.id);
+						await q.closeTemp.run(now(), 'system', temp.id);
 						endedTemp = temp.id;
 					}
 				}
 				else {
-					q.closeTemp.run(now(), 'system', temp.id);
+					await q.closeTemp.run(now(), 'system', temp.id);
 				}
 			}
-			if (q.otherGrant.get(row.id, grant.guild_id, grant.user_id, grant.role_id, endedTemp)) continue;
+			if (await q.otherGrant.get(row.id, grant.guild_id, grant.user_id, grant.role_id, endedTemp)) continue;
 			try {
 				await executor.removeRole(grant.guild_id, grant.user_id, grant.role_id, `Boutique Tebex : paiement #${row.id} remboursé`);
 				removed.push(grant.role_id);
@@ -289,8 +292,8 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 	}
 
 	async function thank(row) {
-		const { thanks } = config();
-		if (!thanks.enabled || !thanks.channelId || network.find(thanks.guildId)?.status !== 'active') return;
+		const { thanks } = await config();
+		if (!thanks.enabled || !thanks.channelId || (await network.find(thanks.guildId))?.status !== 'active') return;
 		const base = row.discord_id
 			? await variables.member(thanks.guildId, row.discord_id, { fivem: usesFivem(thanks.template) })
 			: { ...(await variables.server(thanks.guildId)), 'user': buyerName(row), 'user.name': buyerName(row), 'user.username': buyerName(row) };
@@ -298,8 +301,8 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 		await executor.sendMessage(thanks.channelId, { payload: { content }, files: [], mentionUserIds: row.discord_id ? [row.discord_id] : [] });
 	}
 
-	function logPurchase(row, result) {
-		const cfg = config();
+	async function logPurchase(row, result) {
+		const cfg = await config();
 		const fields = [
 			{ name: 'Joueur', value: buyerName(row), inline: true },
 			{ name: 'Discord', value: row.discord_id ? `<@${row.discord_id}>` : 'non lié', inline: true },
@@ -308,7 +311,7 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 		if (cfg.showPrice) fields.push({ name: 'Montant', value: amountText(row), inline: true });
 		if (result?.given.length) fields.push({ name: 'Rôles donnés', value: result.given.join('\n').slice(0, 1000) });
 		if (result?.errors.length) fields.push({ name: 'Rôles non donnés', value: result.errors.join('\n').slice(0, 1000) });
-		logs.log(null, 'tebex', {
+		await logs.log(null, 'tebex', {
 			title: 'Achat sur la boutique',
 			description: row.discord_id ? null : 'Acheteur non relié à un compte Discord : lie-le depuis la page Boutique du panel pour lui donner ses rôles.',
 			fields,
@@ -327,8 +330,8 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 		}
 	}
 
-	function logRefund(row, removed) {
-		logs.log(null, 'tebex', {
+	async function logRefund(row, removed) {
+		await logs.log(null, 'tebex', {
 			title: /charge.?back|dispute/i.test(row.status) ? 'Paiement contesté (chargeback)' : 'Paiement remboursé',
 			fields: [
 				{ name: 'Joueur', value: buyerName(row), inline: true },
@@ -344,7 +347,7 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 
 	// What to do with a stored payment after its status was read
 	async function handle(id) {
-		let row = q.get.get(id);
+		let row = await q.get.get(id);
 		if (!row || row.baseline) return;
 		const kind = statusKind(row.status);
 		if (kind === 'complete' && !row.revoked_at) {
@@ -352,24 +355,26 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 			let result = null;
 			if (row.discord_id && !row.applied_at) result = await apply(row);
 			if (!row.logged_at) {
-				q.logged.run(now(), row.id);
-				logPurchase(row, result);
+				await q.logged.run(now(), row.id);
+				await logPurchase(row, result);
 				await thank(row).catch(error => logger.warn('Tebex thank-you message:', error.message));
 			}
 		}
 		else if (kind === 'revoked' && !row.revoked_at) {
-			q.revoked.run(now(), row.id);
-			const removed = config().removeOnRefund ? await revokeGrants(row) : [];
-			if (row.logged_at) logRefund(row, removed);
+			await q.revoked.run(now(), row.id);
+			const removed = (await config()).removeOnRefund ? await revokeGrants(row) : [];
+			if (row.logged_at) await logRefund(row, removed);
 		}
 	}
 
 	async function poll() {
-		const key = secret();
-		if (!key || !config().enabled || running) return { skipped: true };
+		const key = await secret();
+		// running is read and set with no await in between: one poll at a time
+		if (!key || !(await config()).enabled || running) return { skipped: true };
 		running = true;
-		const before = state();
+		let before = {};
 		try {
+			before = await state();
 			const body = await call(`/payments?limit=${POLL_LIMIT}`, key);
 			const list = (Array.isArray(body) ? body : Array.isArray(body?.data) ? body.data : []).map(normalizePayment).filter(Boolean).sort((a, b) => a.id - b.id);
 			// First poll with this key: what already exists is only marked as seen (no flood of roles and messages)
@@ -377,22 +382,22 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 			const lastId = Number(before.lastId ?? 0);
 			let fresh = 0;
 			for (const p of list) {
-				const row = q.get.get(p.id);
+				const row = await q.get.get(p.id);
 				if (!row) {
-					q.insert.run({ ...p, packages: JSON.stringify(p.packages), seenAt: now(), baseline: firstRun || p.id <= lastId ? 1 : 0 });
+					await q.insert.run({ ...p, packages: JSON.stringify(p.packages), seenAt: now(), baseline: firstRun || p.id <= lastId ? 1 : 0 });
 					if (!firstRun && p.id > lastId) fresh++;
 				}
 				else if (row.status !== p.status) {
-					q.setStatus.run(p.status, p.id);
+					await q.setStatus.run(p.status, p.id);
 				}
 				if (!firstRun) await handle(p.id);
 			}
 			const maxId = Math.max(lastId, ...list.map(p => p.id));
-			settings.set('tebex.state', { initialized: true, lastId: maxId, lastPollAt: now(), lastError: null, baseline: firstRun ? list.length : (before.baseline ?? 0) });
+			await settings.set('tebex.state', { initialized: true, lastId: maxId, lastPollAt: now(), lastError: null, baseline: firstRun ? list.length : (before.baseline ?? 0) });
 			return { fetched: list.length, fresh, firstRun };
 		}
 		catch (error) {
-			settings.set('tebex.state', { ...before, lastPollAt: now(), lastError: error.message });
+			await settings.set('tebex.state', { ...before, lastPollAt: now(), lastError: error.message });
 			throw error;
 		}
 		finally {
@@ -400,7 +405,7 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 		}
 	}
 
-	function toPayment(row) {
+	async function toPayment(row) {
 		return {
 			id: row.id,
 			status: row.status,
@@ -417,7 +422,7 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 			appliedAt: row.applied_at,
 			revokedAt: row.revoked_at,
 			error: row.error,
-			grants: q.grantsOf.all(row.id).map(g => ({ guildId: g.guild_id, roleId: g.role_id, temporary: Boolean(g.temp_role_id), removedAt: g.removed_at })),
+			grants: (await q.grantsOf.all(row.id)).map(g => ({ guildId: g.guild_id, roleId: g.role_id, temporary: Boolean(g.temp_role_id), removedAt: g.removed_at })),
 		};
 	}
 
@@ -431,33 +436,33 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 		},
 
 		// Settings and state shown by the panel: never the secret, only whether it is set
-		view(actor) {
+		async view(actor) {
 			need(actor, 'tebex.view');
-			const s = state();
-			const count = sql => db.prepare(sql).get().n;
+			const s = await state();
+			const count = async sql => (await db.prepare(sql).get()).n;
 			return {
-				hasSecret: Boolean(secret()),
-				config: config(),
+				hasSecret: Boolean(await secret()),
+				config: await config(),
 				state: { initialized: Boolean(s.initialized), lastPollAt: s.lastPollAt ?? null, lastError: s.lastError ?? null, lastId: s.lastId ?? null },
 				stats: {
-					payments: count('SELECT COUNT(*) AS n FROM tebex_payments WHERE baseline = 0'),
-					unlinked: count('SELECT COUNT(*) AS n FROM tebex_payments WHERE baseline = 0 AND discord_id IS NULL AND revoked_at IS NULL'),
-					revoked: count('SELECT COUNT(*) AS n FROM tebex_payments WHERE baseline = 0 AND revoked_at IS NOT NULL'),
+					payments: await count('SELECT COUNT(*) AS n FROM tebex_payments WHERE baseline = 0'),
+					unlinked: await count('SELECT COUNT(*) AS n FROM tebex_payments WHERE baseline = 0 AND discord_id IS NULL AND revoked_at IS NULL'),
+					revoked: await count('SELECT COUNT(*) AS n FROM tebex_payments WHERE baseline = 0 AND revoked_at IS NOT NULL'),
 					// Sum of the last 30 days, per currency
-					revenue: db.prepare(`SELECT currency, ROUND(SUM(CAST(amount AS REAL)), 2) AS total, COUNT(*) AS n FROM tebex_payments
+					revenue: await db.prepare(`SELECT currency, ROUND(SUM(CAST(amount AS DOUBLE)), 2) AS total, COUNT(*) AS n FROM tebex_payments
 						WHERE baseline = 0 AND revoked_at IS NULL AND COALESCE(paid_at, seen_at) >= ? GROUP BY currency`).all(now() - 30 * DAY),
 				},
 			};
 		},
 
 		// Empty / null removes the key; a new key starts again with a "first poll" (existing payments only marked)
-		setSecret(actor, input) {
+		async setSecret(actor, input) {
 			need(actor, 'tebex.manage');
 			const key = input === null ? '' : String(input ?? '').trim();
 			if (key && !/^[\w-]{16,128}$/.test(key)) throw new ValidationError('Clé secrète Tebex invalide.');
-			if (key !== secret()) settings.set('tebex.state', { ...state(), initialized: false, lastError: null });
-			settings.set('tebex.secret', key);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'tebex.secret', details: { clé: key ? 'enregistrée' : 'retirée' } });
+			if (key !== await secret()) await settings.set('tebex.state', { ...await state(), initialized: false, lastError: null });
+			await settings.set('tebex.secret', key);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'tebex.secret', details: { clé: key ? 'enregistrée' : 'retirée' } });
 			return { hasSecret: Boolean(key) };
 		},
 
@@ -489,23 +494,23 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 			catch (e) {
 				error = e.message;
 			}
-			for (const row of q.seenPackages.all()) {
+			for (const row of await q.seenPackages.all()) {
 				for (const p of JSON.parse(row.packages || '[]')) if (!byId.has(p.id)) byId.set(p.id, { id: p.id, name: p.name, category: null, price: null });
 			}
 			return { packages: [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, 'fr')), error };
 		},
 
-		setConfig(actor, input) {
+		async setConfig(actor, input) {
 			need(actor, 'tebex.manage');
-			const previous = config();
-			const next = normalizeConfig(input, network);
+			const previous = await config();
+			const next = normalizeConfig(input, new Set((await network.list()).filter(g => g.status === 'active').map(g => g.id)));
 			assertFivemAllowed(actor, next.thanks.template, previous.thanks.template);
-			settings.set('tebex.config', next);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'tebex.config', details: { liaisons: next.mappings.length, remerciement: next.thanks.enabled ? 'oui' : 'non', montant_dans_les_logs: next.showPrice ? 'oui' : 'non' } });
+			await settings.set('tebex.config', next);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'tebex.config', details: { liaisons: next.mappings.length, remerciement: next.thanks.enabled ? 'oui' : 'non', montant_dans_les_logs: next.showPrice ? 'oui' : 'non' } });
 			return next;
 		},
 
-		payments(actor, { filter = 'all', search = '', before = null, limit = 50 } = {}) {
+		async payments(actor, { filter = 'all', search = '', before = null, limit = 50 } = {}) {
 			need(actor, 'tebex.view');
 			const where = ['1 = 1'];
 			const params = {};
@@ -514,53 +519,53 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 			if (filter === 'errors') where.push('error IS NOT NULL');
 			if (filter !== 'all' && filter !== 'baseline') where.push('baseline = 0');
 			if (search) {
-				where.push('(player_name LIKE @like OR player_uuid = @exact OR discord_id = @exact OR CAST(id AS TEXT) = @exact OR packages LIKE @like)');
+				where.push('(player_name COLLATE utf8mb4_unicode_ci LIKE @like OR player_uuid = @exact OR discord_id = @exact OR CAST(id AS CHAR) = @exact OR packages COLLATE utf8mb4_unicode_ci LIKE @like)');
 				Object.assign(params, { like: `%${search}%`, exact: search });
 			}
 			if (before) {
 				where.push('id < @before');
 				params.before = Number(before);
 			}
-			const rows = db.prepare(`SELECT * FROM tebex_payments WHERE ${where.join(' AND ')} ORDER BY id DESC LIMIT ${Math.min(100, Math.max(1, limit))}`).all(params);
-			return rows.map(toPayment);
+			const rows = await db.prepare(`SELECT * FROM tebex_payments WHERE ${where.join(' AND ')} ORDER BY id DESC LIMIT ${Math.min(100, Math.max(1, limit))}`).all(params);
+			return Promise.all(rows.map(toPayment));
 		},
 
 		// Manual link (or unlink with null): roles given to someone else are taken back first
 		async link(actor, id, { discordId = null, remember = true } = {}) {
 			need(actor, 'tebex.manage');
-			let row = q.get.get(id);
+			let row = await q.get.get(id);
 			if (!row) throw new NotFoundError('Paiement introuvable.');
 			if (discordId !== null && !SNOWFLAKE.test(String(discordId))) throw new ValidationError('ID Discord invalide.');
 			if (row.discord_id && row.discord_id !== discordId && row.applied_at) {
 				await revokeGrants(row);
-				q.applied.run(null, null, row.id);
+				await q.applied.run(null, null, row.id);
 			}
-			q.setLink.run(discordId, discordId ? 'manual' : null, row.id);
-			if (discordId && remember && row.player_uuid) q.remember.run(row.player_uuid, discordId, actor.id, now());
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'tebex.link', target: discordId ?? undefined, details: { paiement: `#${row.id}`, joueur: buyerName(row), discord: discordId ? `<@${discordId}>` : 'délié' } });
-			row = q.get.get(id);
+			await q.setLink.run(discordId, discordId ? 'manual' : null, row.id);
+			if (discordId && remember && row.player_uuid) await q.remember.run(row.player_uuid, discordId, actor.id, now());
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'tebex.link', target: discordId ?? undefined, details: { paiement: `#${row.id}`, joueur: buyerName(row), discord: discordId ? `<@${discordId}>` : 'délié' } });
+			row = await q.get.get(id);
 			if (discordId && statusKind(row.status) === 'complete' && !row.revoked_at && !row.applied_at) await apply(row);
-			return toPayment(q.get.get(id));
+			return toPayment(await q.get.get(id));
 		},
 
 		// Gives the roles again (member came back, role fixed...): durations restart from now if none is running
 		async reapply(actor, id) {
 			need(actor, 'tebex.manage');
-			let row = q.get.get(id);
+			let row = await q.get.get(id);
 			if (!row) throw new NotFoundError('Paiement introuvable.');
 			if (statusKind(row.status) !== 'complete' || row.revoked_at) throw new ValidationError('Ce paiement n’est pas validé (remboursé, litige ou en attente).');
 			row = await tryLink(row, true);
 			if (!row.discord_id) throw new ValidationError('Acheteur non relié à un compte Discord : lie-le d’abord.');
 			const result = await apply(row, { refreshTemp: false });
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'tebex.reapply', target: row.discord_id, details: { paiement: `#${row.id}`, rôles: result.given.join(', ') || 'aucun' } });
-			return { ...result, payment: toPayment(q.get.get(id)) };
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'tebex.reapply', target: row.discord_id, details: { paiement: `#${row.id}`, rôles: result.given.join(', ') || 'aucun' } });
+			return { ...result, payment: await toPayment(await q.get.get(id)) };
 		},
 
 		async pollNow(actor) {
 			need(actor, 'tebex.manage');
-			if (!secret()) throw new ValidationError('Ajoute d’abord la clé secrète Tebex.');
+			if (!await secret()) throw new ValidationError('Ajoute d’abord la clé secrète Tebex.');
 			if (running) throw new ValidationError('Une vérification est déjà en cours.');
-			if (!config().enabled) throw new ValidationError('Le suivi des achats est en pause.');
+			if (!(await config()).enabled) throw new ValidationError('Le suivi des achats est en pause.');
 			return poll();
 		},
 	};

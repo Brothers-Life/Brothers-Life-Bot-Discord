@@ -15,8 +15,8 @@ async function setup() {
 	const { core, executor, owner } = ctx;
 	const recruitment = createRecruitment({ db: core.db, network: core.network, ranks: core.ranks, audit: core.audit, executor, sanctions: core.sanctions, stats: core.stats, logger: { warn: () => undefined }, now: () => clock });
 	const absences = createAbsences({ db: core.db, network: core.network, ranks: core.ranks, audit: core.audit, executor, settings: core.settings, logger: { warn: () => undefined }, now: () => clock });
-	const helper = core.ranks.create(owner, { name: 'Helper', level: 10, permissions: ['panel.access', 'absences.declare'] });
-	const recruiter = core.ranks.create(owner, { name: 'Recruteur', level: 40, permissions: ['recruitment.view', 'recruitment.vote', 'absences.manage', 'absences.view', 'members.assign'] });
+	const helper = await core.ranks.create(owner, { name: 'Helper', level: 10, permissions: ['panel.access', 'absences.declare'] });
+	const recruiter = await core.ranks.create(owner, { name: 'Recruteur', level: 40, permissions: ['recruitment.view', 'recruitment.vote', 'absences.manage', 'absences.view', 'members.assign'] });
 	await core.ranks.assignDirect(owner, ALICE, recruiter.id);
 	await core.ranks.assignDirect(owner, BOB, helper.id);
 	executor.memberRoles.set(`${MAIN}:${CANDIDATE}`, []);
@@ -27,15 +27,15 @@ async function apply(recruitment, positionId, values) {
 	let { step } = await recruitment.startApplication(positionId, CANDIDATE, MAIN);
 	let result;
 	for (const v of values) {
-		result = recruitment.submitStep(positionId, CANDIDATE, step, v);
+		result = await recruitment.submitStep(positionId, CANDIDATE, step, v);
 		step = result.next;
 	}
-	return recruitment.submit({ positionId, guildId: MAIN, userId: CANDIDATE, userName: 'lea', answers: result.answers });
+	return await recruitment.submit({ positionId, guildId: MAIN, userId: CANDIDATE, userName: 'lea', answers: result.answers });
 }
 
 test('application: two-step form, review message with a thread, staff votes, DM', async () => {
 	const { recruitment, owner, executor } = await setup();
-	const position = recruitment.savePosition(owner, MAIN, { name: 'Modérateur', config: { reviewChannelId: REVIEW, pingRoleIds: ['800000000000000077'] } });
+	const position = await recruitment.savePosition(owner, MAIN, { name: 'Modérateur', config: { reviewChannelId: REVIEW, pingRoleIds: ['800000000000000077'] } });
 	const app = await apply(recruitment, position.id, [
 		{ age: '19', availability: 'Soirs', experience: '2 ans sur un autre serveur' },
 		{ why: 'J’aime aider', situation: 'Je calme puis sanctionne' },
@@ -54,7 +54,7 @@ test('application: two-step form, review message with a thread, staff votes, DM'
 
 test('decision: interview channel, acceptance gives roles and rank; cooldown before applying again', async () => {
 	const { core, recruitment, owner, executor, helper, advance } = await setup();
-	const position = recruitment.savePosition(owner, MAIN, {
+	const position = await recruitment.savePosition(owner, MAIN, {
 		name: 'Helper',
 		config: { form: { steps: [{ questions: [{ id: 'why', label: 'Pourquoi ?' }] }] }, acceptRoleIds: ['800000000000000088'], acceptRankId: helper.id, interviewerRoleIds: ['800000000000000099'], cooldownDays: 7 },
 	});
@@ -75,15 +75,15 @@ test('decision: interview channel, acceptance gives roles and rank; cooldown bef
 
 test('requirements are explained and closed positions refuse applications', async () => {
 	const { recruitment, owner } = await setup();
-	const closed = recruitment.savePosition(owner, MAIN, { name: 'Dev', config: { open: false } });
+	const closed = await recruitment.savePosition(owner, MAIN, { name: 'Dev', config: { open: false } });
 	await assert.rejects(recruitment.startApplication(closed.id, CANDIDATE, MAIN), /fermées/);
-	const strict = recruitment.savePosition(owner, MAIN, { name: 'Admin', config: { requirements: { requiredRoleIds: ['800000000000000011'], minMessages: 100 } } });
+	const strict = await recruitment.savePosition(owner, MAIN, { name: 'Admin', config: { requirements: { requiredRoleIds: ['800000000000000011'], minMessages: 100 } } });
 	await assert.rejects(recruitment.startApplication(strict.id, CANDIDATE, MAIN), /rôle requis[\s\S]*100 messages/);
 });
 
 test('absences: pending then approved by a higher rank, applied then ended automatically', async () => {
 	const { core, absences, owner, executor, advance } = await setup();
-	absences.setConfig(owner, { requireApproval: true, roleByGuild: { [MAIN]: '800000000000000066' }, nicknamePrefix: '[ABS]', announce: { guildId: MAIN, channelId: '610000000000000009' } });
+	await absences.setConfig(owner, { requireApproval: true, roleByGuild: { [MAIN]: '800000000000000066' }, nicknamePrefix: '[ABS]', announce: { guildId: MAIN, channelId: '610000000000000009' } });
 	executor.memberRoles.set(`${MAIN}:${BOB}`, []);
 	const bob = await core.ranks.resolve(BOB);
 	const alice = await core.ranks.resolve(ALICE);
@@ -97,21 +97,21 @@ test('absences: pending then approved by a higher rank, applied then ended autom
 	assert.ok(executor.memberRoles.get(`${MAIN}:${BOB}`).includes('800000000000000066'));
 	assert.ok(executor.calls.some(c => c[0] === 'nickname' && c[3].startsWith('[ABS]')));
 	assert.equal(executor.absenceMessages.at(-1).view.kind, 'away');
-	assert.equal(absences.current().length, 1);
+	assert.equal((await absences.current()).length, 1);
 
 	advance(2 * 86_400_000 + 3600_000);
 	await absences.tick();
 	assert.match(executor.dms.at(-1)[1], /se termine/);
 	advance(86_400_000);
 	await absences.tick();
-	assert.equal(absences.current().length, 0);
+	assert.equal((await absences.current()).length, 0);
 	assert.ok(!executor.memberRoles.get(`${MAIN}:${BOB}`).includes('800000000000000066'));
 	assert.equal(executor.absenceMessages.at(-1).view.kind, 'back');
 });
 
 test('a position can be closed and reopened in one click; its Discord panel follows', async () => {
 	const { recruitment, owner } = await setup();
-	const position = recruitment.savePosition(owner, MAIN, { name: 'Helper', panelChannelId: '610000000000000008' });
+	const position = await recruitment.savePosition(owner, MAIN, { name: 'Helper', panelChannelId: '610000000000000008' });
 	await recruitment.publishPanel(owner, MAIN, '610000000000000008');
 	const closed = await recruitment.setOpen(owner, position.id, false);
 	assert.equal(closed.config.open, false);
@@ -124,12 +124,12 @@ test('absences: request posted as an embed with Valider / Refuser, only the revi
 	const { core, absences, owner, executor } = await setup();
 	const STAFF = '610000000000000010';
 	const REVIEWER_ROLE = '800000000000000077';
-	absences.setConfig(owner, { requireApproval: true, review: { guildId: MAIN, channelId: STAFF }, reviewerRoleIds: [REVIEWER_ROLE], pingReviewers: true });
+	await absences.setConfig(owner, { requireApproval: true, review: { guildId: MAIN, channelId: STAFF }, reviewerRoleIds: [REVIEWER_ROLE], pingReviewers: true });
 	const bob = await core.ranks.resolve(BOB);
 	const absence = await absences.declare(bob, { endAt: Date.now() + 2 * 86_400_000, reason: 'Examens' });
 	const posted = executor.absenceMessages.at(-1);
 	assert.deepEqual([posted.channelId, posted.messageId, posted.view.kind, posted.options.pingRoleIds], [STAFF, null, 'review', [REVIEWER_ROLE]]);
-	assert.equal(absences.list(owner, {})[0].reviewMessageId, '870000000000000001');
+	assert.equal((await absences.list(owner, {}))[0].reviewMessageId, '870000000000000001');
 
 	await assert.rejects(absences.reviewByButton(ALICE, [], absence.id, true), /Seuls les rôles/, 'absences.manage is not enough once roles are set');
 	await assert.rejects(absences.reviewByButton(BOB, [REVIEWER_ROLE], absence.id, true), /propre absence/);
@@ -144,7 +144,7 @@ test('absences: request posted as an embed with Valider / Refuser, only the revi
 	assert.match(absencePayload({ kind: 'review', absence: done }).embeds[0].toJSON().fields.at(-1).value, /Refusée par/);
 
 	// Without reviewer roles: whoever has absences.manage
-	absences.setConfig(owner, { requireApproval: true, review: { guildId: MAIN, channelId: STAFF } });
+	await absences.setConfig(owner, { requireApproval: true, review: { guildId: MAIN, channelId: STAFF } });
 	const next = await absences.declare(bob, { startAt: Date.now() + 5 * 86_400_000, endAt: Date.now() + 6 * 86_400_000 });
 	assert.equal((await absences.reviewByButton(ALICE, [], next.id, true)).status, 'approved');
 	assert.match(executor.dms.at(-1)[1], /validée/);
@@ -156,7 +156,7 @@ test('decision: the candidate leaves the interview channel; the delay counts fro
 	executor.removeChannelMember = async (channelId, userId) => {
 		removed.push([channelId, userId]);
 	};
-	const position = recruitment.savePosition(owner, MAIN, { name: 'Helper', config: { form: { steps: [{ questions: [{ id: 'why', label: 'Pourquoi ?' }] }] }, cooldownDays: 7 } });
+	const position = await recruitment.savePosition(owner, MAIN, { name: 'Helper', config: { form: { steps: [{ questions: [{ id: 'why', label: 'Pourquoi ?' }] }] }, cooldownDays: 7 } });
 
 	// Withdrawn: no delay, and the interview channel is closed to the candidate
 	const first = await apply(recruitment, position.id, [{ why: 'Motivé' }]);

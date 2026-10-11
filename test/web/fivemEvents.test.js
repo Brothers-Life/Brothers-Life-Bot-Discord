@@ -18,11 +18,11 @@ async function setup() {
 
 test('the bridge key posts txAdmin events; identifiers are dropped; it cannot read the settings', async () => {
 	const { core, owner, bearer } = await setup();
-	const call = bearer(core.apiKeys.create(owner, { name: 'Pont txAdmin', permissions: ['fivem.events'] }).secret);
+	const call = bearer((await core.apiKeys.create(owner, { name: 'Pont txAdmin', permissions: ['fivem.events'] })).secret);
 	const res = await call('POST', '/api/fivem/events', { type: 'playerWarned', server: 'BRL', data: { author: 'Admin', reason: 'Test', targetName: 'Léa', targetIds: ['license:abc'], targetNetId: null } });
 	assert.equal(res.statusCode, 200, res.body);
 	assert.equal(res.json().status, 'logged');
-	const stored = core.fivemEvents.recent()[0];
+	const stored = (await core.fivemEvents.recent())[0];
 	assert.equal(stored.type, 'playerWarned');
 	assert.equal(JSON.stringify(stored.data).includes('license'), false);
 
@@ -35,7 +35,7 @@ test('the bridge key posts txAdmin events; identifiers are dropped; it cannot re
 
 test('a key without fivem.events cannot post events', async () => {
 	const { core, owner, bearer } = await setup();
-	const call = bearer(core.apiKeys.create(owner, { name: 'Lecture', permissions: ['network.view'] }).secret);
+	const call = bearer((await core.apiKeys.create(owner, { name: 'Lecture', permissions: ['network.view'] })).secret);
 	const res = await call('POST', '/api/fivem/events', { type: 'serverStarted', data: {} });
 	assert.equal(res.statusCode, 403);
 	assert.match(res.json().error.message, /fivem\.events/);

@@ -11,7 +11,7 @@ export const data = new SlashCommandBuilder()
 
 export async function autocomplete(interaction) {
 	const typed = interaction.options.getFocused().toLowerCase();
-	const positions = interaction.client.core.recruitment.positions(interaction.guildId).filter(p => p.config.open);
+	const positions = (await interaction.client.core.recruitment.positions(interaction.guildId)).filter(p => p.config.open);
 	await interaction.respond(positions.filter(p => p.name.toLowerCase().includes(typed)).slice(0, 25).map(p => ({ name: p.name, value: String(p.id) })));
 }
 

@@ -50,12 +50,12 @@ test('twitch: missing keys reported; a live is announced once, peak kept, messag
 	const sub = await streams.save(owner, { platform: 'twitch', channel: 'https://twitch.tv/BRL_TV', targets: [target], config: { liveRole: { userId: STREAMER, roleByGuild: { [MAIN]: LIVE_ROLE } } } });
 	assert.equal(sub.channel, 'brl_tv');
 	await streams.tick();
-	assert.match(streams.get(sub.id).state.error, /manquants/);
+	assert.match((await streams.get(sub.id)).state.error, /manquants/);
 
-	const creds = streams.setCredentials(owner, { twitch: { clientId: 'abc', clientSecret: 'secret' } });
+	const creds = await streams.setCredentials(owner, { twitch: { clientId: 'abc', clientSecret: 'secret' } });
 	assert.deepEqual(creds.twitch, { clientId: 'abc', hasSecret: true });
-	streams.setCredentials(owner, { twitch: { clientId: 'abc', clientSecret: '' } });
-	assert.equal(streams.credentials().twitch.hasSecret, true, 'an empty secret keeps the saved one');
+	await streams.setCredentials(owner, { twitch: { clientId: 'abc', clientSecret: '' } });
+	assert.equal((await streams.credentials()).twitch.hasSecret, true, 'an empty secret keeps the saved one');
 
 	world.twitch = [twitchStream('s1')];
 	await streams.tick();
@@ -69,7 +69,7 @@ test('twitch: missing keys reported; a live is announced once, peak kept, messag
 	advance(60_000);
 	await streams.tick();
 	assert.equal(executor.announcements.length, 1, 'same live: no second message');
-	assert.equal(streams.get(sub.id).state.peakViewers, 300);
+	assert.equal((await streams.get(sub.id)).state.peakViewers, 300);
 	assert.equal(world.tokenCalls, 1, 'token reused');
 
 	world.twitch = [];
@@ -78,7 +78,7 @@ test('twitch: missing keys reported; a live is announced once, peak kept, messag
 	const edited = [...executor.posted.get(CHANNEL).values()].at(-1);
 	assert.match(edited.embed.description, /Live terminé · 2 h 06 · pic à 300/);
 	assert.ok(!executor.memberRoles.get(`${MAIN}:${STREAMER}`).includes(LIVE_ROLE));
-	assert.deepEqual(streams.history().map(h => h.kind), ['end', 'live']);
+	assert.deepEqual((await streams.history()).map(h => h.kind), ['end', 'live']);
 
 	world.twitch = [twitchStream('s1')];
 	await streams.tick();
@@ -87,7 +87,7 @@ test('twitch: missing keys reported; a live is announced once, peak kept, messag
 
 test('title filters: required and excluded words', async () => {
 	const { streams, owner, executor, world } = await setup();
-	streams.setCredentials(owner, { twitch: { clientId: 'abc', clientSecret: 'secret' } });
+	await streams.setCredentials(owner, { twitch: { clientId: 'abc', clientSecret: 'secret' } });
 	await streams.save(owner, { platform: 'twitch', channel: 'brl_tv', targets: [target], config: { requireWords: ['RP'], excludeWords: ['rediffusion'] } });
 	world.twitch = [twitchStream('s1', { title: 'Rediffusion RP' })];
 	await streams.tick();
@@ -113,7 +113,7 @@ test('youtube: first look only remembers, then new videos announced, Shorts only
 	assert.equal(executor.announcements.length, 1, 'the Short is skipped');
 	assert.equal(executor.announcements[0].payload.embed.title, 'Épisode 2');
 	assert.equal(executor.announcements[0].payload.embed.imageUrl, 'https://i.ytimg.com/vi/new00000001/hq.jpg');
-	assert.equal(streams.get(sub.id).state.lastVideoId, 'short000001');
+	assert.equal((await streams.get(sub.id)).state.lastVideoId, 'short000001');
 });
 
 test('test message and permissions', async () => {
@@ -128,5 +128,5 @@ test('test message and permissions', async () => {
 	const nobody = { id: '1', can: () => false };
 	await assert.rejects(streams.save(nobody, { platform: 'kick', channel: 'x2', targets: [target] }), /notifications.manage/);
 	await streams.remove(owner, sub.id);
-	assert.equal(streams.list().length, 0);
+	assert.equal((await streams.list()).length, 0);
 });

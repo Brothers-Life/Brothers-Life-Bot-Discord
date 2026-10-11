@@ -33,12 +33,12 @@ export function duration(ms) {
 
 const size = bytes => (bytes >= 1_048_576 ? `${(bytes / 1_048_576).toFixed(1)} Mo` : `${Math.max(1, Math.round(bytes / 1024))} Ko`);
 
-function record(guild, event) {
-	return guild.client.core.events.record({ guildId: guild.id, ...event });
+async function record(guild, event) {
+	return await guild.client.core.events.record({ guildId: guild.id, ...event });
 }
 
 // --- Messages ---------------------------------------------------------------------------
-export function messageEdited(oldMessage, message) {
+export async function messageEdited(oldMessage, message) {
 	if (!message.guild || message.author?.bot || message.webhookId) return;
 	const before = oldMessage.partial ? null : oldMessage.content;
 	if (before === message.content) return;
@@ -49,7 +49,7 @@ export function messageEdited(oldMessage, message) {
 	];
 	if (message.createdTimestamp) fields.push({ name: 'Écrit', value: when(message.createdTimestamp), inline: true });
 	if (before !== null) fields.push({ name: 'Taille', value: `${before.length} → ${message.content?.length ?? 0} caractères`, inline: true });
-	record(message.guild, {
+	await record(message.guild, {
 		category: 'messages',
 		type: 'message_edit',
 		userId: message.author?.id,
@@ -68,7 +68,7 @@ export function messageEdited(oldMessage, message) {
 	});
 }
 
-export function messageDeleted(message) {
+export async function messageDeleted(message) {
 	if (!message.guild || message.author?.bot || message.webhookId) return;
 	const files = [...(message.attachments?.values?.() ?? [])];
 	const attachments = files.map(a => a.name);
@@ -84,7 +84,7 @@ export function messageDeleted(message) {
 	if (message.reference?.messageId) fields.push({ name: 'En réponse à', value: `[un message](https://discord.com/channels/${message.guild.id}/${message.reference.channelId ?? message.channelId}/${message.reference.messageId})`, inline: true });
 	const mentions = message.mentions?.users?.size ?? 0;
 	if (mentions) fields.push({ name: 'Mentions', value: String(mentions), inline: true });
-	record(message.guild, {
+	await record(message.guild, {
 		category: 'messages',
 		type: 'message_delete',
 		userId: message.author?.id ?? null,
@@ -104,7 +104,7 @@ export function messageDeleted(message) {
 	});
 }
 
-export function messagesBulkDeleted(messages, channel) {
+export async function messagesBulkDeleted(messages, channel) {
 	if (!channel.guild) return;
 	const counts = new Map();
 	for (const m of messages.values()) if (m.author) counts.set(m.author.id, { user: m.author, n: (counts.get(m.author.id)?.n ?? 0) + 1 });
@@ -112,7 +112,7 @@ export function messagesBulkDeleted(messages, channel) {
 	const top = [...counts.values()].sort((a, b) => b.n - a.n).slice(0, 10);
 	const known = [...messages.values()].filter(m => !m.partial && m.content);
 	const sample = known.slice(-5).map(m => `**${m.author?.username ?? '?'}** : ${clip(m.content, 150)}`).join('\n');
-	record(channel.guild, {
+	await record(channel.guild, {
 		category: 'messages',
 		type: 'message_bulk_delete',
 		channelId: channel.id,
@@ -150,7 +150,7 @@ export async function memberJoined(member) {
 	if (badges.length) fields.push({ name: 'Badges', value: badges.join(', '), inline: true });
 	if (member.user.bot) fields.push({ name: 'Bot', value: '🤖 oui', inline: true });
 	if (!member.user.avatar) fields.push({ name: 'Avatar', value: 'par défaut', inline: true });
-	record(member.guild, {
+	await record(member.guild, {
 		category: 'members',
 		type: 'member_join',
 		userId: member.id,
@@ -169,7 +169,7 @@ export async function memberJoined(member) {
 	return invite;
 }
 
-export function memberLeft(member) {
+export async function memberLeft(member) {
 	const roles = member.roles?.cache.filter(r => r.id !== member.guild.id).map(r => r.name) ?? [];
 	const roleIds = member.roles?.cache.filter(r => r.id !== member.guild.id).map(r => r.id) ?? [];
 	const fields = [];
@@ -178,7 +178,7 @@ export function memberLeft(member) {
 	if (member.guild.memberCount) fields.push({ name: 'Membres restants', value: String(member.guild.memberCount), inline: true });
 	if (roles.length) fields.push({ name: `Rôles (${roles.length})`, value: clip(roleIds.map(id => `<@&${id}>`).join(' ')) });
 	if (member.premiumSinceTimestamp) fields.push({ name: 'Boostait depuis', value: ts(member.premiumSinceTimestamp, 'D'), inline: true });
-	record(member.guild, {
+	await record(member.guild, {
 		category: 'members',
 		type: 'member_leave',
 		userId: member.id,
@@ -188,11 +188,11 @@ export function memberLeft(member) {
 	});
 }
 
-export function memberUpdated(oldMember, member) {
+export async function memberUpdated(oldMember, member) {
 	if (oldMember.partial) return;
 	if (oldMember.avatar !== member.avatar) {
 		const before = oldMember.avatar ? oldMember.displayAvatarURL?.({ size: 256 }) : null;
-		record(member.guild, {
+		await record(member.guild, {
 			category: 'members',
 			type: 'member_avatar',
 			userId: member.id,
@@ -212,7 +212,7 @@ export function memberUpdated(oldMember, member) {
 	}
 	if (Boolean(oldMember.premiumSinceTimestamp) !== Boolean(member.premiumSinceTimestamp)) {
 		const started = Boolean(member.premiumSinceTimestamp);
-		record(member.guild, {
+		await record(member.guild, {
 			category: 'members',
 			type: 'member_boost',
 			userId: member.id,
@@ -233,7 +233,7 @@ export function memberUpdated(oldMember, member) {
 		});
 	}
 	if (oldMember.nickname === member.nickname) return;
-	record(member.guild, {
+	await record(member.guild, {
 		category: 'members',
 		type: 'member_nickname',
 		userId: member.id,
@@ -254,7 +254,7 @@ export function memberUpdated(oldMember, member) {
 }
 
 // Pseudo or Discord avatar changed: logged on every server of the network where the person is
-export function userUpdated(oldUser, user) {
+export async function userUpdated(oldUser, user) {
 	if (oldUser.partial || user.bot) return;
 	const changes = [];
 	if (oldUser.username !== user.username) changes.push({ name: 'Pseudo', value: `${oldUser.username} → ${user.username}` });
@@ -264,7 +264,7 @@ export function userUpdated(oldUser, user) {
 	const avatarChanged = oldUser.avatar !== user.avatar;
 	for (const guild of user.client.guilds.cache.values()) {
 		if (!guild.members.cache.has(user.id)) continue;
-		record(guild, {
+		await record(guild, {
 			category: 'members',
 			type: 'member_username',
 			userId: user.id,
@@ -288,14 +288,14 @@ export function userUpdated(oldUser, user) {
 // guildId:userId -> when they came into their current voice channel (to tell how long they stayed)
 const voiceSince = new Map();
 
-export function voiceChanged(oldState, state) {
+export async function voiceChanged(oldState, state) {
 	const user = state.member?.user;
 	if (oldState.channelId && oldState.channelId === state.channelId) {
 		const kinds = [['streaming', 'partage son écran', 'arrête de partager son écran', '🖥️'], ['selfVideo', 'allume sa caméra', 'coupe sa caméra', '📷']];
 		for (const [key, on, off, icon] of kinds) {
 			if (Boolean(oldState[key]) === Boolean(state[key])) continue;
 			const text = state[key] ? on : off;
-			record(state.guild, {
+			await record(state.guild, {
 				category: 'voice',
 				type: 'voice_stream',
 				userId: state.id,
@@ -322,7 +322,7 @@ export function voiceChanged(oldState, state) {
 	const channel = state.channel ?? oldState.channel;
 	const present = channel?.members?.size;
 	if (present !== undefined) fields.push({ name: 'Dans le salon', value: `${present} personne${present > 1 ? 's' : ''}`, inline: true });
-	record(state.guild, {
+	await record(state.guild, {
 		category: 'voice',
 		type,
 		userId: state.id,
@@ -341,9 +341,9 @@ export function voiceChanged(oldState, state) {
 }
 
 // --- Invites --------------------------------------------------------------------------------
-export function inviteCreated(invite) {
+export async function inviteCreated(invite) {
 	if (!invite.guild) return;
-	record(invite.guild, {
+	await record(invite.guild, {
 		category: 'invites',
 		type: 'invite_create',
 		userId: invite.inviter?.id ?? null,
@@ -365,9 +365,9 @@ export function inviteCreated(invite) {
 	});
 }
 
-export function inviteDeleted(invite) {
+export async function inviteDeleted(invite) {
 	if (!invite.guild) return;
-	record(invite.guild, {
+	await record(invite.guild, {
 		category: 'invites',
 		type: 'invite_delete',
 		channelId: invite.channelId,
@@ -471,7 +471,7 @@ function auditColor(entry, type, category) {
 	return 'info';
 }
 
-export function auditEntry(entry, guild) {
+export async function auditEntry(entry, guild) {
 	const mapping = entry.action === AuditLogEvent.MemberUpdate ? memberUpdateMapping(entry) : AUDIT[entry.action];
 	if (!mapping) return;
 	const [category, type, title] = mapping;
@@ -522,7 +522,7 @@ export function auditEntry(entry, guild) {
 		if (entry.reason) fields.push({ name: 'Raison', value: clip(entry.reason, 500) });
 	}
 
-	record(guild, {
+	await record(guild, {
 		category,
 		type,
 		userId: aboutMember ? entry.targetId : null,

@@ -52,24 +52,26 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 	const players = new Map();
 	// guildId -> player being created (the bot joining the voice channel)
 	const joining = new Map();
+	// guildId -> last permission check of a control (see controlled)
+	const checks = new Map();
 	let nextTrackId = 1;
 	const listeners = new Set();
 	const playlists = createPlaylists({ db, audit, now });
 
-	function config() {
-		return normalizeMusicConfig(settings.get('music.config', {}));
+	async function config() {
+		return normalizeMusicConfig(await settings.get('music.config', {}));
 	}
 
 	// Keys of a Spotify app (client credentials), only used to search Spotify
-	function spotifyKeys() {
-		const keys = settings.get('music.spotify', {});
+	async function spotifyKeys() {
+		const keys = await settings.get('music.spotify', {});
 		return keys.clientId && keys.clientSecret ? { clientId: keys.clientId, clientSecret: keys.clientSecret } : null;
 	}
 
 	// Search options handed to the resolver for a platform
-	function searchOptions(platform) {
+	async function searchOptions(platform) {
 		if (platform !== 'spotify') return {};
-		const spotify = spotifyKeys();
+		const spotify = await spotifyKeys();
 		if (!spotify) throw new ValidationError('La recherche Spotify n’est pas configurée : ajoute les clés de l’appli Spotify dans les réglages musique du panel.');
 		return { spotify };
 	}
@@ -85,7 +87,7 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 			}
 		}
 		const player = players.get(guildId);
-		if (player) refreshMessage(player);
+		if (player) refreshMessage(player).catch(error => logger.warn('Music message failed:', error.message));
 	}
 
 	function playerOf(guildId) {
@@ -132,7 +134,9 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 
 	// keepPlace: edit the message where it is (periodic refresh) instead of bringing it back to the bottom
 	async function refreshMessage(player, { keepPlace = false } = {}) {
-		if (!config().announce || !player.textChannelId || !executor.upsertMusicMessage) return;
+		if (!(await config()).announce || !player.textChannelId || !executor.upsertMusicMessage) return;
+		// Left while the settings were read: its last message is the "ended" one
+		if (players.get(player.guildId) !== player) return;
 		clearTimeout(player.messageTimer);
 		// Bursts of changes (skip, volume...) end up as one edit
 		player.messageTimer = setTimeout(async () => {
@@ -146,7 +150,7 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 				player.fallbackTextChannelId = null;
 				player.textChannelId = fallback && fallback !== player.textChannelId ? fallback : null;
 				player.messageId = null;
-				if (player.textChannelId) refreshMessage(player);
+				if (player.textChannelId) refreshMessage(player).catch(e => logger.warn('Music message failed:', e.message));
 			}
 		}, player.messageId ? 800 : 0);
 		player.messageTimer.unref?.();
@@ -167,10 +171,10 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 		player.loading = true;
 		player.idleSince = null;
 		try {
+			const max = (await config()).maxTrackMinutes;
 			const stream = await resolver.stream(track);
 			if (stale()) return;
 			Object.assign(track, stream.track ?? {});
-			const max = config().maxTrackMinutes;
 			if (max && track.durationMs > max * 60_000) throw new ValidationError(`Trop long (plus de ${max} min).`);
 			await backend.play(player.guildId, { target: stream.target, live: Boolean(track.live), seekMs, speed: player.speed, filters: [...player.filters], volume: player.volume });
 			if (stale()) return;
@@ -219,19 +223,19 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 		return start(player);
 	}
 
-	function assertCan(ctx, player, action) {
+	async function assertCan(ctx, player, action) {
 		if (ctx.can?.('music.use')) return;
 		if (ctx.source === 'panel') throw new ForbiddenError('Permission manquante : music.use');
 		if (player?.channelId && ctx.voiceChannelId !== player.channelId) throw new ForbiddenError('Rejoins d’abord le salon vocal du bot.');
 		if (OPEN_ACTIONS.has(action)) return;
-		const dj = config().djRoles[player?.guildId ?? ctx.guildId] ?? [];
+		const dj = (await config()).djRoles[player?.guildId ?? ctx.guildId] ?? [];
 		if (dj.length && !(ctx.roleIds ?? []).some(id => dj.includes(id))) throw new ForbiddenError('Il faut un rôle DJ pour ça.');
 	}
 
-	function checkBefore(ctx, guildId, { channelId = ctx.voiceChannelId, now: playNow = false } = {}) {
-		if (network.find(guildId)?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
+	async function checkBefore(ctx, guildId, { channelId = ctx.voiceChannelId, now: playNow = false } = {}) {
+		if ((await network.find(guildId))?.status !== 'active') throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
 		const player = players.get(guildId);
-		assertCan(ctx, player, playNow ? 'jump' : 'play');
+		await assertCan(ctx, player, playNow ? 'jump' : 'play');
 		if (!player && !channelId) throw new ValidationError('Rejoins un salon vocal (ou choisis-en un) pour que le bot vienne.');
 	}
 
@@ -244,10 +248,11 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 		if (!player) {
 			if (!joining.has(guildId)) {
 				joining.set(guildId, (async () => {
+					const { defaultVolume } = await config();
 					await backend.join(guildId, channelId).catch((error) => { throw new ValidationError(error.message); });
 					const created = {
 						guildId, channelId, textChannelId: channelId, fallbackTextChannelId: textChannelId,
-						queue: [], index: 0, loop: 'off', volume: config().defaultVolume, speed: 1, filters: new Set(), paused: false, messageId: null, idleSince: null, loading: false,
+						queue: [], index: 0, loop: 'off', volume: defaultVolume, speed: 1, filters: new Set(), paused: false, messageId: null, idleSince: null, loading: false,
 					};
 					players.set(guildId, created);
 					return created;
@@ -260,8 +265,8 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 	}
 
 	async function enqueue(ctx, guildId, found, { channelId = ctx.voiceChannelId, textChannelId = ctx.textChannelId ?? null, next = false, now: playNow = false, label = null, playlist = null } = {}) {
+		const cfg = await config();
 		const player = await ensurePlayer(guildId, channelId, textChannelId);
-		const cfg = config();
 		const room = cfg.maxQueue - (player.queue.length - player.index);
 		if (room <= 0) throw new ValidationError(`La file est pleine (${cfg.maxQueue} titres).`);
 		// Fresh queue entries (a track coming from a playlist or the history has no id, error or requester of its own)
@@ -281,47 +286,63 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 		else {
 			emit(guildId);
 		}
-		record(ctx, guildId, 'play', { title: label ?? tracks[0].title, count: tracks.length });
+		await record(ctx, guildId, 'play', { title: label ?? tracks[0].title, count: tracks.length });
 		return { tracks, playlist, truncated: found.length > tracks.length, startedNow: idle || playNow, state: view(player) };
 	}
 
-	function record(ctx, guildId, verb, details = {}) {
-		audit.record({ actorId: ctx.actorId, source: ctx.source === 'panel' ? 'panel' : 'bot', action: `music.${verb}`, guildId, details });
+	async function record(ctx, guildId, verb, details = {}) {
+		await audit.record({ actorId: ctx.actorId, source: ctx.source === 'panel' ? 'panel' : 'bot', action: `music.${verb}`, guildId, details });
+	}
+
+	// The player of a server, once the actor is allowed to do `action` on it. The check reads the settings:
+	// checks of a server end in the order they were asked (a skip then a jump: the jump is applied last),
+	// and a player that left meanwhile is not touched
+	async function controlled(ctx, guildId, action) {
+		const player = playerOf(guildId);
+		const check = (checks.get(guildId) ?? Promise.resolve()).then(() => assertCan(ctx, player, action));
+		const tail = check.catch(() => undefined);
+		checks.set(guildId, tail);
+		tail.then(() => {
+			if (checks.get(guildId) === tail) checks.delete(guildId);
+		});
+		await check;
+		if (players.get(guildId) !== player) throw new ValidationError('Aucune musique en cours sur ce serveur.');
+		return player;
 	}
 
 	const service = {
 		config,
 		filters: FILTERS,
 
-		setConfig(actor, input) {
+		async setConfig(actor, input) {
 			if (!actor.can('music.manage')) throw new ForbiddenError('Permission manquante : music.manage');
 			const cfg = normalizeMusicConfig(input);
-			settings.set('music.config', cfg);
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'music.config' });
+			await settings.set('music.config', cfg);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'music.config' });
 			return cfg;
 		},
 
 		// The secret never leaves the server: only whether it is set
-		spotify() {
-			const keys = settings.get('music.spotify', {});
+		async spotify() {
+			const keys = await settings.get('music.spotify', {});
 			return { clientId: keys.clientId ?? '', hasSecret: Boolean(keys.clientSecret) };
 		},
 
 		// Empty secret = keep the saved one; null = remove the keys
-		setSpotify(actor, input) {
+		async setSpotify(actor, input) {
 			if (!actor.can('music.manage')) throw new ForbiddenError('Permission manquante : music.manage');
 			if (input === null) {
-				settings.set('music.spotify', {});
+				await settings.set('music.spotify', {});
 			}
 			else {
-				const saved = settings.get('music.spotify', {});
+				const saved = await settings.get('music.spotify', {});
 				const clientId = String(input?.clientId ?? '').trim();
 				const clientSecret = String(input?.clientSecret ?? '').trim() || saved.clientSecret || '';
 				if (!/^[a-f0-9]{32}$/i.test(clientId)) throw new ValidationError('Client ID Spotify invalide (32 caractères hexadécimaux).');
 				if (!/^[a-f0-9]{32}$/i.test(clientSecret)) throw new ValidationError('Client Secret Spotify invalide (32 caractères hexadécimaux).');
-				settings.set('music.spotify', { clientId, clientSecret });
+				await settings.set('music.spotify', { clientId, clientSecret });
 			}
-			audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'music.config', details: { spotify: input === null ? 'clés retirées' : 'clés enregistrées' } });
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'music.config', details: { spotify: input === null ? 'clés retirées' : 'clés enregistrées' } });
 			return service.spotify();
 		},
 
@@ -338,18 +359,18 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 
 		// Typed search: a prefix ("sc: …") wins over the chosen platform, which wins over the default one
 		async search(text, limit = 5, platform = null) {
-			const parsed = parseSearch(text, { platform, fallback: config().searchPlatform });
+			const parsed = parseSearch(text, { platform, fallback: (await config()).searchPlatform });
 			if (parsed.text.length < 2) throw new ValidationError('Tape au moins 2 caractères.');
-			return resolver.search(parsed.text, limit, parsed.platform, searchOptions(parsed.platform)).catch((error) => { throw new ValidationError(error.message); });
+			return resolver.search(parsed.text, limit, parsed.platform, await searchOptions(parsed.platform)).catch((error) => { throw new ValidationError(error.message); });
 		},
 
 		// ctx: { actorId, source: 'bot'|'panel', guildId, voiceChannelId, textChannelId, roleIds, can }
 		async play(ctx, guildId, query, options = {}) {
 			const text = String(query ?? '').trim();
 			if (!text) throw new ValidationError('Donne un lien ou une recherche.');
-			checkBefore(ctx, guildId, options);
-			const parsed = parseSearch(text, { platform: options.platform, fallback: config().searchPlatform });
-			const found = await resolver.resolve(parsed.text, parsed.platform, searchOptions(parsed.platform)).catch((error) => { throw error instanceof ValidationError ? error : new ValidationError(error.message); });
+			await checkBefore(ctx, guildId, options);
+			const parsed = parseSearch(text, { platform: options.platform, fallback: (await config()).searchPlatform });
+			const found = await resolver.resolve(parsed.text, parsed.platform, await searchOptions(parsed.platform)).catch((error) => { throw error instanceof ValidationError ? error : new ValidationError(error.message); });
 			if (!found.tracks.length) throw new ValidationError('Rien trouvé pour cette recherche.');
 			return enqueue(ctx, guildId, found.tracks, { ...options, label: found.playlist?.title, playlist: found.playlist ?? null });
 		},
@@ -357,13 +378,13 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 		// The bot comes into the voice channel with an empty queue and posts its player, to search and add from there.
 		// Already there: the player message comes back to the bottom of the chat.
 		async join(ctx, guildId, { channelId = ctx.voiceChannelId, textChannelId = ctx.textChannelId ?? null } = {}) {
-			checkBefore(ctx, guildId, { channelId });
+			await checkBefore(ctx, guildId, { channelId });
 			const existing = players.get(guildId);
 			const player = await ensurePlayer(guildId, channelId, textChannelId);
 			if (!existing) {
 				// Nothing asked within the idle delay: it leaves like after the end of a queue
 				player.idleSince = now();
-				record(ctx, guildId, 'join');
+				await record(ctx, guildId, 'join');
 			}
 			emit(guildId);
 			return { joined: !existing, state: view(player) };
@@ -371,9 +392,9 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 
 		// A saved playlist, in the queue
 		async playPlaylist(ctx, guildId, id, { shuffle = false, ...options } = {}) {
-			const list = playlists.get(id, ctx.actorId, { forPlay: true });
+			const list = await playlists.get(id, ctx.actorId, { forPlay: true });
 			if (!list.tracks.length) throw new ValidationError('Cette playlist est vide.');
-			checkBefore(ctx, guildId, options);
+			await checkBefore(ctx, guildId, options);
 			const tracks = [...list.tracks];
 			if (shuffle) {
 				for (let i = tracks.length - 1; i > 0; i--) {
@@ -387,7 +408,7 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 		playlists,
 
 		// The whole queue (history included) saved as a playlist
-		saveQueue(ctx, guildId, { name, shared = true, id = null } = {}) {
+		async saveQueue(ctx, guildId, { name, shared = true, id = null } = {}) {
 			const player = playerOf(guildId);
 			const tracks = player.queue.filter(t => !t.error);
 			if (!tracks.length) throw new ValidationError('La file est vide.');
@@ -398,22 +419,21 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 		async addToPlaylist(ctx, id, query, { platform = null } = {}) {
 			const text = String(query ?? '').trim();
 			if (!text) throw new ValidationError('Donne un lien ou une recherche.');
-			const parsed = parseSearch(text, { platform, fallback: config().searchPlatform });
-			const found = await resolver.resolve(parsed.text, parsed.platform, searchOptions(parsed.platform)).catch((error) => { throw error instanceof ValidationError ? error : new ValidationError(error.message); });
+			const parsed = parseSearch(text, { platform, fallback: (await config()).searchPlatform });
+			const found = await resolver.resolve(parsed.text, parsed.platform, await searchOptions(parsed.platform)).catch((error) => { throw error instanceof ValidationError ? error : new ValidationError(error.message); });
 			if (!found.tracks.length) throw new ValidationError('Rien trouvé.');
 			return playlists.addTracks(ctx, id, found.tracks);
 		},
 
 		// The track playing now, added to a playlist
-		addCurrentTo(ctx, guildId, id) {
+		async addCurrentTo(ctx, guildId, id) {
 			const track = current(playerOf(guildId));
 			if (!track) throw new ValidationError('Rien en cours.');
 			return playlists.addTracks(ctx, id, [track]);
 		},
 
 		async pause(ctx, guildId, paused) {
-			const player = playerOf(guildId);
-			assertCan(ctx, player, 'pause');
+			const player = await controlled(ctx, guildId, 'pause');
 			const target = paused ?? !player.paused;
 			if (target) await backend.pause(guildId);
 			else await backend.resume(guildId);
@@ -423,17 +443,15 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 		},
 
 		async skip(ctx, guildId, count = 1) {
-			const player = playerOf(guildId);
-			assertCan(ctx, player, 'skip');
+			const player = await controlled(ctx, guildId, 'skip');
 			if (!current(player)) throw new ValidationError('Rien à passer.');
 			await advance(player, { by: Math.max(1, Math.floor(count)) });
-			record(ctx, guildId, 'skip', { count });
+			await record(ctx, guildId, 'skip', { count });
 			return view(player);
 		},
 
 		async previous(ctx, guildId) {
-			const player = playerOf(guildId);
-			assertCan(ctx, player, 'previous');
+			const player = await controlled(ctx, guildId, 'previous');
 			// Past the first seconds, "previous" restarts the track
 			if (current(player) && position(player) > 5000) {
 				await start(player, 0);
@@ -446,8 +464,7 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 		},
 
 		async jump(ctx, guildId, index) {
-			const player = playerOf(guildId);
-			assertCan(ctx, player, 'jump');
+			const player = await controlled(ctx, guildId, 'jump');
 			if (!Number.isInteger(index) || index < 0 || index >= player.queue.length) throw new ValidationError('Position invalide dans la file.');
 			player.index = index;
 			await start(player);
@@ -455,8 +472,7 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 		},
 
 		async seek(ctx, guildId, ms) {
-			const player = playerOf(guildId);
-			assertCan(ctx, player, 'seek');
+			const player = await controlled(ctx, guildId, 'seek');
 			const track = current(player);
 			if (!track) throw new ValidationError('Rien en cours.');
 			if (track.live) throw new ValidationError('Impossible d’avancer dans un direct.');
@@ -467,8 +483,7 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 		},
 
 		async setVolume(ctx, guildId, volume) {
-			const player = playerOf(guildId);
-			assertCan(ctx, player, 'volume');
+			const player = await controlled(ctx, guildId, 'volume');
 			const value = Math.min(200, Math.max(0, Math.round(volume)));
 			player.volume = value;
 			await backend.setVolume(guildId, value);
@@ -478,8 +493,7 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 
 		// Speed and filters restart ffmpeg where the track is
 		async setSpeed(ctx, guildId, speed) {
-			const player = playerOf(guildId);
-			assertCan(ctx, player, 'speed');
+			const player = await controlled(ctx, guildId, 'speed');
 			if (!SPEEDS.includes(Number(speed))) throw new ValidationError(`Vitesse possible : ${SPEEDS.join(', ')}.`);
 			const at = position(player);
 			player.speed = Number(speed);
@@ -489,8 +503,7 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 		},
 
 		async setFilters(ctx, guildId, filters) {
-			const player = playerOf(guildId);
-			assertCan(ctx, player, 'filters');
+			const player = await controlled(ctx, guildId, 'filters');
 			const next = new Set(filters.filter(f => FILTERS[f]));
 			if (next.has('nightcore') && next.has('vaporwave')) next.delete(player.filters.has('nightcore') ? 'nightcore' : 'vaporwave');
 			const at = position(player);
@@ -500,18 +513,16 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 			return view(player);
 		},
 
-		setLoop(ctx, guildId, loop) {
-			const player = playerOf(guildId);
-			assertCan(ctx, player, 'loop');
+		async setLoop(ctx, guildId, loop) {
+			const player = await controlled(ctx, guildId, 'loop');
 			player.loop = LOOPS.includes(loop) ? loop : LOOPS[(LOOPS.indexOf(player.loop) + 1) % LOOPS.length];
 			emit(guildId);
 			return view(player);
 		},
 
 		// Upcoming tracks only: the current one keeps playing
-		shuffle(ctx, guildId) {
-			const player = playerOf(guildId);
-			assertCan(ctx, player, 'shuffle');
+		async shuffle(ctx, guildId) {
+			const player = await controlled(ctx, guildId, 'shuffle');
 			const upcoming = player.queue.splice(player.index + 1);
 			for (let i = upcoming.length - 1; i > 0; i--) {
 				const j = Math.floor(Math.random() * (i + 1));
@@ -524,8 +535,7 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 
 		// Indexes are positions in the whole queue (history included)
 		async remove(ctx, guildId, index) {
-			const player = playerOf(guildId);
-			assertCan(ctx, player, 'remove');
+			const player = await controlled(ctx, guildId, 'remove');
 			if (!Number.isInteger(index) || index < 0 || index >= player.queue.length) throw new ValidationError('Position invalide dans la file.');
 			const [removed] = player.queue.splice(index, 1);
 			if (index < player.index) player.index -= 1;
@@ -534,9 +544,8 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 			return { removed, state: view(player) };
 		},
 
-		move(ctx, guildId, from, to) {
-			const player = playerOf(guildId);
-			assertCan(ctx, player, 'move');
+		async move(ctx, guildId, from, to) {
+			const player = await controlled(ctx, guildId, 'move');
 			const size = player.queue.length;
 			if (![from, to].every(i => Number.isInteger(i) && i >= 0 && i < size)) throw new ValidationError('Position invalide dans la file.');
 			const playing = player.queue[player.index];
@@ -548,19 +557,17 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 		},
 
 		// Upcoming tracks removed; the current one goes on
-		clear(ctx, guildId) {
-			const player = playerOf(guildId);
-			assertCan(ctx, player, 'clear');
+		async clear(ctx, guildId) {
+			const player = await controlled(ctx, guildId, 'clear');
 			player.queue.splice(player.index + 1);
 			emit(guildId);
 			return view(player);
 		},
 
 		async stop(ctx, guildId) {
-			const player = playerOf(guildId);
-			assertCan(ctx, player, 'stop');
+			await controlled(ctx, guildId, 'stop');
 			await service.leave(guildId);
-			record(ctx, guildId, 'stop');
+			await record(ctx, guildId, 'stop');
 		},
 
 		// The bot leaves the voice channel (also called when it is moved out or kicked)
@@ -612,10 +619,10 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 		// Every 30 s: leaves about a minute after the channel is empty, or after the idle delay with nothing playing.
 		// A track playing (or loading) with people listening never makes it leave.
 		async tick() {
-			const limit = config().idleMinutes * 60_000;
+			const limit = (await config()).idleMinutes * 60_000;
 			for (const player of [...players.values()]) {
 				// Keeps the progress bar of the now-playing message roughly right
-				if (current(player) && !player.paused) refreshMessage(player, { keepPlace: true });
+				if (current(player) && !player.paused) refreshMessage(player, { keepPlace: true }).catch(error => logger.warn('Music message failed:', error.message));
 				const alone = (await backend.listeners(player.guildId, player.channelId).catch(() => null)) === 0;
 				if (alone) player.aloneSince ??= now();
 				else player.aloneSince = null;

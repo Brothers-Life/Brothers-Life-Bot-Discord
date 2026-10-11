@@ -4,7 +4,7 @@ const MENTION = /^<@!?(\d{17,20})>$/;
 const REPLY_COOLDOWN_MS = 5 * 60_000;
 
 export function attachNotificationSources({ notifications, audit, tickets, network, executor, logger = console, now = Date.now }) {
-	const guildName = id => (id ? network.find(id)?.name ?? null : null);
+	const guildName = async id => (id ? (await network.find(id))?.name ?? null : null);
 	const idOf = mention => MENTION.exec(String(mention ?? ''))?.[1] ?? null;
 	async function nameOf(userId) {
 		if (!userId) return null;
@@ -18,7 +18,7 @@ export function attachNotificationSources({ notifications, audit, tickets, netwo
 		'tickets.open': async e => ({
 			type: 'ticket_new',
 			title: `Nouveau ticket #${e.details?.number ?? e.target}`,
-			body: join(e.details?.opener, e.details?.category, e.details?.subject, guildName(e.guildId)),
+			body: join(e.details?.opener, e.details?.category, e.details?.subject, await guildName(e.guildId)),
 			url: `/ticket/${e.target}`,
 		}),
 		'tickets.transfer': async (e) => {
@@ -29,20 +29,20 @@ export function attachNotificationSources({ notifications, audit, tickets, netwo
 				type: 'ticket_assigned',
 				userId: to,
 				title: `Ticket #${e.details?.number ?? e.target} transféré à toi`,
-				body: join(by && `par ${by}`, e.details?.opener, guildName(e.guildId)),
+				body: join(by && `par ${by}`, e.details?.opener, await guildName(e.guildId)),
 				url: `/ticket/${e.target}`,
 			};
 		},
 		'recruitment.apply': async e => ({
 			type: 'application_new',
 			title: `Nouvelle candidature : ${e.details?.position ?? 'poste'}`,
-			body: join(await nameOf(e.actorId), guildName(e.guildId)),
+			body: join(await nameOf(e.actorId), await guildName(e.guildId)),
 			url: '/recruitment',
 		}),
 		'feedback.create': async e => ({
 			type: 'feedback_new',
 			title: `${e.details?.box ?? 'Suggestion'} #${e.details?.number ?? ''} : ${e.details?.title ?? ''}`.trim(),
-			body: join(await nameOf(e.actorId), guildName(e.guildId)),
+			body: join(await nameOf(e.actorId), await guildName(e.guildId)),
 			url: '/feedback',
 		}),
 		'appeals.submit': async e => ({
@@ -64,19 +64,19 @@ export function attachNotificationSources({ notifications, audit, tickets, netwo
 		'antiraid.start': async e => ({
 			type: 'antiraid',
 			title: 'Mode raid activé',
-			body: join(guildName(e.guildId), e.details?.trigger && `déclenchement ${e.details.trigger}`),
+			body: join(await guildName(e.guildId), e.details?.trigger && `déclenchement ${e.details.trigger}`),
 			url: '/antiraid',
 		}),
 		'antinuke.quarantine': async e => ({
 			type: 'antinuke',
 			title: 'Anti-nuke : compte mis en quarantaine',
-			body: join(await nameOf(e.target), guildName(e.guildId)),
+			body: join(await nameOf(e.target), await guildName(e.guildId)),
 			url: '/antinuke',
 		}),
 		'tickets.sla_breach': async e => ({
 			type: 'ticket_sla',
 			title: `Ticket #${e.details?.number ?? e.target} sans réponse à temps`,
-			body: join(e.details?.opener, e.details?.Type, guildName(e.guildId)),
+			body: join(e.details?.opener, e.details?.Type, await guildName(e.guildId)),
 			url: `/ticket/${e.target}`,
 		}),
 	};
@@ -93,24 +93,26 @@ export function attachNotificationSources({ notifications, audit, tickets, netwo
 	// The member writes in a claimed ticket: its handler is told (once per few minutes)
 	const lastReply = new Map();
 	if (tickets?.subscribe) {
-		unsubscribe.push(tickets.subscribe((event) => {
+		unsubscribe.push(tickets.subscribe(async (event) => {
 			if (event.type !== 'message') return;
 			const m = event.message;
 			if (m.bot || m.internal || m.panelUser || !m.authorId) return;
+			const at = now();
 			let ticket;
 			try {
-				ticket = tickets.get(m.ticketId);
+				ticket = await tickets.get(m.ticketId);
 			}
 			catch {
 				return;
 			}
 			if (!ticket?.claimedBy || ticket.status !== 'open' || m.authorId !== ticket.openerId) return;
+			// Checked and set with no await in between: two messages at once give one notification
 			const last = lastReply.get(ticket.id) ?? 0;
-			if (now() - last < REPLY_COOLDOWN_MS) return;
-			lastReply.set(ticket.id, now());
+			if (at - last < REPLY_COOLDOWN_MS) return;
+			lastReply.set(ticket.id, at);
 			if (lastReply.size > 2000) lastReply.clear();
 			try {
-				notifications.push({
+				await notifications.push({
 					type: 'ticket_reply',
 					userId: ticket.claimedBy,
 					actorId: m.authorId,

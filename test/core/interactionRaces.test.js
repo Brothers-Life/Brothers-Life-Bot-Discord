@@ -13,8 +13,8 @@ const fulfilled = results => results.filter(r => r.status === 'fulfilled').lengt
 async function ticketSetup() {
 	const ctx = await withNetwork();
 	const { core, owner, executor } = ctx;
-	const modo = core.ranks.create(owner, { name: 'Modo', level: 20, permissions: ['tickets.handle'] });
-	core.tickets.saveSettings(owner, MAIN, { maxOpen: 1 });
+	const modo = await core.ranks.create(owner, { name: 'Modo', level: 20, permissions: ['tickets.handle'] });
+	await core.tickets.saveSettings(owner, MAIN, { maxOpen: 1 });
 	const category = await core.tickets.saveCategory(owner, MAIN, { name: 'Support', rankIds: [modo.id] });
 	executor.channels.set('c-tickets', { guildId: MAIN, name: 'logs-tickets' });
 	await core.ranks.assignDirect(owner, ALICE, modo.id);
@@ -27,7 +27,7 @@ test('tickets: a double click on the panel opens one ticket, not two (limit per 
 	const results = await Promise.allSettled([open(), open()]);
 	assert.equal(fulfilled(results), 1);
 	assert.match(results.find(r => r.status === 'rejected').reason.message, /déjà un ticket/);
-	assert.equal(core.tickets.list({ guildId: MAIN, openerId: MEMBER, status: 'open' }).length, 1);
+	assert.equal((await core.tickets.list({ guildId: MAIN, openerId: MEMBER, status: 'open' })).length, 1);
 });
 
 test('tickets: what the staff actions return never holds the opening variables (FiveM data)', async () => {
@@ -48,10 +48,10 @@ test('absences: two reviewers clicking at once decide only once', async () => {
 	const ctx = await withNetwork();
 	const { core, executor, owner } = ctx;
 	const absences = createAbsences({ db: core.db, network: core.network, ranks: core.ranks, audit: core.audit, executor, settings: core.settings, logger: { warn: () => undefined } });
-	const helper = core.ranks.create(owner, { name: 'Helper', level: 10, permissions: ['panel.access', 'absences.declare'] });
+	const helper = await core.ranks.create(owner, { name: 'Helper', level: 10, permissions: ['panel.access', 'absences.declare'] });
 	await core.ranks.assignDirect(owner, BOB, helper.id);
 	const ROLE = '800000000000000077';
-	absences.setConfig(owner, { requireApproval: true, review: { guildId: MAIN, channelId: '610000000000000010' }, reviewerRoleIds: [ROLE] });
+	await absences.setConfig(owner, { requireApproval: true, review: { guildId: MAIN, channelId: '610000000000000010' }, reviewerRoleIds: [ROLE] });
 	const absence = await absences.declare(await core.ranks.resolve(BOB), { endAt: Date.now() + 2 * 86_400_000 });
 	const dms = executor.dms.length;
 	const results = await Promise.allSettled([
@@ -65,29 +65,29 @@ test('absences: two reviewers clicking at once decide only once', async () => {
 test('feedback: a double click on "Publier" publishes once', async () => {
 	const { core, executor, owner } = await withNetwork();
 	const feedback = createFeedback({ db: core.db, network: core.network, ranks: core.ranks, audit: core.audit, executor, logger: { warn: () => undefined } });
-	const modo = core.ranks.create(owner, { name: 'Modo', level: 20, permissions: ['feedback.manage', 'feedback.staff'] });
+	const modo = await core.ranks.create(owner, { name: 'Modo', level: 20, permissions: ['feedback.manage', 'feedback.staff'] });
 	await core.ranks.assignDirect(owner, ALICE, modo.id);
-	const box = feedback.createBox(owner, MAIN, { preset: 'suggestions', config: { channelId: '610000000000000001', reviewChannelId: '610000000000000003', cooldownMinutes: 0 } });
+	const box = await feedback.createBox(owner, MAIN, { preset: 'suggestions', config: { channelId: '610000000000000001', reviewChannelId: '610000000000000003', cooldownMinutes: 0 } });
 	const { step } = await feedback.startSubmit(box.id, MEMBER, MAIN);
-	const { answers } = feedback.submitStep(box.id, MEMBER, step, { title: 'Idée' });
+	const { answers } = await feedback.submitStep(box.id, MEMBER, step, { title: 'Idée' });
 	const item = await feedback.create({ boxId: box.id, guildId: MAIN, userId: MEMBER, userName: 'lea', answers });
 	const results = await Promise.allSettled([feedback.review(ALICE, item.id, true), feedback.review(ALICE, item.id, true)]);
 	assert.equal(fulfilled(results), 1);
 	const rejected = await Promise.allSettled([feedback.review(ALICE, item.id, false)]);
 	assert.equal(fulfilled(rejected), 0, 'an approved item cannot be refused afterwards');
-	assert.equal(feedback.get(owner, item.id).approved, true);
+	assert.equal((await feedback.get(owner, item.id)).approved, true);
 });
 
 test('appeals: accepted and refused at the same time: only the first decision counts', async () => {
 	const { core, owner, executor } = await withNetwork();
 	const TARGET = '300000000000000061';
 	executor.members.set(MAIN, new Set([TARGET]));
-	core.appeals.setConfig(owner, { enabled: true, guildId: MAIN, channelId: '610000000000000700', types: ['ban'] });
+	await core.appeals.setConfig(owner, { enabled: true, guildId: MAIN, channelId: '610000000000000700', types: ['ban'] });
 	const sanction = await core.sanctions.create(owner, { type: 'ban', userId: TARGET, reason: 'Triche', durationMs: null });
 	const appeal = await core.appeals.submit(TARGET, sanction.id, ['Je ne trichais pas']);
 	const dms = executor.dms.length;
 	const results = await Promise.allSettled([core.appeals.decide(owner, appeal.id, true), core.appeals.decide(owner, appeal.id, false, 'Non')]);
 	assert.equal(fulfilled(results), 1);
-	assert.equal(core.appeals.get(appeal.id).status, 'accepted');
+	assert.equal((await core.appeals.get(appeal.id)).status, 'accepted');
 	assert.equal(executor.dms.filter((d, i) => i >= dms && d[0] === TARGET && /appel/.test(d[1])).length, 1);
 });

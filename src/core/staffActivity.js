@@ -17,8 +17,8 @@ export const WEIGHTS = { ticketsClosed: 5, ticketReplies: 1, sanctions: 3, dmRep
 
 // Everyone who holds a rank: through a role on the main server, or given directly in the panel
 export async function listStaff({ ranks, network, executor }) {
-	const mainId = network.getMainId();
-	const allRanks = ranks.list();
+	const mainId = await network.getMainId();
+	const allRanks = await ranks.list();
 	const members = new Map();
 	const entry = (id, user) => {
 		if (!members.has(id)) members.set(id, { id, username: user?.username ?? null, globalName: user?.globalName ?? null, avatar: user?.avatar ?? null, ranks: [] });
@@ -33,7 +33,7 @@ export async function listStaff({ ranks, network, executor }) {
 			}
 		}
 	}
-	for (const assignment of ranks.listDirectAssignments()) {
+	for (const assignment of await ranks.listDirectAssignments()) {
 		const rank = allRanks.find(r => r.id === assignment.rankId);
 		if (!rank) continue;
 		const member = members.get(assignment.discordId) ?? entry(assignment.discordId, await executor.getUser(assignment.discordId));
@@ -50,8 +50,8 @@ export function scoreOf(m) {
 export function createStaffActivity({ db, network, ranks, audit, executor, settings, logs, logger = console, now = Date.now }) {
 	logs.registerCategory('staffactivity', 'Rapport mensuel du staff');
 
-	const count = (sql, ...args) => {
-		const rows = db.prepare(sql).all(...args);
+	const count = async (sql, ...args) => {
+		const rows = await db.prepare(sql).all(...args);
 		return new Map(rows.map(r => [r.user_id, r]));
 	};
 
@@ -59,8 +59,8 @@ export function createStaffActivity({ db, network, ranks, audit, executor, setti
 		if (!actor.can(permission)) throw new ForbiddenError(`Permission manquante : ${permission}`);
 	}
 
-	function config() {
-		const c = settings.get('staffActivity.config', {});
+	async function config() {
+		const c = await settings.get('staffActivity.config', {});
 		return { enabled: Boolean(c.enabled), guildId: c.guildId ?? null, channelId: c.channelId ?? null, lastPosted: c.lastPosted ?? null };
 	}
 
@@ -70,20 +70,20 @@ export function createStaffActivity({ db, network, ranks, audit, executor, setti
 		const staff = await listStaff({ ranks, network, executor });
 		// A closed ticket (and its rating) counts for whoever handled it: the claimer, else the staff member whose close
 		// request was accepted or expired, else the closer (never the bot, nor the opener closing their own ticket)
-		const closed = count(`
+		const closed = await count(`
 			SELECT user_id, COUNT(*) AS n, AVG(rating) AS rating FROM (
 				SELECT COALESCE(claimed_by, close_request_by, CASE WHEN closed_by NOT IN ('system', 'unknown') AND closed_by != opener_id THEN closed_by END) AS user_id, rating
 				FROM tickets WHERE closed_at BETWEEN ? AND ?
-			) WHERE user_id IS NOT NULL GROUP BY user_id`, from, to);
-		const claimed = count('SELECT claimed_by AS user_id, COUNT(*) AS n FROM tickets WHERE claimed_by IS NOT NULL AND created_at BETWEEN ? AND ? GROUP BY claimed_by', from, to);
-		const replies = count('SELECT COALESCE(panel_user, author_id) AS user_id, COUNT(*) AS n FROM ticket_messages WHERE is_bot = 0 AND created_at BETWEEN ? AND ? GROUP BY COALESCE(panel_user, author_id)', from, to);
-		const sanctions = count('SELECT moderator_id AS user_id, COUNT(*) AS n, SUM(type = \'ban\') AS bans, SUM(type = \'warn\') AS warns, SUM(type = \'timeout\') AS timeouts FROM sanctions WHERE revoked_at IS NULL AND created_at BETWEEN ? AND ? GROUP BY moderator_id', from, to);
-		const dms = count('SELECT author_id AS user_id, COUNT(*) AS n FROM dm_messages WHERE direction = \'out\' AND at BETWEEN ? AND ? GROUP BY author_id', from, to);
+			) handled WHERE user_id IS NOT NULL GROUP BY user_id`, from, to);
+		const claimed = await count('SELECT claimed_by AS user_id, COUNT(*) AS n FROM tickets WHERE claimed_by IS NOT NULL AND created_at BETWEEN ? AND ? GROUP BY claimed_by', from, to);
+		const replies = await count('SELECT COALESCE(panel_user, author_id) AS user_id, COUNT(*) AS n FROM ticket_messages WHERE is_bot = 0 AND created_at BETWEEN ? AND ? GROUP BY COALESCE(panel_user, author_id)', from, to);
+		const sanctions = await count('SELECT moderator_id AS user_id, COUNT(*) AS n, SUM(type = \'ban\') AS bans, SUM(type = \'warn\') AS warns, SUM(type = \'timeout\') AS timeouts FROM sanctions WHERE revoked_at IS NULL AND created_at BETWEEN ? AND ? GROUP BY moderator_id', from, to);
+		const dms = await count('SELECT author_id AS user_id, COUNT(*) AS n FROM dm_messages WHERE direction = \'out\' AND at BETWEEN ? AND ? GROUP BY author_id', from, to);
 		// Actions done through an API key (scripts, bots) are not panel work
-		const panel = count(`SELECT actor_id AS user_id, COUNT(*) AS n FROM audit_log WHERE source = 'panel' AND at BETWEEN ? AND ?
+		const panel = await count(`SELECT actor_id AS user_id, COUNT(*) AS n FROM audit_log WHERE source = 'panel' AND at BETWEEN ? AND ?
 			AND (details IS NULL OR instr(details, '"${API_KEY_FIELD}":') = 0) GROUP BY actor_id`, from, to);
-		const activity = count('SELECT user_id, SUM(messages) AS messages, SUM(voice_seconds) AS voice FROM stats_activity WHERE day BETWEEN ? AND ? GROUP BY user_id', dayOf(from), dayOf(to));
-		const absences = db.prepare('SELECT user_id, start_at, end_at FROM absences WHERE status IN (\'approved\', \'active\', \'ended\') AND start_at < ? AND end_at > ?').all(to, from);
+		const activity = await count('SELECT user_id, SUM(messages) AS messages, SUM(voice_seconds) AS voice FROM stats_activity WHERE day BETWEEN ? AND ? GROUP BY user_id', dayOf(from), dayOf(to));
+		const absences = await db.prepare('SELECT user_id, start_at, end_at FROM absences WHERE status IN (\'approved\', \'active\', \'ended\') AND start_at < ? AND end_at > ?').all(to, from);
 
 		const members = staff.map((s) => {
 			const absent = absences.filter(a => a.user_id === s.id).reduce((n, a) => n + (Math.min(a.end_at, to) - Math.max(a.start_at, from)), 0);
@@ -119,23 +119,23 @@ export function createStaffActivity({ db, network, ranks, audit, executor, setti
 		report,
 		config,
 
-		setConfig(actor, input) {
+		async setConfig(actor, input) {
 			need(actor, 'staffactivity.manage');
 			const next = {
-				...config(),
+				...await config(),
 				enabled: Boolean(input.enabled),
 				guildId: SNOWFLAKE.test(input.guildId ?? '') ? input.guildId : null,
 				channelId: SNOWFLAKE.test(input.channelId ?? '') ? input.channelId : null,
 			};
 			if (next.enabled && (!next.guildId || !next.channelId)) throw new ValidationError('Choisis le salon où publier le rapport.');
-			settings.set('staffActivity.config', next);
-			audit.record({ actorId: actor.id, source: 'panel', action: 'staffactivity.config', target: 'staff', details: { enabled: next.enabled } });
+			await settings.set('staffActivity.config', next);
+			await audit.record({ actorId: actor.id, source: 'panel', action: 'staffactivity.config', target: 'staff', details: { enabled: next.enabled } });
 			return next;
 		},
 
 		// The 1st of the month (from 10:00, Paris time): last month's ranking posted in the staff channel
 		async tick() {
-			const c = config();
+			const c = await config();
 			if (!c.enabled || !c.channelId) return false;
 			const p = zonedParts(now(), TIME_ZONE);
 			if (p.day !== 1 || p.hour < 10) return false;
@@ -155,8 +155,8 @@ export function createStaffActivity({ db, network, ranks, audit, executor, setti
 					},
 				},
 			}).catch(error => logger.warn('Monthly staff report failed:', error.message));
-			settings.set('staffActivity.config', { ...c, lastPosted: range.key });
-			audit.record({ actorId: 'system', source: 'system', action: 'staffactivity.report', target: 'staff', details: { month: range.label } });
+			await settings.set('staffActivity.config', { ...c, lastPosted: range.key });
+			await audit.record({ actorId: 'system', source: 'system', action: 'staffactivity.report', target: 'staff', details: { month: range.label } });
 			return true;
 		},
 	};

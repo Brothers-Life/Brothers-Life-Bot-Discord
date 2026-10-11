@@ -19,14 +19,14 @@ export function registerPollRoutes(app, { core }) {
 	const { polls, executor, network } = core;
 
 	app.get('/api/polls', { config: { permission: 'polls.view' } }, async () => polls.list());
-	app.get('/api/polls/targets', { config: { permission: 'polls.view' } }, async () => networkTargets(core));
+	app.get('/api/polls/targets', { config: { permission: 'polls.view' } }, async () => await networkTargets(core));
 	app.get('/api/polls/:id', { config: { permission: 'polls.view' }, schema: { params: idParam } }, async (request) => polls.get(request.params.id));
 
 	app.get('/api/polls/:id/export', { config: { permission: 'polls.view' }, schema: { params: idParam } }, async (request, reply) => {
-		const poll = polls.get(request.params.id);
-		const votes = polls.allVotes(request.actor, request.params.id);
+		const poll = await polls.get(request.params.id);
+		const votes = await polls.allVotes(request.actor, request.params.id);
 		const names = await resolveNames(executor, votes.map(v => v.userId).filter(Boolean));
-		const guilds = new Map(network.list().map(g => [g.id, g.name]));
+		const guilds = new Map((await network.list()).map(g => [g.id, g.name]));
 		const labels = new Map(poll.options.map(o => [o.id, o.label]));
 		const rows = [['Choix', 'Membre', 'Serveur', 'Date'], ...votes.map(v => [labels.get(v.choice), v.userId ? names.get(v.userId)?.name ?? v.userId : '(anonyme)', guilds.get(v.guildId) ?? '', new Date(v.at).toLocaleString('fr-FR')])];
 		return reply
@@ -37,7 +37,7 @@ export function registerPollRoutes(app, { core }) {
 
 	app.post('/api/polls', { config: { permission: 'polls.manage' }, schema: { body } }, async (request, reply) => {
 		reply.code(201);
-		return polls.create(request.actor, request.body);
+		return await polls.create(request.actor, request.body);
 	});
 	app.put('/api/polls/:id', { config: { permission: 'polls.manage' }, schema: { params: idParam, body } }, async (request) => polls.update(request.actor, request.params.id, request.body));
 	app.post('/api/polls/:id/publish', { config: { permission: 'polls.manage' }, schema: { params: idParam } }, async (request) => polls.publish(request.actor, request.params.id));

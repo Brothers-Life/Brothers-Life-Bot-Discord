@@ -61,7 +61,7 @@ export function registerGuard(app, core) {
 		const bearer = BEARER.exec(request.headers.authorization ?? '')?.[1];
 		let actor;
 		if (bearer) {
-			const key = core.apiKeys.authenticate(bearer, request.ip);
+			const key = await core.apiKeys.authenticate(bearer, request.ip);
 			if (!key) return sendError(reply, 401, 'INVALID_API_KEY', 'Clé d’API invalide, expirée ou révoquée.');
 			if (config.apiKey === false || request.ws) return sendError(reply, 403, 'PANEL_ONLY', 'Cette route n’est pas accessible avec une clé d’API.');
 			if (overLimit(key.id)) {
@@ -138,7 +138,7 @@ export function isApiRoute(request) {
 // Reads the session cookie; sets request.session and request.actor
 export async function authenticate(request, core) {
 	// The cookie holds a 256-bit random id: nothing to sign, it is only looked up server-side
-	const session = core.sessions.touch(request.cookies?.[SESSION_COOKIE]);
+	const session = await core.sessions.touch(request.cookies?.[SESSION_COOKIE]);
 	if (!session) return null;
 
 	const principal = await core.ranks.resolve(session.discordId);
