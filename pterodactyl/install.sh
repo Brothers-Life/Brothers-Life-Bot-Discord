@@ -1,7 +1,7 @@
 #!/bin/bash
 # Pterodactyl installation script (runs in node:22-bookworm-slim, server files mounted on /mnt/server).
 # Downloads a release of the bot from GitHub (GITHUB_TOKEN only needed for a private repo) and installs its production dependencies.
-# Kept on reinstall: .env.prod, data/ (database, backups, certificate), logs/.
+# Kept on reinstall: .env.prod, data/ (database backups, certificate), logs/.
 set -euo pipefail
 cd /mnt/server
 

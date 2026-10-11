@@ -2,6 +2,7 @@
 // It reads and writes the database itself and asks the bot (BOT_URL) for everything done on Discord.
 // It never holds the bot token. The panel's files are served by the front (src/front.js).
 import { pkg, consoleLog, ipc, logger, onShutdown, run, shutdown } from './app/process.js';
+import path from 'node:path';
 import config from './utils/config.js';
 import { scheduleLogCleanup } from './utils/logger.js';
 import { startupChecks } from './utils/startupChecks.js';
@@ -21,7 +22,7 @@ run(async () => {
 	}
 	scheduleLogCleanup();
 
-	const db = await openDb(databaseOptions(config));
+	const db = await openDb(databaseOptions(config), { backupDir: path.join(config.DATA_DIR, 'backups'), appVersion: pkg.version, logger });
 	onShutdown(() => db.close());
 	if (db.migration.from !== db.migration.to) {
 		logger.info(`Database migrated from schema v${db.migration.from} to v${db.migration.to}`);

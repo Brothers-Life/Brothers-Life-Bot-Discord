@@ -1,5 +1,6 @@
-// Builds pterodactyl/egg-brothers-life-bot.json (import it in Pterodactyl: Admin > Nests > Import Egg).
-// Run: npm run egg
+// Builds the Pterodactyl eggs (import them in Pterodactyl: Admin > Nests > Import Egg). Run: npm run egg
+//   egg-brothers-life-bot.json    everything in one server (bot + panel)
+//   egg-brothers-life-bot-*.json  split deployment: bot, api, front (one server each), see docs/pterodactyl.md
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,49 +20,96 @@ const variable = (name, env, description, rules, defaultValue = '', { viewable =
 	field_type: 'text',
 });
 
-const egg = {
-	_comment: 'Egg Pterodactyl du bot Brothers Life. Généré par pterodactyl/build-egg.mjs, ne pas modifier à la main.',
-	meta: { version: 'PTDL_v2', update_url: null },
-	exported_at: new Date().toISOString(),
-	name: 'Brothers Life Bot',
-	author: 'bot@brothers-life.invalid',
-	description: 'Bot Discord multi-serveurs Brothers Life avec son panel web. Installe une Release du dépôt GitHub privé ; les mises à jour se font ensuite depuis le panel (page Versions).',
-	features: null,
-	docker_images: {
-		'Node.js 22': 'ghcr.io/parkervcp/yolks:nodejs_22',
-		'Node.js 24': 'ghcr.io/parkervcp/yolks:nodejs_24',
-	},
-	file_denylist: [],
-	startup: 'node launcher.js prod',
-	config: {
-		files: '{}',
-		// Pterodactyl shows the server as running once the bot is connected and the panel is listening
-		startup: JSON.stringify({ done: '[LAUNCHER] App ready' }, null, 4),
-		logs: '{}',
-		stop: '^C',
-	},
-	scripts: {
-		installation: {
-			script: installScript,
-			container: 'node:22-bookworm-slim',
-			entrypoint: 'bash',
-		},
-	},
-	variables: [
-		variable('Token du bot', 'TOKEN', 'Developer Portal > Bot > Reset Token.', 'required|string|max:200'),
-		variable('ID de l’application', 'APP_ID', 'Developer Portal > General Information > Application ID.', 'required|regex:/^\\d{17,20}$/'),
-		variable('Client Secret', 'CLIENT_SECRET', 'Developer Portal > OAuth2 > Client Secret (connexion au panel).', 'required|string|max:200'),
-		variable('Chef du réseau (OWNER_ID)', 'OWNER_ID', 'ID Discord du seul compte qui a toutes les permissions.', 'required|regex:/^\\d{17,20}$/', '267235400467218432'),
-		variable('Mode du panel', 'WEB_MODE', 'https-selfsigned (conseillé sans domaine), https-custom (avec TLS_CERT/TLS_KEY) ou http.', 'required|in:https-selfsigned,https-custom,http', 'https-selfsigned'),
-		variable('Adresse publique du panel', 'WEB_PUBLIC_URL', 'https://<IP publique du serveur>:<port de l’allocation>, ex. https://51.77.1.2:25565. Sert au certificat HTTPS et à la connexion Discord : à ajouter aussi dans Discord > OAuth2 > Redirects avec /api/auth/callback.', 'required|regex:/^https?:\\/\\/[^\\/]+$/'),
-		variable('Dépôt GitHub', 'GITHUB_REPO', 'owner/repo où la CI publie les versions.', 'required|regex:/^[\\w.-]+\\/[\\w.-]+$/', 'Brothers-Life/Brothers-Life-Bot-Discord'),
-		variable('Token GitHub', 'GITHUB_TOKEN', 'Seulement si le dépôt est privé : fine-grained token, Contents: Read-only sur le dépôt. Vide si le dépôt est public.', 'nullable|string|max:255'),
-		variable('Version à installer', 'BOT_VERSION', 'latest ou un tag (ex. v1.0.0). Utilisée à l’installation et à la réinstallation ; ensuite, les mises à jour se font depuis le panel.', 'required|string|max:20', 'latest'),
-		variable('Certificat TLS (https-custom)', 'TLS_CERT', 'Chemin du certificat, relatif au dossier du serveur.', 'nullable|string|max:255'),
-		variable('Clé TLS (https-custom)', 'TLS_KEY', 'Chemin de la clé privée, relatif au dossier du serveur.', 'nullable|string|max:255'),
-	],
+const V = {
+	token: variable('Token du bot', 'TOKEN', 'Developer Portal > Bot > Reset Token.', 'required|string|max:200'),
+	appId: variable('ID de l’application', 'APP_ID', 'Developer Portal > General Information > Application ID.', 'required|regex:/^\\d{17,20}$/'),
+	clientSecret: variable('Client Secret', 'CLIENT_SECRET', 'Developer Portal > OAuth2 > Client Secret (connexion au panel).', 'required|string|max:200'),
+	owner: variable('Chef du réseau (OWNER_ID)', 'OWNER_ID', 'ID Discord du seul compte qui a toutes les permissions.', 'required|regex:/^\\d{17,20}$/', '267235400467218432'),
+	webMode: variable('Mode du panel', 'WEB_MODE', 'https-selfsigned (conseillé sans domaine), https-custom (avec TLS_CERT/TLS_KEY) ou http.', 'required|in:https-selfsigned,https-custom,http', 'https-selfsigned'),
+	publicUrl: variable('Adresse publique du panel', 'WEB_PUBLIC_URL', 'https://<IP publique du serveur du panel>:<port de son allocation>, ex. https://51.77.1.2:25565. Sert au certificat HTTPS et à la connexion Discord : à ajouter aussi dans Discord > OAuth2 > Redirects avec /api/auth/callback.', 'required|regex:/^https?:\\/\\/[^\\/]+$/'),
+	repo: variable('Dépôt GitHub', 'GITHUB_REPO', 'owner/repo où la CI publie les versions.', 'required|regex:/^[\\w.-]+\\/[\\w.-]+$/', 'Brothers-Life/Brothers-Life-Bot-Discord'),
+	githubToken: variable('Token GitHub', 'GITHUB_TOKEN', 'Seulement si le dépôt est privé : fine-grained token, Contents: Read-only sur le dépôt. Vide si le dépôt est public.', 'nullable|string|max:255'),
+	version: variable('Version à installer', 'BOT_VERSION', 'latest ou un tag (ex. v2.0.0). Utilisée à l’installation et à la réinstallation ; ensuite, les mises à jour se font depuis le panel.', 'required|string|max:20', 'latest'),
+	tlsCert: variable('Certificat TLS (https-custom)', 'TLS_CERT', 'Chemin du certificat, relatif au dossier du serveur.', 'nullable|string|max:255'),
+	tlsKey: variable('Clé TLS (https-custom)', 'TLS_KEY', 'Chemin de la clé privée, relatif au dossier du serveur.', 'nullable|string|max:255'),
+	dbHost: variable('Base de données : hôte', 'DB_HOST', 'Onglet Databases du serveur Pterodactyl (Endpoint, sans le port), ou l’adresse de ton serveur MariaDB.', 'required|string|max:255'),
+	dbPort: variable('Base de données : port', 'DB_PORT', 'Port MariaDB (3306 en général).', 'required|integer|between:1,65535', '3306'),
+	dbName: variable('Base de données : nom', 'DB_NAME', 'Nom de la base (onglet Databases : « Database »).', 'required|string|max:64'),
+	dbUser: variable('Base de données : utilisateur', 'DB_USER', 'Utilisateur de la base (onglet Databases : « Username »).', 'required|string|max:64'),
+	dbPassword: variable('Base de données : mot de passe', 'DB_PASSWORD', 'Mot de passe de la base (onglet Databases : œil à côté du mot de passe).', 'required|string|max:255'),
+	internalToken: variable('Clé de liaison interne', 'INTERNAL_TOKEN', 'Secret partagé par le bot, l’API et le front (32 caractères ou plus, le même sur les trois). Ex. : openssl rand -hex 32.', 'required|string|min:32|max:255'),
+	botUrl: variable('Adresse du bot', 'BOT_URL', 'http://<IP>:<port de l’allocation du serveur bot>. Même machine : l’IP interne de Pterodactyl (souvent 172.18.0.1).', 'required|regex:/^https?:\\/\\/[^\\/]+$/'),
+	apiUrl: variable('Adresse de l’API', 'API_URL', 'http://<IP>:<port de l’allocation du serveur API>. Même machine : l’IP interne de Pterodactyl (souvent 172.18.0.1).', 'required|regex:/^https?:\\/\\/[^\\/]+$/'),
+	trustProxy: variable('Adresses du front', 'TRUST_PROXY', 'Adresse(s) IP du serveur front, séparées par des virgules : l’API croit leur en-tête X-Forwarded-For (adresse réelle des visiteurs). Même machine : 172.18.0.1.', 'nullable|string|max:255', '172.18.0.1'),
+	servePanel: variable('L’API sert aussi le panel', 'SERVE_PANEL', 'false : seul le front sert le panel (conseillé).', 'required|in:true,false', 'false'),
 };
 
-const out = path.join(dir, 'egg-brothers-life-bot.json');
-fs.writeFileSync(out, `${JSON.stringify(egg, null, 4)}\n`);
-console.log(`Egg écrit dans ${path.relative(process.cwd(), out)}`);
+const DATABASE = [V.dbHost, V.dbPort, V.dbName, V.dbUser, V.dbPassword];
+const GITHUB = [V.repo, V.githubToken, V.version];
+
+const EGGS = [
+	{
+		file: 'egg-brothers-life-bot.json',
+		name: 'Brothers Life Bot',
+		description: 'Bot Discord multi-serveurs Brothers Life avec son panel web, en un seul serveur. Base MariaDB (onglet Databases). Installe une Release du dépôt GitHub ; les mises à jour se font ensuite depuis le panel (page Versions).',
+		startup: 'node launcher.js prod',
+		variables: [V.token, V.appId, V.clientSecret, V.owner, V.webMode, V.publicUrl, ...DATABASE, ...GITHUB, V.tlsCert, V.tlsKey],
+	},
+	{
+		file: 'egg-brothers-life-bot-bot.json',
+		name: 'Brothers Life — Bot',
+		description: 'Déploiement séparé : la partie bot Discord (connexion à Discord, tâches planifiées). Son allocation est sa liaison interne avec l’API : ne l’ouvre qu’au serveur de l’API.',
+		startup: 'node launcher.js prod bot',
+		variables: [V.token, V.appId, V.owner, V.publicUrl, V.internalToken, ...DATABASE, ...GITHUB],
+	},
+	{
+		file: 'egg-brothers-life-bot-api.json',
+		name: 'Brothers Life — API',
+		description: 'Déploiement séparé : l’API du panel et l’API publique. Ne garde jamais le token du bot. Le front lui transmet les requêtes du navigateur.',
+		startup: 'node launcher.js prod api',
+		variables: [V.appId, V.clientSecret, V.owner, V.publicUrl, V.internalToken, V.botUrl, V.trustProxy, V.servePanel, ...DATABASE, ...GITHUB],
+	},
+	{
+		file: 'egg-brothers-life-bot-front.json',
+		name: 'Brothers Life — Front',
+		description: 'Déploiement séparé : le panel (application React) et le HTTPS. C’est la seule adresse ouverte aux navigateurs ; il transmet /api à l’API.',
+		startup: 'node launcher.js prod front',
+		variables: [V.webMode, V.publicUrl, V.apiUrl, V.internalToken, ...GITHUB, V.tlsCert, V.tlsKey],
+	},
+];
+
+for (const egg of EGGS) {
+	const json = {
+		_comment: 'Egg Pterodactyl du bot Brothers Life. Généré par pterodactyl/build-egg.mjs, ne pas modifier à la main.',
+		meta: { version: 'PTDL_v2', update_url: null },
+		exported_at: new Date().toISOString(),
+		name: egg.name,
+		author: 'bot@brothers-life.invalid',
+		description: egg.description,
+		features: null,
+		docker_images: {
+			'Node.js 22': 'ghcr.io/parkervcp/yolks:nodejs_22',
+			'Node.js 24': 'ghcr.io/parkervcp/yolks:nodejs_24',
+		},
+		file_denylist: [],
+		startup: egg.startup,
+		config: {
+			files: '{}',
+			// Pterodactyl shows the server as running once the app said it is ready
+			startup: JSON.stringify({ done: '[LAUNCHER] App ready' }, null, 4),
+			logs: '{}',
+			stop: '^C',
+		},
+		scripts: {
+			installation: {
+				script: installScript,
+				container: 'node:22-bookworm-slim',
+				entrypoint: 'bash',
+			},
+		},
+		variables: egg.variables,
+	};
+	const out = path.join(dir, egg.file);
+	fs.writeFileSync(out, `${JSON.stringify(json, null, 4)}\n`);
+	console.log(`Egg écrit dans ${path.relative(process.cwd(), out)}`);
+}

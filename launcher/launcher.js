@@ -3,7 +3,7 @@ import path from 'node:path';
 import { createRingBuffer } from './ringBuffer.js';
 import { createSupervisor } from './supervisor.js';
 import { readCurrent, writeCurrent, resolveEntry, installVersion, pruneVersions, run } from './versions.js';
-import { backupDatabase, restoreDatabase } from './backup.js';
+import { migrationBackupSince, requestRestore } from './backup.js';
 
 const HISTORY_LINES = 5000;
 
@@ -12,6 +12,8 @@ const HISTORY_LINES = 5000;
 export function createLauncher({
 	root,
 	envName = 'prod',
+	// all (bot + panel), or bot / api / front for a split deployment
+	role = 'all',
 	env = process.env,
 	repo,
 	token,
@@ -23,7 +25,6 @@ export function createLauncher({
 	print = (text) => process.stdout.write(`${text}\n`),
 }) {
 	const history = createRingBuffer(HISTORY_LINES);
-	let lastSchemaVersion = null;
 	let installing = false;
 	let installState = null;
 	let stopping = false;
@@ -35,7 +36,7 @@ export function createLauncher({
 	}
 
 	const supervisor = createSupervisor({
-		resolveEntry: () => resolveEntry(root),
+		resolveEntry: () => resolveEntry(root, role),
 		args: [envName],
 		env: { ...env, BOT_ROOT: root },
 		getHistory: () => history.lines(),
@@ -48,7 +49,6 @@ export function createLauncher({
 	});
 
 	supervisor.events.on('ready', (message) => {
-		lastSchemaVersion = message.schemaVersion ?? lastSchemaVersion;
 		log(`App ready (${message.version ?? 'dev'}, schema v${message.schemaVersion ?? '?'})`);
 		if (installState) supervisor.send({ type: 'install-progress', state: installState });
 	});
@@ -105,6 +105,7 @@ export function createLauncher({
 		}
 		installing = true;
 		const previous = readCurrent(root)?.version ?? null;
+		const startedAt = Date.now();
 
 		try {
 			try {
@@ -118,11 +119,10 @@ export function createLauncher({
 			progress(version, 'stopping the bot');
 			await supervisor.stop();
 
-			const backup = backupDatabase(root, { label: `avant-${version}`, schemaVersion: lastSchemaVersion, fromVersion: previous });
-			if (backup) log(`Database saved to data/backups/${backup}`);
+			// The app saves the database itself before migrating it; an older version may need older data
 			if (restoreBackup) {
-				restoreDatabase(root, restoreBackup);
-				log(`Database restored from ${restoreBackup}`);
+				requestRestore(root, restoreBackup);
+				log(`The database will be restored from ${restoreBackup} at start`);
 			}
 			writeCurrent(root, { version, previous, installedAt: Date.now() });
 
@@ -137,10 +137,14 @@ export function createLauncher({
 				return;
 			}
 
-			// Rollback: previous code, previous data
+			// Rollback: previous code, and the data as it was before the failed version migrated it
 			log(`${version} failed: ${result.reason}. Rolling back to ${previous ?? 'the base code'}.`, 'error');
 			await supervisor.stop();
-			if (backup) restoreDatabase(root, backup);
+			const backup = migrationBackupSince(root, startedAt);
+			if (backup) {
+				requestRestore(root, backup);
+				log(`The database will be restored from ${backup}`);
+			}
 			if (previous) writeCurrent(root, { version: previous, previous: null, installedAt: Date.now() });
 			else fs.rmSync(path.join(root, 'current.json'), { force: true });
 			installState = { version, step: 'rolled back', error: result.reason, done: true };
@@ -167,7 +171,7 @@ export function createLauncher({
 		shutdown,
 		start() {
 			const { version } = resolveEntry(root);
-			log(`Starting ${version ?? 'base code'} (${envName})`);
+			log(`Starting ${version ?? 'base code'} (${envName}${role === 'all' ? '' : `, ${role}`})`);
 			supervisor.start();
 		},
 		get installState() {

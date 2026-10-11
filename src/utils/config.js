@@ -52,7 +52,8 @@ export function parseConfig(vars, { role: processRole = 'all' } = {}) {
 		INTERNAL_TOKEN: str('INTERNAL_TOKEN'),
 		// Bot: where its internal link listens. API: where to reach it (http://bot:3002)
 		BOT_RPC_HOST: str('BOT_RPC_HOST') || '0.0.0.0',
-		BOT_RPC_PORT: Number(str('BOT_RPC_PORT') || 3002),
+		// Pterodactyl: the bot server's allocation is its internal link
+		BOT_RPC_PORT: Number(str('BOT_RPC_PORT') || (processRole === 'bot' && str('SERVER_PORT')) || 3002),
 		BOT_URL: str('BOT_URL').replace(/\/+$/, ''),
 		// API: the panel files are served by the front; true keeps serving them from the API too
 		SERVE_PANEL: str('SERVE_PANEL') ? str('SERVE_PANEL') === 'true' : true,
@@ -77,10 +78,11 @@ export function parseConfig(vars, { role: processRole = 'all' } = {}) {
 	else if (!/^https?:\/\/[^/]+$/.test(config.WEB_PUBLIC_URL)) {
 		problems.push('WEB_PUBLIC_URL must look like http(s)://host[:port], without path');
 	}
-	else if (config.WEB_MODE !== 'http' && !config.WEB_PUBLIC_URL.startsWith('https://')) {
+	// The API and the bot never serve browsers directly in a split deployment (the front does, with its own WEB_MODE)
+	else if (!['api', 'bot'].includes(processRole) && config.WEB_MODE !== 'http' && !config.WEB_PUBLIC_URL.startsWith('https://')) {
 		problems.push(`WEB_PUBLIC_URL must start with https:// when WEB_MODE is ${config.WEB_MODE}`);
 	}
-	else if (config.WEB_MODE === 'http' && !config.WEB_PUBLIC_URL.startsWith('http://')) {
+	else if (!['api', 'bot'].includes(processRole) && config.WEB_MODE === 'http' && !config.WEB_PUBLIC_URL.startsWith('http://')) {
 		problems.push('WEB_PUBLIC_URL must start with http:// when WEB_MODE is http');
 	}
 

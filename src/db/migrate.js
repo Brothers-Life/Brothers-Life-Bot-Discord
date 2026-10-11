@@ -32,7 +32,8 @@ export async function schemaVersion(db) {
 // The bot and the API both migrate on start: a named lock makes the second one wait for the first.
 // MariaDB commits schema changes right away, so a failing migration can leave it half applied:
 // the launcher takes a backup before every update.
-export async function migrate(db, dir = MIGRATIONS_DIR) {
+// beforeMigrate(fromVersion): called (inside the lock) when migrations are about to run on an existing database
+export async function migrate(db, dir = MIGRATIONS_DIR, { beforeMigrate = null } = {}) {
 	const connection = await db.pool.getConnection();
 	try {
 		const [[lock]] = await connection.query('SELECT GET_LOCK(?, 120) AS ok', [`brl_migrate_${db.options.database}`]);
@@ -43,8 +44,9 @@ export async function migrate(db, dir = MIGRATIONS_DIR) {
 			if (from > latest) {
 				throw new Error(`Database schema (v${from}) is newer than this version of the bot (v${latest}). Restore a compatible backup or install a newer version.`);
 			}
-			for (const { version, file } of listMigrations(dir)) {
-				if (version <= from) continue;
+			const pending = listMigrations(dir).filter(m => m.version > from);
+			if (pending.length && from > 0) await beforeMigrate?.(from);
+			for (const { version, file } of pending) {
 				await db.exec(fs.readFileSync(file, 'utf8'));
 				await db.query('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', version, Date.now());
 			}

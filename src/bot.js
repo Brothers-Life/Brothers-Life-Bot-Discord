@@ -1,6 +1,7 @@
 // Bot process of a split deployment: the Discord connection, the periodic tasks and the services holding live
 // state (music, tickets, raids…). The API reaches it through its internal link (INTERNAL_TOKEN, BOT_RPC_PORT).
 import { pkg, consoleLog, ipc, logger, onShutdown, every, run, shutdown } from './app/process.js';
+import path from 'node:path';
 import config from './utils/config.js';
 import { scheduleLogCleanup } from './utils/logger.js';
 import { startupChecks } from './utils/startupChecks.js';
@@ -22,7 +23,7 @@ run(async () => {
 	}
 	scheduleLogCleanup();
 
-	const db = await openDb(databaseOptions(config));
+	const db = await openDb(databaseOptions(config), { backupDir: path.join(config.DATA_DIR, 'backups'), appVersion: pkg.version, logger });
 	onShutdown(() => db.close());
 	if (db.migration.from !== db.migration.to) {
 		logger.info(`Database migrated from schema v${db.migration.from} to v${db.migration.to}`);

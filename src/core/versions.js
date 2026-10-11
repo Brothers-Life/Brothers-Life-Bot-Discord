@@ -1,9 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ValidationError, AppError } from './errors.js';
+import { listBackups } from '../db/dump.js';
 
 const CACHE_MS = 10 * 60_000;
 const SCHEMA_MARKER = /<!--\s*schema:(\d+)\s*-->/;
+const FIRST_MARIADB_VERSION = 'v2.0.0';
 
 export function compareVersions(a, b) {
 	const pa = String(a).replace(/^v/, '').split('.').map(Number);
@@ -37,17 +39,9 @@ export function createVersionService({ config, settings, audit, appVersion, dbSc
 		};
 	}
 
+	// Database backups made before each migration (src/db/dump.js)
 	function backups() {
-		const dir = path.join(config.DATA_DIR, 'backups');
-		if (!fs.existsSync(dir)) return [];
-		return fs.readdirSync(dir)
-			.filter(f => f.endsWith('.db'))
-			.map((file) => {
-				const meta = readJson(path.join(dir, file.replace(/\.db$/, '.json'))) ?? {};
-				const stat = fs.statSync(path.join(dir, file));
-				return { file, at: meta.at ?? stat.mtimeMs, schemaVersion: meta.schemaVersion ?? null, fromVersion: meta.fromVersion ?? null, size: stat.size };
-			})
-			.sort((a, b) => b.at - a.at);
+		return listBackups(path.join(config.DATA_DIR, 'backups')).map(b => ({ ...b, fromVersion: b.appVersion }));
 	}
 
 	async function listReleases(force = false) {
@@ -82,6 +76,8 @@ export function createVersionService({ config, settings, audit, appVersion, dbSc
 
 	// What installing `version` implies for the database
 	async function plan(release) {
+		// Versions before 2.0.0 ran on SQLite: they cannot use this database at all
+		if (compareVersions(release.version, FIRST_MARIADB_VERSION) < 0) return { compatible: false, restoreBackup: null, legacy: true };
 		const dbVersion = await dbSchemaVersion();
 		if (release.schemaVersion === null || release.schemaVersion >= dbVersion) {
 			return { compatible: true, restoreBackup: null };
@@ -112,6 +108,7 @@ export function createVersionService({ config, settings, audit, appVersion, dbSc
 			const release = (await listReleases(true)).find(r => r.version === version);
 			if (!release) throw new ValidationError(`Version inconnue : ${version}.`);
 			const target = await plan(release);
+			if (target.legacy) throw new ValidationError(`${version} fonctionne avec l’ancienne base SQLite : elle ne peut pas être installée sur la base MariaDB.`);
 			if (!target.compatible && !target.restoreBackup) {
 				throw new ValidationError(`${version} attend une base plus ancienne (schéma ${release.schemaVersion}) et aucune sauvegarde compatible n’existe.`);
 			}

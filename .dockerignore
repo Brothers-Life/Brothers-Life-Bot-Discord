@@ -1,0 +1,16 @@
+node_modules
+web/node_modules
+web/dist
+data
+logs
+versions
+current.json
+.env
+.env.*
+!.env.example
+.git
+.github
+docs/superpowers
+bruno
+test
+*.log

@@ -1,7 +1,10 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import mysql from 'mysql2/promise';
 import { compile, bind } from './sql.js';
+import fs from 'node:fs';
+import path from 'node:path';
 import { migrate } from './migrate.js';
+import { dumpDatabase, restoreDatabase, LAST_MIGRATION, RESTORE_REQUEST } from './dump.js';
 
 // Exact comparisons like before (utf8mb4_bin tables), `||` concatenates strings, strict types
 const SQL_MODE = 'STRICT_ALL_TABLES,PIPES_AS_CONCAT,NO_ENGINE_SUBSTITUTION,ERROR_FOR_DIVISION_BY_ZERO';
@@ -23,7 +26,8 @@ export function databaseOptions(config) {
 
 // The database shared by the bot and the API (MariaDB). The interface keeps the shape the code was
 // written for (prepare().get/all/run, transaction()), every call returning a promise.
-export async function openDb(options, { migrationsDir, migrate: runMigrations = true, connectionLimit = 10 } = {}) {
+// backupDir: where the database is saved before each migration (and where launcher.js asks for a restore)
+export async function openDb(options, { migrationsDir, migrate: runMigrations = true, connectionLimit = 10, backupDir = null, appVersion = null, logger = console } = {}) {
 	const pool = mysql.createPool({
 		...options,
 		charset: 'utf8mb4_bin',
@@ -132,8 +136,32 @@ export async function openDb(options, { migrationsDir, migrate: runMigrations = 
 		},
 	};
 
-	db.migration = runMigrations ? await migrate(db, migrationsDir) : null;
+	if (backupDir) await applyRestoreRequest(db, backupDir, logger);
+	const beforeMigrate = backupDir
+		? async (from) => {
+			const file = await dumpDatabase(db, backupDir, { label: `avant-migration-v${from}`, schemaVersion: from, appVersion });
+			fs.writeFileSync(path.join(backupDir, LAST_MIGRATION), JSON.stringify({ file, at: Date.now(), schemaVersion: from }));
+			logger.info(`Database saved to ${path.join(backupDir, file)} before migrating`);
+		}
+		: null;
+	db.migration = runMigrations ? await migrate(db, migrationsDir, { beforeMigrate }) : null;
 	return db;
+}
+
+// launcher.js rolled back a version, or a version that needs older data was installed from the panel
+async function applyRestoreRequest(db, backupDir, logger) {
+	const request = path.join(backupDir, RESTORE_REQUEST);
+	if (!fs.existsSync(request)) return;
+	const { file } = JSON.parse(fs.readFileSync(request, 'utf8'));
+	const source = path.join(backupDir, path.basename(String(file)));
+	fs.rmSync(request, { force: true });
+	if (!fs.existsSync(source)) {
+		logger.error(`Restore asked from ${file}, but the file is missing: the database is left as is.`);
+		return;
+	}
+	logger.warn(`Restoring the database from ${path.basename(source)}…`);
+	await restoreDatabase(db, source);
+	logger.success?.('Database restored.');
 }
 
 // Small JSON key/value store on top of the settings table

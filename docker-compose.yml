@@ -1,0 +1,106 @@
+# Bot, API, front and database in separate containers (docs/architecture.md).
+#   cp .env.docker.example .env   then fill it in
+#   docker compose up -d --build
+# Only the front is reachable from outside (PANEL_PORT). The API and the bot's internal link stay on the
+# private network of the containers. Each container only gets the settings it needs (the bot token: the bot).
+name: brothers-life
+
+x-app: &app
+  image: brothers-life-bot:${BOT_VERSION:-local}
+  build: .
+  restart: unless-stopped
+  depends_on:
+    db:
+      condition: service_healthy
+
+services:
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: brl
+      MARIADB_USER: brl
+      MARIADB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD manquant dans .env}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD manquant dans .env}
+    command: ["--max-allowed-packet=64M", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_bin"]
+    volumes:
+      - db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  bot:
+    <<: *app
+    command: ["node", "src/bot.js", "prod"]
+    environment:
+      TOKEN: ${TOKEN:?TOKEN manquant dans .env}
+      APP_ID: ${APP_ID}
+      OWNER_ID: ${OWNER_ID}
+      DEV_GUILD_ID: ${DEV_GUILD_ID:-}
+      WEB_PUBLIC_URL: ${WEB_PUBLIC_URL}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?INTERNAL_TOKEN manquant dans .env}
+      GITHUB_REPO: ${GITHUB_REPO:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: db
+      DB_USER: brl
+      DB_NAME: brl
+      BOT_RPC_HOST: 0.0.0.0
+      BOT_RPC_PORT: "3002"
+    volumes:
+      - bot-data:/app/data
+
+  api:
+    <<: *app
+    command: ["node", "src/api.js", "prod"]
+    environment:
+      APP_ID: ${APP_ID}
+      CLIENT_SECRET: ${CLIENT_SECRET}
+      OWNER_ID: ${OWNER_ID}
+      WEB_PUBLIC_URL: ${WEB_PUBLIC_URL}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?INTERNAL_TOKEN manquant dans .env}
+      GITHUB_REPO: ${GITHUB_REPO:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: db
+      DB_USER: brl
+      DB_NAME: brl
+      BOT_URL: http://bot:3002
+      WEB_PORT: "3001"
+      WEB_MODE: http
+      SERVE_PANEL: "false"
+      # Only the front reaches the API: the client address comes from its X-Forwarded-For
+      TRUST_PROXY: "true"
+    volumes:
+      - api-data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+      bot:
+        condition: service_started
+
+  front:
+    <<: *app
+    command: ["node", "src/front.js", "prod"]
+    environment:
+      WEB_PUBLIC_URL: ${WEB_PUBLIC_URL}
+      WEB_MODE: ${WEB_MODE:-http}
+      TLS_CERT: ${TLS_CERT:-}
+      TLS_KEY: ${TLS_KEY:-}
+      API_URL: http://api:3001
+      WEB_PORT: "3000"
+    ports:
+      - "${PANEL_PORT:-3000}:3000"
+    volumes:
+      - front-data:/app/data
+    depends_on:
+      api:
+        condition: service_started
+
+volumes:
+  db:
+  bot-data:
+  api-data:
+  front-data:

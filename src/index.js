@@ -1,6 +1,7 @@
 // All-in-one process: the Discord bot and the panel API together (development, small installs).
 // For a split deployment, run src/bot.js, src/api.js and src/front.js instead (docs/architecture.md).
 import { pkg, consoleLog, ipc, logger, onShutdown, every, run, shutdown } from './app/process.js';
+import path from 'node:path';
 import config from './utils/config.js';
 import { scheduleLogCleanup } from './utils/logger.js';
 import { startupChecks } from './utils/startupChecks.js';
@@ -23,7 +24,7 @@ run(async () => {
 	}
 	scheduleLogCleanup();
 
-	const db = await openDb(databaseOptions(config));
+	const db = await openDb(databaseOptions(config), { backupDir: path.join(config.DATA_DIR, 'backups'), appVersion: pkg.version, logger });
 	onShutdown(() => db.close());
 	if (db.migration.from !== db.migration.to) {
 		logger.info(`Database migrated from schema v${db.migration.from} to v${db.migration.to}`);

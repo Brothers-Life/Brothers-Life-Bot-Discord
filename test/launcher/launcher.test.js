@@ -27,7 +27,6 @@ function makeRoot(mode) {
 	fs.mkdirSync(path.join(root, 'data'));
 	fs.writeFileSync(path.join(root, 'src', 'index.js'), fakeApp(mode));
 	fs.writeFileSync(path.join(root, 'package.json'), '{"type":"commonjs"}');
-	fs.writeFileSync(path.join(root, 'data', 'bot.db'), 'ORIGINAL');
 	return root;
 }
 
@@ -113,7 +112,7 @@ test('restart requested by the app', async () => {
 	await launcher.supervisor.stop();
 });
 
-test('installs a version, backs up the database and switches to it', async () => {
+test('installs a version and switches to it', async () => {
 	const root = makeRoot('ready');
 	const { launcher } = launcherFor(root, fakeRelease('ready', 2));
 	let ready = waitFor(launcher.supervisor.events, 'ready');
@@ -126,14 +125,26 @@ test('installs a version, backs up the database and switches to it', async () =>
 
 	assert.equal(readCurrent(root).version, 'v1.2.0');
 	assert.equal(launcher.installState.step, 'done');
-	const backups = fs.readdirSync(path.join(root, 'data', 'backups'));
-	assert.ok(backups.some(f => f.startsWith('avant-v1.2.0') && f.endsWith('.db')));
-	const meta = JSON.parse(fs.readFileSync(path.join(root, 'data', 'backups', backups.find(f => f.endsWith('.json'))), 'utf8'));
-	assert.equal(meta.schemaVersion, 1);
+	assert.equal(fs.existsSync(path.join(root, 'data', 'backups', 'restore-request.json')), false, 'no restore asked');
+	await launcher.supervisor.stop();
+});
+
+test('an older version needing older data gets its backup restored by the app at start', async () => {
+	const root = makeRoot('ready');
+	const { launcher } = launcherFor(root, fakeRelease('ready', 2));
+	let ready = waitFor(launcher.supervisor.events, 'ready');
+	launcher.start();
+	await ready;
+	ready = waitFor(launcher.supervisor.events, 'ready', m => m.version === 'v1.2.0');
+	await launcher.install({ version: 'v1.2.0', assetId: 1, restoreBackup: '../avant-migration-v3.sql.gz' });
+	await ready;
+	const request = JSON.parse(fs.readFileSync(path.join(root, 'data', 'backups', 'restore-request.json'), 'utf8'));
+	assert.equal(request.file, 'avant-migration-v3.sql.gz', 'only a file name, never a path');
 	await launcher.supervisor.stop();
 });
 
 test('rolls back code and data when the new version does not start', async () => {
+	// The broken version saved the database before migrating it
 	const root = makeRoot('ready');
 	const { launcher } = launcherFor(root, fakeRelease('crash', 2));
 	let ready = waitFor(launcher.supervisor.events, 'ready');
@@ -144,14 +155,26 @@ test('rolls back code and data when the new version does not start', async () =>
 	ready = waitFor(launcher.supervisor.events, 'ready');
 	const installing = launcher.install({ version: 'v2.0.0', assetId: 1 });
 	await waitFor(launcher.supervisor.events, 'state', s => s === 'starting');
-	fs.writeFileSync(path.join(root, 'data', 'bot.db'), 'MIGRATED BY BROKEN VERSION');
+	fs.mkdirSync(path.join(root, 'data', 'backups'), { recursive: true });
+	fs.writeFileSync(path.join(root, 'data', 'backups', 'last-migration.json'), JSON.stringify({ file: 'avant-migration-v1.sql.gz', at: Date.now() }));
 	await installing;
 	await ready;
 
 	assert.equal(readCurrent(root), null, 'back to the base code');
-	assert.equal(fs.readFileSync(path.join(root, 'data', 'bot.db'), 'utf8'), 'ORIGINAL');
+	const request = JSON.parse(fs.readFileSync(path.join(root, 'data', 'backups', 'restore-request.json'), 'utf8'));
+	assert.equal(request.file, 'avant-migration-v1.sql.gz', 'the data comes back with the code');
 	assert.equal(launcher.installState.step, 'rolled back');
 	assert.match(launcher.installState.error, /exited|not ready/);
+	await launcher.supervisor.stop();
+});
+
+test('a split deployment runs the entry of its part', async () => {
+	const root = makeRoot('crash');
+	fs.writeFileSync(path.join(root, 'src', 'api.js'), fakeApp('ready', { version: 'api' }));
+	const { launcher } = launcherFor(root, { role: 'api' });
+	const ready = waitFor(launcher.supervisor.events, 'ready');
+	launcher.start();
+	assert.equal((await ready).version, 'api');
 	await launcher.supervisor.stop();
 });
 

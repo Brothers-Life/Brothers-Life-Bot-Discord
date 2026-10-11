@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createSettings } from '../src/db/index.js';
+import { createSettings, openDb } from '../src/db/index.js';
+import { dumpDatabase, restoreDatabase, listBackups, LAST_MIGRATION, RESTORE_REQUEST } from '../src/db/dump.js';
 import { migrate, latestSchemaVersion, schemaVersion } from '../src/db/migrate.js';
 import { compile, bind } from '../src/db/sql.js';
 import { createScratchDatabase, openTestDb } from './db.js';
@@ -90,4 +91,47 @@ test('named parameters ignore strings and comments', () => {
 	assert.deepEqual(bind(compiled, [2, { a: 1, c: 3 }]), [1, 2, 3]);
 	assert.throws(() => bind(compiled, [2, { a: 1 }]), /"c"/);
 	assert.throws(() => bind(compile('SELECT ?'), [{ x: 1 }]), /JSON\.stringify/);
+});
+
+test('a backup restores every row, text with line breaks and binary data included', async () => {
+	const db = await createScratchDatabase();
+	const dir = tmpDir();
+	await db.query('INSERT INTO settings (`key`, value) VALUES (?, ?), (?, ?)', 'a', '"ligne 1\nligne 2 ; DROP TABLE x;\n-- pas un commentaire"', 'b', '"é💬\'\\\\"');
+	await db.query('INSERT INTO files (id, kind, mime, size, gzip, data, created_at) VALUES (?, ?, ?, ?, 0, ?, 1)', 'upload:x', 'upload', 'image/png', 3, Buffer.from([0, 255, 10]));
+	const file = await dumpDatabase(db, dir, { label: 'test', schemaVersion: 2 });
+	assert.equal(listBackups(dir)[0].schemaVersion, 2);
+
+	await db.query('DELETE FROM settings');
+	await db.query('INSERT INTO settings (`key`, value) VALUES (?, ?)', 'c', '1');
+	await restoreDatabase(db, path.join(dir, file));
+	const rows = await db.query('SELECT `key`, value FROM settings ORDER BY `key`');
+	assert.deepEqual(rows.map(r => r.key), ['a', 'b']);
+	assert.equal(rows[0].value, '"ligne 1\nligne 2 ; DROP TABLE x;\n-- pas un commentaire"');
+	assert.equal(rows[1].value, '"é💬\'\\\\"');
+	assert.deepEqual([...(await db.query('SELECT data FROM files'))[0].data], [0, 255, 10]);
+	assert.equal(await schemaVersion(db), latestSchemaVersion());
+});
+
+test('the database is saved before a migration, and a restore asked by the launcher is applied at start', async () => {
+	const dir = tmpDir();
+	fs.writeFileSync(path.join(dir, '001_a.sql'), 'CREATE TABLE a (x INTEGER);');
+	const db = await createScratchDatabase({ migrate: false });
+	await migrate(db, dir);
+	await db.query('INSERT INTO a (x) VALUES (1)');
+	fs.writeFileSync(path.join(dir, '002_b.sql'), 'CREATE TABLE b (y INTEGER);');
+	const backups = path.join(dir, 'backups');
+	const reopened = await openDb(db.options, { migrationsDir: dir, backupDir: backups, logger: { info: () => undefined } });
+	const last = JSON.parse(fs.readFileSync(path.join(backups, LAST_MIGRATION), 'utf8'));
+	assert.equal(last.schemaVersion, 1);
+	assert.equal(reopened.migration.to, 2);
+
+	await reopened.query('INSERT INTO a (x) VALUES (2)');
+	fs.writeFileSync(path.join(backups, RESTORE_REQUEST), JSON.stringify({ file: last.file }));
+	fs.rmSync(path.join(dir, '002_b.sql'));
+	const restored = await openDb(db.options, { migrationsDir: dir, backupDir: backups, logger: { warn: () => undefined, success: () => undefined, info: () => undefined } });
+	assert.equal(await schemaVersion(restored), 1);
+	assert.deepEqual((await restored.query('SELECT x FROM a')).map(r => r.x), [1]);
+	assert.equal(fs.existsSync(path.join(backups, RESTORE_REQUEST)), false);
+	await reopened.close();
+	await restored.close();
 });

@@ -7,10 +7,21 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,6 +41,8 @@ jobs:
           fi
 
       - name: Lint and test the bot
+        env:
+          TEST_DATABASE_URL: mysql://root:root@127.0.0.1:3306/
         run: |
           npm ci
           npm run lint
@@ -44,7 +57,7 @@ jobs:
       - name: Package
         run: |
           tar -czf "bot-$GITHUB_REF_NAME.tar.gz" \
-            src assets launcher launcher.js web/dist package.json package-lock.json .npmrc .env.example README.md docs/pterodactyl.md
+            src assets launcher launcher.js scripts/migrate-sqlite.mjs web/dist package.json package-lock.json .npmrc .env.example README.md docs/pterodactyl.md docs/architecture.md
 
       - name: Release notes
         run: |
@@ -66,3 +79,26 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$GITHUB_REF_NAME" "bot-$GITHUB_REF_NAME.tar.gz" --title "$GITHUB_REF_NAME" --notes-file notes.md
+
+  # Same version as a Docker image (docker-compose.yml): ghcr.io/<owner>/<repo>:vX.Y.Z and :latest
+  image:
+    runs-on: ubuntu-latest
+    needs: release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Image name
+        id: name
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.name.outputs.image }}:${{ github.ref_name }}
+            ${{ steps.name.outputs.image }}:latest

@@ -2,14 +2,16 @@
 
 Bot Discord multi-serveurs pour la communauté RP **Brothers Life** (serveur FiveM Qbox) : il gère plusieurs serveurs Discord comme un seul réseau et s'administre depuis un panel web React en français. Tout le texte visible (Discord, panel, commits) est en **français** ; le code et ses commentaires en anglais.
 
-État au 2026-10-05 : **v1.11.0 publiée**, tout est poussé, 475 tests.
+État au 2026-10-11 : **v1.11.0 publiée** ; sur la branche `claude/determined-wozniak-qisgw1` (pas encore publiée, future **v2.0.0**) : passage à **MariaDB** (tout le code asynchrone) et **séparation bot / API / front** (`docs/architecture.md`). 499 tests.
 
 ## Commandes
 
 ```bash
-npm run dev            # bot + panel API avec nodemon (lit .env)
+npm run db:test        # MariaDB de test dans Docker (root/root, port 3306) : nécessaire pour npm test
+npm run dev            # tout-en-un (bot + panel API) avec nodemon (lit .env)
+npm run dev:bot / dev:api / dev:front   # les morceaux séparés
 npm run dev:web        # panel Vite seul (web/)
-npm test               # node --test "test/**/*.test.js"
+npm test               # node --test "test/**/*.test.js" (TEST_DATABASE_URL, défaut mysql://root:root@127.0.0.1:3306/)
 npm run lint           # eslint src/ test/ launcher.js launcher/
 npm run build:web      # npm ci + tsc -b + vite build du panel (web/dist servi par le bot)
 cd web && npx tsc -b && npx eslint src   # vérif du panel
@@ -22,10 +24,12 @@ Avant tout commit : `npm run lint`, `npm test`, et pour le panel `npx tsc -b` + 
 
 ## Architecture
 
-- **Node ESM**, discord.js 14, **better-sqlite3** (migrations numérotées `src/db/migrations/NNN_*.sql`, dernière : `042_public_notifications.sql`), **Fastify** pour l'API du panel.
+- **Node ESM**, discord.js 14, **MariaDB** via mysql2 (`src/db/index.js` : `db.prepare(sql).get/all/run()` **asynchrones**, `await db.transaction(async () => …)()`, paramètres `?` ou `@nom`), migrations `src/db/migrations/NNN_*.sql` (dernière : `002_files.sql` ; `001_init.sql` = tout le schéma de la v1.11.0), **Fastify** pour l'API du panel.
+- **Processus** : `src/index.js` tout-en-un ; déploiement séparé `src/bot.js` (Discord, tâches, services à état, liaison interne `src/bot/link.js`), `src/api.js` (API, exécuteur et services distants `src/api/link.js`, sans token), `src/front.js` (panel + relais `/api`, `src/web/front.js`). Liaison : `src/rpc/` (HTTP + SSE, `INTERNAL_TOKEN`). Services relayés au bot : `BOT_SERVICES` dans `context.js`. Démarrage commun : `src/app/process.js`, tâches `src/app/tasks.js`.
+- **Fichiers partagés** (images envoyées, transcripts, archives) : table `files` (`core.files`, `core.uploads` asynchrone), jamais sur le disque d'un processus.
 - **Panel** (`web/`) : React 19, Vite, TanStack Router (routes fichiers dans `web/src/routes/_authenticated/`, `routeTree.gen.ts` généré par Vite) + TanStack Query, shadcn/ui, Tailwind v4, recharts. Composants maison dans `web/src/components/app/ui.tsx` (`Page`, `Section`, `StatCards`, `Pill`, `EmptyState`, `Notice`, `UserAvatar`…) et `pickers.tsx`.
-- `src/core/` : toute la logique, **sans discord.js**. Chaque service est créé dans `src/core/context.js` (`createCore`) et reçoit `executor` (accès Discord), `audit`, `settings`, `logs`, `network`, `ranks`…
-- `src/bot/executor.js` : la seule couche qui parle à Discord (envoyer, rôles, membres, vocal, messages de log…). Dans les tests, `test/helpers.js` fournit un **faux exécuteur** (`createTestCore`, `withNetwork`).
+- `src/core/` : toute la logique, **sans discord.js**. Chaque service est créé dans `src/core/context.js` (`createCore`) et reçoit `executor` (accès Discord), `audit`, `settings`, `logs`, `network`, `ranks`… **Aucune requête à la création d'un service** : ce qui doit être chargé au démarrage va dans `init()` (caches) ou `recover()` (réparations du seul processus bot), appelés par `core.init({ worker })`.
+- `src/bot/executor.js` : la seule couche qui parle à Discord (envoyer, rôles, membres, vocal, messages de log…). Dans l'API, c'est un proxy vers le bot : arguments et retours sérialisables (Buffer ok, pas de fonctions ni de chemins de fichiers locaux). Dans les tests, `test/helpers.js` fournit un **faux exécuteur** (`await createTestCore()`, `await withNetwork()`).
 - `src/bot/commands/<catégorie>/*.js` : commandes slash (`data` + `execute` + `autocomplete`). **Toute commande doit être listée dans `src/core/commandCatalog.js`** (un test le vérifie).
 - `src/bot/components/*.js` : boutons/menus/modales, routés par le **préfixe du customId** (`export const prefix = 'mu'` → `mu:action:…`).
 - `src/bot/events/*.js` : événements Discord. `src/bot/eventLog.js` transforme les événements en logs.
@@ -34,6 +38,9 @@ Avant tout commit : `npm run lint`, `npm test`, et pour le panel `npx tsc -b` + 
 
 ## Conventions à respecter
 
+- **Asynchrone partout** : toute méthode de service qui touche la base est `async` ; **toujours `await`** un appel de service (un oubli renvoie une Promise, toujours vraie). Pas d'`await` dans `.map/.filter` : `Promise.all` ou `for…of`. Les écouteurs (`audit.onRecord`, timers) attrapent leurs erreurs.
+- **SQL MariaDB** : `INSERT IGNORE`, `ON DUPLICATE KEY UPDATE x = VALUES(x)`, colonnes `` `key` `` / `` `trigger` `` entre backticks, `COLLATE utf8mb4_unicode_ci` pour l'insensible à la casse (tables en `utf8mb4_bin`), `GREATEST/LEAST`, `CHAR_LENGTH`, pas de `LIMIT` dans un `IN (sous-requête)` (passer par une table dérivée), `ORDER BY` avec départage (`id`) dès que l'ordre compte, ids Discord liés en **chaînes**. Les « vérifier puis écrire » (double clic) : `UPDATE … WHERE status = 'open'` puis `changes`, ou transaction + `SELECT … FOR UPDATE`.
+- **Nouveau service avec état vivant** (timers, cache, lecteur) : l'ajouter à `BOT_SERVICES` ; ses méthodes appelées depuis l'API s'exécutent alors dans le bot (acteur sérialisé), ses abonnements (`subscribe`/`onChange`) passent par les événements de `src/bot/link.js` → `src/api/link.js`.
 - **Permissions** : `definePermission('cat.verbe', { label, category })` dans le service ; un acteur a `actor.can('…')`. Les services vérifient eux-mêmes (`ForbiddenError`).
 - **Erreurs** : `ValidationError`, `ForbiddenError`, `NotFoundError` (`src/core/errors.js`) → messages affichés tels quels à l'utilisateur, donc en français clair.
 - **Audit et logs** : `audit.record({ actorId, source, action: 'categorie.verbe', guildId, target, details })`. La partie avant le point est la **catégorie de log** : il faut `logs.registerCategory(key, label)` pour qu'elle soit routable vers un salon Discord. Les titres lisibles sont dans `TITLES` de `src/core/describe.js`.
@@ -96,17 +103,19 @@ Réseau de serveurs, rangs et permissions synchronisés, staff sync, sanctions (
 
 ## Tests et vérification visuelle
 
-- Tests unitaires : `node --test`, faux exécuteur et faux pool MySQL (`test/core/fivemData.test.js` montre le modèle : réponses par regex de SQL).
+- Tests unitaires : `node --test` sur un vrai MariaDB (`test/db.js` : une base par fichier de test, vidée à chaque `createTestCore()`/`openTestDb()`, supprimée à la fin), faux exécuteur, faux pool MySQL pour la base FiveM (`test/core/fivemData.test.js`). `test/split.test.js` fait tourner bot + API reliés par la vraie liaison ; `test/web/front.test.js` le serveur front.
+- Essai complet en local : MariaDB + `node src/api.js` + `node src/front.js` + un faux bot (cœur + `createBotLink` + faux exécuteur), session insérée dans `sessions`, puis Playwright sur le front.
 - **Jamais testé avec un vrai token Discord** : tout est validé par les tests et par un **panel de démo** (serveur Fastify réel + faux exécuteur + fausses données FiveM) lancé avec `NODE_TEST_CONTEXT=1 node demo-panel.mjs`, qui affiche `SID=…` à mettre en cookie `sid` sur `http://127.0.0.1:3001`. Ces scripts vivaient dans le scratchpad de session ; les recréer au besoin à partir de `test/helpers.js`.
 - Scripts ponctuels sur la vraie base FiveM : lecture seule, identifiants en variables d'environnement, n'afficher que des formes/comptages (pas de données perso).
 - Piège : les heredocs bash cassent les antislashs dans du Python/JS → écrire les scripts avec un fichier plutôt qu'un heredoc.
 
 ## Release et production
 
-- Release : `npm version X.Y.Z --no-git-tag-version`, commit `chore: vX.Y.Z`, push `main`, puis tag `vX.Y.Z` (doit correspondre à `package.json`) et push du tag. Le workflow `release.yml` construit `bot-vX.Y.Z.tar.gz` (installable depuis le panel). Vérifier `npx -y npm@10 ci --dry-run` avant.
+- Release : `npm version X.Y.Z --no-git-tag-version`, commit `chore: vX.Y.Z`, push `main`, puis tag `vX.Y.Z` (doit correspondre à `package.json`) et push du tag. Le workflow `release.yml` (tests sur un service MariaDB) construit `bot-vX.Y.Z.tar.gz` (installable depuis le panel) et pousse l'image Docker `ghcr.io/brothers-life/brothers-life-bot-discord:vX.Y.Z`. Vérifier `npx -y npm@10 ci --dry-run` avant. La première version MariaDB doit être **v2.0.0** (`FIRST_MARIADB_VERSION` dans `versions.js` refuse de réinstaller une 1.x).
 - Ne **pousser / publier que sur demande explicite** de l'utilisateur.
 - Repo : https://github.com/Brothers-Life/Brothers-Life-Bot-Discord (privé), compte `Brothers-Life` via Git Credential Manager. `gh` n'est pas installé ; l'état d'une release se suit avec l'API GitHub (token de `git credential fill`).
-- Prod : **Pterodactyl/Pelican**, accès panel par IP:port, HTTPS auto-signé, lanceur `launcher.js` (mises à jour, redémarrages), egg dans `pterodactyl/`, doc `docs/pterodactyl.md`. Les commandes slash se réenregistrent au démarrage.
+- Prod : **Pterodactyl/Pelican**, accès panel par IP:port, HTTPS auto-signé, lanceur `launcher.js prod [all|bot|api|front]` (mises à jour, redémarrages, retour arrière avec restauration de la sauvegarde faite avant migration), 4 eggs dans `pterodactyl/` (tout-en-un, bot, api, front), base dans l'onglet Databases, doc `docs/pterodactyl.md`. Ou **Docker** : `docker-compose.yml` + `.env.docker.example`. Les commandes slash se réenregistrent au démarrage.
+- Passage v1 → v2 : `node scripts/migrate-sqlite.mjs prod` (lit `data/bot.db` au schéma 43 avec `node:sqlite`, recopie tables et fichiers, compte les lignes).
 
 ## Historique des versions
 

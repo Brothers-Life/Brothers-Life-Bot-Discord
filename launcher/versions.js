@@ -42,14 +42,18 @@ export function writeCurrent(root, state) {
 	fs.renameSync(`${file}.tmp`, file);
 }
 
+// The process a launcher runs: everything in one (all), or one part of a split deployment
+export const ENTRIES = { all: 'index.js', bot: 'bot.js', api: 'api.js', front: 'front.js' };
+
 // Entry of the app to run: an installed version, or the code next to launcher.js
-export function resolveEntry(root) {
+export function resolveEntry(root, role = 'all') {
+	const file = ENTRIES[role] ?? ENTRIES.all;
 	const current = readCurrent(root);
 	if (current) {
 		const dir = path.join(root, 'versions', current.version);
-		if (fs.existsSync(path.join(dir, 'src', 'index.js'))) return { entry: path.join(dir, 'src', 'index.js'), cwd: dir, version: current.version };
+		if (fs.existsSync(path.join(dir, 'src', file))) return { entry: path.join(dir, 'src', file), cwd: dir, version: current.version };
 	}
-	return { entry: path.join(root, 'src', 'index.js'), cwd: root, version: null };
+	return { entry: path.join(root, 'src', file), cwd: root, version: null };
 }
 
 export function run(command, args, { cwd, onLine = () => undefined } = {}) {
