@@ -21,27 +21,40 @@ export function latestSchemaVersion(dir = MIGRATIONS_DIR) {
 	return migrations.length ? migrations.at(-1).version : 0;
 }
 
-export function schemaVersion(db) {
-	return db.pragma('user_version', { simple: true });
+const VERSION_TABLE = 'CREATE TABLE IF NOT EXISTS schema_migrations (version INT PRIMARY KEY, applied_at BIGINT NOT NULL) ENGINE=InnoDB';
+
+export async function schemaVersion(db) {
+	await db.query(VERSION_TABLE);
+	const row = (await db.query('SELECT MAX(version) AS version FROM schema_migrations'))[0];
+	return row?.version ?? 0;
 }
 
-// Each migration runs in its own transaction: a failing migration leaves the database untouched
-export function migrate(db, dir = MIGRATIONS_DIR) {
-	const from = schemaVersion(db);
-	const latest = latestSchemaVersion(dir);
-
-	if (from > latest) {
-		throw new Error(`Database schema (v${from}) is newer than this version of the bot (v${latest}). Restore a compatible backup or install a newer version.`);
+// The bot and the API both migrate on start: a named lock makes the second one wait for the first.
+// MariaDB commits schema changes right away, so a failing migration can leave it half applied:
+// the launcher takes a backup before every update.
+export async function migrate(db, dir = MIGRATIONS_DIR) {
+	const connection = await db.pool.getConnection();
+	try {
+		const [[lock]] = await connection.query('SELECT GET_LOCK(?, 120) AS ok', [`brl_migrate_${db.options.database}`]);
+		if (!lock?.ok) throw new Error('Another process is migrating the database (lock not obtained after 2 minutes).');
+		try {
+			const from = await schemaVersion(db);
+			const latest = latestSchemaVersion(dir);
+			if (from > latest) {
+				throw new Error(`Database schema (v${from}) is newer than this version of the bot (v${latest}). Restore a compatible backup or install a newer version.`);
+			}
+			for (const { version, file } of listMigrations(dir)) {
+				if (version <= from) continue;
+				await db.exec(fs.readFileSync(file, 'utf8'));
+				await db.query('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', version, Date.now());
+			}
+			return { from, to: await schemaVersion(db) };
+		}
+		finally {
+			await connection.query('SELECT RELEASE_LOCK(?)', [`brl_migrate_${db.options.database}`]);
+		}
 	}
-
-	for (const { version, file } of listMigrations(dir)) {
-		if (version <= from) continue;
-		const sql = fs.readFileSync(file, 'utf8');
-		db.transaction(() => {
-			db.exec(sql);
-			db.pragma(`user_version = ${version}`);
-		})();
+	finally {
+		connection.release();
 	}
-
-	return { from, to: schemaVersion(db) };
 }

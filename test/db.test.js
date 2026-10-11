@@ -3,89 +3,91 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { openDb, backupDb, createSettings, Database } from '../src/db/index.js';
+import { createSettings } from '../src/db/index.js';
 import { migrate, latestSchemaVersion, schemaVersion } from '../src/db/migrate.js';
+import { compile, bind } from '../src/db/sql.js';
+import { createScratchDatabase, openTestDb } from './db.js';
 
 function tmpDir() {
 	return fs.mkdtempSync(path.join(os.tmpdir(), 'brl-db-'));
 }
 
-test('a new database is migrated to the latest schema', () => {
-	const db = openDb(':memory:');
-	assert.equal(schemaVersion(db), latestSchemaVersion());
+test('a new database is migrated to the latest schema', async () => {
+	const db = await createScratchDatabase();
+	assert.equal(await schemaVersion(db), latestSchemaVersion());
 	assert.deepEqual(db.migration, { from: 0, to: latestSchemaVersion() });
-	const tables = db.prepare('SELECT name FROM sqlite_master WHERE type = \'table\'').all().map(r => r.name);
+	const tables = (await db.query('SELECT table_name AS name FROM information_schema.tables WHERE table_schema = DATABASE()')).map(r => r.name);
 	for (const name of ['guilds', 'ranks', 'rank_permissions', 'rank_roles', 'user_ranks', 'sessions', 'audit_log', 'log_routes', 'settings']) {
 		assert.ok(tables.includes(name), `missing table ${name}`);
 	}
 });
 
-test('migrating twice is a no-op', () => {
-	const db = openDb(':memory:');
-	const version = schemaVersion(db);
-	assert.deepEqual(migrate(db), { from: version, to: version });
+test('migrating twice is a no-op', async () => {
+	const db = await createScratchDatabase();
+	const version = await schemaVersion(db);
+	assert.deepEqual(await migrate(db), { from: version, to: version });
 });
 
-test('a failing migration is rolled back', () => {
+test('a failing migration stops there', async () => {
 	const dir = tmpDir();
 	fs.writeFileSync(path.join(dir, '001_ok.sql'), 'CREATE TABLE a (x INTEGER);');
-	fs.writeFileSync(path.join(dir, '002_broken.sql'), 'CREATE TABLE b (x INTEGER); THIS IS NOT SQL;');
-	const db = new Database(':memory:');
-	assert.throws(() => migrate(db, dir));
-	assert.equal(schemaVersion(db), 1);
-	assert.equal(db.prepare('SELECT count(*) AS c FROM sqlite_master WHERE name = \'b\'').get().c, 0);
+	fs.writeFileSync(path.join(dir, '002_broken.sql'), 'THIS IS NOT SQL;');
+	const db = await createScratchDatabase({ migrate: false });
+	await assert.rejects(() => migrate(db, dir));
+	assert.equal(await schemaVersion(db), 1);
 });
 
-test('refuses a database newer than the code', () => {
+test('refuses a database newer than the code', async () => {
 	const dir = tmpDir();
 	fs.writeFileSync(path.join(dir, '001_ok.sql'), 'CREATE TABLE a (x INTEGER);');
-	const db = new Database(':memory:');
-	db.pragma('user_version = 5');
-	assert.throws(() => migrate(db, dir), /newer/);
+	const db = await createScratchDatabase({ migrate: false });
+	await schemaVersion(db);
+	await db.query('INSERT INTO schema_migrations (version, applied_at) VALUES (5, 0)');
+	await assert.rejects(() => migrate(db, dir), /newer/);
 });
 
-test('backup produces a usable copy', async () => {
-	const dir = tmpDir();
-	const db = openDb(path.join(dir, 'bot.db'));
-	createSettings(db).set('hello', { a: 1 });
-	await backupDb(db, path.join(dir, 'backups', 'copy.db'));
-	const copy = openDb(path.join(dir, 'backups', 'copy.db'));
-	assert.deepEqual(createSettings(copy).get('hello'), { a: 1 });
-	db.close();
-	copy.close();
+test('settings store JSON values and delete on null', async () => {
+	const settings = createSettings(await openTestDb());
+	assert.equal(await settings.get('x', 'default'), 'default');
+	await settings.set('x', [1, 2]);
+	assert.deepEqual(await settings.get('x'), [1, 2]);
+	await settings.set('x', null);
+	assert.equal(await settings.get('x'), null);
 });
 
-test('settings store JSON values and delete on null', () => {
-	const settings = createSettings(openDb(':memory:'));
-	assert.equal(settings.get('x', 'default'), 'default');
-	settings.set('x', [1, 2]);
-	assert.deepEqual(settings.get('x'), [1, 2]);
-	settings.set('x', null);
-	assert.equal(settings.get('x'), null);
+test('statements bind positional, array and named values', async () => {
+	const db = await openTestDb();
+	const insert = db.prepare('INSERT INTO settings (`key`, value) VALUES (@key, @value)');
+	const first = await insert.run({ key: 'a', value: '"x"' });
+	assert.equal(first.changes, 1);
+	await db.prepare('INSERT INTO settings (`key`, value) VALUES (?, ?)').run(['b', '1']);
+	const rows = await db.prepare('SELECT `key` FROM settings WHERE `key` IN (?, ?) ORDER BY `key`').all('a', 'b');
+	assert.deepEqual(rows.map(r => r.key), ['a', 'b']);
+	assert.equal(await db.prepare('SELECT value FROM settings WHERE `key` = ?').get('missing'), undefined);
+	// UPDATE counts matched rows, even when the value does not change (like SQLite)
+	assert.equal((await db.prepare('UPDATE settings SET value = value WHERE `key` = ?').run('a')).changes, 1);
 });
 
-// The production database is at v8 (before the community batch): every later migration must apply on real data
-test('upgrading a v8 database with data keeps it and reaches the latest schema', () => {
-	const dir = tmpDir();
-	const all = fileURLToPath(new URL('../src/db/migrations', import.meta.url));
-	for (const file of fs.readdirSync(all).filter(f => Number(f.slice(0, 3)) <= 8)) fs.copyFileSync(path.join(all, file), path.join(dir, file));
-	const db = new Database(':memory:');
-	migrate(db, dir);
-	assert.equal(schemaVersion(db), 8);
-	const now = Date.now();
-	db.prepare('INSERT INTO ticket_settings (guild_id, panel_channel_id, panel_message_id, panel_title, panel_text, max_open) VALUES (?, ?, ?, ?, ?, ?)').run('900000000000000001', '610000000000000001', '710000000000000001', 'Support', 'Ouvre un ticket', 2);
-	db.prepare('INSERT INTO ticket_categories (guild_id, name, position, created_at) VALUES (?, ?, 0, ?)').run('900000000000000001', 'Aide', now);
-	db.prepare('INSERT INTO tickets (guild_id, number, category_id, channel_id, opener_id, created_at) VALUES (?, 1, 1, ?, ?, ?)').run('900000000000000001', '620000000000000001', '300000000000000001', now);
-	db.prepare('INSERT INTO sanctions (type, user_id, moderator_id, source, scope, reason, created_at) VALUES (\'warn\', ?, ?, \'panel\', \'network\', \'Spam\', ?)').run('300000000000000001', '100000000000000001', now);
+test('a transaction rolls back on error and nested calls join it', async () => {
+	const db = await openTestDb();
+	const insert = db.prepare('INSERT INTO settings (`key`, value) VALUES (?, ?)');
+	const count = async () => (await db.prepare('SELECT COUNT(*) AS n FROM settings WHERE `key` LIKE \'tx%\'').get()).n;
+	const inner = db.transaction(async () => insert.run('tx2', '2'));
+	const outer = db.transaction(async (fail) => {
+		await insert.run('tx1', '1');
+		await inner();
+		if (fail) throw new Error('boom');
+	});
+	await assert.rejects(() => outer(true), /boom/);
+	assert.equal(await count(), 0);
+	await outer(false);
+	assert.equal(await count(), 2);
+});
 
-	const result = migrate(db);
-	assert.deepEqual(result, { from: 8, to: latestSchemaVersion() });
-	assert.equal(db.prepare('SELECT COUNT(*) AS n FROM tickets').get().n, 1);
-	assert.equal(db.prepare('SELECT reason FROM sanctions').get().reason, 'Spam');
-	// v1 ticket panel turned into the first panel of tickets v2
-	const panel = db.prepare('SELECT * FROM ticket_panels').get();
-	assert.equal(panel.channel_id, '610000000000000001');
-	assert.equal(JSON.parse(db.prepare('SELECT config FROM ticket_settings').get().config).maxOpen, 2);
-	assert.equal(db.prepare('SELECT status_key FROM tickets').get().status_key, 'open');
+test('named parameters ignore strings and comments', () => {
+	const compiled = compile('SELECT \'@not\', ":no" -- @nope\n FROM t WHERE a = @a AND b = ? AND c = :c');
+	assert.equal(compiled.sql, 'SELECT \'@not\', ":no" -- @nope\n FROM t WHERE a = ? AND b = ? AND c = ?');
+	assert.deepEqual(bind(compiled, [2, { a: 1, c: 3 }]), [1, 2, 3]);
+	assert.throws(() => bind(compiled, [2, { a: 1 }]), /"c"/);
+	assert.throws(() => bind(compile('SELECT ?'), [{ x: 1 }]), /JSON\.stringify/);
 });
