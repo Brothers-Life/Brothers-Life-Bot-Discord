@@ -92,8 +92,8 @@ test('point by point: one type sent elsewhere or turned off, the rest of its cat
 	await core.logs.setRoute(owner, MAIN, 'messages', 'c-main-ranks');
 	await core.logs.setRoute(owner, MAIN, 'messages:message_edit', '0');
 	executor.sent.length = 0;
-	core.events.record({ guildId: MAIN, category: 'messages', type: 'message_edit', summary: 'edit' });
-	core.events.record({ guildId: MAIN, category: 'messages', type: 'message_delete', summary: 'delete' });
+	await core.events.record({ guildId: MAIN, category: 'messages', type: 'message_edit', summary: 'edit' });
+	await core.events.record({ guildId: MAIN, category: 'messages', type: 'message_delete', summary: 'delete' });
 	await core.logs.flush();
 	assert.deepEqual(executor.sent.map(s => s.message.title), ['delete']);
 
