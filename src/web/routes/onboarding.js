@@ -61,7 +61,7 @@ export function registerOnboardingRoutes(app, { core }) {
 			throw new ForbiddenError('Il te faut une permission de configuration pour envoyer des images.');
 		}
 		const buffer = Buffer.from(request.body.data.replace(/^data:[^,]*,/, ''), 'base64');
-		const saved = uploads.save(buffer);
+		const saved = await uploads.save(buffer);
 		await core.audit.record({ actorId: actor.id, source: 'panel', action: 'uploads.add', target: saved.id, details: { size: saved.size } });
 		reply.code(201);
 		return saved;
@@ -72,7 +72,7 @@ export function registerOnboardingRoutes(app, { core }) {
 		schema: { params: { type: 'object', properties: { id: { type: 'string', pattern: '^[a-f0-9]{32}\\.(png|jpg|webp|gif)$' } }, required: ['id'] } },
 	}, async (request, reply) => {
 		const { id } = request.params;
-		const buffer = uploads.read(id);
+		const buffer = await uploads.read(id);
 		return reply.type(MIME[id.split('.').pop()]).header('Cache-Control', 'private, max-age=86400').send(buffer);
 	});
 }

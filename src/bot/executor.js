@@ -1394,6 +1394,10 @@ export function createExecutor(client) {
 			}
 		},
 
+		guildIds() {
+			return [...client.guilds.cache.keys()];
+		},
+
 		guildIcon(guildId) {
 			return client.guilds.cache.get(guildId)?.iconURL({ size: 64 }) ?? null;
 		},

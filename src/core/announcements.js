@@ -218,12 +218,12 @@ export function createAnnouncements({ db, network, audit, executor, logs, upload
 	}
 
 	// Payload and options checked together: panel images must exist, 10 at most
-	function clean(payload, options) {
+	async function clean(payload, options) {
 		const p = normalizePayload(payload, { uploads: true });
 		const o = normalizeOptions(options);
 		const refs = uploadRefs(p, o);
 		if (new Set(refs).size > MAX_IMAGES) throw new ValidationError(`${MAX_IMAGES} images envoyées au maximum par annonce.`);
-		for (const ref of refs) if (uploads && !uploads.exists(ref.slice(7))) throw new ValidationError('Une des images envoyées n’existe plus : renvoie-la.');
+		for (const ref of refs) if (uploads && !await uploads.exists(ref.slice(7))) throw new ValidationError('Une des images envoyées n’existe plus : renvoie-la.');
 		return { payload: p, options: o };
 	}
 
@@ -244,7 +244,7 @@ export function createAnnouncements({ db, network, audit, executor, logs, upload
 		const swap = (value) => {
 			if (!value || !UPLOAD.test(value)) return value;
 			const id = value.slice(7);
-			files.set(id, uploads ? uploads.file(id) : id);
+			files.set(id, id);
 			return `attachment://${id}`;
 		};
 		const f = value => (typeof value === 'string' ? fillVars(value, vars) : value);
@@ -259,7 +259,8 @@ export function createAnnouncements({ db, network, audit, executor, logs, upload
 			},
 		};
 		const options = { ...a.options, gallery: a.options.gallery.map(swap), attachments: a.options.attachments.map(swap), thread: { ...a.options.thread, name: f(a.options.thread.name) } };
-		return { payload, options, files: [...files].map(([name, attachment]) => ({ name, attachment })) };
+		const attached = await Promise.all([...files.keys()].map(async name => ({ name, attachment: uploads ? await uploads.read(name) : name })));
+		return { payload, options, files: attached };
 	}
 
 	async function deliver(id, actor) {
@@ -318,7 +319,7 @@ export function createAnnouncements({ db, network, audit, executor, logs, upload
 
 		async create(actor, { name, payload, targets, options }) {
 			requireManage(actor);
-			const c = { name: validateName(name), ...clean(payload, options), targets: normalizeTargets(targets ?? []) };
+			const c = { name: validateName(name), ...await clean(payload, options), targets: normalizeTargets(targets ?? []) };
 			if (c.targets.length) await checkTargets(actor, c.targets);
 			const id = Number((await q.insert.run({
 				name: c.name, payload: JSON.stringify(c.payload), targets: JSON.stringify(c.targets), options: JSON.stringify(c.options),
@@ -335,7 +336,7 @@ export function createAnnouncements({ db, network, audit, executor, logs, upload
 			if (!EDITABLE.has(current.status)) throw new ValidationError('Une annonce déjà envoyée ne se modifie plus : duplique-la.');
 			const c = {
 				name: name === undefined ? current.name : validateName(name),
-				...clean(payload === undefined ? current.payload : payload, options === undefined ? current.options : options),
+				...await clean(payload === undefined ? current.payload : payload, options === undefined ? current.options : options),
 				targets: targets === undefined ? current.targets : normalizeTargets(targets),
 			};
 			if (c.targets.length) await checkTargets(actor, c.targets);
@@ -426,7 +427,7 @@ export function createAnnouncements({ db, network, audit, executor, logs, upload
 
 		async saveTemplate(actor, { name, payload, options, targets }) {
 			requireManage(actor);
-			const c = { name: validateName(name), ...clean(payload, options), targets: normalizeTargets(targets ?? []) };
+			const c = { name: validateName(name), ...await clean(payload, options), targets: normalizeTargets(targets ?? []) };
 			const id = Number((await q.addTemplate.run({ name: c.name, payload: JSON.stringify(c.payload), options: JSON.stringify(c.options), targets: JSON.stringify(c.targets), createdBy: actor.id, at: now() })).lastInsertRowid);
 			await audit.record({ actorId: actor.id, source: 'panel', action: 'announcements.template', target: String(id), details: { name: c.name } });
 			return toTemplate(await q.template.get(id));

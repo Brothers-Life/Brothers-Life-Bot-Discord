@@ -152,15 +152,16 @@ export function createDms({ db, audit, executor, settings, logs, uploads = null,
 			if (thread.blocked) throw new ValidationError('Cette personne est sur la liste noire des MP.');
 			const text = String(content).trim();
 			const files = (Array.isArray(attachments) ? attachments : []).slice(0, 5);
-			for (const f of files) if (!UPLOAD.test(f) || (uploads && !uploads.exists(f.slice(7)))) throw new ValidationError('Pièce jointe invalide : renvoie l’image.');
+			for (const f of files) if (!UPLOAD.test(f) || (uploads && !await uploads.exists(f.slice(7)))) throw new ValidationError('Pièce jointe invalide : renvoie l’image.');
 			if (!text && !files.length) throw new ValidationError('Le message est vide.');
 			if (text.length > 1800) throw new ValidationError('Message trop long (1 800 caractères au maximum).');
 			const signature = signed && authorName ? authorName : (await config()).signature;
+			const attached = await Promise.all(files.map(async f => ({ name: f.slice(7), attachment: uploads ? await uploads.read(f.slice(7)) : f })));
 			let messageId;
 			try {
 				messageId = await executor.sendDirect(thread.userId, {
 					content: `${text}${text ? '\n\n' : ''}-# — ${signature}`,
-					files: files.map(f => ({ name: f.slice(7), attachment: uploads ? uploads.file(f.slice(7)) : f })),
+					files: attached,
 				});
 			}
 			catch (error) {

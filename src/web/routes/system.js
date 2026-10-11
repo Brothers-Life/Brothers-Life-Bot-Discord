@@ -1,4 +1,5 @@
 import { authenticate } from '../guard.js';
+import { sameSecret } from '../../rpc/server.js';
 
 const PERMISSION_RECHECK_MS = 30_000;
 
@@ -92,6 +93,16 @@ export function registerSystemRoutes(app, { core, runtime, consoleLog, versions 
 			details: { from: versions.current().version, restoreBackup: target.restoreBackup?.file ?? null },
 		});
 		runtime.install({ version, assetId: target.release.asset, schemaVersion: target.release.schemaVersion, restoreBackup: target.restoreBackup?.file ?? null });
+		// Split deployment: the front (and any process started later) installs the same version
+		await core.settings.set('system.release', { version, assetId: target.release.asset, at: Date.now() });
 		return { ok: true };
+	});
+
+	// The version the panel asked for, read by the front server (it has no database): internal secret only
+	app.get('/api/system/release', { config: { public: true, apiKey: false } }, async (request, reply) => {
+		if (!core.config.INTERNAL_TOKEN || !sameSecret(request.headers['x-internal-token'], core.config.INTERNAL_TOKEN)) {
+			return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Route d’API inconnue.' } });
+		}
+		return await core.settings.get('system.release', {});
 	});
 }

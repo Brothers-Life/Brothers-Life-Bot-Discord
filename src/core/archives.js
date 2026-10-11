@@ -1,5 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { definePermission } from './permissions.js';
 import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
 import { inlineImages } from './transcript.js';
@@ -66,8 +64,8 @@ ${rows || '<p style="padding:20px">Aucun message.</p>'}
 }
 
 // Channel exports: the messages of a channel (or of a period) saved as a readable HTML page
-export function createArchives({ db, network, audit, executor, dataDir, fetchImpl = fetch, now = Date.now }) {
-	const dir = path.join(dataDir, 'archives');
+export function createArchives({ db, network, audit, executor, files, fetchImpl = fetch, now = Date.now }) {
+	const fileId = archive => `archive:${archive.file}`;
 	const q = {
 		insert: db.prepare(`
 			INSERT INTO channel_archives (guild_id, channel_id, channel_name, created_by, message_count, first_at, last_at, file, size, created_at)
@@ -91,9 +89,11 @@ export function createArchives({ db, network, audit, executor, dataDir, fetchImp
 			return archive;
 		},
 
-		// Full path of the HTML file (to download it)
-		pathOf(archive) {
-			return path.join(dir, path.basename(archive.file));
+		// The HTML page (Buffer), to download it
+		async content(archive) {
+			const file = await files.get(fileId(archive));
+			if (!file) throw new NotFoundError('Le fichier de cette archive n’existe plus.');
+			return file.data;
 		},
 
 		// limit: last N messages; from/to: only that period
@@ -108,8 +108,7 @@ export function createArchives({ db, network, audit, executor, dataDir, fetchImp
 			const at = now();
 			const html = renderArchive({ guildName: guild.name, channelName, messages, createdAt: at, createdBy: actor.name ?? actor.id });
 			const file = `${guildId}-${channelId}-${at}.html`;
-			fs.mkdirSync(dir, { recursive: true });
-			fs.writeFileSync(path.join(dir, file), html);
+			await files.put(fileId({ file }), { kind: 'archive', mime: 'text/html', data: html, compress: true });
 			const id = Number((await q.insert.run({
 				guildId, channelId, channelName, createdBy: actor.id, count: messages.length,
 				firstAt: messages[0]?.createdAt ?? null, lastAt: messages.at(-1)?.createdAt ?? null, file, size: Buffer.byteLength(html), at,
@@ -121,7 +120,7 @@ export function createArchives({ db, network, audit, executor, dataDir, fetchImp
 		async remove(actor, id) {
 			if (!actor.can('archives.manage')) throw new ForbiddenError('Permission manquante : archives.manage');
 			const archive = await service.get(id);
-			fs.rmSync(service.pathOf(archive), { force: true });
+			await files.remove(fileId(archive));
 			await q.remove.run(id);
 			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'archives.delete', guildId: archive.guildId, target: archive.channelId, details: { salon: `#${archive.channelName}` } });
 		},

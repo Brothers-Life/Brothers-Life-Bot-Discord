@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { withNetwork, ALICE, BOB, MAIN, OTHER } from '../helpers.js';
@@ -174,7 +173,7 @@ test('HTML transcript: Discord-like page, internal notes only in the panel copy'
 	const logged = executor.sent.find(s => s.channelId === 'c-tickets').message.files[0].content;
 	const member = executor.dms.at(-1)[2][0].content;
 	const saved = await core.tickets.transcriptFile(ticket.id);
-	const staff = fs.readFileSync(saved.file, 'utf8');
+	const staff = saved.html.toString('utf8');
 	assert.doesNotMatch(logged, /Note secrète du staff/, 'Discord copies never carry the internal notes');
 	assert.match(staff, /^<!doctype html>/);
 	assert.match(staff, /Ticket #0001/);
@@ -183,7 +182,7 @@ test('HTML transcript: Discord-like page, internal notes only in the panel copy'
 	assert.match(staff, /Note secrète du staff/);
 	assert.doesNotMatch(member, /Note secrète du staff/);
 	assert.match(member, /Réglé/);
-	assert.ok(saved.file.endsWith(`ticket-${ticket.id}.html`));
+	assert.equal(saved.ticket.id, ticket.id);
 });
 
 test('the whole ticket system is copied to another server, without its channels and roles', async () => {

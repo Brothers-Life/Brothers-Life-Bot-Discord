@@ -1,5 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { ValidationError } from '../../core/errors.js';
 import { FILTERS, LOOPS, SEARCH_PLATFORMS, SPEEDS } from '../../core/music/index.js';
 import { resolveNames, snowflake } from './helpers.js';
@@ -10,8 +8,6 @@ const platformSchema = { type: 'string', enum: Object.keys(SEARCH_PLATFORMS) };
 
 export function registerMusicRoutes(app, { core }) {
 	const { music, network, executor, audit } = core;
-	// Cookies of a YouTube account (Netscape format) read by yt-dlp: servers in datacenters are often asked to sign in
-	const cookiesFile = path.join(core.config.DATA_DIR, 'youtube-cookies.txt');
 	const ctxOf = (request) => ({ actorId: request.actor.id, source: 'panel', can: request.actor.can });
 	const withNames = async (state) => {
 		if (!state.connected) return state;
@@ -34,7 +30,7 @@ export function registerMusicRoutes(app, { core }) {
 			spotify: manage ? await music.spotify() : { clientId: '', hasSecret: (await music.spotify()).hasSecret },
 			filters: FILTERS,
 			speeds: SPEEDS,
-			cookies: fs.existsSync(cookiesFile),
+			cookies: Boolean(await executor.hasYoutubeCookies?.()),
 		};
 	});
 
@@ -108,8 +104,8 @@ export function registerMusicRoutes(app, { core }) {
 		if (!lines.length || !lines.some(l => l.split('\t').length >= 7 && /youtube\.com/.test(l))) {
 			throw new ValidationError('Ce n’est pas un fichier de cookies YouTube (format Netscape, « cookies.txt »).');
 		}
-		fs.mkdirSync(path.dirname(cookiesFile), { recursive: true });
-		fs.writeFileSync(cookiesFile, content, { mode: 0o600 });
+		// Cookies of a YouTube account read by yt-dlp (servers in datacenters are often asked to sign in): kept by the bot
+		await executor.setYoutubeCookies(content);
 		await audit.record({ actorId: request.actor.id, source: 'panel', action: 'music.config', details: { cookies: 'ajoutés' } });
 		return { ok: true };
 	});
@@ -123,7 +119,7 @@ export function registerMusicRoutes(app, { core }) {
 	app.delete('/api/music/spotify', { config: { permission: 'music.manage' } }, async (request) => music.setSpotify(request.actor, null));
 
 	app.delete('/api/music/cookies', { config: { permission: 'music.manage' } }, async (request) => {
-		fs.rmSync(cookiesFile, { force: true });
+		await executor.setYoutubeCookies(null);
 		await audit.record({ actorId: request.actor.id, source: 'panel', action: 'music.config', details: { cookies: 'retirés' } });
 		return { ok: true };
 	});

@@ -1,6 +1,5 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import { withNetwork, ALICE, BOB, MAIN } from '../helpers.js';
 import { ForbiddenError, ValidationError } from '../../src/core/errors.js';
 import { inWindow, nextChange, normalizeSchedule, stateAt } from '../../src/core/channelSchedules.js';
@@ -96,13 +95,13 @@ test('archives: the channel saved as an HTML page (escaped), downloadable, delet
 	]);
 	const archive = await core.archives.create({ ...owner, name: 'Pedro' }, { guildId: MAIN, channelId: '610000000000000900', limit: 50 });
 	assert.deepEqual([archive.channelName, archive.messageCount], ['general', 2]);
-	const html = fs.readFileSync(core.archives.pathOf(archive), 'utf8');
+	const html = (await core.archives.content(archive)).toString('utf8');
 	assert.match(html, /<strong>tout le monde<\/strong>/);
 	assert.ok(!html.includes('<script>alert'), 'escaped');
 	assert.match(html, /doc\.pdf/);
 	assert.match(html, /archivé le .* par Pedro/);
 	await core.archives.remove(owner, archive.id);
-	assert.equal(fs.existsSync(core.archives.pathOf(archive)), false);
+	assert.equal(await core.files.exists(`archive:${archive.file}`), false);
 	assert.match(renderArchive({ guildName: 'G', channelName: 'c', messages: [], createdAt: Date.now(), createdBy: 'x' }), /Aucun message/);
 });
 

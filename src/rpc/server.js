@@ -111,7 +111,9 @@ export function createRpcServer({ token, host = '0.0.0.0', port = 3002, handlers
 		close() {
 			for (const res of clients) res.end();
 			clients.clear();
-			return new Promise(resolve => server.close(() => resolve()));
+			const closed = new Promise(resolve => server.close(() => resolve()));
+			server.closeAllConnections();
+			return closed;
 		},
 	};
 }

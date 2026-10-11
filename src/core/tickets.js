@@ -1,5 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { definePermission } from './permissions.js';
 import { inlineImages, renderTicketTranscript, transcriptText } from './transcript.js';
 import { assertFivemAllowed, createVariables, fivemKeysIn } from './variables.js';
@@ -35,8 +33,8 @@ const DEFAULT_PANEL_PAYLOAD = {
 };
 
 // variables: shared template variables (member, server, FiveM account), see variables.js
-// dataDir: where the HTML transcripts are kept for the panel (none in some tests)
-export function createTickets({ db, network, ranks, audit, executor, logs, logger = console, now = Date.now, dataDir = null, fetchImpl = fetch, variables = createVariables({ executor, logger, now }) }) {
+// files: where the HTML transcripts are kept for the panel (none in some tests)
+export function createTickets({ db, network, ranks, audit, executor, logs, logger = console, now = Date.now, files = null, fetchImpl = fetch, variables = createVariables({ executor, logger, now }) }) {
 	logs.registerCategory('tickets', 'Tickets (ouverture, fermeture, transcripts)');
 
 	const q = {
@@ -362,11 +360,9 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 		};
 	}
 
-	function transcriptPath(ticketId) {
-		return dataDir ? path.join(dataDir, 'transcripts', `ticket-${Number(ticketId)}.html`) : null;
-	}
+	const transcriptId = ticketId => `transcript:ticket-${Number(ticketId)}`;
 
-	// Staff page (with the internal notes of the panel, kept on disk for the panel) and member page
+	// Staff page (with the internal notes of the panel, kept in the database for the panel) and member page
 	async function transcriptPages(ticket, category, history, { closerId, reason, closedAt }) {
 		await inlineImages(history.messages, { fetchImpl, maxTotal: TRANSCRIPT_IMAGES_MAX });
 		const nameOf = async id => (id ? (await executor.getUser(id).catch(() => null)) : null);
@@ -381,11 +377,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			closedAt, reason, messages: history.messages, mentions: history.mentions ?? {}, notes,
 		};
 		const pages = { staff: renderTicketTranscript({ ...base, audience: 'staff' }), member: renderTicketTranscript({ ...base, audience: 'member' }) };
-		const file = transcriptPath(ticket.id);
-		if (file) {
-			fs.mkdirSync(path.dirname(file), { recursive: true });
-			fs.writeFileSync(file, pages.staff);
-		}
+		if (files) await files.put(transcriptId(ticket.id), { kind: 'transcript', mime: 'text/html', data: pages.staff, compress: true });
 		return pages;
 	}
 
@@ -1126,11 +1118,11 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			return saved;
 		},
 
-		// Path of the staff HTML transcript, when it exists
+		// The staff HTML transcript ({ ticket, html: Buffer }), when it exists
 		async transcriptFile(ticketId) {
 			const ticket = await getTicket(ticketId);
-			const file = transcriptPath(ticket.id);
-			return file && fs.existsSync(file) ? { ticket, file } : null;
+			const file = files ? await files.get(transcriptId(ticket.id)) : null;
+			return file ? { ticket, html: file.data } : null;
 		},
 
 		async messages(ticketId) {

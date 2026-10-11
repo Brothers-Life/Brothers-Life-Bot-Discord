@@ -50,7 +50,7 @@ test('options: buttons, reactions, gallery and attachment limits', () => {
 
 test('panel images become attachments, variables are filled, send options and auto-delete', async () => {
 	const { core, owner, executor, announcements, advance } = await setup();
-	const { id } = core.uploads.save(PNG);
+	const { id } = await core.uploads.save(PNG);
 	await assert.rejects(announcements.create(owner, { name: 'x', payload: { content: 'x', embed: { imageUrl: 'upload:0123456789abcdef0123456789abcdef.png' } } }), /n’existe plus/);
 	const a = await announcements.create(owner, {
 		name: 'Soirée', targets: [target],

@@ -100,11 +100,11 @@ test('cards: layers validated, uploads by content, rendered with an uploaded bac
 
 	// A 1x1 PNG saved as an upload, then used as the background
 	const png = await renderCard({ width: 200, height: 100, background: { type: 'color', color: '#ff0000' }, layers: [] }, {}, { loadSource: async () => null });
-	const upload = core.uploads.save(png);
+	const upload = await core.uploads.save(png);
 	assert.match(upload.id, /^[a-f0-9]{32}\.png$/);
-	assert.equal(core.uploads.save(png).id, upload.id, 'same content, same id');
-	assert.throws(() => core.uploads.save(Buffer.from('<svg></svg>')), /Format non accepté/);
-	assert.throws(() => core.uploads.file('../bot.db'), /introuvable/);
+	assert.equal((await core.uploads.save(png)).id, upload.id, 'same content, same id');
+	await assert.rejects(core.uploads.save(Buffer.from('<svg></svg>')), /Format non accepté/);
+	await assert.rejects(core.uploads.read('../bot.db'), /introuvable/);
 	const preview = await core.onboarding.previewCard(MAIN, { width: 400, height: 200, background: { type: 'image', image: `upload:${upload.id}` }, layers: [{ type: 'avatar', x: 200, y: 100, size: 80 }] });
 	assert.ok(preview.length > 100);
 });

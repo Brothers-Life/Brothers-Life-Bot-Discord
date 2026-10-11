@@ -44,6 +44,14 @@ export function createBot({ dataDir = path.join(__dirname, '..', '..', 'data') }
 	const ytdlp = createYtDlp({ dataDir, logger });
 	executor.music = createMusicBackend(client, { ytdlp, ffmpeg: createFfmpeg({ dataDir, logger }), logger });
 	executor.musicResolver = createMusicResolver({ ytdlp });
+	// Cookies of a YouTube account (Netscape format) read by yt-dlp: kept next to it, set from the panel
+	const cookiesFile = path.join(dataDir, 'youtube-cookies.txt');
+	executor.hasYoutubeCookies = async () => fs.existsSync(cookiesFile);
+	executor.setYoutubeCookies = async (content) => {
+		if (content === null) return fs.rmSync(cookiesFile, { force: true });
+		fs.mkdirSync(path.dirname(cookiesFile), { recursive: true });
+		fs.writeFileSync(cookiesFile, content, { mode: 0o600 });
+	};
 
 	return {
 		client,

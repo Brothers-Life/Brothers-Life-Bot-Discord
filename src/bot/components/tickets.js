@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { AppError, ForbiddenError } from '../../core/errors.js';
 import { showFormModal, readModal, fromEphemeralMessage } from '../forms.js';
@@ -147,10 +146,10 @@ export async function execute(interaction) {
 			}
 			// The web page of the conversation (Discord look) when it was saved, else the plain text
 			const html = await tickets.transcriptFile(id);
-			const size = html ? fs.statSync(html.file).size : 0;
+			const size = html ? html.html.length : 0;
 			if (html && size <= HTML_TRANSCRIPT_MAX) {
 				const name = `ticket-${String(html.ticket.number).padStart(4, '0')}.html`;
-				return await interaction.reply({ content: 'Conversation du ticket : ouvre le fichier dans ton navigateur.', files: [new AttachmentBuilder(html.file, { name })], flags: MessageFlags.Ephemeral });
+				return await interaction.reply({ content: 'Conversation du ticket : ouvre le fichier dans ton navigateur.', files: [new AttachmentBuilder(html.html, { name })], flags: MessageFlags.Ephemeral });
 			}
 			const ticket = await tickets.get(id, { withTranscript: true });
 			const file = new AttachmentBuilder(Buffer.from(ticket.transcript ?? '(vide)', 'utf8'), { name: `ticket-${ticket.number}.txt` });

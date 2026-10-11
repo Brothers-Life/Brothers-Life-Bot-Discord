@@ -165,6 +165,15 @@ export function createNetwork({ db, audit, now = Date.now }) {
 			return main;
 		},
 
+		// A change made by another process (seen through its audit entry): the listeners here react to it too
+		async replay(entry) {
+			const guild = entry.guildId ? await this.find(entry.guildId) : null;
+			if (!guild) return;
+			if (entry.action === 'network.add' && guild.status === 'active') emit('activated', guild);
+			else if (entry.action === 'network.remove') emit('removed', guild);
+			else if (entry.action === 'network.main' && guild.isMain) emit('mainChanged', { main: guild, previous: entry.details?.previous ?? null });
+		},
+
 		on(event, listener) {
 			listeners[event].add(listener);
 			return () => listeners[event].delete(listener);

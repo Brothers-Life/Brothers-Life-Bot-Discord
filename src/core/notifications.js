@@ -162,6 +162,18 @@ export function createNotifications({ db, now = Date.now }) {
 			return service.prefs(actor);
 		},
 
+		// A notification pushed by another process (the bot, seen from the API): only shown live, already saved
+		relay(notification) {
+			for (const listener of listeners) {
+				try {
+					listener(notification);
+				}
+				catch {
+					// Same as push: a closed socket breaks nothing
+				}
+			}
+		},
+
 		// Live feed (panel WebSocket): listener(notification), filtered per user by the caller
 		subscribe(listener) {
 			listeners.add(listener);

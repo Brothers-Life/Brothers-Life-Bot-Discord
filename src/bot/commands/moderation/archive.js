@@ -1,5 +1,4 @@
 import { AttachmentBuilder, ChannelType } from 'discord.js';
-import fs from 'node:fs';
 import { moderationCommand, runModeration } from '../../moderation.js';
 
 export const data = moderationCommand('archive', 'Archiver un salon en page HTML (téléchargeable aussi depuis le panel)')
@@ -15,12 +14,11 @@ export async function execute(interaction) {
 			channelId: channel.id,
 			limit: interaction.options.getInteger('messages') ?? 1000,
 		});
-		const path = archives.pathOf(archive);
 		// Discord refuses attachments over 10 MB without boosts: the panel keeps the file anyway
 		const small = archive.size < 9.5 * 1024 * 1024;
 		return {
 			content: `🗄️ #${archive.channelName} archivé : ${archive.messageCount} message${archive.messageCount > 1 ? 's' : ''}.${small ? '' : ' Fichier trop lourd pour Discord : télécharge-le depuis le panel (page Archives).'}`,
-			files: small ? [new AttachmentBuilder(fs.readFileSync(path), { name: `archive-${archive.channelName}.html` })] : [],
+			files: small ? [new AttachmentBuilder(await archives.content(archive), { name: `archive-${archive.channelName}.html` })] : [],
 		};
 	});
 }

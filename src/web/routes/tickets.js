@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import { NotFoundError } from '../../core/errors.js';
 import { authenticate } from '../guard.js';
 import { resolveNames, snowflake } from './helpers.js';
@@ -116,7 +115,7 @@ export function registerTicketRoutes(app, { core }) {
 		const name = `ticket-${String(found.ticket.number).padStart(4, '0')}.html`;
 		return reply.type('text/html; charset=utf-8')
 			.header('Content-Disposition', `${request.query.download ? 'attachment' : 'inline'}; filename="${name}"`)
-			.send(fs.createReadStream(found.file));
+			.send(found.html);
 	});
 
 	const handle = { permission: 'tickets.handle' };

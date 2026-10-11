@@ -86,15 +86,15 @@ export function createRpEvents({ db, network, audit, executor, uploads = null, l
 		if (!actor.can(permission)) throw new ForbiddenError(`Permission manquante : ${permission}`);
 	}
 
-	function imageFiles(e) {
+	async function imageFiles(e) {
 		if (!e.image || !UPLOAD.test(e.image)) return { imageUrl: e.image, files: [] };
 		const id = e.image.slice(7);
-		return { imageUrl: `attachment://${id}`, files: uploads ? [{ name: id, attachment: uploads.file(id) }] : [] };
+		return { imageUrl: `attachment://${id}`, files: uploads ? [{ name: id, attachment: await uploads.read(id) }] : [] };
 	}
 
 	// The message of the event in each channel, created or kept up to date
 	async function refreshMessages(e, { create = false } = {}) {
-		const { imageUrl, files } = imageFiles(e);
+		const { imageUrl, files } = await imageFiles(e);
 		const view = { ...e, imageUrl };
 		const known = new Map(e.messages.map(m => [m.channelId, m.messageId]));
 		const messages = [];
@@ -156,7 +156,7 @@ export function createRpEvents({ db, network, audit, executor, uploads = null, l
 			const c = normalizeEvent(input, { now: now() });
 			if (!c.targets.length) throw new ValidationError('Choisis au moins un salon où annoncer l’événement.');
 			for (const t of c.targets) if ((await network.find(t.guildId))?.status !== 'active') throw new ValidationError('Un des serveurs choisis ne fait pas partie du réseau.');
-			if (c.image && UPLOAD.test(c.image) && uploads && !uploads.exists(c.image.slice(7))) throw new ValidationError('L’image envoyée n’existe plus : renvoie-la.');
+			if (c.image && UPLOAD.test(c.image) && uploads && !await uploads.exists(c.image.slice(7))) throw new ValidationError('L’image envoyée n’existe plus : renvoie-la.');
 			const row = { ...c, allowMaybe: c.allowMaybe ? 1 : 0, targets: JSON.stringify(c.targets), roles: JSON.stringify(c.roles), reminders: JSON.stringify(c.reminders), by: actor.id, at: now() };
 			let id = current?.id;
 			if (current) await q.update.run({ ...row, id });

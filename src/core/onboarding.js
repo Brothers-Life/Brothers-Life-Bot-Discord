@@ -221,7 +221,7 @@ export function createOnboarding({ db, network, audit, executor, uploads, logger
 			const config = normalizeOnboarding({ ...input, rules: { ...input.rules, messageId: current.rules.messageId } });
 			for (const [key, value] of [['welcome', config.welcome.card.design], ['leave', config.leave.card.design], ['boost', config.boost.card.design]]) {
 				for (const source of [value.background.image, ...value.layers.map(l => l.src)]) {
-					if (source?.startsWith('upload:') && !uploads.exists(source.slice(7))) throw new ValidationError(`Carte ${key} : une image envoyée n’existe plus, renvoie-la.`);
+					if (source?.startsWith('upload:') && !await uploads.exists(source.slice(7))) throw new ValidationError(`Carte ${key} : une image envoyée n’existe plus, renvoie-la.`);
 				}
 			}
 			await q.upsert.run(guildId, JSON.stringify(config), now(), actor.id);

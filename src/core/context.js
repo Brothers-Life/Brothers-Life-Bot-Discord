@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { createSettings } from '../db/index.js';
 import { createAudit } from './audit.js';
 import { createNetwork } from './network.js';
@@ -31,6 +30,7 @@ import { createAnnouncements } from './announcements.js';
 import { createTickets } from './tickets.js';
 import { createVariables } from './variables.js';
 import { createUploads } from './uploads.js';
+import { createFiles } from './files.js';
 import { createOnboarding } from './onboarding.js';
 import { createAntiraid } from './antiraid.js';
 import { createStats } from './stats.js';
@@ -66,9 +66,19 @@ import { auditTypes, describeAuditEntry } from './describe.js';
 
 const SELF_LOGGED_ACTIONS = new Set(['tickets.close']);
 
+// Services holding live state of the Discord bot (players, caches, locks, timers): when the API runs in its own
+// process, calls to them are carried out by the bot process (see src/api.js). The others work on the database alone.
+export const BOT_SERVICES = new Set([
+	'music', 'tickets', 'dms', 'templates', 'backups', 'antiraid', 'antinuke', 'automod', 'channelFeatures', 'onboarding',
+	'verification', 'customCommands', 'voiceRooms', 'fivem', 'fivemEvents', 'giveaways', 'polls', 'feeds', 'streams', 'tebex',
+	'moderation', 'channelSchedules', 'meetings',
+]);
+
 // Wires every core service together. `executor` is the only door to Discord:
-// the real one lives in src/bot/executor.js, tests use a fake.
-export function createCore({ db, config, executor, logger = console, fetchImpl = fetch }) {
+// the real one lives in src/bot/executor.js, tests use a fake, the API process a remote one.
+// `remote(name, local)`, in the API process, gives the stand-in of a service of BOT_SERVICES living in the bot.
+export function createCore({ db, config, executor, logger = console, fetchImpl = fetch, remote = null }) {
+	const shared = (name, service) => (remote && BOT_SERVICES.has(name) ? remote(name, service) : service);
 	const settings = createSettings(db);
 	const audit = createAudit({ db });
 	const network = createNetwork({ db, audit });
@@ -93,11 +103,12 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const members = createMembers({ db, network, ranks, sanctions, audit, executor });
 	const moderation = createModeration({ db, network, ranks, audit, executor, settings, members, logs, logger });
 	const roleImport = createRoleImport({ db, network, ranks, staffSync, executor, audit });
-	const uploads = createUploads({ dir: path.join(config.DATA_DIR, 'uploads') });
+	const files = createFiles({ db });
+	const uploads = createUploads({ files });
 	// Template variables shared by every message of the bot; {fivem.*} come from fivemData, created further down
 	const variables = createVariables({ executor, logger, fivemVars: discordId => fivemData.discordVars(discordId), fivemEnabled: async () => (await fivemData.settingsView()).enabled });
 	const announcements = createAnnouncements({ db, network, audit, executor, logs, uploads, variables, logger });
-	const tickets = createTickets({ db, network, ranks, audit, executor, logs, variables, logger, dataDir: config.DATA_DIR, fetchImpl });
+	const tickets = createTickets({ db, network, ranks, audit, executor, logs, variables, logger, files, fetchImpl });
 	const onboarding = createOnboarding({ db, network, audit, executor, uploads, variables, logger, fetchImpl });
 	logs.registerCategory('onboarding', 'Accueil (règlement accepté, boosts, réglages)');
 	const antiraid = createAntiraid({ db, network, audit, executor, sanctions, logs, logger });
@@ -118,7 +129,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const streams = createStreams({ db, network, audit, executor, settings, logs, variables, fetchImpl, logger });
 	const feeds = createFeeds({ db, network, audit, executor, logs, variables, fetchImpl, logger });
 	const fivem = createFivem({ db, network, audit, executor, settings, logs, fetchImpl, logger });
-	stats.addVariables(async () => fivem.variables());
+	stats.addVariables(async () => core.fivem.variables());
 	const fivemEvents = createFivemEvents({ db, settings, audit, logs, executor, network, variables, fivem, logger });
 	const memberInsights = createMemberInsights({ db, stats, events });
 	const channelFeatures = createChannelFeatures({ db, network, audit, executor, logger });
@@ -129,7 +140,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const appeals = createAppeals({ db, audit, settings, sanctions, executor, logs, logger });
 	const channelSchedules = createChannelSchedules({ db, network, audit, executor, logger });
 	logs.registerCategory('schedules', 'Horaires des salons (ouverture, fermeture)');
-	const archives = createArchives({ db, network, audit, executor, dataDir: config.DATA_DIR });
+	const archives = createArchives({ db, network, audit, executor, files });
 	logs.registerCategory('archives', 'Archives de salons');
 	const meetings = createMeetings({ db, network, ranks, audit, executor, logs, logger });
 	// The crossed FiveM stats compare play time with the Discord activity the bot records
@@ -176,36 +187,51 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 
 	// Any rank change can move staff roles: resync everybody a few seconds later (changes often come in bursts)
 	let resync = null;
-	audit.onRecord((entry) => {
-		if (!entry.action.startsWith('ranks.') && entry.action !== 'staff_sync.links' && entry.action !== 'network.main') return;
+	const scheduleResync = () => {
 		clearTimeout(resync);
 		resync = setTimeout(() => staffSync.syncAll().catch(error => logger.error('Staff sync failed:', error)), 5000);
 		resync.unref?.();
-	});
-	network.on('activated', () => {
-		clearTimeout(resync);
-		resync = setTimeout(() => staffSync.syncAll().catch(error => logger.error('Staff sync failed:', error)), 5000);
-		resync.unref?.();
-	});
-
+	};
+	const reactToAudit = (entry) => {
+		if (entry.action.startsWith('ranks.') || entry.action === 'staff_sync.links' || entry.action === 'network.main') scheduleResync();
+	};
 	// A server joining the network gets the network bans and hands over its own ban list
-	network.on('activated', (guild) => {
+	const onActivated = (guild) => {
+		scheduleResync();
 		sanctions.syncGuild(guild.id).catch(error => logger.error(`Ban sync failed on ${guild.name}:`, error));
-	});
+	};
+	// In the API process these reactions are left to the bot, which hears of the API's changes (remoteAudit)
+	if (!remote) {
+		audit.onRecord(reactToAudit);
+		network.on('activated', onActivated);
+	}
 
-	const core = { db, config, executor, variables, settings, audit, network, ranks, logs, sessions, apiKeys, sanctions, sanctionTemplates, music, memberInsights, channelFeatures, verification, embedBuilder, appeals, channelSchedules, archives, meetings, fivemData, fivemRoles, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents, antinuke, fivemEvents, feeds, tebex };
+	// An audit entry recorded by the other process (bot or API): cached servers and ranks are refreshed,
+	// and the bot reacts as if the change had been made here (staff resync, new server, main server…)
+	async function remoteAudit(entry) {
+		if (!/^(network|ranks|staff_sync|members)\./.test(entry?.action ?? '')) return;
+		network.invalidate();
+		ranks.invalidate();
+		if (remote) return;
+		reactToAudit(entry);
+		await network.replay(entry);
+	}
+
+	const core = { db, config, executor, files, variables, settings, audit, network, ranks, logs, sessions, apiKeys, sanctions, sanctionTemplates, music, memberInsights, channelFeatures, verification, embedBuilder, appeals, channelSchedules, archives, meetings, fivemData, fivemRoles, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents, antinuke, fivemEvents, feeds, tebex };
+	for (const name of BOT_SERVICES) core[name] = shared(name, core[name]);
+	core.remoteAudit = remoteAudit;
 
 	// Panel notification center: other features call core.notifications.push({ permission, title, body, url, guildId })
 	core.notifications = createNotifications({ db });
 	attachNotificationSources({ notifications: core.notifications, audit, tickets, network, executor, logger });
 	// Public page (no login); the maintenance block shows only when a fivemEvents service exists
-	core.publicPage = createPublicPage({ settings, audit, network, ranks, executor, fivem, rpEvents, recruitment, logger, maintenance: () => core.fivemEvents?.publicState?.() ?? null });
+	core.publicPage = createPublicPage({ settings, audit, network, ranks, executor, fivem: core.fivem, rpEvents, recruitment, logger, maintenance: () => core.fivemEvents?.publicState?.() ?? null });
 	logs.registerCategory('publicpage', 'Page publique (réglages)', auditTypes().publicpage);
 
 	// What the services load from the database before working (open tickets, raids in progress…).
 	// `worker`: the process running the Discord bot also repairs what a restart cut (announcements being sent…).
 	core.init = async ({ worker = false } = {}) => {
-		for (const service of [tickets, antiraid, fivemEvents]) await service.init();
+		if (!remote) for (const service of [tickets, antiraid, fivemEvents]) await service.init();
 		if (worker) for (const service of [templates, announcements]) await service.recover();
 	};
 	return core;

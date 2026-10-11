@@ -1,11 +1,34 @@
 import logger from './logger.js';
 import { env, missingDatabaseConfig } from './config.js';
 
-// Returns false when the bot must not start. No process.exit() here: exiting while
+// Returns false when the process must not start. No process.exit() here: exiting while
 // fetch is still closing its socket crashes Node on Windows (libuv assertion).
-export async function startupChecks(config) {
+// role: 'all' (bot and panel in one process), 'bot' or 'api' (split deployment)
+export async function startupChecks(config, { role = 'all' } = {}) {
 	const prefix = 'STARTUP CHECKS | ';
-	logger.info(prefix + 'Starting bot checks...');
+	logger.info(prefix + `Starting ${role === 'api' ? 'API' : 'bot'} checks...`);
+
+	if (role !== 'all' && !config.INTERNAL_TOKEN) {
+		logger.error(prefix + 'INTERNAL_TOKEN is missing: the bot and the API share it to talk to each other (32 characters or more, the same on both).');
+		return false;
+	}
+	if (role === 'api' && !config.BOT_URL) {
+		logger.error(prefix + 'BOT_URL is missing: the API needs the address of the bot\'s internal link (e.g. http://bot:3002).');
+		return false;
+	}
+
+	const missingDb = missingDatabaseConfig(config);
+	if (missingDb.length) {
+		logger.error(prefix + `Database settings missing: set DATABASE_URL (mysql://user:password@host:3306/database) or ${missingDb.join(', ')} (.env file or environment variables)!`);
+		return false;
+	}
+
+	// The API never connects to Discord as the bot: no token needed there
+	if (role === 'api') {
+		if (!config.CLIENT_SECRET || !config.APP_ID) logger.warn(prefix + 'CLIENT_SECRET or APP_ID is missing: nobody will be able to log in to the panel.');
+		logger.info(prefix + 'All startup checks passed...');
+		return true;
+	}
 
 	if (!config.TOKEN) {
 		logger.error(prefix + 'TOKEN is missing (.env file or environment variable)!');
@@ -16,13 +39,7 @@ export async function startupChecks(config) {
 		return false;
 	}
 
-	const missingDb = missingDatabaseConfig(config);
-	if (missingDb.length) {
-		logger.error(prefix + `Database settings missing: set DATABASE_URL (mysql://user:password@host:3306/database) or ${missingDb.join(', ')} (.env file or environment variables)!`);
-		return false;
-	}
-
-	if (!config.CLIENT_SECRET) {
+	if (role === 'all' && !config.CLIENT_SECRET) {
 		logger.warn(prefix + 'CLIENT_SECRET is missing: nobody will be able to log in to the panel.');
 	}
 

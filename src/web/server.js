@@ -7,6 +7,7 @@ import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
 import fastifyStatic from '@fastify/static';
 import { getTlsOptions, ensureSelfSigned } from './tls.js';
+import { SECURITY_HEADERS } from './headers.js';
 import { errorHandler, sendError } from './errors.js';
 import { registerGuard, isApiRoute } from './guard.js';
 import { registerAuthRoutes } from './auth.js';
@@ -52,32 +53,22 @@ import { registerNotificationRoutes } from './routes/notifications.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_STATIC_DIR = path.resolve(__dirname, '..', '..', 'web', 'dist');
 
-const SECURITY_HEADERS = {
-	'X-Frame-Options': 'DENY',
-	'X-Content-Type-Options': 'nosniff',
-	'Referrer-Policy': 'same-origin',
-	'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-	'Content-Security-Policy': [
-		'default-src \'self\'',
-		// Any https image (announcement previews), blob: for the card previews rendered by the server
-		'img-src \'self\' data: blob: https:',
-		'style-src \'self\' \'unsafe-inline\'',
-		'font-src \'self\' data:',
-		'connect-src \'self\'',
-		// Music page: the clip of the song being played
-		'frame-src https://www.youtube-nocookie.com',
-		'frame-ancestors \'none\'',
-		'base-uri \'self\'',
-		'form-action \'self\'',
-	].join('; '),
-};
+
+// TRUST_PROXY: "true", a hop count, or addresses/ranges separated by commas
+export function trustProxyOf(value) {
+	if (!value || value === 'false') return false;
+	if (value === 'true') return true;
+	if (/^\d+$/.test(value)) return Number(value);
+	return value.split(',').map(v => v.trim()).filter(Boolean);
+}
 
 export async function createWebServer({ config, core, runtime, consoleLog, versions, logger, fetchImpl = fetch, staticDir = DEFAULT_STATIC_DIR, tls, onRoutes }) {
 	const https = tls === undefined ? await getTlsOptions(config, logger) : tls;
 	const app = Fastify({
 		https: https ?? undefined,
 		logger: false,
-		trustProxy: false,
+		// Behind the front (split deployment) or another reverse proxy: the client address comes from X-Forwarded-For
+		trustProxy: trustProxyOf(config.TRUST_PROXY),
 		bodyLimit: 256 * 1024,
 	});
 
@@ -141,8 +132,10 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	registerApiRoutes(app, { core, runtime, routes });
 	onRoutes?.(routes);
 
-	const hasPanel = fs.existsSync(path.join(staticDir, 'index.html'));
+	// Split deployment: the front serves the panel's files (SERVE_PANEL=false), the API only answers /api
+	const hasPanel = config.SERVE_PANEL !== false && fs.existsSync(path.join(staticDir, 'index.html'));
 	const sendPanel = (reply) => {
+		if (config.SERVE_PANEL === false) return reply.code(404).type('text/plain').send(`This is the API of the panel. Open the panel at ${config.WEB_PUBLIC_URL}`);
 		if (!hasPanel) return reply.type('text/plain').send('Panel not built: run "npm run build" in web/ (or use a release).');
 		return reply.type('text/html').header('Cache-Control', 'no-cache').sendFile('index.html');
 	};

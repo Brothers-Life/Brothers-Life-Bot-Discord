@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import { resolveNames, snowflake } from './helpers.js';
 
 const idParam = { type: 'object', properties: { id: { type: 'integer' } }, required: ['id'] };
@@ -57,7 +56,7 @@ export function registerModerationToolRoutes(app, { core }) {
 		const name = `archive-${archive.channelName}-${new Date(archive.createdAt).toISOString().slice(0, 10)}.html`.replace(/[^\w.-]/g, '_');
 		return reply.type('text/html; charset=utf-8')
 			.header('Content-Disposition', `${request.query.download ? 'attachment' : 'inline'}; filename="${name}"`)
-			.send(fs.createReadStream(await archives.pathOf(archive)));
+			.send(await archives.content(archive));
 	});
 	app.delete('/api/archives/:id', { config: { permission: 'archives.manage' }, schema: { params: idParam } }, async (request) => {
 		await archives.remove(request.actor, request.params.id);

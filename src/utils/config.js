@@ -16,8 +16,12 @@ export class ConfigError extends Error {
 const WEB_MODES = ['http', 'https-selfsigned', 'https-custom'];
 const SNOWFLAKE = /^\d{17,20}$/;
 
-// Pure: turns raw environment variables into a validated config object
-export function parseConfig(vars) {
+// Process being started: all (src/index.js), bot, api or front (split deployment), from the entry file
+export const role = process.env.BRL_ROLE || ({ 'bot.js': 'bot', 'api.js': 'api', 'front.js': 'front' }[path.basename(process.argv[1] ?? '')] ?? 'all');
+
+// Pure: turns raw environment variables into a validated config object.
+// The front serves files and forwards requests: it needs no Discord setting.
+export function parseConfig(vars, { role: processRole = 'all' } = {}) {
 	const problems = [];
 	const str = (key) => (vars[key] ?? '').trim();
 
@@ -43,9 +47,22 @@ export function parseConfig(vars) {
 		DB_USER: str('DB_USER'),
 		DB_PASSWORD: vars.DB_PASSWORD ?? '',
 		DB_NAME: str('DB_NAME'),
+		// Split deployment (bot, API and front in separate processes, see docs/architecture.md)
+		// Shared secret of the internal link between the API and the bot (32 characters or more)
+		INTERNAL_TOKEN: str('INTERNAL_TOKEN'),
+		// Bot: where its internal link listens. API: where to reach it (http://bot:3002)
+		BOT_RPC_HOST: str('BOT_RPC_HOST') || '0.0.0.0',
+		BOT_RPC_PORT: Number(str('BOT_RPC_PORT') || 3002),
+		BOT_URL: str('BOT_URL').replace(/\/+$/, ''),
+		// API: the panel files are served by the front; true keeps serving them from the API too
+		SERVE_PANEL: str('SERVE_PANEL') ? str('SERVE_PANEL') === 'true' : true,
+		// API behind the front (or another reverse proxy): addresses whose X-Forwarded-For is trusted
+		TRUST_PROXY: str('TRUST_PROXY'),
+		// Front: where to reach the API (http://api:3001)
+		API_URL: str('API_URL').replace(/\/+$/, ''),
 	};
 
-	if (!SNOWFLAKE.test(config.OWNER_ID)) problems.push('OWNER_ID must be a single Discord user ID (17 to 20 digits)');
+	if (processRole !== 'front' && !SNOWFLAKE.test(config.OWNER_ID)) problems.push('OWNER_ID must be a single Discord user ID (17 to 20 digits)');
 	if (config.APP_ID && !SNOWFLAKE.test(config.APP_ID)) problems.push('APP_ID must be a Discord ID');
 	if (config.DEV_GUILD_ID && !SNOWFLAKE.test(config.DEV_GUILD_ID)) problems.push('DEV_GUILD_ID must be a Discord ID');
 	if (!Number.isInteger(config.WEB_PORT) || config.WEB_PORT < 1 || config.WEB_PORT > 65535) problems.push('WEB_PORT must be a port number');
@@ -85,6 +102,11 @@ export function parseConfig(vars) {
 	if (config.DB_PORT && !(Number.isInteger(Number(config.DB_PORT)) && Number(config.DB_PORT) >= 1 && Number(config.DB_PORT) <= 65535)) {
 		problems.push('DB_PORT must be a port number');
 	}
+	if (config.INTERNAL_TOKEN && config.INTERNAL_TOKEN.length < 32) problems.push('INTERNAL_TOKEN must be 32 characters or more');
+	if (!Number.isInteger(config.BOT_RPC_PORT) || config.BOT_RPC_PORT < 1 || config.BOT_RPC_PORT > 65535) problems.push('BOT_RPC_PORT must be a port number');
+	for (const key of ['BOT_URL', 'API_URL']) {
+		if (config[key] && !/^https?:\/\/[^/]+$/.test(config[key])) problems.push(`${key} must look like http://host:port, without path`);
+	}
 	if (config.GITHUB_REPO && !/^[\w.-]+\/[\w.-]+$/.test(config.GITHUB_REPO)) {
 		problems.push('GITHUB_REPO must look like owner/repo');
 	}
@@ -118,7 +140,7 @@ export function loadConfig(envName, rootDir = resolveRootDir()) {
 		logger.warn(`${path.basename(envFile)} not found, using environment variables only`);
 	}
 
-	const config = parseConfig({ ...fileVars, ...pickDefined(process.env) });
+	const config = parseConfig({ ...fileVars, ...pickDefined(process.env) }, { role });
 	config.ENV = envName;
 	config.ROOT_DIR = rootDir;
 	config.DATA_DIR = path.join(rootDir, 'data');
