@@ -30,7 +30,7 @@ export function registerMusicRoutes(app, { core }) {
 			spotify: manage ? await music.spotify() : { clientId: '', hasSecret: (await music.spotify()).hasSecret },
 			filters: FILTERS,
 			speeds: SPEEDS,
-			cookies: Boolean(await executor.hasYoutubeCookies?.()),
+			cookies: await executor.hasYoutubeCookies().catch(() => false),
 		};
 	});
 

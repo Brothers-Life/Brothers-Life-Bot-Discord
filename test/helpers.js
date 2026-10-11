@@ -589,6 +589,13 @@ export function createFakeExecutor() {
 		status() {
 			return { ready: true, ping: 42, guilds: 2, user: { id: '1', username: 'bot' } };
 		},
+		youtubeCookies: null,
+		async hasYoutubeCookies() {
+			return this.youtubeCookies !== null;
+		},
+		async setYoutubeCookies(content) {
+			this.youtubeCookies = content;
+		},
 	};
 }
 

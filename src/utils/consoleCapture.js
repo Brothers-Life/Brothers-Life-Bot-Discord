@@ -64,7 +64,7 @@ export function subscribe(listener) {
 
 // A line of another process (the bot, seen from the API): kept and shown like the local ones, tagged with its origin
 export function ingest(line, origin) {
-	const entry = { ...line, id: ++seq, origin };
+	const entry = { ...line, id: ++seq, origin, text: `${origin} │ ${line.text}` };
 	buffer.push(entry);
 	if (buffer.length > MAX_LINES) buffer.splice(0, buffer.length - MAX_LINES);
 	for (const subscriber of subscribers) {
