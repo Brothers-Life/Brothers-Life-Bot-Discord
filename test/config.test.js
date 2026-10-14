@@ -55,11 +55,11 @@ test('uses the Pterodactyl allocation when WEB_PORT and WEB_PUBLIC_URL are not s
 	assert.equal(parseConfig({ OWNER_ID: OWNER, SERVER_PORT: '25565', SERVER_IP: '0.0.0.0' }).WEB_PUBLIC_URL, 'http://localhost:25565');
 });
 
-test('reads the MariaDB settings and tells which ones are missing', () => {
+test('reads the PostgreSQL settings and tells which ones are missing', () => {
 	const none = parseConfig({ OWNER_ID: OWNER });
 	assert.deepEqual(missingDatabaseConfig(none), ['DB_HOST', 'DB_USER', 'DB_NAME']);
-	const url = parseConfig({ OWNER_ID: OWNER, DATABASE_URL: 'mysql://bot:secret@db.local:3307/brl' });
-	assert.equal(url.DATABASE_URL, 'mysql://bot:secret@db.local:3307/brl');
+	const url = parseConfig({ OWNER_ID: OWNER, DATABASE_URL: 'postgres://bot:secret@db.local:5433/brl' });
+	assert.equal(url.DATABASE_URL, 'postgres://bot:secret@db.local:5433/brl');
 	assert.deepEqual(missingDatabaseConfig(url), []);
 	const vars = parseConfig({ OWNER_ID: OWNER, DB_HOST: 'db.local', DB_PORT: '3307', DB_USER: 'bot', DB_PASSWORD: ' p@ss ', DB_NAME: 'brl' });
 	assert.equal(vars.DB_PASSWORD, ' p@ss ');
@@ -69,7 +69,7 @@ test('reads the MariaDB settings and tells which ones are missing', () => {
 
 test('rejects a malformed DATABASE_URL or DB_PORT', () => {
 	assert.throws(() => parseConfig({ OWNER_ID: OWNER, DATABASE_URL: 'not a url' }), /DATABASE_URL/);
-	assert.throws(() => parseConfig({ OWNER_ID: OWNER, DATABASE_URL: 'postgres://u:p@h/db' }), /DATABASE_URL/);
-	assert.throws(() => parseConfig({ OWNER_ID: OWNER, DATABASE_URL: 'mysql://u:p@h:3306/' }), /DATABASE_URL/);
+	assert.throws(() => parseConfig({ OWNER_ID: OWNER, DATABASE_URL: 'mysql://u:p@h/db' }), /DATABASE_URL/);
+	assert.throws(() => parseConfig({ OWNER_ID: OWNER, DATABASE_URL: 'postgres://u:p@h:5432/' }), /DATABASE_URL/);
 	assert.throws(() => parseConfig({ OWNER_ID: OWNER, DB_PORT: 'abc' }), /DB_PORT/);
 });

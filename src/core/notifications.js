@@ -37,10 +37,10 @@ export function createNotifications({ db, now = Date.now }) {
 		`),
 		recent: db.prepare('SELECT * FROM panel_notifications WHERE (user_id IS NULL OR user_id = ?) AND created_at >= ? ORDER BY id DESC LIMIT ?'),
 		reads: db.prepare('SELECT notification_id FROM panel_notification_reads WHERE user_id = ? AND notification_id > ?'),
-		read: db.prepare('INSERT IGNORE INTO panel_notification_reads (notification_id, user_id) SELECT id, ? FROM panel_notifications WHERE id = ?'),
+		read: db.prepare('INSERT INTO panel_notification_reads (notification_id, user_id) SELECT id, ? FROM panel_notifications WHERE id = ? ON CONFLICT DO NOTHING'),
 		prefs: db.prepare('SELECT * FROM panel_notification_prefs WHERE user_id = ?'),
-		setDisabled: db.prepare('INSERT INTO panel_notification_prefs (user_id, disabled) VALUES (?, ?) ON DUPLICATE KEY UPDATE disabled = VALUES(disabled)'),
-		setReadUpTo: db.prepare('INSERT INTO panel_notification_prefs (user_id, read_up_to) VALUES (?, ?) ON DUPLICATE KEY UPDATE read_up_to = GREATEST(read_up_to, VALUES(read_up_to))'),
+		setDisabled: db.prepare('INSERT INTO panel_notification_prefs (user_id, disabled) VALUES (?, ?) ON CONFLICT (user_id) DO UPDATE SET disabled = EXCLUDED.disabled'),
+		setReadUpTo: db.prepare('INSERT INTO panel_notification_prefs (user_id, read_up_to) VALUES (?, ?) ON CONFLICT (user_id) DO UPDATE SET read_up_to = GREATEST(panel_notification_prefs.read_up_to, EXCLUDED.read_up_to)'),
 		purge: db.prepare('DELETE FROM panel_notifications WHERE created_at < ?'),
 		lastId: db.prepare('SELECT MAX(id) AS id FROM panel_notifications'),
 	};

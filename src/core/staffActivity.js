@@ -77,11 +77,11 @@ export function createStaffActivity({ db, network, ranks, audit, executor, setti
 			) handled WHERE user_id IS NOT NULL GROUP BY user_id`, from, to);
 		const claimed = await count('SELECT claimed_by AS user_id, COUNT(*) AS n FROM tickets WHERE claimed_by IS NOT NULL AND created_at BETWEEN ? AND ? GROUP BY claimed_by', from, to);
 		const replies = await count('SELECT COALESCE(panel_user, author_id) AS user_id, COUNT(*) AS n FROM ticket_messages WHERE is_bot = 0 AND created_at BETWEEN ? AND ? GROUP BY COALESCE(panel_user, author_id)', from, to);
-		const sanctions = await count('SELECT moderator_id AS user_id, COUNT(*) AS n, SUM(type = \'ban\') AS bans, SUM(type = \'warn\') AS warns, SUM(type = \'timeout\') AS timeouts FROM sanctions WHERE revoked_at IS NULL AND created_at BETWEEN ? AND ? GROUP BY moderator_id', from, to);
+		const sanctions = await count('SELECT moderator_id AS user_id, COUNT(*) AS n, COUNT(*) FILTER (WHERE type = \'ban\') AS bans, COUNT(*) FILTER (WHERE type = \'warn\') AS warns, COUNT(*) FILTER (WHERE type = \'timeout\') AS timeouts FROM sanctions WHERE revoked_at IS NULL AND created_at BETWEEN ? AND ? GROUP BY moderator_id', from, to);
 		const dms = await count('SELECT author_id AS user_id, COUNT(*) AS n FROM dm_messages WHERE direction = \'out\' AND at BETWEEN ? AND ? GROUP BY author_id', from, to);
 		// Actions done through an API key (scripts, bots) are not panel work
 		const panel = await count(`SELECT actor_id AS user_id, COUNT(*) AS n FROM audit_log WHERE source = 'panel' AND at BETWEEN ? AND ?
-			AND (details IS NULL OR instr(details, '"${API_KEY_FIELD}":') = 0) GROUP BY actor_id`, from, to);
+			AND (details IS NULL OR strpos(details, '"${API_KEY_FIELD}":') = 0) GROUP BY actor_id`, from, to);
 		const activity = await count('SELECT user_id, SUM(messages) AS messages, SUM(voice_seconds) AS voice FROM stats_activity WHERE day BETWEEN ? AND ? GROUP BY user_id', dayOf(from), dayOf(to));
 		const absences = await db.prepare('SELECT user_id, start_at, end_at FROM absences WHERE status IN (\'approved\', \'active\', \'ended\') AND start_at < ? AND end_at > ?').all(to, from);
 

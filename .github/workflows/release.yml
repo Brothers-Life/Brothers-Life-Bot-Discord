@@ -13,14 +13,14 @@ jobs:
   release:
     runs-on: ubuntu-latest
     services:
-      mariadb:
-        image: mariadb:11.4
+      postgres:
+        image: postgres:17
         env:
-          MARIADB_ROOT_PASSWORD: root
+          POSTGRES_PASSWORD: root
         ports:
-          - 3306:3306
+          - 5432:5432
         options: >-
-          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-cmd="pg_isready -U postgres"
           --health-interval=5s --health-timeout=5s --health-retries=20
     steps:
       - uses: actions/checkout@v4
@@ -42,7 +42,7 @@ jobs:
 
       - name: Lint and test the bot
         env:
-          TEST_DATABASE_URL: mysql://root:root@127.0.0.1:3306/
+          TEST_DATABASE_URL: postgres://postgres:root@127.0.0.1:5432/postgres
         run: |
           npm ci
           npm run lint

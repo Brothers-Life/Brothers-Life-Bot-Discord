@@ -119,7 +119,7 @@ export function createOnboarding({ db, network, audit, executor, uploads, logger
 		lock: db.prepare('SELECT * FROM onboarding_config WHERE guild_id = ? FOR UPDATE'),
 		upsert: db.prepare(`
 			INSERT INTO onboarding_config (guild_id, config, updated_at, updated_by) VALUES (?, ?, ?, ?)
-			ON DUPLICATE KEY UPDATE config = VALUES(config), updated_at = VALUES(updated_at), updated_by = VALUES(updated_by)
+			ON CONFLICT (guild_id) DO UPDATE SET config = EXCLUDED.config, updated_at = EXCLUDED.updated_at, updated_by = EXCLUDED.updated_by
 		`),
 	};
 	const cache = new Map();

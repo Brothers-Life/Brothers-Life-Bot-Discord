@@ -44,7 +44,7 @@ export function createAntiraid({ db, network, audit, executor, sanctions, logs, 
 		get: db.prepare('SELECT * FROM antiraid_config WHERE guild_id = ?'),
 		upsert: db.prepare(`
 			INSERT INTO antiraid_config (guild_id, config, updated_at, updated_by) VALUES (?, ?, ?, ?)
-			ON DUPLICATE KEY UPDATE config = VALUES(config), updated_at = VALUES(updated_at), updated_by = VALUES(updated_by)
+			ON CONFLICT (guild_id) DO UPDATE SET config = EXCLUDED.config, updated_at = EXCLUDED.updated_at, updated_by = EXCLUDED.updated_by
 		`),
 	};
 	const cache = new Map();
@@ -56,9 +56,9 @@ export function createAntiraid({ db, network, audit, executor, sanctions, logs, 
 	// Raids are kept in the settings table: after a restart, the locks are still lifted at the end
 	const RAID_KEY = 'antiraid.raid.';
 	const stored = {
-		all: db.prepare('SELECT `key`, value FROM settings WHERE `key` LIKE \'antiraid.raid.%\''),
-		set: db.prepare('INSERT INTO settings (`key`, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)'),
-		delete: db.prepare('DELETE FROM settings WHERE `key` = ?'),
+		all: db.prepare('SELECT key, value FROM settings WHERE key LIKE \'antiraid.raid.%\''),
+		set: db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value'),
+		delete: db.prepare('DELETE FROM settings WHERE key = ?'),
 	};
 	async function init() {
 		raids.clear();

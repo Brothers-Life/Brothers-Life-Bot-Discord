@@ -40,7 +40,7 @@ export function parseConfig(vars, { role: processRole = 'all' } = {}) {
 		GITHUB_REPO: str('GITHUB_REPO'),
 		GITHUB_TOKEN: str('GITHUB_TOKEN'),
 		USE_TRANSLATION_CACHE: str('USE_TRANSLATION_CACHE') !== 'false',
-		// MariaDB: DATABASE_URL (mysql://user:password@host:3306/database) or the DB_* variables
+		// PostgreSQL: DATABASE_URL (postgres://user:password@host:5432/database, given by Railway) or the DB_* variables
 		DATABASE_URL: str('DATABASE_URL'),
 		DB_HOST: str('DB_HOST'),
 		DB_PORT: str('DB_PORT'),
@@ -50,16 +50,11 @@ export function parseConfig(vars, { role: processRole = 'all' } = {}) {
 		// Split deployment (bot, API and front in separate processes, see docs/architecture.md)
 		// Shared secret of the internal link between the API and the bot (32 characters or more)
 		INTERNAL_TOKEN: str('INTERNAL_TOKEN'),
-		// Bot: where its internal link listens. API: where to reach it (http://bot:3002)
-		BOT_RPC_HOST: str('BOT_RPC_HOST') || '0.0.0.0',
-		// Pterodactyl: the bot server's allocation is its internal link
-		BOT_RPC_PORT: Number(str('BOT_RPC_PORT') || (processRole === 'bot' && str('SERVER_PORT')) || 3002),
-		BOT_URL: str('BOT_URL').replace(/\/+$/, ''),
 		// API: the panel files are served by the front; true keeps serving them from the API too
 		SERVE_PANEL: str('SERVE_PANEL') ? str('SERVE_PANEL') === 'true' : true,
 		// API behind the front (or another reverse proxy): addresses whose X-Forwarded-For is trusted
 		TRUST_PROXY: str('TRUST_PROXY'),
-		// Front: where to reach the API (http://api:3001)
+		// Front and bot: where to reach the API (http://api:3001); the bot dials API_URL/internal/bot
 		API_URL: str('API_URL').replace(/\/+$/, ''),
 	};
 
@@ -97,16 +92,15 @@ export function parseConfig(vars, { role: processRole = 'all' } = {}) {
 		catch {
 			// reported below
 		}
-		if (!url || !['mysql:', 'mariadb:'].includes(url.protocol) || !url.hostname || url.pathname.length < 2) {
-			problems.push('DATABASE_URL must look like mysql://user:password@host:3306/database');
+		if (!url || !['postgres:', 'postgresql:'].includes(url.protocol) || !url.hostname || url.pathname.length < 2) {
+			problems.push('DATABASE_URL must look like postgres://user:password@host:5432/database');
 		}
 	}
 	if (config.DB_PORT && !(Number.isInteger(Number(config.DB_PORT)) && Number(config.DB_PORT) >= 1 && Number(config.DB_PORT) <= 65535)) {
 		problems.push('DB_PORT must be a port number');
 	}
 	if (config.INTERNAL_TOKEN && config.INTERNAL_TOKEN.length < 32) problems.push('INTERNAL_TOKEN must be 32 characters or more');
-	if (!Number.isInteger(config.BOT_RPC_PORT) || config.BOT_RPC_PORT < 1 || config.BOT_RPC_PORT > 65535) problems.push('BOT_RPC_PORT must be a port number');
-	for (const key of ['BOT_URL', 'API_URL']) {
+	for (const key of ['API_URL']) {
 		if (config[key] && !/^https?:\/\/[^/]+$/.test(config[key])) problems.push(`${key} must look like http://host:port, without path`);
 	}
 	if (config.GITHUB_REPO && !/^[\w.-]+\/[\w.-]+$/.test(config.GITHUB_REPO)) {

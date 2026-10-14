@@ -4,7 +4,7 @@
         "version": "PTDL_v2",
         "update_url": null
     },
-    "exported_at": "2026-10-11T03:08:20.481Z",
+    "exported_at": "2026-10-14T19:25:02.501Z",
     "name": "Brothers Life — Front",
     "author": "bot@brothers-life.invalid",
     "description": "Déploiement séparé : le panel (application React) et le HTTPS. C’est la seule adresse ouverte aux navigateurs ; il transmet /api à l’API.",
@@ -51,7 +51,7 @@
         },
         {
             "name": "Adresse de l’API",
-            "description": "http://<IP>:<port de l’allocation du serveur API>. Même machine : l’IP interne de Pterodactyl (souvent 172.18.0.1).",
+            "description": "http://<IP>:<port de l’allocation du serveur API>, utilisée par le front et par le bot (qui s’y connecte). Même machine : l’IP interne de Pterodactyl (souvent 172.18.0.1).",
             "env_variable": "API_URL",
             "default_value": "",
             "user_viewable": true,

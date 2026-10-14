@@ -70,7 +70,7 @@ export function createPermissionSync({ db, network, ranks, audit, executor, logs
 		get: db.prepare('SELECT * FROM permission_profiles WHERE rank_id = ?'),
 		upsert: db.prepare(`
 			INSERT INTO permission_profiles (rank_id, permissions, updated_at, updated_by) VALUES (?, ?, ?, ?)
-			ON DUPLICATE KEY UPDATE permissions = VALUES(permissions), updated_at = VALUES(updated_at), updated_by = VALUES(updated_by)
+			ON CONFLICT (rank_id) DO UPDATE SET permissions = EXCLUDED.permissions, updated_at = EXCLUDED.updated_at, updated_by = EXCLUDED.updated_by
 		`),
 		delete: db.prepare('DELETE FROM permission_profiles WHERE rank_id = ?'),
 		links: db.prepare('SELECT guild_id, role_id FROM rank_roles WHERE rank_id = ?'),

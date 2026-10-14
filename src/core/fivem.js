@@ -30,7 +30,7 @@ export function createFivem({ db, network, audit, executor, settings, logs, fetc
 	let maintenance = null;
 
 	const q = {
-		all: db.prepare('SELECT * FROM fivem_servers ORDER BY name COLLATE utf8mb4_unicode_ci, id'),
+		all: db.prepare('SELECT * FROM fivem_servers ORDER BY lower(name), id'),
 		get: db.prepare('SELECT * FROM fivem_servers WHERE id = ?'),
 		insert: db.prepare('INSERT INTO fivem_servers (name, address, join_code, config, created_by, created_at) VALUES (@name, @address, @joinCode, @config, @by, @at)'),
 		update: db.prepare('UPDATE fivem_servers SET name = @name, address = @address, join_code = @joinCode, config = @config WHERE id = @id'),
@@ -38,7 +38,7 @@ export function createFivem({ db, network, audit, executor, settings, logs, fetc
 		messages: db.prepare('SELECT * FROM fivem_status_messages ORDER BY id'),
 		messagesOf: db.prepare('SELECT * FROM fivem_status_messages WHERE server_id = ? ORDER BY id'),
 		message: db.prepare('SELECT * FROM fivem_status_messages WHERE id = ?'),
-		addMessage: db.prepare('INSERT IGNORE INTO fivem_status_messages (server_id, guild_id, channel_id) VALUES (?, ?, ?)'),
+		addMessage: db.prepare('INSERT INTO fivem_status_messages (server_id, guild_id, channel_id) VALUES (?, ?, ?) ON CONFLICT DO NOTHING'),
 		setMessage: db.prepare('UPDATE fivem_status_messages SET message_id = ? WHERE id = ?'),
 		dropMessage: db.prepare('DELETE FROM fivem_status_messages WHERE id = ?'),
 	};

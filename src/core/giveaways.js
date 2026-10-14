@@ -95,7 +95,7 @@ export function createGiveaways({ db, network, ranks, audit, executor, sanctions
 		entries: db.prepare('SELECT * FROM giveaway_entries WHERE giveaway_id = ? ORDER BY at, user_id'),
 		entryCount: db.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(entries), 0) AS tickets FROM giveaway_entries WHERE giveaway_id = ?'),
 		// Only while the giveaway is open, once per member (double click, or the draw running meanwhile)
-		addEntry: db.prepare('INSERT IGNORE INTO giveaway_entries (giveaway_id, user_id, guild_id, entries, at) SELECT id, ?, ?, ?, ? FROM giveaways WHERE id = ? AND status = \'open\''),
+		addEntry: db.prepare('INSERT INTO giveaway_entries (giveaway_id, user_id, guild_id, entries, at) SELECT id, ?, ?, ?, ? FROM giveaways WHERE id = ? AND status = \'open\' ON CONFLICT DO NOTHING'),
 		removeEntry: db.prepare('DELETE FROM giveaway_entries WHERE giveaway_id = ? AND user_id = ?'),
 		winners: db.prepare('SELECT * FROM giveaway_winners WHERE giveaway_id = ? ORDER BY id'),
 		addWinner: db.prepare('INSERT INTO giveaway_winners (giveaway_id, user_id, drawn_at) VALUES (?, ?, ?)'),

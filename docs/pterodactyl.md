@@ -5,7 +5,7 @@ Deux façons d'installer le bot :
 - **Un seul serveur** (egg « Brothers Life Bot ») : le bot et le panel ensemble. C'est le plus simple, et ce que décrivent les sections 1 à 4.
 - **Trois serveurs** (eggs « Bot », « API » et « Front ») : chaque morceau séparé, voir la section « Déploiement séparé » plus bas et `docs/architecture.md`.
 
-Dans les deux cas, les données sont dans une base **MariaDB** (onglet *Databases* de Pterodactyl).
+Dans les deux cas, les données sont dans une base **PostgreSQL**. L'onglet *Databases* de Pterodactyl ne crée que des bases MySQL : il faut un PostgreSQL à part (un serveur Pterodactyl avec l'egg PostgreSQL, un conteneur `postgres:17` sur la machine, ou un PostgreSQL hébergé).
 
 ## 1. Préparer GitHub
 
@@ -91,7 +91,7 @@ Revenir à une version plus ancienne se fait depuis la même page. Si l'ancienne
 | Chemin | Contenu |
 |---|---|
 | Variables du serveur (onglet Startup) | Configuration |
-| Base MariaDB (onglet Databases) | Toutes les données, images et transcripts compris |
+| Base PostgreSQL | Toutes les données, images et transcripts compris |
 | `data/backups/` | Sauvegardes de la base faites avant chaque migration (10 dernières, `.sql.gz`) |
 | `data/bin/` | yt-dlp et ffmpeg téléchargés par le bot (musique) |
 | `data/tls/` | Certificat auto-signé du panel |
@@ -109,18 +109,18 @@ Pour repartir d'une version précise (par exemple si le panel ne démarre plus d
 
 ## Déploiement séparé (trois serveurs)
 
-Le bot, l'API et le front tournent chacun sur leur serveur Pterodactyl (même nœud conseillé). Une seule base MariaDB pour les deux premiers.
+Le bot, l'API et le front tournent chacun sur leur serveur Pterodactyl (même nœud conseillé). Une seule base PostgreSQL pour les deux premiers.
 
 1. Importe les eggs `egg-brothers-life-bot-bot.json`, `-api.json` et `-front.json`.
 2. Choisis une **clé de liaison** : 32 caractères ou plus (`openssl rand -hex 32`). La même va dans la variable « Clé de liaison interne » des trois serveurs.
-3. **Serveur Bot** (egg « Brothers Life — Bot ») : 512 Mo à 1 Go. Son allocation est le port de sa liaison interne : **ne l'ouvre pas sur Internet** (pare-feu : seulement depuis le serveur de l'API). Crée la base dans son onglet *Databases* et remplis les variables de la base.
-4. **Serveur API** (egg « Brothers Life — API ») : 256 à 512 Mo. Mêmes variables de base que le bot (même base). « Adresse du bot » : `http://<IP>:<port du serveur Bot>` ; sur le même nœud, l'IP interne de Pterodactyl (souvent `172.18.0.1`). « Adresses du front » : l'IP d'où le front joint l'API (souvent `172.18.0.1`).
+3. **Serveur API** (egg « Brothers Life — API ») : 256 à 512 Mo. Variables de la base PostgreSQL. « Adresses du front » : l'IP d'où le front joint l'API (souvent `172.18.0.1`). Son allocation ne doit être joignable que par le front et le bot (pare-feu).
+4. **Serveur Bot** (egg « Brothers Life — Bot ») : 512 Mo à 1 Go. Mêmes variables de base que l'API (même base). « Adresse de l'API » : `http://<IP>:<port du serveur API>` ; sur le même nœud, l'IP interne de Pterodactyl (souvent `172.18.0.1`). Le bot se connecte à l'API : son allocation ne sert à rien d'autre, ne l'ouvre pas.
 5. **Serveur Front** (egg « Brothers Life — Front ») : 128 Mo. C'est lui que les navigateurs ouvrent : « Adresse publique du panel » = `https://<IP publique>:<port du serveur Front>`, et le mode HTTPS se règle ici. « Adresse de l'API » : `http://<IP>:<port du serveur API>`.
 6. « Adresse publique du panel » est la même sur les trois serveurs (celle du front). Ajoute `<adresse>/api/auth/callback` dans Discord > OAuth2 > Redirects.
-7. Démarre le bot, puis l'API, puis le front. La console du panel montre les lignes de l'API et celles du bot (préfixe `bot │`). Les boutons « Redémarrer » et « Arrêter » de la console agissent sur le bot.
+7. Démarre l'API, puis le bot et le front (le bot réessaie tout seul tant que l'API n'est pas prête). La console du panel montre les lignes de l'API et celles du bot (préfixe `bot │`). Les boutons « Redémarrer » et « Arrêter » de la console agissent sur le bot.
 
 Seul le serveur Bot a le token Discord. Si le bot redémarre, le panel reste ouvert et affiche « Le bot ne répond pas pour le moment » pour les actions qui ont besoin de lui.
 
 ## Passer de la v1 (SQLite) à la v2
 
-Voir `docs/architecture.md`, section « Passer de la v1 (SQLite) à la v2 (MariaDB) » : base vide, installation de la v2, puis `node scripts/migrate-sqlite.mjs prod` dans la console du serveur qui a l'ancien `data/bot.db` (Pterodactyl : onglet *Startup*, ou un serveur temporaire), avant le premier démarrage du bot.
+Voir `docs/architecture.md`, section « Passer de la v1 (SQLite) à la v2 (PostgreSQL) » : base vide, installation de la v2, puis `node scripts/migrate-sqlite.mjs prod` dans la console du serveur qui a l'ancien `data/bot.db` (Pterodactyl : onglet *Startup*, ou un serveur temporaire), avant le premier démarrage du bot.

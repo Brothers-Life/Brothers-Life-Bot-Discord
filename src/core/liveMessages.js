@@ -46,7 +46,7 @@ export function createLiveMessages({ db, network, audit, executor, stats, logger
 		refreshed: db.prepare('UPDATE live_messages SET refreshed_at = ? WHERE id = ?'),
 		remove: db.prepare('DELETE FROM live_messages WHERE id = ?'),
 		targets: db.prepare('SELECT * FROM live_message_targets WHERE message_id = ? ORDER BY id'),
-		insertTarget: db.prepare('INSERT IGNORE INTO live_message_targets (message_id, guild_id, channel_id) VALUES (?, ?, ?)'),
+		insertTarget: db.prepare('INSERT INTO live_message_targets (message_id, guild_id, channel_id) VALUES (?, ?, ?) ON CONFLICT DO NOTHING'),
 		deleteTarget: db.prepare('DELETE FROM live_message_targets WHERE id = ?'),
 		targetDone: db.prepare('UPDATE live_message_targets SET discord_id = ?, last_hash = ?, last_error = NULL, updated_at = ? WHERE id = ?'),
 		targetFailed: db.prepare('UPDATE live_message_targets SET last_error = ?, updated_at = ? WHERE id = ?'),

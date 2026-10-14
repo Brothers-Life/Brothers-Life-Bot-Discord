@@ -4,7 +4,7 @@
         "version": "PTDL_v2",
         "update_url": null
     },
-    "exported_at": "2026-10-11T03:08:20.480Z",
+    "exported_at": "2026-10-14T19:25:02.500Z",
     "name": "Brothers Life — API",
     "author": "bot@brothers-life.invalid",
     "description": "Déploiement séparé : l’API du panel et l’API publique. Ne garde jamais le token du bot. Le front lui transmet les requêtes du navigateur.",
@@ -80,16 +80,6 @@
             "field_type": "text"
         },
         {
-            "name": "Adresse du bot",
-            "description": "http://<IP>:<port de l’allocation du serveur bot>. Même machine : l’IP interne de Pterodactyl (souvent 172.18.0.1).",
-            "env_variable": "BOT_URL",
-            "default_value": "",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "required|regex:/^https?:\\/\\/[^\\/]+$/",
-            "field_type": "text"
-        },
-        {
             "name": "Adresses du front",
             "description": "Adresse(s) IP du serveur front, séparées par des virgules : l’API croit leur en-tête X-Forwarded-For (adresse réelle des visiteurs). Même machine : 172.18.0.1.",
             "env_variable": "TRUST_PROXY",
@@ -111,7 +101,7 @@
         },
         {
             "name": "Base de données : hôte",
-            "description": "Onglet Databases du serveur Pterodactyl (Endpoint, sans le port), ou l’adresse de ton serveur MariaDB.",
+            "description": "Adresse du serveur PostgreSQL (l’onglet Databases de Pterodactyl ne crée que des bases MySQL : il faut un PostgreSQL à part, ex. un conteneur postgres:17).",
             "env_variable": "DB_HOST",
             "default_value": "",
             "user_viewable": true,
@@ -121,9 +111,9 @@
         },
         {
             "name": "Base de données : port",
-            "description": "Port MariaDB (3306 en général).",
+            "description": "Port PostgreSQL (5432 en général).",
             "env_variable": "DB_PORT",
-            "default_value": "3306",
+            "default_value": "5432",
             "user_viewable": true,
             "user_editable": true,
             "rules": "required|integer|between:1,65535",
@@ -131,7 +121,7 @@
         },
         {
             "name": "Base de données : nom",
-            "description": "Nom de la base (onglet Databases : « Database »).",
+            "description": "Nom de la base PostgreSQL.",
             "env_variable": "DB_NAME",
             "default_value": "",
             "user_viewable": true,
@@ -141,7 +131,7 @@
         },
         {
             "name": "Base de données : utilisateur",
-            "description": "Utilisateur de la base (onglet Databases : « Username »).",
+            "description": "Utilisateur PostgreSQL propriétaire de la base.",
             "env_variable": "DB_USER",
             "default_value": "",
             "user_viewable": true,
@@ -151,7 +141,7 @@
         },
         {
             "name": "Base de données : mot de passe",
-            "description": "Mot de passe de la base (onglet Databases : œil à côté du mot de passe).",
+            "description": "Mot de passe de cet utilisateur.",
             "env_variable": "DB_PASSWORD",
             "default_value": "",
             "user_viewable": true,

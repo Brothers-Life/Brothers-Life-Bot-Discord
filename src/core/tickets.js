@@ -41,7 +41,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 		settings: db.prepare('SELECT * FROM ticket_settings WHERE guild_id = ?'),
 		upsertSettings: db.prepare(`
 			INSERT INTO ticket_settings (guild_id, max_open, config) VALUES (@guildId, @maxOpen, @config)
-			ON DUPLICATE KEY UPDATE max_open = VALUES(max_open), config = VALUES(config)
+			ON CONFLICT (guild_id) DO UPDATE SET max_open = EXCLUDED.max_open, config = EXCLUDED.config
 		`),
 		categories: db.prepare('SELECT * FROM ticket_categories WHERE guild_id = ? ORDER BY position, id'),
 		category: db.prepare('SELECT * FROM ticket_categories WHERE id = ?'),
@@ -69,7 +69,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 		statuses: db.prepare('SELECT * FROM ticket_statuses WHERE guild_id = ? ORDER BY position'),
 		clearStatuses: db.prepare('DELETE FROM ticket_statuses WHERE guild_id = ?'),
 		insertStatus: db.prepare(`
-			INSERT INTO ticket_statuses (guild_id, \`key\`, label, emoji, color, parent_channel_id, position)
+			INSERT INTO ticket_statuses (guild_id, key, label, emoji, color, parent_channel_id, position)
 			VALUES (@guildId, @key, @label, @emoji, @color, @parentChannelId, @position)
 		`),
 		nextNumber: db.prepare('SELECT COALESCE(MAX(number), 0) + 1 AS n FROM tickets WHERE guild_id = ?'),
@@ -112,7 +112,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 		insertMessage: db.prepare(`
 			INSERT INTO ticket_messages (id, ticket_id, author_id, author_name, author_avatar, is_bot, panel_user, content, attachments, embeds, internal, created_at)
 			VALUES (@id, @ticketId, @authorId, @authorName, @authorAvatar, @isBot, @panelUser, @content, @attachments, @embeds, @internal, @createdAt)
-			ON DUPLICATE KEY UPDATE panel_user = COALESCE(VALUES(panel_user), panel_user)
+			ON CONFLICT (id) DO UPDATE SET panel_user = COALESCE(EXCLUDED.panel_user, ticket_messages.panel_user)
 		`),
 		editMessage: db.prepare('UPDATE ticket_messages SET content = @content, embeds = @embeds, edited_at = @at WHERE id = @id'),
 		removeMessage: db.prepare('UPDATE ticket_messages SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL'),
@@ -1227,7 +1227,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 				else id = Number((await q.insertReply.run({ ...values, by: actor.id })).lastInsertRowid);
 			}
 			catch (error) {
-				if (error.code === 'ER_DUP_ENTRY') throw new ValidationError(`Une réponse s’appelle déjà « ${name} » sur ce serveur.`);
+				if (error.code === '23505') throw new ValidationError(`Une réponse s’appelle déjà « ${name} » sur ce serveur.`);
 				throw error;
 			}
 			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'tickets.reply_save', guildId, target: String(id), details: { name } });

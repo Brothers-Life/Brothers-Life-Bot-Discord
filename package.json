@@ -1,7 +1,7 @@
 {
   "name": "bot-discord-brl",
   "version": "1.11.0",
-  "description": "Bot Discord Brothers Life : bot, API, front (panel) et base MariaDB séparés",
+  "description": "Bot Discord Brothers Life : bot, API, front (panel) et base PostgreSQL séparés",
   "main": "src/index.js",
   "type": "module",
   "scripts": {
@@ -13,7 +13,7 @@
     "start:app": "node src/index.js prod",
     "lint": "eslint src/ test/ launcher.js launcher/",
     "test": "node --test \"test/**/*.test.js\"",
-    "db:test": "docker run -d --name brl-db -p 3306:3306 -e MARIADB_ROOT_PASSWORD=root --tmpfs /var/lib/mysql:rw mariadb:11.4 --innodb-flush-log-at-trx-commit=0",
+    "db:test": "docker run -d --name brl-pg -p 5432:5432 -e POSTGRES_PASSWORD=root --tmpfs /var/lib/postgresql/data:rw postgres:17 -c fsync=off -c synchronous_commit=off -c max_connections=300",
     "db:migrate-sqlite": "node scripts/migrate-sqlite.mjs",
     "deploy:dev": "node src/bot/deploy-commands.js dev",
     "deploy:prod:guild": "node src/bot/deploy-commands.js prod",
@@ -40,6 +40,7 @@
     "mysql2": "^3.24.5",
     "node-cron": "^4.2.1",
     "opusscript": "^0.0.8",
+    "pg": "^8.13.1",
     "selfsigned": "^5.5.0"
   },
   "devDependencies": {

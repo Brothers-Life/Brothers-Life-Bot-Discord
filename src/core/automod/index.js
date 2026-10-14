@@ -25,7 +25,7 @@ export function createAutomod({ db, network, sanctions, ranks, audit, executor, 
 		get: db.prepare('SELECT * FROM automod_config WHERE guild_id = ?'),
 		upsert: db.prepare(`
 			INSERT INTO automod_config (guild_id, config, updated_at, updated_by) VALUES (?, ?, ?, ?)
-			ON DUPLICATE KEY UPDATE config = VALUES(config), updated_at = VALUES(updated_at), updated_by = VALUES(updated_by)
+			ON CONFLICT (guild_id) DO UPDATE SET config = EXCLUDED.config, updated_at = EXCLUDED.updated_at, updated_by = EXCLUDED.updated_by
 		`),
 		delete: db.prepare('DELETE FROM automod_config WHERE guild_id = ?'),
 	};

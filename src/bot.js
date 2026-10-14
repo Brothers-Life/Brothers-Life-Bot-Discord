@@ -1,5 +1,6 @@
 // Bot process of a split deployment: the Discord connection, the periodic tasks and the services holding live
-// state (music, tickets, raids…). The API reaches it through its internal link (INTERNAL_TOKEN, BOT_RPC_PORT).
+// state (music, tickets, raids…). It dials the API (API_URL, INTERNAL_TOKEN) and keeps a websocket open: no port
+// to open on the bot.
 import { pkg, consoleLog, ipc, logger, onShutdown, every, run, shutdown } from './app/process.js';
 import path from 'node:path';
 import config from './utils/config.js';
@@ -48,9 +49,9 @@ run(async () => {
 	onShutdown(() => core.stats.flush());
 	onShutdown(() => core.fivemData.close());
 
-	// Listening before the Discord login: the panel shows "bot starting" instead of an error meanwhile
+	// Linked before the Discord login: the panel shows "bot starting" instead of an error meanwhile
 	const link = createBotLink({ config, core, executor: bot.executor, runtime, consoleLog, logger });
-	await link.start();
+	link.start();
 	onShutdown(() => link.close());
 
 	await bot.login(config.TOKEN);

@@ -1,19 +1,23 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import { once } from 'node:events';
-import { createRpcServer } from '../src/rpc/server.js';
-import { createRpcClient, remoteObject, BotUnavailableError } from '../src/rpc/client.js';
+import WebSocket from 'ws';
+import { createPeer, BotUnavailableError } from '../src/rpc/peer.js';
+import { attachInternalLink, remoteObject } from '../src/rpc/socket.js';
 import { encode, decode } from '../src/rpc/codec.js';
 import { createPrincipal } from '../src/core/permissions.js';
 import { ValidationError } from '../src/core/errors.js';
 
 const TOKEN = 'x'.repeat(40);
+const quiet = { warn: () => undefined };
 
-async function setup(handlers) {
-	const server = createRpcServer({ token: TOKEN, host: '127.0.0.1', port: 0, handlers, logger: { warn: () => undefined } });
-	const address = await server.listen();
-	const client = createRpcClient({ url: `http://127.0.0.1:${address.port}`, token: TOKEN, logger: { warn: () => undefined } });
-	return { server, client, port: address.port };
+// Two peers wired back to back (what the websocket does)
+function pair(onCall, onEvent = () => undefined) {
+	let bot = null;
+	const api = createPeer({ send: text => setImmediate(() => bot.handle(text)), onEvent: () => undefined, logger: quiet });
+	bot = createPeer({ send: text => setImmediate(() => api.handle(text)), onCall, onEvent, logger: quiet });
+	return { api, bot };
 }
 
 test('the codec keeps buffers, dates, maps, big integers, errors and actors', () => {
@@ -36,46 +40,67 @@ test('the codec keeps buffers, dates, maps, big integers, errors and actors', ()
 	assert.throws(() => encode({ fn: () => undefined }), /Functions/);
 });
 
-test('calls reach the handler, errors come back with their class', async () => {
-	const { server, client } = await setup({
-		async call({ target, method, args }) {
-			if (method === 'fail') throw new ValidationError('Salon introuvable.');
-			if (method === 'discord') throw Object.assign(new Error('Unknown Channel'), { code: 10003 });
-			return { target, method, size: args[0].length };
-		},
+test('calls reach the other end, errors come back with their class', async () => {
+	const { api } = pair(async ({ target, method, args }) => {
+		if (method === 'fail') throw new ValidationError('Salon introuvable.');
+		if (method === 'discord') throw Object.assign(new Error('Unknown Channel'), { code: 10003 });
+		return { target, method, size: args[0].length };
 	});
-	const executor = remoteObject(client, 'executor', { local: { botUserId: () => '42' } });
+	const executor = remoteObject(api, 'executor', { local: { botUserId: () => '42' } });
 	assert.deepEqual(await executor.send(Buffer.alloc(3)), { target: 'executor', method: 'send', size: 3 });
 	assert.equal(executor.botUserId(), '42');
 	assert.equal(executor.then, undefined);
 	await assert.rejects(executor.fail(), ValidationError);
 	await assert.rejects(executor.discord(), (error) => error.code === 10003);
-	await server.close();
 });
 
-test('a wrong token is refused, a stopped bot gives a clear error', async () => {
-	const { server, port } = await setup({ async call() { return 1; } });
-	const intruder = createRpcClient({ url: `http://127.0.0.1:${port}`, token: 'y'.repeat(40) });
-	await assert.rejects(intruder.call('executor', 'x'), /Unauthorized/);
-	await server.close();
-	const client = createRpcClient({ url: `http://127.0.0.1:${port}`, token: TOKEN });
-	await assert.rejects(client.call('executor', 'x'), BotUnavailableError);
+test('a closed link fails pending and new calls with a clear error, events go both ways', async () => {
+	const events = [];
+	const { api } = pair(() => new Promise(() => undefined), event => events.push(event));
+	const pending = api.call('executor', 'slow');
+	api.event('audit', { action: 'x' });
+	await new Promise(resolve => setTimeout(resolve, 10));
+	assert.deepEqual(events, [{ type: 'audit', data: { action: 'x' } }]);
+	api.close();
+	await assert.rejects(pending, BotUnavailableError);
+	await assert.rejects(api.call('executor', 'x'), BotUnavailableError);
 });
 
-test('events are streamed to the API, starting with the welcome ones', async () => {
-	const { server, client } = await setup({ call: async () => undefined, async welcome() { return [{ type: 'snapshot', data: { botUserId: '42' } }]; } });
-	const snapshot = once(client.events, 'snapshot');
-	client.start();
-	assert.deepEqual((await snapshot)[0], { botUserId: '42' });
-	const next = once(client.events, 'ticket');
-	server.broadcast({ type: 'ticket', data: { id: 7, file: Buffer.from('x') } });
-	const [data] = await next;
-	assert.equal(data.id, 7);
-	assert.equal(data.file.toString(), 'x');
-	client.close();
-	await server.close();
+test('the bot dials the API with the token; a wrong token is refused, other upgrades go on', async () => {
+	const server = http.createServer();
+	let other = 0;
+	server.on('upgrade', (req, socket) => {
+		other++;
+		socket.destroy();
+	});
+	const accepted = [];
+	const link = attachInternalLink(server, { token: TOKEN, onConnection: ws => accepted.push(ws), logger: quiet });
+	server.listen(0, '127.0.0.1');
+	await once(server, 'listening');
+	const base = `ws://127.0.0.1:${server.address().port}`;
+
+	const intruder = new WebSocket(`${base}/internal/bot`, { headers: { Authorization: `Bearer ${'y'.repeat(40)}` } });
+	const [, res] = await once(intruder, 'unexpected-response');
+	assert.equal(res.statusCode, 401);
+	intruder.on('error', () => undefined);
+	intruder.terminate();
+
+	const panel = new WebSocket(`${base}/api/console`);
+	await once(panel, 'error').catch(() => undefined);
+	assert.equal(other, 1);
+
+	const bot = new WebSocket(`${base}/internal/bot`, { headers: { Authorization: `Bearer ${TOKEN}` }, maxPayload: 64 * 1024 * 1024 });
+	await once(bot, 'open');
+	assert.equal(accepted.length, 1);
+	// Files bigger than the panel's frame limit go through
+	const received = once(accepted[0], 'message');
+	bot.send(encode({ file: Buffer.alloc(1024 * 1024, 1) }));
+	assert.equal(decode(String((await received)[0])).file.length, 1024 * 1024);
+	bot.close();
+	link.close();
+	server.close();
 });
 
 test('the internal link refuses to start without a long enough secret', () => {
-	assert.throws(() => createRpcServer({ token: 'short', handlers: {} }), /INTERNAL_TOKEN/);
+	assert.throws(() => attachInternalLink(http.createServer(), { token: 'short', onConnection: () => undefined }), /INTERNAL_TOKEN/);
 });

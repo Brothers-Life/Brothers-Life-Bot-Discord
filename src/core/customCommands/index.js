@@ -18,18 +18,18 @@ export function createCustomCommands({ db, network, ranks, audit, executor, logs
 	const cooldowns = new Map();
 
 	const q = {
-		all: db.prepare('SELECT * FROM custom_commands ORDER BY name COLLATE utf8mb4_unicode_ci, id'),
+		all: db.prepare('SELECT * FROM custom_commands ORDER BY lower(name), id'),
 		get: db.prepare('SELECT * FROM custom_commands WHERE id = ?'),
 		insert: db.prepare('INSERT INTO custom_commands (name, definition, enabled, created_by, created_at, updated_by, updated_at) VALUES (@name, @definition, 1, @by, @at, @by, @at)'),
 		update: db.prepare('UPDATE custom_commands SET name = @name, definition = @definition, updated_by = @by, updated_at = @at WHERE id = @id'),
 		enable: db.prepare('UPDATE custom_commands SET enabled = ?, updated_by = ?, updated_at = ? WHERE id = ?'),
 		delete: db.prepare('DELETE FROM custom_commands WHERE id = ?'),
 		used: db.prepare('UPDATE custom_commands SET uses = uses + 1 WHERE id = ?'),
-		counter: db.prepare('SELECT value FROM custom_command_counters WHERE `key` = ? AND user_id = ?'),
-		setCounter: db.prepare('INSERT INTO custom_command_counters (`key`, user_id, value) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)'),
+		counter: db.prepare('SELECT value FROM custom_command_counters WHERE key = ? AND user_id = ?'),
+		setCounter: db.prepare('INSERT INTO custom_command_counters (key, user_id, value) VALUES (?, ?, ?) ON CONFLICT (key, user_id) DO UPDATE SET value = EXCLUDED.value'),
 		// Atomic increment (two runs at once both count)
-		addCounter: db.prepare('INSERT INTO custom_command_counters (`key`, user_id, value) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE value = value + VALUES(value)'),
-		run: db.prepare('INSERT INTO custom_command_runs (command_id, guild_id, user_id, `trigger`, ok, detail, at) VALUES (?, ?, ?, ?, ?, ?, ?)'),
+		addCounter: db.prepare('INSERT INTO custom_command_counters (key, user_id, value) VALUES (?, ?, ?) ON CONFLICT (key, user_id) DO UPDATE SET value = custom_command_counters.value + EXCLUDED.value'),
+		run: db.prepare('INSERT INTO custom_command_runs (command_id, guild_id, user_id, trigger, ok, detail, at) VALUES (?, ?, ?, ?, ?, ?, ?)'),
 		runs: db.prepare('SELECT * FROM custom_command_runs WHERE command_id = ? ORDER BY id DESC LIMIT ?'),
 		trim: db.prepare('DELETE FROM custom_command_runs WHERE command_id = ? AND id NOT IN (SELECT id FROM (SELECT id FROM custom_command_runs WHERE command_id = ? ORDER BY id DESC LIMIT 500) AS kept)'),
 	};
@@ -150,8 +150,8 @@ export function createCustomCommands({ db, network, ranks, audit, executor, logs
 	return {
 		list: () => all(),
 		get: getOrThrow,
-		runs: async (id, limit = 100) => (await q.runs.all(id, limit)).map(r => ({ id: r.id, guildId: r.guild_id, userId: r.user_id, trigger: r.trigger, ok: Boolean(r.ok), detail: r.detail, at: r.at })),
-		counters: () => db.prepare('SELECT `key`, user_id AS userId, value FROM custom_command_counters ORDER BY `key`, value DESC, user_id LIMIT 500').all(),
+		runs: async (id, limit = 100) => (await q.runs.all(id, Number(limit) || 100)).map(r => ({ id: r.id, guildId: r.guild_id, userId: r.user_id, trigger: r.trigger, ok: Boolean(r.ok), detail: r.detail, at: r.at })),
+		counters: () => db.prepare('SELECT key, user_id AS "userId", value FROM custom_command_counters ORDER BY key, value DESC, user_id LIMIT 500').all(),
 		onChange(fn) {
 			listeners.add(fn);
 			return () => listeners.delete(fn);

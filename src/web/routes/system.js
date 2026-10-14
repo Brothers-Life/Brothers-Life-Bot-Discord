@@ -1,5 +1,5 @@
 import { authenticate } from '../guard.js';
-import { sameSecret } from '../../rpc/server.js';
+import { sameSecret } from '../../rpc/socket.js';
 
 const PERMISSION_RECHECK_MS = 30_000;
 

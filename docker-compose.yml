@@ -1,8 +1,8 @@
 # Bot, API, front and database in separate containers (docs/architecture.md).
 #   cp .env.docker.example .env   then fill it in
 #   docker compose up -d --build
-# Only the front is reachable from outside (PANEL_PORT). The API and the bot's internal link stay on the
-# private network of the containers. Each container only gets the settings it needs (the bot token: the bot).
+# Only the front is reachable from outside (PANEL_PORT). The API stays on the private network of the containers;
+# the bot opens no port, it dials the API (internal link on /internal/bot). Each container only gets the settings it needs (the bot token: the bot).
 name: brothers-life
 
 x-app: &app
@@ -15,18 +15,16 @@ x-app: &app
 
 services:
   db:
-    image: mariadb:11.4
+    image: postgres:17
     restart: unless-stopped
     environment:
-      MARIADB_DATABASE: brl
-      MARIADB_USER: brl
-      MARIADB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD manquant dans .env}
-      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD manquant dans .env}
-    command: ["--max-allowed-packet=64M", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_bin"]
+      POSTGRES_DB: brl
+      POSTGRES_USER: brl
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD manquant dans .env}
     volumes:
-      - db:/var/lib/mysql
+      - db:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      test: ["CMD-SHELL", "pg_isready -U brl -d brl"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -47,8 +45,7 @@ services:
       DB_HOST: db
       DB_USER: brl
       DB_NAME: brl
-      BOT_RPC_HOST: 0.0.0.0
-      BOT_RPC_PORT: "3002"
+      API_URL: http://api:3001
     volumes:
       - bot-data:/app/data
 
@@ -67,7 +64,6 @@ services:
       DB_HOST: db
       DB_USER: brl
       DB_NAME: brl
-      BOT_URL: http://bot:3002
       WEB_PORT: "3001"
       WEB_MODE: http
       SERVE_PANEL: "false"
@@ -75,11 +71,6 @@ services:
       TRUST_PROXY: "true"
     volumes:
       - api-data:/app/data
-    depends_on:
-      db:
-        condition: service_healthy
-      bot:
-        condition: service_started
 
   front:
     <<: *app

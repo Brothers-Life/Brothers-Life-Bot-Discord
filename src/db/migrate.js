@@ -21,7 +21,9 @@ export function latestSchemaVersion(dir = MIGRATIONS_DIR) {
 	return migrations.length ? migrations.at(-1).version : 0;
 }
 
-const VERSION_TABLE = 'CREATE TABLE IF NOT EXISTS schema_migrations (version INT PRIMARY KEY, applied_at BIGINT NOT NULL) ENGINE=InnoDB';
+const VERSION_TABLE = 'CREATE TABLE IF NOT EXISTS schema_migrations (version INT PRIMARY KEY, applied_at BIGINT NOT NULL)';
+// Same number for every process of the bot: pg_advisory_lock serialises their migrations
+const LOCK_KEY = 'brl_migrate';
 
 export async function schemaVersion(db) {
 	await db.query(VERSION_TABLE);
@@ -29,15 +31,14 @@ export async function schemaVersion(db) {
 	return row?.version ?? 0;
 }
 
-// The bot and the API both migrate on start: a named lock makes the second one wait for the first.
-// MariaDB commits schema changes right away, so a failing migration can leave it half applied:
-// the launcher takes a backup before every update.
+// The bot and the API both migrate on start: an advisory lock makes the second one wait for the first.
+// Each migration runs in its own transaction (PostgreSQL rolls schema changes back too).
 // beforeMigrate(fromVersion): called (inside the lock) when migrations are about to run on an existing database
 export async function migrate(db, dir = MIGRATIONS_DIR, { beforeMigrate = null } = {}) {
-	const connection = await db.pool.getConnection();
+	const client = await db.pool.connect();
 	try {
-		const [[lock]] = await connection.query('SELECT GET_LOCK(?, 120) AS ok', [`brl_migrate_${db.options.database}`]);
-		if (!lock?.ok) throw new Error('Another process is migrating the database (lock not obtained after 2 minutes).');
+		await client.query('SET lock_timeout = \'120s\'');
+		await client.query('SELECT pg_advisory_lock(hashtext($1))', [LOCK_KEY]);
 		try {
 			const from = await schemaVersion(db);
 			const latest = latestSchemaVersion(dir);
@@ -47,16 +48,24 @@ export async function migrate(db, dir = MIGRATIONS_DIR, { beforeMigrate = null }
 			const pending = listMigrations(dir).filter(m => m.version > from);
 			if (pending.length && from > 0) await beforeMigrate?.(from);
 			for (const { version, file } of pending) {
-				await db.exec(fs.readFileSync(file, 'utf8'));
-				await db.query('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', version, Date.now());
+				await client.query('BEGIN');
+				try {
+					await client.query(fs.readFileSync(file, 'utf8'));
+					await client.query('INSERT INTO schema_migrations (version, applied_at) VALUES ($1, $2)', [version, Date.now()]);
+					await client.query('COMMIT');
+				}
+				catch (error) {
+					await client.query('ROLLBACK').catch(() => undefined);
+					throw new Error(`Migration ${path.basename(file)} failed: ${error.message}`);
+				}
 			}
 			return { from, to: await schemaVersion(db) };
 		}
 		finally {
-			await connection.query('SELECT RELEASE_LOCK(?)', [`brl_migrate_${db.options.database}`]);
+			await client.query('SELECT pg_advisory_unlock(hashtext($1))', [LOCK_KEY]).catch(() => undefined);
 		}
 	}
 	finally {
-		connection.release();
+		client.release();
 	}
 }

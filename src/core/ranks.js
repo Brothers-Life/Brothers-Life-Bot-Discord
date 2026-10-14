@@ -20,11 +20,11 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 		clearPerms: db.prepare('DELETE FROM rank_permissions WHERE rank_id = ?'),
 		addPerm: db.prepare('INSERT INTO rank_permissions (rank_id, permission) VALUES (?, ?)'),
 		clearRoles: db.prepare('DELETE FROM rank_roles WHERE rank_id = ? AND guild_id = ?'),
-		addRole: db.prepare('INSERT IGNORE INTO rank_roles (rank_id, guild_id, role_id) VALUES (?, ?, ?)'),
-		byName: db.prepare('SELECT id FROM ranks WHERE name = ? COLLATE utf8mb4_unicode_ci AND id != ?'),
+		addRole: db.prepare('INSERT INTO rank_roles (rank_id, guild_id, role_id) VALUES (?, ?, ?) ON CONFLICT DO NOTHING'),
+		byName: db.prepare('SELECT id FROM ranks WHERE lower(name) = lower(?) AND id != ?'),
 		directOf: db.prepare('SELECT rank_id FROM user_ranks WHERE discord_id = ?'),
 		direct: db.prepare('SELECT discord_id, rank_id, added_by, added_at FROM user_ranks ORDER BY added_at'),
-		assign: db.prepare('INSERT IGNORE INTO user_ranks (discord_id, rank_id, added_by, added_at) VALUES (?, ?, ?, ?)'),
+		assign: db.prepare('INSERT INTO user_ranks (discord_id, rank_id, added_by, added_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING'),
 		unassign: db.prepare('DELETE FROM user_ranks WHERE discord_id = ? AND rank_id = ?'),
 	};
 

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-// The database is a MariaDB server: the app itself saves it before migrating (src/db/dump.js writes
+// The database is a PostgreSQL server: the app itself saves it before migrating (src/db/dump.js writes
 // data/backups/last-migration.json) and restores a backup at start when data/backups/restore-request.json exists.
 // The launcher only asks for those restores. Names shared with src/db/dump.js.
 const LAST_MIGRATION = 'last-migration.json';

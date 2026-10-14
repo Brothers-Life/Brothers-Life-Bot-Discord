@@ -15,7 +15,7 @@ export function createTemplates({ db, network, audit, executor, events, automod,
 	let job = null;
 
 	const q = {
-		all: db.prepare('SELECT * FROM server_templates ORDER BY name COLLATE utf8mb4_unicode_ci, id'),
+		all: db.prepare('SELECT * FROM server_templates ORDER BY lower(name), id'),
 		get: db.prepare('SELECT * FROM server_templates WHERE id = ?'),
 		insert: db.prepare('INSERT INTO server_templates (name, description, source_guild_id, snapshot, captured_at, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'),
 		capture: db.prepare('UPDATE server_templates SET snapshot = ?, captured_at = ? WHERE id = ?'),
@@ -27,8 +27,8 @@ export function createTemplates({ db, network, audit, executor, events, automod,
 		saveApplication: db.prepare(`
 			INSERT INTO template_applications (guild_id, template_id, mapping, mode, status, report, applied_at, applied_by)
 			VALUES (@guildId, @templateId, @mapping, @mode, @status, @report, @at, @by)
-			ON DUPLICATE KEY UPDATE template_id = VALUES(template_id), mapping = VALUES(mapping), mode = VALUES(mode),
-				status = VALUES(status), report = VALUES(report), applied_at = VALUES(applied_at), applied_by = VALUES(applied_by)
+			ON CONFLICT (guild_id) DO UPDATE SET template_id = EXCLUDED.template_id, mapping = EXCLUDED.mapping, mode = EXCLUDED.mode,
+				status = EXCLUDED.status, report = EXCLUDED.report, applied_at = EXCLUDED.applied_at, applied_by = EXCLUDED.applied_by
 		`),
 	};
 
@@ -102,7 +102,7 @@ export function createTemplates({ db, network, audit, executor, events, automod,
 		};
 		const insert = async (table, row, orIgnore = false) => {
 			const cols = Object.keys(row);
-			return db.prepare(`INSERT ${orIgnore ? 'IGNORE ' : ''}INTO ${table} (${cols.map(c => `\`${c}\``).join(', ')}) VALUES (${cols.map(c => `@${c}`).join(', ')})`).run(row);
+			return db.prepare(`INSERT INTO ${table} (${cols.map(c => `"${c}"`).join(', ')}) VALUES (${cols.map(c => `@${c}`).join(', ')})${orIgnore ? ' ON CONFLICT DO NOTHING' : ''}`).run(row);
 		};
 		const existing = table => db.prepare(`SELECT * FROM ${table} WHERE guild_id = ?`).all(guildId);
 		const categoryIds = new Map();
@@ -123,7 +123,7 @@ export function createTemplates({ db, network, audit, executor, events, automod,
 					categoryIds.set(row.id, match.id);
 					if (mode === 'reset') {
 						const cols = Object.keys(data).filter(c => c !== 'guild_id' && c !== 'created_at');
-						await db.prepare(`UPDATE ticket_categories SET ${cols.map(c => `\`${c}\` = @${c}`).join(', ')} WHERE id = @id`).run({ ...data, id: match.id });
+						await db.prepare(`UPDATE ticket_categories SET ${cols.map(c => `"${c}" = @${c}`).join(', ')} WHERE id = @id`).run({ ...data, id: match.id });
 					}
 				}
 				else {

@@ -1,5 +1,6 @@
 // API process of a split deployment: the panel's REST API and websockets, and the public API (keys brl_…).
-// It reads and writes the database itself and asks the bot (BOT_URL) for everything done on Discord.
+// It reads and writes the database itself and asks the bot for everything done on Discord: the bot
+// dials in on /internal/bot (INTERNAL_TOKEN).
 // It never holds the bot token. The panel's files are served by the front (src/front.js).
 import { pkg, consoleLog, ipc, logger, onShutdown, run, shutdown } from './app/process.js';
 import path from 'node:path';
@@ -32,8 +33,6 @@ run(async () => {
 	const core = createCore({ db, config, executor: link.executor, logger, remote: link.remote });
 	await core.init();
 	link.attach(core);
-	link.start();
-	onShutdown(() => link.close());
 
 	const versions = createVersionService({
 		config,
@@ -56,6 +55,8 @@ run(async () => {
 	};
 
 	const web = await createWebServer({ config, core, runtime, consoleLog, versions, logger });
+	link.listen(web.app.server);
+	onShutdown(() => link.close());
 	await web.listen();
 	onShutdown(() => web.close());
 	onShutdown(() => core.logs.flush());

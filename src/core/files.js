@@ -8,7 +8,7 @@ const gunzip = promisify(zlib.gunzip);
 // of tickets, channel archives. Text documents are stored gzipped.
 export function createFiles({ db, now = Date.now }) {
 	const q = {
-		put: db.prepare('REPLACE INTO files (id, kind, mime, size, gzip, data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'),
+		put: db.prepare('INSERT INTO files (id, kind, mime, size, gzip, data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET kind = EXCLUDED.kind, mime = EXCLUDED.mime, size = EXCLUDED.size, gzip = EXCLUDED.gzip, data = EXCLUDED.data, created_at = EXCLUDED.created_at'),
 		get: db.prepare('SELECT mime, gzip, data FROM files WHERE id = ?'),
 		exists: db.prepare('SELECT 1 AS found FROM files WHERE id = ?'),
 		remove: db.prepare('DELETE FROM files WHERE id = ?'),

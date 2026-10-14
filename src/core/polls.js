@@ -82,12 +82,12 @@ export function createPolls({ db, network, audit, executor, logger = console, no
 		dueEnd: db.prepare('SELECT * FROM polls WHERE status = \'open\' AND ends_at IS NOT NULL AND ends_at <= ? ORDER BY id'),
 		votesOf: db.prepare('SELECT choice FROM poll_votes WHERE poll_id = ? AND user_id = ? ORDER BY at, choice'),
 		clearVotes: db.prepare('DELETE FROM poll_votes WHERE poll_id = ? AND user_id = ?'),
-		addVote: db.prepare('INSERT IGNORE INTO poll_votes (poll_id, user_id, choice, guild_id, at) VALUES (?, ?, ?, ?, ?)'),
+		addVote: db.prepare('INSERT INTO poll_votes (poll_id, user_id, choice, guild_id, at) VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING'),
 		counts: db.prepare('SELECT choice, COUNT(*) AS n FROM poll_votes WHERE poll_id = ? GROUP BY choice'),
 		voters: db.prepare('SELECT COUNT(DISTINCT user_id) AS n FROM poll_votes WHERE poll_id = ?'),
-		byGuild: db.prepare('SELECT guild_id AS guildId, choice, COUNT(*) AS n FROM poll_votes WHERE poll_id = ? GROUP BY guild_id, choice'),
-		votersOf: db.prepare('SELECT user_id AS userId FROM poll_votes WHERE poll_id = ? AND choice = ? ORDER BY at, user_id LIMIT 100'),
-		allVotes: db.prepare('SELECT user_id AS userId, choice, guild_id AS guildId, at FROM poll_votes WHERE poll_id = ? ORDER BY at, user_id, choice'),
+		byGuild: db.prepare('SELECT guild_id AS "guildId", choice, COUNT(*) AS n FROM poll_votes WHERE poll_id = ? GROUP BY guild_id, choice'),
+		votersOf: db.prepare('SELECT user_id AS "userId" FROM poll_votes WHERE poll_id = ? AND choice = ? ORDER BY at, user_id LIMIT 100'),
+		allVotes: db.prepare('SELECT user_id AS "userId", choice, guild_id AS "guildId", at FROM poll_votes WHERE poll_id = ? ORDER BY at, user_id, choice'),
 	};
 	// pollId -> pending refresh timer (vote bursts are grouped)
 	const refreshes = new Map();

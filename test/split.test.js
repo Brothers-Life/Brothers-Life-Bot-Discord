@@ -1,7 +1,8 @@
 // The split deployment in one process: a bot side (fake Discord) and an API side sharing the test database,
-// linked by the real internal link (HTTP + events).
+// linked by the real internal link (the bot dials the API's websocket).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import { once } from 'node:events';
 import { createCore } from '../src/core/context.js';
 import { parseConfig } from '../src/utils/config.js';
@@ -17,31 +18,35 @@ const silent = { info: () => undefined, warn: () => undefined, error: () => unde
 
 async function setup() {
 	const db = await openTestDb();
-	const config = { ...parseConfig({ OWNER_ID: OWNER }), DATA_DIR: '/nonexistent', INTERNAL_TOKEN: TOKEN, BOT_RPC_HOST: '127.0.0.1', BOT_RPC_PORT: 0 };
+	// The API side first: its HTTP server takes the bot's connection
+	const server = http.createServer();
+	server.listen(0, '127.0.0.1');
+	await once(server, 'listening');
+	const config = { ...parseConfig({ OWNER_ID: OWNER }), DATA_DIR: '/nonexistent', INTERNAL_TOKEN: TOKEN, API_URL: `http://127.0.0.1:${server.address().port}` };
+	const lines = [];
+	const apiLink = createApiLink({ config, consoleLog: { ingest: line => lines.push(line) }, logger: silent });
+	const apiCore = createCore({ db, config, executor: apiLink.executor, logger: silent, remote: apiLink.remote });
+	await apiCore.init();
+	apiLink.attach(apiCore);
+	apiLink.listen(server);
+
 	const executor = createFakeExecutor();
 	const botCore = createCore({ db, config, executor, logger: silent });
 	await botCore.init({ worker: true });
 	const runtime = { info: () => ({ version: 'v-test', supervised: false }), installState: () => null, restart: async () => 'restarted', stop: async () => undefined, install: () => undefined };
-	const lines = [];
 	const botLink = createBotLink({ config, core: botCore, executor, runtime, consoleLog: { subscribe: () => () => undefined }, logger: silent });
-	const { port } = await botLink.start();
-
-	const apiConfig = { ...config, BOT_URL: `http://127.0.0.1:${port}` };
-	const apiLink = createApiLink({ config: apiConfig, consoleLog: { ingest: line => lines.push(line) }, logger: silent });
-	const apiCore = createCore({ db, config: apiConfig, executor: apiLink.executor, logger: silent, remote: apiLink.remote });
-	await apiCore.init();
-	apiLink.attach(apiCore);
-	const connected = once(apiLink.rpc.events, 'connected');
-	apiLink.start();
-	await connected;
+	const snapshot = once(apiLink.events, 'snapshot');
+	botLink.start();
+	await snapshot;
 
 	await botCore.network.upsertSeen({ id: MAIN, name: 'Main' });
 	await botCore.network.upsertSeen({ id: OTHER, name: 'Other' });
 	const owner = createPrincipal({ id: OWNER, isOwner: true });
 	await botCore.network.setMain(owner, MAIN);
 	const close = async () => {
-		apiLink.close();
 		await botLink.close();
+		apiLink.close();
+		server.close();
 	};
 	return { db, executor, botCore, apiCore, apiLink, owner, lines, close };
 }
@@ -99,6 +104,7 @@ test('a change made from the panel refreshes the bot caches, and the other way r
 test('the bot status and its console reach the API', async () => {
 	const { apiCore, apiLink, close } = await setup();
 	assert.equal(apiCore.executor.status().ready, true);
+	assert.equal(apiLink.connected, true);
 	assert.equal(apiLink.botRuntime.info().version, 'v-test');
 	assert.equal(await apiLink.botRuntime.restart(), 'restarted');
 	await close();

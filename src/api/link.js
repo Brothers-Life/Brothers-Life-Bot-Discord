@@ -1,7 +1,9 @@
-// API side of the internal link with the bot (split deployment): a Discord executor and stand-ins for the
-// services living in the bot, live events relayed to the panel, the bot's process controls.
+// API side of the internal link with the bot (split deployment): the bot dials in (src/rpc/socket.js), then the API
+// gets a Discord executor and stand-ins for the services living in the bot, live events relayed to the panel,
+// and the bot's process controls. While no bot is linked, calls fail with BotUnavailableError (503).
 import { EventEmitter } from 'node:events';
-import { createRpcClient, remoteObject } from '../rpc/client.js';
+import { createPeer, BotUnavailableError } from '../rpc/peer.js';
+import { attachInternalLink, remoteObject } from '../rpc/socket.js';
 
 // Subscriptions answered here from the bot's event stream: service -> [method, event]
 const SUBSCRIPTIONS = { tickets: ['subscribe', 'tickets'], dms: ['subscribe', 'dms'], music: ['onChange', 'music'], customCommands: ['onChange', null] };
@@ -9,26 +11,57 @@ const SUBSCRIPTIONS = { tickets: ['subscribe', 'tickets'], dms: ['subscribe', 'd
 const LOCAL_METHODS = { tickets: new Set(['priorities']) };
 
 export function createApiLink({ config, consoleLog, logger }) {
-	const rpc = createRpcClient({ url: config.BOT_URL, token: config.INTERNAL_TOKEN, logger });
-	const bridge = new EventEmitter();
-	bridge.setMaxListeners(0);
+	const events = new EventEmitter();
+	events.setMaxListeners(0);
 	let snapshot = { botUserId: null, status: { ready: false, ping: null, guilds: 0, uptime: null, user: null }, icons: {}, runtime: null, install: null };
 	let core = null;
+	// { ws, peer } of the linked bot
+	let current = null;
+	let attached = null;
 
-	rpc.events.on('snapshot', (data) => {
-		snapshot = data;
-	});
-	for (const type of ['tickets', 'dms', 'music']) rpc.events.on(type, data => bridge.emit(type, data));
-	rpc.events.on('notification', data => core?.notifications.relay(data));
-	rpc.events.on('console', line => consoleLog.ingest(line, 'bot'));
-	rpc.events.on('audit', entry => core?.remoteAudit(entry).catch(error => logger.warn('Bot change not applied here:', error?.message)));
-	rpc.events.on('connected', () => logger.success('Linked to the bot'));
+	function onEvent({ type, data }) {
+		if (type === 'snapshot') snapshot = data;
+		else if (type === 'notification') core?.notifications.relay(data);
+		else if (type === 'console') consoleLog.ingest(data, 'bot');
+		else if (type === 'audit') core?.remoteAudit(data).catch(error => logger.warn('Bot change not applied here:', error?.message));
+		events.emit(type, data);
+	}
+
+	function accept(ws) {
+		// A new bot connection replaces the old one (bot restarted before the old socket timed out)
+		if (current) current.ws.terminate();
+		const peer = createPeer({ send: text => ws.send(text), onEvent, logger });
+		const link = { ws, peer };
+		current = link;
+		ws.on('message', text => peer.handle(text));
+		ws.on('error', error => logger.warn('Internal link error:', error?.message));
+		ws.on('close', () => {
+			peer.close(new Error('Link closed'));
+			if (current !== link) return;
+			current = null;
+			snapshot = { ...snapshot, status: { ...snapshot.status, ready: false } };
+			logger.warn('The bot left the internal link.');
+			events.emit('disconnected');
+		});
+		logger.success('Linked to the bot');
+		events.emit('connected');
+	}
+
+	const rpc = {
+		call(target, method, args = [], service = null) {
+			if (!current) return Promise.reject(new BotUnavailableError());
+			return current.peer.call(target, method, args, service);
+		},
+		emit(type, data = null) {
+			current?.peer.event(type, data);
+		},
+	};
 
 	// Discord actions are done by the bot; the few synchronous answers come from its last snapshot
 	const executor = remoteObject(rpc, 'executor', {
 		local: {
 			botUserId: () => snapshot.botUserId,
-			status: () => ({ ...snapshot.status, ready: rpc.connected && snapshot.status.ready }),
+			status: () => ({ ...snapshot.status, ready: Boolean(current) && snapshot.status.ready }),
 			guildIcon: guildId => snapshot.icons[guildId] ?? null,
 			guildIds: () => Object.keys(snapshot.icons),
 			music: null,
@@ -45,8 +78,8 @@ export function createApiLink({ config, consoleLog, logger }) {
 				if (subscription && prop === subscription[0]) {
 					return (listener) => {
 						if (!subscription[1]) return () => undefined;
-						bridge.on(subscription[1], listener);
-						return () => bridge.off(subscription[1], listener);
+						events.on(subscription[1], listener);
+						return () => events.off(subscription[1], listener);
 					};
 				}
 				const value = target[prop];
@@ -67,23 +100,33 @@ export function createApiLink({ config, consoleLog, logger }) {
 	};
 
 	return {
-		rpc,
+		events,
 		executor,
 		remote,
 		botRuntime,
 		get connected() {
-			return rpc.connected;
+			return Boolean(current);
 		},
-		attach(attached) {
-			core = attached;
+		attach(attachedCore) {
+			core = attachedCore;
 			// Changes made from the panel reach the bot (caches, staff resync, new servers…)
-			core.audit.onRecord(entry => rpc.emit('audit', entry).catch(() => undefined));
+			core.audit.onRecord((entry) => {
+				try {
+					rpc.emit('audit', entry);
+				}
+				catch (error) {
+					logger.warn('Panel change not sent to the bot:', error?.message);
+				}
+			});
 		},
-		start() {
-			rpc.start();
+		// Takes the bot's connections on the API's HTTP server (before it listens)
+		listen(server) {
+			attached = attachInternalLink(server, { token: config.INTERNAL_TOKEN, onConnection: accept, logger });
 		},
 		close() {
-			rpc.close();
+			current?.ws.terminate();
+			current = null;
+			attached?.close();
 		},
 	};
 }

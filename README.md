@@ -2,7 +2,7 @@
 
 Bot qui gère plusieurs serveurs Discord comme un seul **réseau**, piloté depuis un **panel web**.
 
-Quatre morceaux séparés (voir [docs/architecture.md](docs/architecture.md)) : le **bot** (Discord), l'**API** (panel et API publique), le **front** (le panel React) et la **base MariaDB**. Ils peuvent aussi tourner ensemble dans un seul processus (`src/index.js`).
+Quatre morceaux séparés (voir [docs/architecture.md](docs/architecture.md)) : le **bot** (Discord), l'**API** (panel et API publique), le **front** (le panel React) et la **base PostgreSQL**. Ils peuvent aussi tourner ensemble dans un seul processus (`src/index.js`).
 
 Fonctionnalités :
 
@@ -26,7 +26,7 @@ La conception détaillée est dans `docs/superpowers/specs/`.
 ## Prérequis
 
 - Node.js 22 ou plus
-- MariaDB 10.6 ou plus (11.4 conseillé) : une base vide suffit, le bot crée les tables. En local : `npm run db:test` lance un MariaDB dans Docker (root / root).
+- PostgreSQL 14 ou plus (17 conseillé) : une base vide suffit, le bot crée les tables. En local : `npm run db:test` lance un PostgreSQL dans Docker (postgres / root).
 - Une application Discord ([Developer Portal](https://discord.com/developers/applications)) :
   - **Bot** : activer les intents privilégiés *Server Members* et *Message Content*.
   - **OAuth2 > Redirects** : ajouter `<WEB_PUBLIC_URL>/api/auth/callback` (par exemple `http://localhost:3000/api/auth/callback`).
@@ -50,7 +50,7 @@ npm run dev:web               # http://localhost:5173 (l'API est relayée vers :
 
 Pour servir le panel compilé directement par le bot : `npm run build:web`.
 
-Les morceaux séparés en local : `npm run dev:bot`, `npm run dev:api`, `npm run dev:front` (avec `INTERNAL_TOKEN`, `BOT_URL`, `API_URL`… dans `.env.dev`, voir `.env.example`).
+Les morceaux séparés en local : `npm run dev:bot`, `npm run dev:api`, `npm run dev:front` (avec `INTERNAL_TOKEN`, `API_URL`… dans `.env.dev`, voir `.env.example`).
 
 La première connexion au panel se fait avec le compte `OWNER_ID`. Choisis ensuite le serveur principal dans « Serveurs ».
 
@@ -61,9 +61,9 @@ La première connexion au panel se fait avec le compte `OWNER_ID`. Choisis ensui
 | `npm run dev` | Bot en local avec rechargement (config `.env.dev`) |
 | `npm start` | Lanceur de production tout-en-un (`launcher.js`, config `.env.prod`) |
 | `npm run start:bot` / `start:api` / `start:front` | Lanceur d'un morceau du déploiement séparé |
-| `npm test` | Tests (`node --test`, sur MariaDB : `TEST_DATABASE_URL`, par défaut `mysql://root:root@127.0.0.1:3306/`) |
-| `npm run db:test` | MariaDB de test dans Docker |
-| `npm run db:migrate-sqlite` | Reprendre les données d'une v1 (fichier SQLite `data/bot.db`) dans MariaDB |
+| `npm test` | Tests (`node --test`, sur PostgreSQL : `TEST_DATABASE_URL`, par défaut `postgres://postgres:root@127.0.0.1:5432/postgres`) |
+| `npm run db:test` | PostgreSQL de test dans Docker |
+| `npm run db:migrate-sqlite` | Reprendre les données d'une v1 (fichier SQLite `data/bot.db`) dans PostgreSQL |
 | `npm run lint` | ESLint |
 | `npm run deploy:dev` / `deploy:global` | Forcer l'enregistrement des commandes slash (normalement automatique au démarrage) |
 | `npm run dev:web` / `build:web` | Panel : développement / compilation |
@@ -86,7 +86,7 @@ La CI vérifie le lint et les tests, compile le panel et publie la Release GitHu
 ## Production
 
 - **Pterodactyl** : [docs/pterodactyl.md](docs/pterodactyl.md) (un serveur, ou bot / API / front séparés).
-- **Docker** : `docker-compose.yml` (MariaDB + bot + API + front), modèle de configuration `.env.docker.example` :
+- **Docker** : `docker-compose.yml` (PostgreSQL + bot + API + front), modèle de configuration `.env.docker.example` :
 
 ```bash
 cp .env.docker.example .env   # puis remplir
@@ -102,7 +102,7 @@ src/bot.js, api.js,      déploiement séparé : le bot, l'API, le front
   front.js
 src/core/                logique métier : réseau, rangs, sanctions, événements, automod,
                          staff, tickets, permissions Discord, audit, sessions, versions
-src/db/                  MariaDB : driver, migrations, sauvegardes
+src/db/                  PostgreSQL : driver, migrations, sauvegardes
 src/rpc/, bot/link.js,   liaison interne bot ↔ API
   api/link.js
 src/bot/                 discord.js : événements, commandes, boutons, exécuteur Discord

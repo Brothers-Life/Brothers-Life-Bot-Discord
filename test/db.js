@@ -1,28 +1,41 @@
-// Test databases on MariaDB: each test file (one process) gets its own database, created and migrated once,
+// Test databases on PostgreSQL: each test file (one process) gets its own database, created and migrated once,
 // emptied between tests (only the tables written to), dropped at the end.
-// TEST_DATABASE_URL=mysql://root:root@127.0.0.1:3306 by default (docker compose -f docker-compose.test.yml up -d).
+// TEST_DATABASE_URL=postgres://postgres:root@127.0.0.1:5432/postgres by default (npm run db:test).
 import crypto from 'node:crypto';
 import { after } from 'node:test';
-import mysql from 'mysql2/promise';
+import pg from 'pg';
 import { openDb, databaseOptions } from '../src/db/index.js';
+import { literal } from '../src/db/dump.js';
 
-const WRITE = /^\s*(?:INSERT(?:\s+IGNORE)?\s+INTO|REPLACE\s+INTO|UPDATE(?:\s+IGNORE)?|DELETE\s+FROM)\s+`?(\w+)`?/i;
+const WRITE = /^\s*(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+"?(\w+)"?/i;
 
-export function testServerOptions() {
-	const url = process.env.TEST_DATABASE_URL ?? 'mysql://root:root@127.0.0.1:3306/';
-	const server = databaseOptions({ DATABASE_URL: url });
-	delete server.database;
-	return server;
+function serverUrl() {
+	return process.env.TEST_DATABASE_URL ?? 'postgres://postgres:root@127.0.0.1:5432/postgres';
+}
+
+// Connection settings of a database on the test server
+export function testDatabaseOptions(name) {
+	const url = new URL(serverUrl());
+	url.pathname = `/${name}`;
+	return databaseOptions({ DATABASE_URL: url.toString() });
+}
+
+async function admin(sql) {
+	const client = new pg.Client({ connectionString: serverUrl() });
+	await client.connect();
+	try {
+		await client.query(sql);
+	}
+	finally {
+		await client.end();
+	}
 }
 
 // A fresh database of its own, migrated (or not): for tests about migrations
 export async function createScratchDatabase({ migrate = true, migrationsDir } = {}) {
-	const server = testServerOptions();
 	const name = `brl_test_${crypto.randomBytes(6).toString('hex')}`;
-	const admin = await mysql.createConnection(server);
-	await admin.query(`CREATE DATABASE \`${name}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_bin`);
-	await admin.end();
-	const db = await openDb({ ...server, database: name }, { migrate, migrationsDir, connectionLimit: 4 });
+	await admin(`CREATE DATABASE ${name}`);
+	const db = await openDb(testDatabaseOptions(name), { migrate, migrationsDir, connectionLimit: 4 });
 	scratch.push({ db, name });
 	return db;
 }
@@ -35,14 +48,14 @@ async function setup() {
 	const dirty = new Set();
 	db.onQuery((sql) => {
 		const match = WRITE.exec(sql);
-		if (match) dirty.add(match[1]);
+		if (match) dirty.add(match[1].toLowerCase());
 	});
 	// Rows written by the migrations (default restriction profiles…), put back after each reset
 	const seeds = new Map();
-	const tables = (await db.query('SELECT table_name AS name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = \'BASE TABLE\'')).map(r => r.name);
+	const tables = (await db.query('SELECT table_name AS name FROM information_schema.tables WHERE table_schema = current_schema() AND table_type = \'BASE TABLE\'')).map(r => r.name);
 	for (const table of tables) {
 		if (table === 'schema_migrations') continue;
-		const rows = await db.query(`SELECT * FROM \`${table}\``);
+		const rows = await db.query(`SELECT * FROM ${table}`);
 		if (rows.length) seeds.set(table, rows);
 	}
 	return { db, dirty, seeds };
@@ -52,17 +65,13 @@ async function reset({ db, dirty, seeds }) {
 	if (!dirty.size) return;
 	const tables = [...dirty];
 	dirty.clear();
-	const connection = await db.pool.getConnection();
-	try {
-		await connection.query('SET FOREIGN_KEY_CHECKS = 0');
-		for (const table of tables) await connection.query(`TRUNCATE TABLE \`${table}\``);
-		await connection.query('SET FOREIGN_KEY_CHECKS = 1');
-		for (const table of tables) {
-			for (const row of seeds.get(table) ?? []) await connection.query(`INSERT INTO \`${table}\` SET ?`, [row]);
+	// One statement: ids start again from 1, rows pointing to these tables go too
+	await db.exec(`TRUNCATE ${tables.join(', ')} RESTART IDENTITY CASCADE`);
+	for (const table of tables) {
+		for (const row of seeds.get(table) ?? []) {
+			const columns = Object.keys(row);
+			await db.exec(`INSERT INTO ${table} (${columns.join(', ')}) VALUES (${columns.map(c => literal(row[c])).join(', ')})`);
 		}
-	}
-	finally {
-		connection.release();
 	}
 }
 
@@ -75,11 +84,9 @@ export async function openTestDb() {
 
 after(async () => {
 	if (!scratch.length) return;
-	const admin = await mysql.createConnection(testServerOptions());
 	for (const { db, name } of scratch.splice(0)) {
 		await db.close().catch(() => undefined);
-		await admin.query(`DROP DATABASE IF EXISTS \`${name}\``);
+		await admin(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`).catch(() => undefined);
 	}
-	await admin.end();
 	shared = null;
 });

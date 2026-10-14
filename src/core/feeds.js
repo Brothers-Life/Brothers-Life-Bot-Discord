@@ -190,7 +190,7 @@ export function createFeeds({ db, network, audit, executor, logs, fetchImpl = fe
 	let running = false;
 
 	const q = {
-		all: db.prepare('SELECT * FROM feed_subscriptions ORDER BY kind, display_name COLLATE utf8mb4_unicode_ci, id'),
+		all: db.prepare('SELECT * FROM feed_subscriptions ORDER BY kind, lower(display_name), id'),
 		get: db.prepare('SELECT * FROM feed_subscriptions WHERE id = ?'),
 		insert: db.prepare(`
 			INSERT INTO feed_subscriptions (kind, url, display_name, targets, payload, config, enabled, created_by, created_at, updated_at)
@@ -199,10 +199,10 @@ export function createFeeds({ db, network, audit, executor, logs, fetchImpl = fe
 		update: db.prepare('UPDATE feed_subscriptions SET url = @url, display_name = @displayName, targets = @targets, payload = @payload, config = @config, enabled = @enabled, updated_at = @at WHERE id = @id'),
 		delete: db.prepare('DELETE FROM feed_subscriptions WHERE id = ?'),
 		state: db.prepare('SELECT * FROM feed_state WHERE subscription_id = ?'),
-		ensureState: db.prepare('INSERT IGNORE INTO feed_state (subscription_id) VALUES (?)'),
+		ensureState: db.prepare('INSERT INTO feed_state (subscription_id) VALUES (?) ON CONFLICT DO NOTHING'),
 		resetState: db.prepare('DELETE FROM feed_state WHERE subscription_id = ?'),
 		isSeen: db.prepare('SELECT 1 FROM feed_seen WHERE subscription_id = ? AND item_key = ?'),
-		seen: db.prepare('INSERT INTO feed_seen (subscription_id, item_key, seen_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE seen_at = VALUES(seen_at)'),
+		seen: db.prepare('INSERT INTO feed_seen (subscription_id, item_key, seen_at) VALUES (?, ?, ?) ON CONFLICT (subscription_id, item_key) DO UPDATE SET seen_at = EXCLUDED.seen_at'),
 		clearSeen: db.prepare('DELETE FROM feed_seen WHERE subscription_id = ?'),
 		pruneSeen: db.prepare('DELETE FROM feed_seen WHERE subscription_id = ? AND seen_at < ?'),
 		history: db.prepare('INSERT INTO feed_history (subscription_id, kind, title, url, channels, at) VALUES (?, ?, ?, ?, ?, ?)'),

@@ -9,7 +9,7 @@ export function createStaffSync({ db, network, ranks, audit, executor, logs, log
 	const q = {
 		linksOf: db.prepare('SELECT rank_id, role_id FROM rank_roles WHERE guild_id = ?'),
 		clear: db.prepare('DELETE FROM rank_roles WHERE rank_id = ? AND guild_id = ?'),
-		add: db.prepare('INSERT IGNORE INTO rank_roles (rank_id, guild_id, role_id) VALUES (?, ?, ?)'),
+		add: db.prepare('INSERT INTO rank_roles (rank_id, guild_id, role_id) VALUES (?, ?, ?) ON CONFLICT DO NOTHING'),
 		direct: db.prepare('SELECT DISTINCT discord_id FROM user_ranks'),
 	};
 

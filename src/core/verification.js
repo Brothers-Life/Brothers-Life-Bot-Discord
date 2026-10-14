@@ -53,7 +53,7 @@ export function createVerification({ db, network, audit, settings, executor, log
 		kicked: 'Expulsé faute de vérification',
 	});
 	const q = {
-		add: db.prepare('REPLACE INTO verification_pending (guild_id, user_id, joined_at) VALUES (?, ?, ?)'),
+		add: db.prepare('INSERT INTO verification_pending (guild_id, user_id, joined_at) VALUES (?, ?, ?) ON CONFLICT (guild_id, user_id) DO UPDATE SET joined_at = EXCLUDED.joined_at, attempts = 0'),
 		get: db.prepare('SELECT * FROM verification_pending WHERE guild_id = ? AND user_id = ?'),
 		done: db.prepare('DELETE FROM verification_pending WHERE guild_id = ? AND user_id = ?'),
 		attempt: db.prepare('UPDATE verification_pending SET attempts = attempts + 1 WHERE guild_id = ? AND user_id = ?'),

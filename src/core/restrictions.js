@@ -13,15 +13,15 @@ export const RESTRICTABLE = [
 // "Punishment roles": one role per profile and per server, denied on every channel
 export function createRestrictions({ db, network, audit, executor, logger = console }) {
 	const q = {
-		profiles: db.prepare('SELECT * FROM restriction_profiles ORDER BY position, `key`'),
-		profile: db.prepare('SELECT * FROM restriction_profiles WHERE `key` = ?'),
+		profiles: db.prepare('SELECT * FROM restriction_profiles ORDER BY position, key'),
+		profile: db.prepare('SELECT * FROM restriction_profiles WHERE key = ?'),
 		clearProfiles: db.prepare('DELETE FROM restriction_profiles'),
-		insertProfile: db.prepare('INSERT INTO restriction_profiles (`key`, label, deny, position) VALUES (@key, @label, @deny, @position)'),
+		insertProfile: db.prepare('INSERT INTO restriction_profiles (key, label, deny, position) VALUES (@key, @label, @deny, @position)'),
 		role: db.prepare('SELECT role_id FROM restriction_roles WHERE guild_id = ? AND profile_key = ?'),
 		roles: db.prepare('SELECT * FROM restriction_roles WHERE guild_id = ?'),
 		setRole: db.prepare(`
 			INSERT INTO restriction_roles (guild_id, profile_key, role_id) VALUES (?, ?, ?)
-			ON DUPLICATE KEY UPDATE role_id = VALUES(role_id)
+			ON CONFLICT (guild_id, profile_key) DO UPDATE SET role_id = EXCLUDED.role_id
 		`),
 		deleteRoles: db.prepare('DELETE FROM restriction_roles WHERE profile_key = ?'),
 	};

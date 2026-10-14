@@ -48,7 +48,7 @@ export function createChannelFeatures({ db, network, audit, executor, logger = c
 		get: db.prepare('SELECT * FROM channel_features WHERE channel_id = ? AND kind = ?'),
 		upsert: db.prepare(`
 			INSERT INTO channel_features (channel_id, guild_id, kind, config, state, created_at, updated_at) VALUES (@channelId, @guildId, @kind, @config, '{}', @at, @at)
-			ON DUPLICATE KEY UPDATE config = VALUES(config), updated_at = VALUES(updated_at)
+			ON CONFLICT (channel_id, kind) DO UPDATE SET config = EXCLUDED.config, updated_at = EXCLUDED.updated_at
 		`),
 		state: db.prepare('UPDATE channel_features SET state = ? WHERE channel_id = ? AND kind = ?'),
 		remove: db.prepare('DELETE FROM channel_features WHERE channel_id = ? AND kind = ?'),

@@ -1,6 +1,6 @@
 # One image for every part of the bot: the command chooses what runs
 #   node src/index.js prod   everything in one process
-#   node src/bot.js prod     the Discord bot (+ periodic tasks, internal link on BOT_RPC_PORT)
+#   node src/bot.js prod     the Discord bot (+ periodic tasks; dials the API on API_URL)
 #   node src/api.js prod     the panel's API
 #   node src/front.js prod   the panel (React app) and the forwarding of /api to the API
 # See docker-compose.yml and docs/architecture.md.

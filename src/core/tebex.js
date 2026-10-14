@@ -107,8 +107,9 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 	const q = {
 		get: db.prepare('SELECT * FROM tebex_payments WHERE id = ?'),
 		insert: db.prepare(`
-			INSERT IGNORE INTO tebex_payments (id, status, amount, currency, player_uuid, player_name, packages, paid_at, seen_at, baseline)
+			INSERT INTO tebex_payments (id, status, amount, currency, player_uuid, player_name, packages, paid_at, seen_at, baseline)
 			VALUES (@id, @status, @amount, @currency, @playerUuid, @playerName, @packages, @paidAt, @seenAt, @baseline)
+			ON CONFLICT DO NOTHING
 		`),
 		setStatus: db.prepare('UPDATE tebex_payments SET status = ? WHERE id = ?'),
 		setLink: db.prepare('UPDATE tebex_payments SET discord_id = ?, link_method = ? WHERE id = ?'),
@@ -136,7 +137,7 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 		knownLink: db.prepare('SELECT discord_id FROM tebex_links WHERE player_uuid = ?'),
 		remember: db.prepare(`
 			INSERT INTO tebex_links (player_uuid, discord_id, created_by, created_at) VALUES (?, ?, ?, ?)
-			ON DUPLICATE KEY UPDATE discord_id = VALUES(discord_id), created_by = VALUES(created_by), created_at = VALUES(created_at)
+			ON CONFLICT (player_uuid) DO UPDATE SET discord_id = EXCLUDED.discord_id, created_by = EXCLUDED.created_by, created_at = EXCLUDED.created_at
 		`),
 		// Temporary roles share the table of /role: moderation.expireTempRoles takes them off when due
 		activeTemp: db.prepare('SELECT * FROM temp_roles WHERE guild_id = ? AND user_id = ? AND role_id = ? AND removed_at IS NULL'),
@@ -449,7 +450,7 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 					unlinked: await count('SELECT COUNT(*) AS n FROM tebex_payments WHERE baseline = 0 AND discord_id IS NULL AND revoked_at IS NULL'),
 					revoked: await count('SELECT COUNT(*) AS n FROM tebex_payments WHERE baseline = 0 AND revoked_at IS NOT NULL'),
 					// Sum of the last 30 days, per currency
-					revenue: await db.prepare(`SELECT currency, ROUND(SUM(CAST(amount AS DOUBLE)), 2) AS total, COUNT(*) AS n FROM tebex_payments
+					revenue: await db.prepare(`SELECT currency, ROUND(SUM(CASE WHEN amount ~ '^-{0,1}[0-9]+([.][0-9]+){0,1}$' THEN amount::numeric ELSE 0 END), 2) AS total, COUNT(*) AS n FROM tebex_payments
 						WHERE baseline = 0 AND revoked_at IS NULL AND COALESCE(paid_at, seen_at) >= ? GROUP BY currency`).all(now() - 30 * DAY),
 				},
 			};
@@ -519,7 +520,7 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 			if (filter === 'errors') where.push('error IS NOT NULL');
 			if (filter !== 'all' && filter !== 'baseline') where.push('baseline = 0');
 			if (search) {
-				where.push('(player_name COLLATE utf8mb4_unicode_ci LIKE @like OR player_uuid = @exact OR discord_id = @exact OR CAST(id AS CHAR) = @exact OR packages COLLATE utf8mb4_unicode_ci LIKE @like)');
+				where.push('(player_name ILIKE @like OR player_uuid = @exact OR discord_id = @exact OR id::text = @exact OR packages ILIKE @like)');
 				Object.assign(params, { like: `%${search}%`, exact: search });
 			}
 			if (before) {

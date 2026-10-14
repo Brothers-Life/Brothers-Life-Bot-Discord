@@ -98,8 +98,8 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 		setReview: db.prepare('UPDATE recruit_applications SET review_channel_id = ?, review_message_id = ?, thread_id = ? WHERE id = ?'),
 		setInterview: db.prepare('UPDATE recruit_applications SET interview_channel_id = ? WHERE id = ?'),
 		setNotes: db.prepare('UPDATE recruit_applications SET notes = ?, updated_at = ? WHERE id = ?'),
-		vote: db.prepare('INSERT INTO recruit_votes (application_id, user_id, vote, comment, at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE vote = VALUES(vote), comment = COALESCE(VALUES(comment), comment), at = VALUES(at)'),
-		votes: db.prepare('SELECT user_id AS userId, vote, comment, at FROM recruit_votes WHERE application_id = ? ORDER BY at, user_id'),
+		vote: db.prepare('INSERT INTO recruit_votes (application_id, user_id, vote, comment, at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (application_id, user_id) DO UPDATE SET vote = EXCLUDED.vote, comment = COALESCE(EXCLUDED.comment, recruit_votes.comment), at = EXCLUDED.at'),
+		votes: db.prepare('SELECT user_id AS "userId", vote, comment, at FROM recruit_votes WHERE application_id = ? ORDER BY at, user_id'),
 	};
 	const forms = new Map();
 

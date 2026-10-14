@@ -62,7 +62,7 @@ export function createMeetings({ db, network, ranks, audit, executor, logs, logg
 		message: db.prepare('UPDATE meetings SET message_id = ? WHERE id = ?'),
 		notes: db.prepare('UPDATE meetings SET notes = ?, agenda = ?, updated_at = ? WHERE id = ?'),
 		invites: db.prepare('SELECT * FROM meeting_invites WHERE meeting_id = ?'),
-		invite: db.prepare('INSERT IGNORE INTO meeting_invites (meeting_id, user_id) VALUES (?, ?)'),
+		invite: db.prepare('INSERT INTO meeting_invites (meeting_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING'),
 		uninvite: db.prepare('DELETE FROM meeting_invites WHERE meeting_id = ? AND user_id = ? AND rsvp = \'pending\''),
 		rsvp: db.prepare('UPDATE meeting_invites SET rsvp = ?, reason = ?, responded_at = ? WHERE meeting_id = ? AND user_id = ?'),
 		attendance: db.prepare('SELECT * FROM meeting_attendance WHERE meeting_id = ? ORDER BY joined_at, id'),

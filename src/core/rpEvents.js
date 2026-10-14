@@ -55,8 +55,8 @@ export function createRpEvents({ db, network, audit, executor, uploads = null, l
 		delete: db.prepare('DELETE FROM rp_events WHERE id = ?'),
 		rsvps: db.prepare('SELECT * FROM rp_event_rsvps WHERE event_id = ? ORDER BY at, user_id'),
 		rsvp: db.prepare('SELECT * FROM rp_event_rsvps WHERE event_id = ? AND user_id = ?'),
-		// `at` is set before `status` (MariaDB applies the assignments in order): kept when the status does not change
-		upsertRsvp: db.prepare('INSERT INTO rp_event_rsvps (event_id, user_id, status, at) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE at = IF(status = VALUES(status), at, VALUES(at)), status = VALUES(status)'),
+		// `at` is kept when the status does not change (PostgreSQL reads the old row values in every assignment)
+		upsertRsvp: db.prepare('INSERT INTO rp_event_rsvps (event_id, user_id, status, at) VALUES (?, ?, ?, ?) ON CONFLICT (event_id, user_id) DO UPDATE SET at = CASE WHEN rp_event_rsvps.status = EXCLUDED.status THEN rp_event_rsvps.at ELSE EXCLUDED.at END, status = EXCLUDED.status'),
 		deleteRsvp: db.prepare('DELETE FROM rp_event_rsvps WHERE event_id = ? AND user_id = ?'),
 		countGoing: db.prepare('SELECT COUNT(*) AS n FROM rp_event_rsvps WHERE event_id = ? AND status = \'going\''),
 		// Sign-ups of an event are changed one at a time (capacity, waiting list)

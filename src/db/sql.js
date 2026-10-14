@@ -1,5 +1,6 @@
-// Turns the named parameters of a query (@name, :name, $name) into `?` placeholders, and binds the
+// Turns the placeholders of a query (`?`, or named: @name, :name) into PostgreSQL's $1, $2…, and binds the
 // values the way better-sqlite3 did: positional arguments, arrays (flattened) and/or one object of named values.
+// `::type` casts and $1-style placeholders written by hand are left alone.
 
 // Splits a query into its placeholders, skipping strings, quoted identifiers and comments
 export function compile(sql) {
@@ -8,7 +9,7 @@ export function compile(sql) {
 	let positional = 0;
 	for (let i = 0; i < sql.length; i++) {
 		const ch = sql[i];
-		if (ch === '\'' || ch === '"' || ch === '`') {
+		if (ch === '\'' || ch === '"') {
 			const end = closing(sql, i, ch);
 			out += sql.slice(i, end + 1);
 			i = end;
@@ -30,13 +31,18 @@ export function compile(sql) {
 		}
 		if (ch === '?') {
 			slots.push(positional++);
-			out += '?';
+			out += `$${slots.length}`;
 			continue;
 		}
-		if ((ch === '@' || ch === ':' || ch === '$') && /[A-Za-z_]/.test(sql[i + 1] ?? '') && !/[\w]/.test(sql[i - 1] ?? '')) {
+		// A cast (x::text) is not a named parameter
+		if (ch === ':' && (sql[i + 1] === ':' || sql[i - 1] === ':')) {
+			out += ch;
+			continue;
+		}
+		if ((ch === '@' || ch === ':') && /[A-Za-z_]/.test(sql[i + 1] ?? '') && !/[\w]/.test(sql[i - 1] ?? '')) {
 			const match = /^[A-Za-z_]\w*/.exec(sql.slice(i + 1));
 			slots.push(match[0]);
-			out += '?';
+			out += `$${slots.length}`;
 			i += match[0].length;
 			continue;
 		}
@@ -47,10 +53,6 @@ export function compile(sql) {
 
 function closing(sql, start, quote) {
 	for (let i = start + 1; i < sql.length; i++) {
-		if (sql[i] === '\\' && quote !== '`') {
-			i++;
-			continue;
-		}
 		if (sql[i] === quote) {
 			// Doubled quote = escaped quote
 			if (sql[i + 1] === quote) {

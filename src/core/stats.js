@@ -25,16 +25,16 @@ export function createStats({ db, network, audit, executor, logger = console, no
 	const q = {
 		addActivity: db.prepare(`
 			INSERT INTO stats_activity (guild_id, day, user_id, channel_id, messages, voice_seconds) VALUES (@guildId, @day, @userId, @channelId, @messages, @voice)
-			ON DUPLICATE KEY UPDATE messages = messages + VALUES(messages), voice_seconds = voice_seconds + VALUES(voice_seconds)
+			ON CONFLICT (guild_id, day, user_id, channel_id) DO UPDATE SET messages = stats_activity.messages + EXCLUDED.messages, voice_seconds = stats_activity.voice_seconds + EXCLUDED.voice_seconds
 		`),
 		addHourly: db.prepare(`
 			INSERT INTO stats_hourly (guild_id, hour, messages, voice_seconds) VALUES (@guildId, @hour, @messages, @voice)
-			ON DUPLICATE KEY UPDATE messages = messages + VALUES(messages), voice_seconds = voice_seconds + VALUES(voice_seconds)
+			ON CONFLICT (guild_id, hour) DO UPDATE SET messages = stats_hourly.messages + EXCLUDED.messages, voice_seconds = stats_hourly.voice_seconds + EXCLUDED.voice_seconds
 		`),
 		addMembers: db.prepare(`
 			INSERT INTO stats_members (guild_id, day, joins, leaves, member_count, voice_peak) VALUES (@guildId, @day, @joins, @leaves, @memberCount, @voicePeak)
-			ON DUPLICATE KEY UPDATE joins = joins + VALUES(joins), leaves = leaves + VALUES(leaves),
-				member_count = COALESCE(VALUES(member_count), member_count), voice_peak = GREATEST(voice_peak, VALUES(voice_peak))
+			ON CONFLICT (guild_id, day) DO UPDATE SET joins = stats_members.joins + EXCLUDED.joins, leaves = stats_members.leaves + EXCLUDED.leaves,
+				member_count = COALESCE(EXCLUDED.member_count, stats_members.member_count), voice_peak = GREATEST(stats_members.voice_peak, EXCLUDED.voice_peak)
 		`),
 		purgeActivity: db.prepare('DELETE FROM stats_activity WHERE day < ?'),
 		purgeHourly: db.prepare('DELETE FROM stats_hourly WHERE hour < ?'),
@@ -263,7 +263,7 @@ export function createStats({ db, network, audit, executor, logger = console, no
 				FROM stats_activity WHERE ${where.sql}
 			`).get(...where.params);
 			const members = await db.prepare(`
-				SELECT day, SUM(joins) AS joins, SUM(leaves) AS leaves, SUM(member_count) AS memberCount, MAX(voice_peak) AS voicePeak
+				SELECT day, SUM(joins) AS joins, SUM(leaves) AS leaves, SUM(member_count) AS "memberCount", MAX(voice_peak) AS "voicePeak"
 				FROM stats_members WHERE ${guilds.sql} AND day BETWEEN ? AND ? GROUP BY day
 			`).all(...guilds.params, range.fromDay, range.toDay);
 			const days = [];
@@ -312,7 +312,7 @@ export function createStats({ db, network, audit, executor, logger = console, no
 			const where = await activityWhere(filters, range);
 			const order = metric === 'voice' ? 'SUM(voice_seconds)' : 'SUM(messages)';
 			return (await db.prepare(`
-				SELECT user_id AS userId, SUM(messages) AS messages, SUM(voice_seconds) AS voice, COUNT(DISTINCT day) AS days
+				SELECT user_id AS "userId", SUM(messages) AS messages, SUM(voice_seconds) AS voice, COUNT(DISTINCT day) AS days
 				FROM stats_activity WHERE ${where.sql} GROUP BY user_id ORDER BY ${order} DESC LIMIT ?
 			`).all(...where.params, Math.min(Math.max(limit, 1), 200)))
 				.map(r => ({ ...r, voiceHours: Math.round(r.voice / 36) / 100 }));
@@ -322,7 +322,7 @@ export function createStats({ db, network, audit, executor, logger = console, no
 			const range = rangeOf(filters);
 			const where = await activityWhere(filters, range);
 			return (await db.prepare(`
-				SELECT guild_id AS guildId, channel_id AS channelId, SUM(messages) AS messages, SUM(voice_seconds) AS voice, COUNT(DISTINCT user_id) AS members
+				SELECT guild_id AS "guildId", channel_id AS "channelId", SUM(messages) AS messages, SUM(voice_seconds) AS voice, COUNT(DISTINCT user_id) AS members
 				FROM stats_activity WHERE ${where.sql} GROUP BY guild_id, channel_id ORDER BY SUM(messages) + SUM(voice_seconds) / 60 DESC LIMIT ?
 			`).all(...where.params, Math.min(Math.max(limit, 1), 200)))
 				.map(r => ({ ...r, voiceHours: Math.round(r.voice / 36) / 100 }));
@@ -333,19 +333,19 @@ export function createStats({ db, network, audit, executor, logger = console, no
 			const range = rangeOf(filters);
 			const guilds = await guildFilter(filters.guildIds);
 			const sanctions = await db.prepare(`
-				SELECT moderator_id AS userId, type, COUNT(*) AS n FROM sanctions
-				WHERE created_at BETWEEN ? AND ? AND (origin_guild_id IS NULL OR ${guilds.sql.replace('guild_id', 'origin_guild_id')}) AND moderator_id REGEXP '^[0-9]'
+				SELECT moderator_id AS "userId", type, COUNT(*) AS n FROM sanctions
+				WHERE created_at BETWEEN ? AND ? AND (origin_guild_id IS NULL OR ${guilds.sql.replace('guild_id', 'origin_guild_id')}) AND moderator_id ~ '^[0-9]'
 				GROUP BY moderator_id, type
 			`).all(range.start, range.end + DAY_MS, ...guilds.params);
 			const tickets = await db.prepare(`
-				SELECT claimed_by AS userId, COUNT(*) AS claimed, SUM(status = 'closed') AS closed,
-					AVG(CASE WHEN closed_at IS NOT NULL THEN closed_at - created_at END) AS avgResolutionMs, AVG(rating) AS rating, COUNT(rating) AS ratings
+				SELECT claimed_by AS "userId", COUNT(*) AS claimed, SUM(CASE WHEN status = 'closed' THEN 1 ELSE 0 END) AS closed,
+					AVG(CASE WHEN closed_at IS NOT NULL THEN closed_at - created_at END) AS "avgResolutionMs", AVG(rating) AS rating, COUNT(rating) AS ratings
 				FROM tickets WHERE claimed_by IS NOT NULL AND created_at BETWEEN ? AND ? AND ${guilds.sql} GROUP BY claimed_by
 			`).all(range.start, range.end + DAY_MS, ...guilds.params);
 			const ids = new Set([...await staffIds(), ...sanctions.map(s => s.userId), ...tickets.map(t => t.userId)]);
 			const where = await activityWhere({ ...filters, staffOnly: false }, range);
 			const activityRows = ids.size
-				? await db.prepare(`SELECT user_id AS userId, SUM(messages) AS messages, SUM(voice_seconds) AS voice FROM stats_activity WHERE ${where.sql} AND user_id IN (${[...ids].map(() => '?').join(',')}) GROUP BY user_id`)
+				? await db.prepare(`SELECT user_id AS "userId", SUM(messages) AS messages, SUM(voice_seconds) AS voice FROM stats_activity WHERE ${where.sql} AND user_id IN (${[...ids].map(() => '?').join(',')}) GROUP BY user_id`)
 					.all(...where.params, ...ids)
 				: [];
 			return [...ids].map((userId) => {
@@ -371,10 +371,10 @@ export function createStats({ db, network, audit, executor, logger = console, no
 			const range = rangeOf(filters);
 			const where = await activityWhere({ ...filters, userId }, range);
 			const totals = await db.prepare(`SELECT COALESCE(SUM(messages), 0) AS messages, COALESCE(SUM(voice_seconds), 0) AS voice, COUNT(DISTINCT day) AS days FROM stats_activity WHERE ${where.sql}`).get(...where.params);
-			const channels = await db.prepare(`SELECT channel_id AS channelId, SUM(messages) AS messages FROM stats_activity WHERE ${where.sql} GROUP BY channel_id ORDER BY SUM(messages) DESC, channel_id LIMIT 3`).all(...where.params);
+			const channels = await db.prepare(`SELECT channel_id AS "channelId", SUM(messages) AS messages FROM stats_activity WHERE ${where.sql} GROUP BY channel_id ORDER BY SUM(messages) DESC, channel_id LIMIT 3`).all(...where.params);
 			const all = await activityWhere({ ...filters, userId: null }, range);
 			const rankRow = await db.prepare(`
-				SELECT COUNT(*) + 1 AS \`rank\` FROM (SELECT user_id, SUM(messages) AS m FROM stats_activity WHERE ${all.sql} GROUP BY user_id) AS totals
+				SELECT COUNT(*) + 1 AS "rank" FROM (SELECT user_id, SUM(messages) AS m FROM stats_activity WHERE ${all.sql} GROUP BY user_id) AS totals
 				WHERE m > ?
 			`).get(...all.params, totals.messages);
 			return { ...totals, voiceHours: Math.round(totals.voice / 36) / 100, topChannels: channels, rank: rankRow.rank, from: range.fromDay, to: range.toDay };

@@ -15,7 +15,7 @@ export async function panelSnapshot(db, guildId) {
 	const out = {};
 	for (const [table, { key, autoId }] of Object.entries(PANEL_TABLES)) {
 		// Stable order: by id (creation order) or by primary key
-		const order = (autoId ? ['id'] : key).map(c => `\`${c}\``).join(', ');
+		const order = (autoId ? ['id'] : key).map(c => `"${c}"`).join(', ');
 		out[table] = await db.prepare(`SELECT * FROM ${table} WHERE guild_id = ? ORDER BY ${order}`).all(guildId);
 	}
 	return out;

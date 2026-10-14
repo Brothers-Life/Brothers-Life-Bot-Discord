@@ -77,7 +77,7 @@ test('several templates; reset rebuilds the target with its panel configuration;
 	const tickets = core.tickets;
 	// Panel configuration of the model: a ticket type in its category, logs in #direction
 	await tickets.saveCategory(owner, OTHER, { name: 'Recrutement', parentChannelId: '820000000000000001', roleIds: ['810000000000000002'] });
-	await core.db.prepare('REPLACE INTO log_routes (guild_id, category, channel_id, enabled) VALUES (?, ?, ?, 1)').run(OTHER, 'tickets', '820000000000000002');
+	await core.db.prepare('INSERT INTO log_routes (guild_id, category, channel_id, enabled) VALUES (?, ?, ?, 1) ON CONFLICT (guild_id, category) DO UPDATE SET channel_id = EXCLUDED.channel_id, enabled = EXCLUDED.enabled').run(OTHER, 'tickets', '820000000000000002');
 
 	const entreprise = await core.templates.create(owner, { name: 'Entreprise', sourceGuildId: OTHER });
 	assert.deepEqual(entreprise.summary, { roles: 2, categories: 1, channels: 3, ticketTypes: 1, logRoutes: 1, automod: false });

@@ -143,11 +143,11 @@ export function createFeedback({ db, network, ranks, audit, executor, logger = c
 		removePending: db.prepare('DELETE FROM feedback_items WHERE id = ? AND approved = 0'),
 		remove: db.prepare('DELETE FROM feedback_items WHERE id = ?'),
 		reminded: db.prepare('UPDATE feedback_items SET reminded_at = ? WHERE id = ? AND reminded_at IS NULL'),
-		vote: db.prepare('INSERT INTO feedback_votes (item_id, user_id, value, at) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value), at = VALUES(at)'),
+		vote: db.prepare('INSERT INTO feedback_votes (item_id, user_id, value, at) VALUES (?, ?, ?, ?) ON CONFLICT (item_id, user_id) DO UPDATE SET value = EXCLUDED.value, at = EXCLUDED.at'),
 		myVote: db.prepare('SELECT value FROM feedback_votes WHERE item_id = ? AND user_id = ?'),
 		unvote: db.prepare('DELETE FROM feedback_votes WHERE item_id = ? AND user_id = ?'),
 		voters: db.prepare('SELECT user_id, value, at FROM feedback_votes WHERE item_id = ? ORDER BY at, user_id'),
-		score: db.prepare('SELECT SUM(value = 1) AS up, SUM(value = -1) AS down FROM feedback_votes WHERE item_id = ?'),
+		score: db.prepare('SELECT COUNT(*) FILTER (WHERE value = 1) AS up, COUNT(*) FILTER (WHERE value = -1) AS down FROM feedback_votes WHERE item_id = ?'),
 		pendingStaff: db.prepare(`
 			SELECT i.*, b.config FROM feedback_items i JOIN feedback_boxes b ON b.id = i.box_id
 			WHERE b.kind = 'staff' AND i.assignee_id IS NULL AND i.reminded_at IS NULL AND i.approved = 1 ORDER BY i.id

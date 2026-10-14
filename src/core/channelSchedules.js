@@ -97,7 +97,7 @@ export function createChannelSchedules({ db, network, audit, executor, logger = 
 				announce = @announce, enabled = @enabled, applied = NULL, updated_at = @at WHERE id = @id
 		`),
 		// Conditional: only the caller that saw the previous state applies the change
-		applied: db.prepare('UPDATE channel_schedules SET applied = ? WHERE id = ? AND applied <=> ?'),
+		applied: db.prepare('UPDATE channel_schedules SET applied = ? WHERE id = ? AND applied IS NOT DISTINCT FROM ?'),
 		remove: db.prepare('DELETE FROM channel_schedules WHERE id = ?'),
 	};
 	const toRule = row => row && ({

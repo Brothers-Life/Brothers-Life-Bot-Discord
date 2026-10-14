@@ -56,7 +56,7 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 	const token = createTokenCache({ fetchImpl, now });
 
 	const q = {
-		all: db.prepare('SELECT * FROM stream_subscriptions ORDER BY platform, display_name COLLATE utf8mb4_unicode_ci, id'),
+		all: db.prepare('SELECT * FROM stream_subscriptions ORDER BY platform, lower(display_name), id'),
 		get: db.prepare('SELECT * FROM stream_subscriptions WHERE id = ?'),
 		insert: db.prepare(`
 			INSERT INTO stream_subscriptions (platform, channel, display_name, targets, payloads, config, enabled, created_by, created_at, updated_at)
@@ -65,7 +65,7 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 		update: db.prepare('UPDATE stream_subscriptions SET channel = @channel, display_name = @displayName, targets = @targets, payloads = @payloads, config = @config, enabled = @enabled, updated_at = @at WHERE id = @id'),
 		delete: db.prepare('DELETE FROM stream_subscriptions WHERE id = ?'),
 		state: db.prepare('SELECT * FROM stream_state WHERE subscription_id = ?'),
-		ensureState: db.prepare('INSERT IGNORE INTO stream_state (subscription_id) VALUES (?)'),
+		ensureState: db.prepare('INSERT INTO stream_state (subscription_id) VALUES (?) ON CONFLICT DO NOTHING'),
 		history: db.prepare('INSERT INTO stream_history (subscription_id, kind, title, url, channels, at) VALUES (?, ?, ?, ?, ?, ?)'),
 		recent: db.prepare(`
 			SELECT h.*, s.display_name, s.platform FROM stream_history h JOIN stream_subscriptions s ON s.id = h.subscription_id

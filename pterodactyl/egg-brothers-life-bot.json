@@ -4,10 +4,10 @@
         "version": "PTDL_v2",
         "update_url": null
     },
-    "exported_at": "2026-10-11T03:08:20.478Z",
+    "exported_at": "2026-10-14T19:25:02.493Z",
     "name": "Brothers Life Bot",
     "author": "bot@brothers-life.invalid",
-    "description": "Bot Discord multi-serveurs Brothers Life avec son panel web, en un seul serveur. Base MariaDB (onglet Databases). Installe une Release du dépôt GitHub ; les mises à jour se font ensuite depuis le panel (page Versions).",
+    "description": "Bot Discord multi-serveurs Brothers Life avec son panel web, en un seul serveur. Base PostgreSQL (serveur à part). Installe une Release du dépôt GitHub ; les mises à jour se font ensuite depuis le panel (page Versions).",
     "features": null,
     "docker_images": {
         "Node.js 22": "ghcr.io/parkervcp/yolks:nodejs_22",
@@ -91,7 +91,7 @@
         },
         {
             "name": "Base de données : hôte",
-            "description": "Onglet Databases du serveur Pterodactyl (Endpoint, sans le port), ou l’adresse de ton serveur MariaDB.",
+            "description": "Adresse du serveur PostgreSQL (l’onglet Databases de Pterodactyl ne crée que des bases MySQL : il faut un PostgreSQL à part, ex. un conteneur postgres:17).",
             "env_variable": "DB_HOST",
             "default_value": "",
             "user_viewable": true,
@@ -101,9 +101,9 @@
         },
         {
             "name": "Base de données : port",
-            "description": "Port MariaDB (3306 en général).",
+            "description": "Port PostgreSQL (5432 en général).",
             "env_variable": "DB_PORT",
-            "default_value": "3306",
+            "default_value": "5432",
             "user_viewable": true,
             "user_editable": true,
             "rules": "required|integer|between:1,65535",
@@ -111,7 +111,7 @@
         },
         {
             "name": "Base de données : nom",
-            "description": "Nom de la base (onglet Databases : « Database »).",
+            "description": "Nom de la base PostgreSQL.",
             "env_variable": "DB_NAME",
             "default_value": "",
             "user_viewable": true,
@@ -121,7 +121,7 @@
         },
         {
             "name": "Base de données : utilisateur",
-            "description": "Utilisateur de la base (onglet Databases : « Username »).",
+            "description": "Utilisateur PostgreSQL propriétaire de la base.",
             "env_variable": "DB_USER",
             "default_value": "",
             "user_viewable": true,
@@ -131,7 +131,7 @@
         },
         {
             "name": "Base de données : mot de passe",
-            "description": "Mot de passe de la base (onglet Databases : œil à côté du mot de passe).",
+            "description": "Mot de passe de cet utilisateur.",
             "env_variable": "DB_PASSWORD",
             "default_value": "",
             "user_viewable": true,

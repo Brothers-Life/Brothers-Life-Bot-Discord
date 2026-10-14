@@ -22,7 +22,7 @@ export function createLogRouting({ db, executor, network, audit, logger = consol
 		route: db.prepare('SELECT channel_id, enabled FROM log_routes WHERE guild_id = ? AND category = ?'),
 		upsert: db.prepare(`
 			INSERT INTO log_routes (guild_id, category, channel_id, enabled) VALUES (?, ?, ?, ?)
-			ON DUPLICATE KEY UPDATE channel_id = VALUES(channel_id), enabled = VALUES(enabled)
+			ON CONFLICT (guild_id, category) DO UPDATE SET channel_id = EXCLUDED.channel_id, enabled = EXCLUDED.enabled
 		`),
 		delete: db.prepare('DELETE FROM log_routes WHERE guild_id = ? AND category = ?'),
 		disableChannel: db.prepare('UPDATE log_routes SET enabled = 0 WHERE channel_id = ?'),

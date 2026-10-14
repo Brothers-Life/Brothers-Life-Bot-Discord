@@ -14,7 +14,7 @@ export function createSanctionTemplates({ db, audit, restrictions, now = Date.no
 	const q = {
 		list: db.prepare('SELECT * FROM sanction_templates ORDER BY position, name'),
 		get: db.prepare('SELECT * FROM sanction_templates WHERE id = ?'),
-		byName: db.prepare('SELECT id FROM sanction_templates WHERE name COLLATE utf8mb4_unicode_ci = ? AND id != ?'),
+		byName: db.prepare('SELECT id FROM sanction_templates WHERE lower(name) = lower(?) AND id != ?'),
 		insert: db.prepare(`
 			INSERT INTO sanction_templates (name, type, reason, duration_ms, scope, profile, delete_message_seconds, position, created_at, updated_at)
 			VALUES (@name, @type, @reason, @durationMs, @scope, @profile, @deleteMessageSeconds, (SELECT COALESCE(MAX(position), 0) + 1 FROM sanction_templates), @at, @at)

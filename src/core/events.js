@@ -68,7 +68,7 @@ export function createEvents({ db, network, logs, settings, now = Date.now }) {
 				guildId && 'guild_id = @guildId',
 				category && 'category = @category',
 				userId && '(user_id = @userId OR actor_id = @userId)',
-				q && '(summary COLLATE utf8mb4_unicode_ci LIKE @q ESCAPE \'\\\\\' OR details COLLATE utf8mb4_unicode_ci LIKE @q ESCAPE \'\\\\\')',
+				q && '(summary ILIKE @q OR details ILIKE @q)',
 				from && 'at >= @from',
 				to && 'at <= @to',
 				before && 'id < @before',

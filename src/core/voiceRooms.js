@@ -62,7 +62,7 @@ export function createVoiceRooms({ db, network, audit, executor, logger = consol
 		prefs: db.prepare('SELECT prefs FROM voice_prefs WHERE user_id = ? AND guild_id = ?'),
 		savePrefs: db.prepare(`
 			INSERT INTO voice_prefs (user_id, guild_id, prefs) VALUES (?, ?, ?)
-			ON DUPLICATE KEY UPDATE prefs = VALUES(prefs)
+			ON CONFLICT (user_id, guild_id) DO UPDATE SET prefs = EXCLUDED.prefs
 		`),
 	};
 

@@ -12,14 +12,14 @@ export async function startupChecks(config, { role = 'all' } = {}) {
 		logger.error(prefix + 'INTERNAL_TOKEN is missing: the bot and the API share it to talk to each other (32 characters or more, the same on both).');
 		return false;
 	}
-	if (role === 'api' && !config.BOT_URL) {
-		logger.error(prefix + 'BOT_URL is missing: the API needs the address of the bot\'s internal link (e.g. http://bot:3002).');
+	if (role === 'bot' && !config.API_URL) {
+		logger.error(prefix + 'API_URL is missing: the bot dials the API to link with it (e.g. http://api:3000).');
 		return false;
 	}
 
 	const missingDb = missingDatabaseConfig(config);
 	if (missingDb.length) {
-		logger.error(prefix + `Database settings missing: set DATABASE_URL (mysql://user:password@host:3306/database) or ${missingDb.join(', ')} (.env file or environment variables)!`);
+		logger.error(prefix + `Database settings missing: set DATABASE_URL (postgres://user:password@host:5432/database) or ${missingDb.join(', ')} (.env file or environment variables)!`);
 		return false;
 	}
 

@@ -158,7 +158,7 @@ export function createAnnouncements({ db, network, audit, executor, logs, upload
 		addDeletion: db.prepare('INSERT INTO scheduled_deletions (channel_id, message_id, delete_at, source) VALUES (?, ?, ?, ?)'),
 		dueDeletions: db.prepare('SELECT * FROM scheduled_deletions WHERE delete_at <= ? LIMIT 50'),
 		dropDeletion: db.prepare('DELETE FROM scheduled_deletions WHERE id = ?'),
-		templates: db.prepare('SELECT * FROM announcement_templates ORDER BY name COLLATE utf8mb4_unicode_ci, id'),
+		templates: db.prepare('SELECT * FROM announcement_templates ORDER BY lower(name), id'),
 		template: db.prepare('SELECT * FROM announcement_templates WHERE id = ?'),
 		addTemplate: db.prepare('INSERT INTO announcement_templates (name, payload, options, targets, created_by, created_at) VALUES (@name, @payload, @options, @targets, @createdBy, @at)'),
 		dropTemplate: db.prepare('DELETE FROM announcement_templates WHERE id = ?'),
