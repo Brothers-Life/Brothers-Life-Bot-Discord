@@ -48,7 +48,7 @@ function useStored<T>(key: string, fallback: T) {
   return [value, update] as const
 }
 
-const isActive = (url: string, pathname: string) => (url === '/' ? pathname === '/' : pathname === url || pathname.startsWith(`${url}/`) || pathname.startsWith(`${url}.`))
+const isActive = (url: string, pathname: string, exact = false) => (url === '/' || exact ? pathname === url : pathname === url || pathname.startsWith(`${url}/`) || pathname.startsWith(`${url}.`))
 
 export function AppSidebar() {
   const { collapsible, variant } = useLayout()
@@ -82,7 +82,7 @@ export function AppSidebar() {
 
   const entry = (item: NavEntry, { favorite = false } = {}) => (
     <SidebarMenuItem key={`${favorite ? 'fav-' : ''}${item.url}`}>
-      <SidebarMenuButton asChild isActive={isActive(item.url, pathname)} tooltip={item.title}>
+      <SidebarMenuButton asChild isActive={isActive(item.url, pathname, item.exact)} tooltip={item.title}>
         <Link to={item.url} onClick={() => setOpenMobile(false)}>
           <item.icon />
           <span>{item.title}</span>
@@ -141,7 +141,7 @@ export function AppSidebar() {
         )}
 
         {sections.map((section) => {
-          const current = section.items.some((item) => isActive(item.url, pathname))
+          const current = section.items.some((item) => isActive(item.url, pathname, item.exact))
           // The group of the current page is always open; icons-only mode shows everything
           const open = iconsOnly || current || opened.includes(section.title)
           return (

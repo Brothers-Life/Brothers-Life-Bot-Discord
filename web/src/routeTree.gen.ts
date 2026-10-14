@@ -64,7 +64,24 @@ import { Route as AuthenticatedVersionsRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedVoiceRouteImport } from './routes/_authenticated/voice'
 import { Route as AuthenticatedAnnouncementsIndexRouteImport } from './routes/_authenticated/announcements/index'
 import { Route as AuthenticatedAnnouncementsIdRouteImport } from './routes/_authenticated/announcements/$id'
+import { Route as AuthenticatedTelemetryIndexRouteImport } from './routes/_authenticated/telemetry/index'
+import { Route as AuthenticatedTelemetryAlertsRouteImport } from './routes/_authenticated/telemetry/alerts'
+import { Route as AuthenticatedTelemetryAnnounceRouteImport } from './routes/_authenticated/telemetry/announce'
+import { Route as AuthenticatedTelemetryDbRouteImport } from './routes/_authenticated/telemetry/db'
+import { Route as AuthenticatedTelemetryDeathmapRouteImport } from './routes/_authenticated/telemetry/deathmap'
+import { Route as AuthenticatedTelemetryEconomyRouteImport } from './routes/_authenticated/telemetry/economy'
+import { Route as AuthenticatedTelemetryLiveRouteImport } from './routes/_authenticated/telemetry/live'
+import { Route as AuthenticatedTelemetryLogsRouteImport } from './routes/_authenticated/telemetry/logs'
+import { Route as AuthenticatedTelemetryPerfRouteImport } from './routes/_authenticated/telemetry/perf'
+import { Route as AuthenticatedTelemetryScriptsRouteImport } from './routes/_authenticated/telemetry/scripts'
+import { Route as AuthenticatedTelemetrySearchRouteImport } from './routes/_authenticated/telemetry/search'
+import { Route as AuthenticatedTelemetrySecurityRouteImport } from './routes/_authenticated/telemetry/security'
+import { Route as AuthenticatedTelemetrySettingsRouteImport } from './routes/_authenticated/telemetry/settings'
+import { Route as AuthenticatedTelemetryStaffRouteImport } from './routes/_authenticated/telemetry/staff'
+import { Route as AuthenticatedTelemetryStatsRouteImport } from './routes/_authenticated/telemetry/stats'
 import { Route as AuthenticatedTicketIdRouteImport } from './routes/_authenticated/ticket.$id'
+import { Route as AuthenticatedTelemetryPlayersIndexRouteImport } from './routes/_authenticated/telemetry/players.index'
+import { Route as AuthenticatedTelemetryPlayersCidRouteImport } from './routes/_authenticated/telemetry/players.$cid'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -351,11 +368,113 @@ const AuthenticatedAnnouncementsIdRoute =
     path: '/announcements/$id',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedTelemetryIndexRoute =
+  AuthenticatedTelemetryIndexRouteImport.update({
+    id: '/telemetry/',
+    path: '/telemetry/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedTelemetryAlertsRoute =
+  AuthenticatedTelemetryAlertsRouteImport.update({
+    id: '/telemetry/alerts',
+    path: '/telemetry/alerts',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedTelemetryAnnounceRoute =
+  AuthenticatedTelemetryAnnounceRouteImport.update({
+    id: '/telemetry/announce',
+    path: '/telemetry/announce',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedTelemetryDbRoute =
+  AuthenticatedTelemetryDbRouteImport.update({
+    id: '/telemetry/db',
+    path: '/telemetry/db',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedTelemetryDeathmapRoute =
+  AuthenticatedTelemetryDeathmapRouteImport.update({
+    id: '/telemetry/deathmap',
+    path: '/telemetry/deathmap',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedTelemetryEconomyRoute =
+  AuthenticatedTelemetryEconomyRouteImport.update({
+    id: '/telemetry/economy',
+    path: '/telemetry/economy',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedTelemetryLiveRoute =
+  AuthenticatedTelemetryLiveRouteImport.update({
+    id: '/telemetry/live',
+    path: '/telemetry/live',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedTelemetryLogsRoute =
+  AuthenticatedTelemetryLogsRouteImport.update({
+    id: '/telemetry/logs',
+    path: '/telemetry/logs',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedTelemetryPerfRoute =
+  AuthenticatedTelemetryPerfRouteImport.update({
+    id: '/telemetry/perf',
+    path: '/telemetry/perf',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedTelemetryScriptsRoute =
+  AuthenticatedTelemetryScriptsRouteImport.update({
+    id: '/telemetry/scripts',
+    path: '/telemetry/scripts',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedTelemetrySearchRoute =
+  AuthenticatedTelemetrySearchRouteImport.update({
+    id: '/telemetry/search',
+    path: '/telemetry/search',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedTelemetrySecurityRoute =
+  AuthenticatedTelemetrySecurityRouteImport.update({
+    id: '/telemetry/security',
+    path: '/telemetry/security',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedTelemetrySettingsRoute =
+  AuthenticatedTelemetrySettingsRouteImport.update({
+    id: '/telemetry/settings',
+    path: '/telemetry/settings',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedTelemetryStaffRoute =
+  AuthenticatedTelemetryStaffRouteImport.update({
+    id: '/telemetry/staff',
+    path: '/telemetry/staff',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedTelemetryStatsRoute =
+  AuthenticatedTelemetryStatsRouteImport.update({
+    id: '/telemetry/stats',
+    path: '/telemetry/stats',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedTicketIdRoute = AuthenticatedTicketIdRouteImport.update({
   id: '/ticket/$id',
   path: '/ticket/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedTelemetryPlayersIndexRoute =
+  AuthenticatedTelemetryPlayersIndexRouteImport.update({
+    id: '/telemetry/players/',
+    path: '/telemetry/players/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedTelemetryPlayersCidRoute =
+  AuthenticatedTelemetryPlayersCidRouteImport.update({
+    id: '/telemetry/players/$cid',
+    path: '/telemetry/players/$cid',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -411,8 +530,25 @@ export interface FileRoutesByFullPath {
   '/versions': typeof AuthenticatedVersionsRoute
   '/voice': typeof AuthenticatedVoiceRoute
   '/announcements/$id': typeof AuthenticatedAnnouncementsIdRoute
+  '/telemetry/alerts': typeof AuthenticatedTelemetryAlertsRoute
+  '/telemetry/announce': typeof AuthenticatedTelemetryAnnounceRoute
+  '/telemetry/db': typeof AuthenticatedTelemetryDbRoute
+  '/telemetry/deathmap': typeof AuthenticatedTelemetryDeathmapRoute
+  '/telemetry/economy': typeof AuthenticatedTelemetryEconomyRoute
+  '/telemetry/live': typeof AuthenticatedTelemetryLiveRoute
+  '/telemetry/logs': typeof AuthenticatedTelemetryLogsRoute
+  '/telemetry/perf': typeof AuthenticatedTelemetryPerfRoute
+  '/telemetry/scripts': typeof AuthenticatedTelemetryScriptsRoute
+  '/telemetry/search': typeof AuthenticatedTelemetrySearchRoute
+  '/telemetry/security': typeof AuthenticatedTelemetrySecurityRoute
+  '/telemetry/settings': typeof AuthenticatedTelemetrySettingsRoute
+  '/telemetry/staff': typeof AuthenticatedTelemetryStaffRoute
+  '/telemetry/stats': typeof AuthenticatedTelemetryStatsRoute
   '/ticket/$id': typeof AuthenticatedTicketIdRoute
   '/announcements/': typeof AuthenticatedAnnouncementsIndexRoute
+  '/telemetry/': typeof AuthenticatedTelemetryIndexRoute
+  '/telemetry/players/$cid': typeof AuthenticatedTelemetryPlayersCidRoute
+  '/telemetry/players/': typeof AuthenticatedTelemetryPlayersIndexRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
@@ -468,8 +604,25 @@ export interface FileRoutesByTo {
   '/voice': typeof AuthenticatedVoiceRoute
   '/': typeof AuthenticatedIndexRoute
   '/announcements/$id': typeof AuthenticatedAnnouncementsIdRoute
+  '/telemetry/alerts': typeof AuthenticatedTelemetryAlertsRoute
+  '/telemetry/announce': typeof AuthenticatedTelemetryAnnounceRoute
+  '/telemetry/db': typeof AuthenticatedTelemetryDbRoute
+  '/telemetry/deathmap': typeof AuthenticatedTelemetryDeathmapRoute
+  '/telemetry/economy': typeof AuthenticatedTelemetryEconomyRoute
+  '/telemetry/live': typeof AuthenticatedTelemetryLiveRoute
+  '/telemetry/logs': typeof AuthenticatedTelemetryLogsRoute
+  '/telemetry/perf': typeof AuthenticatedTelemetryPerfRoute
+  '/telemetry/scripts': typeof AuthenticatedTelemetryScriptsRoute
+  '/telemetry/search': typeof AuthenticatedTelemetrySearchRoute
+  '/telemetry/security': typeof AuthenticatedTelemetrySecurityRoute
+  '/telemetry/settings': typeof AuthenticatedTelemetrySettingsRoute
+  '/telemetry/staff': typeof AuthenticatedTelemetryStaffRoute
+  '/telemetry/stats': typeof AuthenticatedTelemetryStatsRoute
   '/ticket/$id': typeof AuthenticatedTicketIdRoute
   '/announcements': typeof AuthenticatedAnnouncementsIndexRoute
+  '/telemetry': typeof AuthenticatedTelemetryIndexRoute
+  '/telemetry/players/$cid': typeof AuthenticatedTelemetryPlayersCidRoute
+  '/telemetry/players': typeof AuthenticatedTelemetryPlayersIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -527,8 +680,25 @@ export interface FileRoutesById {
   '/_authenticated/voice': typeof AuthenticatedVoiceRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/announcements/$id': typeof AuthenticatedAnnouncementsIdRoute
+  '/_authenticated/telemetry/alerts': typeof AuthenticatedTelemetryAlertsRoute
+  '/_authenticated/telemetry/announce': typeof AuthenticatedTelemetryAnnounceRoute
+  '/_authenticated/telemetry/db': typeof AuthenticatedTelemetryDbRoute
+  '/_authenticated/telemetry/deathmap': typeof AuthenticatedTelemetryDeathmapRoute
+  '/_authenticated/telemetry/economy': typeof AuthenticatedTelemetryEconomyRoute
+  '/_authenticated/telemetry/live': typeof AuthenticatedTelemetryLiveRoute
+  '/_authenticated/telemetry/logs': typeof AuthenticatedTelemetryLogsRoute
+  '/_authenticated/telemetry/perf': typeof AuthenticatedTelemetryPerfRoute
+  '/_authenticated/telemetry/scripts': typeof AuthenticatedTelemetryScriptsRoute
+  '/_authenticated/telemetry/search': typeof AuthenticatedTelemetrySearchRoute
+  '/_authenticated/telemetry/security': typeof AuthenticatedTelemetrySecurityRoute
+  '/_authenticated/telemetry/settings': typeof AuthenticatedTelemetrySettingsRoute
+  '/_authenticated/telemetry/staff': typeof AuthenticatedTelemetryStaffRoute
+  '/_authenticated/telemetry/stats': typeof AuthenticatedTelemetryStatsRoute
   '/_authenticated/ticket/$id': typeof AuthenticatedTicketIdRoute
   '/_authenticated/announcements/': typeof AuthenticatedAnnouncementsIndexRoute
+  '/_authenticated/telemetry/': typeof AuthenticatedTelemetryIndexRoute
+  '/_authenticated/telemetry/players/$cid': typeof AuthenticatedTelemetryPlayersCidRoute
+  '/_authenticated/telemetry/players/': typeof AuthenticatedTelemetryPlayersIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -586,8 +756,25 @@ export interface FileRouteTypes {
     | '/versions'
     | '/voice'
     | '/announcements/$id'
+    | '/telemetry/alerts'
+    | '/telemetry/announce'
+    | '/telemetry/db'
+    | '/telemetry/deathmap'
+    | '/telemetry/economy'
+    | '/telemetry/live'
+    | '/telemetry/logs'
+    | '/telemetry/perf'
+    | '/telemetry/scripts'
+    | '/telemetry/search'
+    | '/telemetry/security'
+    | '/telemetry/settings'
+    | '/telemetry/staff'
+    | '/telemetry/stats'
     | '/ticket/$id'
     | '/announcements/'
+    | '/telemetry/'
+    | '/telemetry/players/$cid'
+    | '/telemetry/players/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
@@ -643,8 +830,25 @@ export interface FileRouteTypes {
     | '/voice'
     | '/'
     | '/announcements/$id'
+    | '/telemetry/alerts'
+    | '/telemetry/announce'
+    | '/telemetry/db'
+    | '/telemetry/deathmap'
+    | '/telemetry/economy'
+    | '/telemetry/live'
+    | '/telemetry/logs'
+    | '/telemetry/perf'
+    | '/telemetry/scripts'
+    | '/telemetry/search'
+    | '/telemetry/security'
+    | '/telemetry/settings'
+    | '/telemetry/staff'
+    | '/telemetry/stats'
     | '/ticket/$id'
     | '/announcements'
+    | '/telemetry'
+    | '/telemetry/players/$cid'
+    | '/telemetry/players'
   id:
     | '__root__'
     | '/_authenticated'
@@ -701,8 +905,25 @@ export interface FileRouteTypes {
     | '/_authenticated/voice'
     | '/_authenticated/'
     | '/_authenticated/announcements/$id'
+    | '/_authenticated/telemetry/alerts'
+    | '/_authenticated/telemetry/announce'
+    | '/_authenticated/telemetry/db'
+    | '/_authenticated/telemetry/deathmap'
+    | '/_authenticated/telemetry/economy'
+    | '/_authenticated/telemetry/live'
+    | '/_authenticated/telemetry/logs'
+    | '/_authenticated/telemetry/perf'
+    | '/_authenticated/telemetry/scripts'
+    | '/_authenticated/telemetry/search'
+    | '/_authenticated/telemetry/security'
+    | '/_authenticated/telemetry/settings'
+    | '/_authenticated/telemetry/staff'
+    | '/_authenticated/telemetry/stats'
     | '/_authenticated/ticket/$id'
     | '/_authenticated/announcements/'
+    | '/_authenticated/telemetry/'
+    | '/_authenticated/telemetry/players/$cid'
+    | '/_authenticated/telemetry/players/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1098,11 +1319,130 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAnnouncementsIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/telemetry/': {
+      id: '/_authenticated/telemetry/'
+      path: '/telemetry'
+      fullPath: '/telemetry/'
+      preLoaderRoute: typeof AuthenticatedTelemetryIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/telemetry/alerts': {
+      id: '/_authenticated/telemetry/alerts'
+      path: '/telemetry/alerts'
+      fullPath: '/telemetry/alerts'
+      preLoaderRoute: typeof AuthenticatedTelemetryAlertsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/telemetry/announce': {
+      id: '/_authenticated/telemetry/announce'
+      path: '/telemetry/announce'
+      fullPath: '/telemetry/announce'
+      preLoaderRoute: typeof AuthenticatedTelemetryAnnounceRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/telemetry/db': {
+      id: '/_authenticated/telemetry/db'
+      path: '/telemetry/db'
+      fullPath: '/telemetry/db'
+      preLoaderRoute: typeof AuthenticatedTelemetryDbRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/telemetry/deathmap': {
+      id: '/_authenticated/telemetry/deathmap'
+      path: '/telemetry/deathmap'
+      fullPath: '/telemetry/deathmap'
+      preLoaderRoute: typeof AuthenticatedTelemetryDeathmapRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/telemetry/economy': {
+      id: '/_authenticated/telemetry/economy'
+      path: '/telemetry/economy'
+      fullPath: '/telemetry/economy'
+      preLoaderRoute: typeof AuthenticatedTelemetryEconomyRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/telemetry/live': {
+      id: '/_authenticated/telemetry/live'
+      path: '/telemetry/live'
+      fullPath: '/telemetry/live'
+      preLoaderRoute: typeof AuthenticatedTelemetryLiveRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/telemetry/logs': {
+      id: '/_authenticated/telemetry/logs'
+      path: '/telemetry/logs'
+      fullPath: '/telemetry/logs'
+      preLoaderRoute: typeof AuthenticatedTelemetryLogsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/telemetry/perf': {
+      id: '/_authenticated/telemetry/perf'
+      path: '/telemetry/perf'
+      fullPath: '/telemetry/perf'
+      preLoaderRoute: typeof AuthenticatedTelemetryPerfRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/telemetry/scripts': {
+      id: '/_authenticated/telemetry/scripts'
+      path: '/telemetry/scripts'
+      fullPath: '/telemetry/scripts'
+      preLoaderRoute: typeof AuthenticatedTelemetryScriptsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/telemetry/search': {
+      id: '/_authenticated/telemetry/search'
+      path: '/telemetry/search'
+      fullPath: '/telemetry/search'
+      preLoaderRoute: typeof AuthenticatedTelemetrySearchRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/telemetry/security': {
+      id: '/_authenticated/telemetry/security'
+      path: '/telemetry/security'
+      fullPath: '/telemetry/security'
+      preLoaderRoute: typeof AuthenticatedTelemetrySecurityRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/telemetry/settings': {
+      id: '/_authenticated/telemetry/settings'
+      path: '/telemetry/settings'
+      fullPath: '/telemetry/settings'
+      preLoaderRoute: typeof AuthenticatedTelemetrySettingsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/telemetry/staff': {
+      id: '/_authenticated/telemetry/staff'
+      path: '/telemetry/staff'
+      fullPath: '/telemetry/staff'
+      preLoaderRoute: typeof AuthenticatedTelemetryStaffRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/telemetry/stats': {
+      id: '/_authenticated/telemetry/stats'
+      path: '/telemetry/stats'
+      fullPath: '/telemetry/stats'
+      preLoaderRoute: typeof AuthenticatedTelemetryStatsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/ticket/$id': {
       id: '/_authenticated/ticket/$id'
       path: '/ticket/$id'
       fullPath: '/ticket/$id'
       preLoaderRoute: typeof AuthenticatedTicketIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/telemetry/players/': {
+      id: '/_authenticated/telemetry/players/'
+      path: '/telemetry/players'
+      fullPath: '/telemetry/players/'
+      preLoaderRoute: typeof AuthenticatedTelemetryPlayersIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/telemetry/players/$cid': {
+      id: '/_authenticated/telemetry/players/$cid'
+      path: '/telemetry/players/$cid'
+      fullPath: '/telemetry/players/$cid'
+      preLoaderRoute: typeof AuthenticatedTelemetryPlayersCidRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
   }
@@ -1160,8 +1500,25 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedVoiceRoute: typeof AuthenticatedVoiceRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedAnnouncementsIdRoute: typeof AuthenticatedAnnouncementsIdRoute
+  AuthenticatedTelemetryAlertsRoute: typeof AuthenticatedTelemetryAlertsRoute
+  AuthenticatedTelemetryAnnounceRoute: typeof AuthenticatedTelemetryAnnounceRoute
+  AuthenticatedTelemetryDbRoute: typeof AuthenticatedTelemetryDbRoute
+  AuthenticatedTelemetryDeathmapRoute: typeof AuthenticatedTelemetryDeathmapRoute
+  AuthenticatedTelemetryEconomyRoute: typeof AuthenticatedTelemetryEconomyRoute
+  AuthenticatedTelemetryLiveRoute: typeof AuthenticatedTelemetryLiveRoute
+  AuthenticatedTelemetryLogsRoute: typeof AuthenticatedTelemetryLogsRoute
+  AuthenticatedTelemetryPerfRoute: typeof AuthenticatedTelemetryPerfRoute
+  AuthenticatedTelemetryScriptsRoute: typeof AuthenticatedTelemetryScriptsRoute
+  AuthenticatedTelemetrySearchRoute: typeof AuthenticatedTelemetrySearchRoute
+  AuthenticatedTelemetrySecurityRoute: typeof AuthenticatedTelemetrySecurityRoute
+  AuthenticatedTelemetrySettingsRoute: typeof AuthenticatedTelemetrySettingsRoute
+  AuthenticatedTelemetryStaffRoute: typeof AuthenticatedTelemetryStaffRoute
+  AuthenticatedTelemetryStatsRoute: typeof AuthenticatedTelemetryStatsRoute
   AuthenticatedTicketIdRoute: typeof AuthenticatedTicketIdRoute
   AuthenticatedAnnouncementsIndexRoute: typeof AuthenticatedAnnouncementsIndexRoute
+  AuthenticatedTelemetryIndexRoute: typeof AuthenticatedTelemetryIndexRoute
+  AuthenticatedTelemetryPlayersCidRoute: typeof AuthenticatedTelemetryPlayersCidRoute
+  AuthenticatedTelemetryPlayersIndexRoute: typeof AuthenticatedTelemetryPlayersIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -1216,8 +1573,26 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedVoiceRoute: AuthenticatedVoiceRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedAnnouncementsIdRoute: AuthenticatedAnnouncementsIdRoute,
+  AuthenticatedTelemetryAlertsRoute: AuthenticatedTelemetryAlertsRoute,
+  AuthenticatedTelemetryAnnounceRoute: AuthenticatedTelemetryAnnounceRoute,
+  AuthenticatedTelemetryDbRoute: AuthenticatedTelemetryDbRoute,
+  AuthenticatedTelemetryDeathmapRoute: AuthenticatedTelemetryDeathmapRoute,
+  AuthenticatedTelemetryEconomyRoute: AuthenticatedTelemetryEconomyRoute,
+  AuthenticatedTelemetryLiveRoute: AuthenticatedTelemetryLiveRoute,
+  AuthenticatedTelemetryLogsRoute: AuthenticatedTelemetryLogsRoute,
+  AuthenticatedTelemetryPerfRoute: AuthenticatedTelemetryPerfRoute,
+  AuthenticatedTelemetryScriptsRoute: AuthenticatedTelemetryScriptsRoute,
+  AuthenticatedTelemetrySearchRoute: AuthenticatedTelemetrySearchRoute,
+  AuthenticatedTelemetrySecurityRoute: AuthenticatedTelemetrySecurityRoute,
+  AuthenticatedTelemetrySettingsRoute: AuthenticatedTelemetrySettingsRoute,
+  AuthenticatedTelemetryStaffRoute: AuthenticatedTelemetryStaffRoute,
+  AuthenticatedTelemetryStatsRoute: AuthenticatedTelemetryStatsRoute,
   AuthenticatedTicketIdRoute: AuthenticatedTicketIdRoute,
   AuthenticatedAnnouncementsIndexRoute: AuthenticatedAnnouncementsIndexRoute,
+  AuthenticatedTelemetryIndexRoute: AuthenticatedTelemetryIndexRoute,
+  AuthenticatedTelemetryPlayersCidRoute: AuthenticatedTelemetryPlayersCidRoute,
+  AuthenticatedTelemetryPlayersIndexRoute:
+    AuthenticatedTelemetryPlayersIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

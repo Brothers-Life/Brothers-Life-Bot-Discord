@@ -56,6 +56,22 @@ import {
   Wrench,
   ShoppingCart,
   Globe,
+  Radar,
+  Satellite,
+  Wallet,
+  UsersRound,
+  Terminal,
+  BellRing,
+  ChartPie,
+  MapPinned,
+  Zap,
+  Cpu,
+  ShieldEllipsis,
+  Search,
+  Database,
+  MessageSquareShare,
+  SlidersHorizontal,
+  UserCog,
 } from 'lucide-react'
 
 export type NavEntry = {
@@ -66,6 +82,8 @@ export type NavEntry = {
   permission: string | null
   // Other words the quick search (Ctrl+K) should find it with
   keywords?: string
+  // Active only on this exact URL (an overview whose children have entries of their own)
+  exact?: boolean
 }
 
 export type NavSection = { title: string; icon: React.ElementType; items: NavEntry[] }
@@ -90,6 +108,28 @@ export const navSections: NavSection[] = [
       { title: 'FiveM · txAdmin et maintenance', url: '/fivem-events', icon: Wrench, permission: 'fivemevents.view', keywords: 'txadmin maintenance redémarrage restart reboot annonce pont bridge' },
       { title: 'FiveM · Base de données', url: '/fivem-players', icon: Contact, permission: 'fivemdata.view', keywords: 'joueur personnage citizen véhicule plaque inventaire argent bdd base métier gang logs staff prison mdt économie activité données' },
       { title: 'Boutique', url: '/tebex', icon: ShoppingCart, permission: 'tebex.view', keywords: 'tebex achat paiement vip remboursement' },
+    ],
+  },
+  {
+    title: 'Télémétrie FiveM',
+    icon: Radar,
+    items: [
+      { title: 'Télémétrie · Vue d’ensemble', url: '/telemetry', icon: Radar, permission: 'telemetry.view', exact: true, keywords: 'fivem jeu en ligne tick disponibilité uptime erreurs' },
+      { title: 'Télémétrie · Direct', url: '/telemetry/live', icon: Satellite, permission: 'telemetry.view', keywords: 'temps réel live flux connexions morts chat' },
+      { title: 'Télémétrie · Joueurs', url: '/telemetry/players', icon: UsersRound, permission: 'telemetry.view', keywords: 'personnage citizenid fiche journal inventaire véhicules comptes liés' },
+      { title: 'Télémétrie · Économie', url: '/telemetry/economy', icon: Wallet, permission: 'telemetry.economy', keywords: 'argent masse monétaire inflation banque boutiques achats crypto sociétés' },
+      { title: 'Télémétrie · Logs', url: '/telemetry/logs', icon: Terminal, permission: 'telemetry.logs', keywords: 'console chat commandes erreurs' },
+      { title: 'Télémétrie · Alertes', url: '/telemetry/alerts', icon: BellRing, permission: 'telemetry.view', keywords: 'anticheat serveur tombé saut d’argent rafale erreurs' },
+      { title: 'Télémétrie · Statistiques', url: '/telemetry/stats', icon: ChartPie, permission: 'telemetry.view', keywords: 'affluence métiers gangs tueurs armes causes pic' },
+      { title: 'Télémétrie · Carte des morts', url: '/telemetry/deathmap', icon: MapPinned, permission: 'telemetry.view', keywords: 'carte chaleur zones captures' },
+      { title: 'Télémétrie · Performances', url: '/telemetry/perf', icon: Zap, permission: 'telemetry.view', keywords: 'fps tick mlo intérieurs zones entités profiler ressources optimiser' },
+      { title: 'Télémétrie · Scripts', url: '/telemetry/scripts', icon: Cpu, permission: 'telemetry.view', keywords: 'ressources erreurs hitch ralentissements redémarrages' },
+      { title: 'Télémétrie · Suivi staff', url: '/telemetry/staff', icon: UserCog, permission: 'telemetry.view', keywords: 'ban kick tp téléportation qui fait quoi txadmin' },
+      { title: 'Télémétrie · Sécurité', url: '/telemetry/security', icon: ShieldEllipsis, permission: 'telemetry.view', keywords: 'actions staff connexions explosions morts' },
+      { title: 'Télémétrie · Recherche', url: '/telemetry/search', icon: Search, permission: 'telemetry.view', keywords: 'chercher joueurs logs chat journaux' },
+      { title: 'Télémétrie · Base de données', url: '/telemetry/db', icon: Database, permission: 'telemetry.view', keywords: 'tables lignes taille fortunes bans' },
+      { title: 'Télémétrie · Annonces en jeu', url: '/telemetry/announce', icon: MessageSquareShare, permission: 'telemetry.announce', keywords: 'message joueurs notification chat' },
+      { title: 'Télémétrie · Réglages', url: '/telemetry/settings', icon: SlidersHorizontal, permission: 'telemetry.manage', keywords: 'jeton token ingestion seuils conservation fuseau' },
     ],
   },
   {
