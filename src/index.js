@@ -14,6 +14,7 @@ import { setPanelUrl } from './bot/musicUi.js';
 import { createWebServer } from './web/server.js';
 import { createRuntime } from './runtime.js';
 import { startTasks, startUpdateCheck } from './app/tasks.js';
+import { importTelemetry } from './core/telemetry/importer.js';
 
 run(async () => {
 	logger.info(`Brothers Life bot v${pkg.version} (${config.ENV})`);
@@ -35,6 +36,11 @@ run(async () => {
 	const core = createCore({ db, config, executor: bot.executor, logger });
 	// Caches every process needs, then the repairs only the bot process does
 	await core.init({ worker: true });
+	if (config.TELEMETRY_IMPORT_FROM) {
+		importTelemetry({ db, url: config.TELEMETRY_IMPORT_FROM, settings: core.settings, logger })
+			.then(counts => counts && logger.success('Old telemetry database imported.'))
+			.catch(error => logger.error('Telemetry import failed:', error?.message ?? error));
+	}
 	const versions = createVersionService({
 		config,
 		settings: core.settings,

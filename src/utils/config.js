@@ -58,6 +58,8 @@ export function parseConfig(vars, { role: processRole = 'all' } = {}) {
 		API_URL: str('API_URL').replace(/\/+$/, ''),
 		// FiveM telemetry (bl_telemetry): ingest token and server address until they are set from the panel
 		TELEMETRY_INGEST_TOKEN: str('TELEMETRY_INGEST_TOKEN'),
+		// Old panel database (bl-panel-api) copied once into the telemetry tables, then ignored
+		TELEMETRY_IMPORT_FROM: str('TELEMETRY_IMPORT_FROM'),
 		TELEMETRY_FIVEM_BASE: str('TELEMETRY_FIVEM_BASE').replace(/\/+$/, ''),
 	};
 

@@ -14,6 +14,7 @@ import { createVersionService } from './core/versions.js';
 import { createWebServer } from './web/server.js';
 import { createRuntime } from './runtime.js';
 import { createApiLink } from './api/link.js';
+import { importTelemetry } from './core/telemetry/importer.js';
 
 run(async () => {
 	logger.info(`Brothers Life bot v${pkg.version} (${config.ENV}) — API process`);
@@ -32,6 +33,11 @@ run(async () => {
 	const link = createApiLink({ config, consoleLog, logger });
 	const core = createCore({ db, config, executor: link.executor, logger, remote: link.remote });
 	await core.init();
+	if (config.TELEMETRY_IMPORT_FROM) {
+		importTelemetry({ db, url: config.TELEMETRY_IMPORT_FROM, settings: core.settings, logger })
+			.then(counts => counts && logger.success('Old telemetry database imported.'))
+			.catch(error => logger.error('Telemetry import failed:', error?.message ?? error));
+	}
 	link.attach(core);
 
 	const versions = createVersionService({

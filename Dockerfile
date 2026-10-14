@@ -1,4 +1,4 @@
-# One image for every part of the bot: the command chooses what runs
+# One image for every part of the bot: APP_ROLE (all, bot, api, front) or the command chooses what runs
 #   node src/index.js prod   everything in one process
 #   node src/bot.js prod     the Discord bot (+ periodic tasks; dials the API on API_URL)
 #   node src/api.js prod     the panel's API
@@ -27,4 +27,4 @@ COPY --from=panel /build/web/dist ./web/dist
 RUN mkdir -p data logs && chown -R node:node data logs
 USER node
 VOLUME ["/app/data"]
-CMD ["node", "src/index.js", "prod"]
+CMD ["node", "src/start.js", "prod"]
