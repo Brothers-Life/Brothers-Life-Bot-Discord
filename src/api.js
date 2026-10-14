@@ -15,6 +15,7 @@ import { createWebServer } from './web/server.js';
 import { createRuntime } from './runtime.js';
 import { createApiLink } from './api/link.js';
 import { importTelemetry } from './core/telemetry/importer.js';
+import { takeOverLegacyPanel } from './core/telemetry/legacy.js';
 
 run(async () => {
 	logger.info(`Brothers Life bot v${pkg.version} (${config.ENV}) — API process`);
@@ -33,6 +34,8 @@ run(async () => {
 	const link = createApiLink({ config, consoleLog, logger });
 	const core = createCore({ db, config, executor: link.executor, logger, remote: link.remote });
 	await core.init();
+	// Old FiveM panel: its settings and accesses (variables copied as they were), once
+	await takeOverLegacyPanel({ core, db, config, logger });
 	if (config.TELEMETRY_IMPORT_FROM) {
 		importTelemetry({ db, url: config.TELEMETRY_IMPORT_FROM, settings: core.settings, logger })
 			.then(counts => counts && logger.success('Old telemetry database imported.'))

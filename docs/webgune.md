@@ -12,6 +12,28 @@ Tout le projet tient dans un projet webgune (« Brothers Life Panel ») : **une 
             les deux ──▶ brl-db (PostgreSQL)
 ```
 
+## Installation en une commande
+
+`scripts/webgune-setup.mjs` lit les anciens services du projet (`panel-api`, `panel`, `panel-db`) et crée `brl-db` et `brl-panel` avec les anciens réglages déjà remplis. Le bot n'est créé qu'avec `--with-bot`.
+
+```bash
+# Simulation (une clé en lecture suffit) : montre tout ce qui sera créé, secrets masqués
+WEBGUNE_API_KEY=wgk_… node scripts/webgune-setup.mjs --branch claude/determined-wozniak-qisgw1 --dry-run
+# Pour de vrai (clé avec services:write et projects:write)
+WEBGUNE_API_KEY=wgk_… node scripts/webgune-setup.mjs --branch claude/determined-wozniak-qisgw1
+# Plus tard, une fois l'ancien bot arrêté et ses données reprises
+WEBGUNE_API_KEY=wgk_… BOT_TOKEN=… APP_ID=<id de l'appli du bot> node scripts/webgune-setup.mjs --branch … --with-bot
+```
+
+Ce qui est repris de l'ancien panel, sans rien retaper :
+- **Réglages de télémétrie** : jeton d'ingestion (`INGEST_TOKEN`, bl_telemetry n'a rien à changer à part l'adresse), adresse du serveur FiveM, seuils d'alerte, durées de conservation, fuseau horaire.
+- **Historique** : toutes les tables de l'ancienne base, copiées une fois au premier démarrage (`TELEMETRY_IMPORT_FROM`).
+- **Accès** : les webmasters (`WEBMASTER_DISCORD_IDS`) reçoivent le rang « FiveM — webmaster » (tout, réglages compris), les comptes autorisés à la main le rang « FiveM — ancien panel » (lecture), que donnent aussi les rôles `DISCORD_ALLOWED_ROLE_IDS` du serveur `DISCORD_GUILD_ID`. Les comptes retirés ne reçoivent rien.
+- **Connexion Discord** : l'application OAuth de l'ancien panel (`DISCORD_CLIENT_ID` / `SECRET`) sert à se connecter au panel tant que `APP_ID` / `CLIENT_SECRET` ne sont pas donnés.
+- **Chef du réseau** : `OWNER_ID` = le premier webmaster de l'ancien panel, sauf si tu le donnes.
+
+Chaque reprise ne se fait qu'une fois et n'écrase jamais ce qui a été changé depuis le panel. La reprise des données de la v1 (`migrate-sqlite.mjs`) garde la télémétrie et ses réglages.
+
 ## Services
 
 | Service | Type webgune | Variables |

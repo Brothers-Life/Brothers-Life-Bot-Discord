@@ -89,6 +89,7 @@ const TITLES = {
 	'tebex.purchase': 'Achat sur la boutique',
 	'tebex.refund': 'Paiement remboursé ou contesté',
 	'tebex.secret': 'Clé secrète Tebex modifiée',
+	'ranks.legacy': 'Accès de l’ancien panel FiveM repris en rangs',
 	'telemetry.announce': 'Annonce envoyée en jeu (FiveM)',
 	'telemetry.config': 'Réglages de la télémétrie FiveM modifiés',
 	'telemetry.token': 'Nouveau jeton d’ingestion de la télémétrie',

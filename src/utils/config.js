@@ -21,14 +21,20 @@ export const role = process.env.BRL_ROLE || ({ 'bot.js': 'bot', 'api.js': 'api',
 
 // Pure: turns raw environment variables into a validated config object.
 // The front serves files and forwards requests: it needs no Discord setting.
+// Variable names of the old FiveM panel, read as they were set on its services
+export const LEGACY_PANEL_VARS = ['INGEST_TOKEN', 'FIVEM_BASE', 'PANEL_TZ', 'ALERT_ERRORS_5MIN', 'ALERT_MONEY_JUMP', 'ALERT_ANTICHEAT_CHANNEL',
+	'RETENTION_DAYS', 'RETENTION_LOGS_DAYS', 'RETENTION_PERF_DAYS', 'RETENTION_SNAPSHOTS_DAYS', 'WEBMASTER_DISCORD_IDS', 'DISCORD_ALLOWED_ROLE_IDS',
+	'DISCORD_GUILD_ID', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET'];
+
 export function parseConfig(vars, { role: processRole = 'all' } = {}) {
 	const problems = [];
 	const str = (key) => (vars[key] ?? '').trim();
 
 	const config = {
 		TOKEN: str('TOKEN'),
-		APP_ID: str('APP_ID'),
-		CLIENT_SECRET: str('CLIENT_SECRET'),
+		// The old FiveM panel's Discord application (DISCORD_CLIENT_*) works for the panel login when nothing else is set
+		APP_ID: str('APP_ID') || str('DISCORD_CLIENT_ID').replace(/\s+#.*$/, ''),
+		CLIENT_SECRET: str('CLIENT_SECRET') || str('DISCORD_CLIENT_SECRET').replace(/\s+#.*$/, ''),
 		DEV_GUILD_ID: str('DEV_GUILD_ID'),
 		OWNER_ID: str('OWNER_ID'),
 		// Pterodactyl gives the allocated port in SERVER_PORT, webgune (and most PaaS) in PORT
@@ -61,6 +67,10 @@ export function parseConfig(vars, { role: processRole = 'all' } = {}) {
 		// Old panel database (bl-panel-api) copied once into the telemetry tables, then ignored
 		TELEMETRY_IMPORT_FROM: str('TELEMETRY_IMPORT_FROM'),
 		TELEMETRY_FIVEM_BASE: str('TELEMETRY_FIVEM_BASE').replace(/\/+$/, ''),
+		// Variables of the old FiveM panel (bl-panel-api, bl-panel-front) copied as they were: taken over once
+		// (telemetry settings, panel access as ranks), see src/core/telemetry/legacy.js
+		// (a value pasted from a .env may have kept its comment: "123   # à remplir")
+		LEGACY_PANEL: Object.fromEntries(LEGACY_PANEL_VARS.map(key => [key, str(key).replace(/\s+#.*$/, '')]).filter(([, value]) => value)),
 	};
 
 	if (processRole !== 'front' && !SNOWFLAKE.test(config.OWNER_ID)) problems.push('OWNER_ID must be a single Discord user ID (17 to 20 digits)');

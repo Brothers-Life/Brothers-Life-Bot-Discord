@@ -99,8 +99,9 @@ try {
 
 	// Only an empty target: never mix two networks (restriction_profiles is filled by the migrations)
 	const filled = [];
+	// Only the tables of the v1: the FiveM telemetry (tel_*, copied from the old panel) is left as it is
 	for (const table of tables) {
-		if (SKIP.has(table) || table === 'restriction_profiles') continue;
+		if (SKIP.has(table) || table === 'restriction_profiles' || !sqliteTables.has(table)) continue;
 		if ((await client.query(`SELECT 1 FROM ${quote(table)} LIMIT 1`)).rows.length) filled.push(table);
 	}
 	if (filled.length && !force) {
@@ -109,11 +110,14 @@ try {
 
 	await client.query('BEGIN');
 	const targets = tables.filter(t => !SKIP.has(t));
-	if (targets.length) await client.query(`TRUNCATE ${targets.map(quote).join(', ')} RESTART IDENTITY`);
+	const emptied = targets.filter(t => sqliteTables.has(t));
+	// Settings of the telemetry (taken over from the old panel) survive the copy of the v1 settings
+	const kept = emptied.includes('settings') ? (await client.query('SELECT key, value FROM settings WHERE key LIKE \'telemetry.%\'')).rows : [];
+	if (emptied.length) await client.query(`TRUNCATE ${emptied.map(quote).join(', ')} RESTART IDENTITY`);
 
 	for (const table of targets) {
 		if (!sqliteTables.has(table)) {
-			report.push([table, 0, 'absente de SQLite']);
+			report.push([table, 0, table.startsWith('tel_') ? 'gardée (télémétrie, pas dans la v1)' : 'absente de SQLite']);
 			continue;
 		}
 		const targetColumns = (await client.query(`
@@ -215,6 +219,9 @@ try {
 			await put(`archive:${name}`, 'archive', 'text/html', fs.readFileSync(path.join(archives, name)), true);
 			files++;
 		}
+	}
+	for (const { key, value } of kept) {
+		await client.query('INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value', [key, value]);
 	}
 	await client.query('COMMIT');
 }

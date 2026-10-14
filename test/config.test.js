@@ -72,6 +72,14 @@ test('uses PORT (webgune and other hosts) when WEB_PORT is not set', () => {
 	assert.equal(parseConfig({ OWNER_ID: OWNER, PORT: '8080', WEB_PORT: '3001' }).WEB_PORT, 3001);
 });
 
+test('takes the old FiveM panel variables, without the comments pasted with them', () => {
+	const config = parseConfig({ OWNER_ID: OWNER, DISCORD_CLIENT_ID: '155485873949088160   # ⟵ à remplir', INGEST_TOKEN: 'abc', DISCORD_CLIENT_SECRET: 's3cret' });
+	assert.equal(config.APP_ID, '155485873949088160');
+	assert.equal(config.CLIENT_SECRET, 's3cret');
+	assert.deepEqual(config.LEGACY_PANEL, { INGEST_TOKEN: 'abc', DISCORD_CLIENT_ID: '155485873949088160', DISCORD_CLIENT_SECRET: 's3cret' });
+	assert.equal(parseConfig({ OWNER_ID: OWNER, APP_ID: '123456789012345678', DISCORD_CLIENT_ID: '155485873949088160' }).APP_ID, '123456789012345678');
+});
+
 test('rejects a malformed DATABASE_URL or DB_PORT', () => {
 	assert.throws(() => parseConfig({ OWNER_ID: OWNER, DATABASE_URL: 'not a url' }), /DATABASE_URL/);
 	assert.throws(() => parseConfig({ OWNER_ID: OWNER, DATABASE_URL: 'mysql://u:p@h/db' }), /DATABASE_URL/);

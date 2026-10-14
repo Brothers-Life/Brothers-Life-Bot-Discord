@@ -15,6 +15,7 @@ import { createWebServer } from './web/server.js';
 import { createRuntime } from './runtime.js';
 import { startTasks, startUpdateCheck } from './app/tasks.js';
 import { importTelemetry } from './core/telemetry/importer.js';
+import { takeOverLegacyPanel } from './core/telemetry/legacy.js';
 
 run(async () => {
 	logger.info(`Brothers Life bot v${pkg.version} (${config.ENV})`);
@@ -36,6 +37,8 @@ run(async () => {
 	const core = createCore({ db, config, executor: bot.executor, logger });
 	// Caches every process needs, then the repairs only the bot process does
 	await core.init({ worker: true });
+	// Old FiveM panel: its settings and accesses (variables copied as they were), once
+	await takeOverLegacyPanel({ core, db, config, logger });
 	if (config.TELEMETRY_IMPORT_FROM) {
 		importTelemetry({ db, url: config.TELEMETRY_IMPORT_FROM, settings: core.settings, logger })
 			.then(counts => counts && logger.success('Old telemetry database imported.'))
