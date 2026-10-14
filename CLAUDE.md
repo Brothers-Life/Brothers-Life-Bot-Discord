@@ -115,6 +115,8 @@ Réseau de serveurs, rangs et permissions synchronisés, staff sync, sanctions (
 - Ne **pousser / publier que sur demande explicite** de l'utilisateur.
 - Repo : https://github.com/Brothers-Life/Brothers-Life-Bot-Discord (privé), compte `Brothers-Life` via Git Credential Manager. `gh` n'est pas installé ; l'état d'une release se suit avec l'API GitHub (token de `git credential fill`).
 - Prod : **Pterodactyl/Pelican**, accès panel par IP:port, HTTPS auto-signé, lanceur `launcher.js prod [all|bot|api|front]` (mises à jour, redémarrages, retour arrière avec restauration de la sauvegarde faite avant migration), 4 eggs dans `pterodactyl/` (tout-en-un, bot, api, front), PostgreSQL à part (l'onglet Databases ne fait que du MySQL), doc `docs/pterodactyl.md`. Ou **Docker** : `docker-compose.yml` + `.env.docker.example`. Les commandes slash se réenregistrent au démarrage.
+- **webgune** (cible) : `docs/webgune.md` — `brl-db` (PostgreSQL), `brl-panel` (web, `APP_ROLE=api`, `SERVE_PANEL=true`, reçoit aussi `/v1/*` de bl_telemetry), `brl-bot` (Bot Discord, `APP_ROLE=bot`, `API_URL` interne). Image : `src/start.js` lit `APP_ROLE`. Port lu dans `PORT`. Clé API webgune : jamais dans le dépôt.
+- **Télémétrie FiveM** (ex `bl-panel-api`) : `src/core/telemetry/` (tables `tel_*`, migration 002), routes `/api/telemetry/*` et `/v1/*` (jeton d'ingestion propre), reprise unique de l'ancienne base par `TELEMETRY_IMPORT_FROM`.
 - Passage v1 → v2 : `node scripts/migrate-sqlite.mjs prod` (lit `data/bot.db` au schéma 43 avec `node:sqlite`, recopie tables et fichiers dans PostgreSQL en une transaction, compte les lignes, ignore les orphelines).
 
 ## Historique des versions

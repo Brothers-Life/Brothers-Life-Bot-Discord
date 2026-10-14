@@ -61,6 +61,7 @@ Les versions 1.x ne peuvent pas être réinstallées depuis le panel sur une bas
 
 - **Docker** : `docker-compose.yml` (PostgreSQL + bot + API + front, seul le front est exposé). Voir `.env.docker.example`. Mise à jour : nouvelle image (`docker compose pull` ou `--build`) puis `docker compose up -d` ; la page Versions du panel montre les nouvelles versions mais n'installe rien sous Docker.
 - **Pterodactyl** : un egg tout-en-un, ou trois eggs (bot, API, front) pour le déploiement séparé : voir `docs/pterodactyl.md`. Les mises à jour depuis le panel installent la version sur l'API et le bot ; le front la suit tout seul (il la lit sur l'API toutes les 2 minutes).
+- **webgune** : une base PostgreSQL, un service web (API + panel + télémétrie, `APP_ROLE=api`) et un service Bot Discord (`APP_ROLE=bot`) : voir `docs/webgune.md`.
 - **À la main** : `npm run start:bot`, `npm run start:api`, `npm run start:front` (chacun sous `launcher.js`), ou `npm start` pour le tout-en-un.
 
 ## Variables propres au déploiement séparé

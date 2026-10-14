@@ -67,6 +67,11 @@ test('reads the PostgreSQL settings and tells which ones are missing', () => {
 	assert.deepEqual(missingDatabaseConfig(parseConfig({ OWNER_ID: OWNER, DB_HOST: 'db.local' })), ['DB_USER', 'DB_NAME']);
 });
 
+test('uses PORT (webgune and other hosts) when WEB_PORT is not set', () => {
+	assert.equal(parseConfig({ OWNER_ID: OWNER, PORT: '8080' }).WEB_PORT, 8080);
+	assert.equal(parseConfig({ OWNER_ID: OWNER, PORT: '8080', WEB_PORT: '3001' }).WEB_PORT, 3001);
+});
+
 test('rejects a malformed DATABASE_URL or DB_PORT', () => {
 	assert.throws(() => parseConfig({ OWNER_ID: OWNER, DATABASE_URL: 'not a url' }), /DATABASE_URL/);
 	assert.throws(() => parseConfig({ OWNER_ID: OWNER, DATABASE_URL: 'mysql://u:p@h/db' }), /DATABASE_URL/);

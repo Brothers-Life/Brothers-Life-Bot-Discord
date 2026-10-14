@@ -31,8 +31,8 @@ export function parseConfig(vars, { role: processRole = 'all' } = {}) {
 		CLIENT_SECRET: str('CLIENT_SECRET'),
 		DEV_GUILD_ID: str('DEV_GUILD_ID'),
 		OWNER_ID: str('OWNER_ID'),
-		// Pterodactyl gives the allocated port in SERVER_PORT
-		WEB_PORT: Number(str('WEB_PORT') || str('SERVER_PORT') || 3000),
+		// Pterodactyl gives the allocated port in SERVER_PORT, webgune (and most PaaS) in PORT
+		WEB_PORT: Number(str('WEB_PORT') || str('SERVER_PORT') || str('PORT') || 3000),
 		WEB_MODE: str('WEB_MODE') || 'http',
 		WEB_PUBLIC_URL: str('WEB_PUBLIC_URL').replace(/\/+$/, ''),
 		TLS_CERT: str('TLS_CERT'),
