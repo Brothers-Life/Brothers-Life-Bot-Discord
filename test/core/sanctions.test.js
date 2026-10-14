@@ -157,13 +157,15 @@ test('a server joining the network receives network bans and hands over its own'
 	executor.calls.length = 0;
 
 	await core.network.activate(owner, THIRD);
-	await new Promise(r => setTimeout(r, 20));
+	// The sync runs after the activation: wait for its audit entry on that server (slow CI machines)
+	const synced = async () => (await core.audit.query({ action: 'sanctions.sync' })).find(e => e.guildId === THIRD);
+	for (let i = 0; i < 250 && !await synced(); i++) await new Promise(r => setTimeout(r, 20));
 
 	assert.deepEqual(executor.calls.map(c => [c[0], c[1], c[2]]), [['ban', THIRD, TARGET]]);
 	const imported = (await core.sanctions.list({ userId: '300000000000000009' }))[0];
 	assert.equal(imported.scope, 'local');
 	assert.equal(imported.originGuildId, THIRD);
-	assert.equal((await core.audit.query({ action: 'sanctions.sync' }))[0].details.imported, 1);
+	assert.equal((await synced()).details.imported, 1);
 });
 
 test('list filters', async () => {
