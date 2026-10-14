@@ -79,6 +79,7 @@ test('/api and /public go to the API, with the client address and cookies', asyn
 	await fetch(`${base}/public`);
 	assert.equal(seen[1].url, '/public');
 	assert.equal(goesToApi('/apidocs'), false);
+	assert.equal(goesToApi('/v1/batch'), true);
 	await close();
 });
 

@@ -1,0 +1,38 @@
+meta {
+  name: PUT /telemetry/config
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{baseUrl}}/api/telemetry/config
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "ingestToken": null,
+    "fivemBase": null,
+    "alerts": {
+      "errors5min": 1,
+      "moneyJump": 1,
+      "anticheatChannel": "anticheatChannel"
+    },
+    "retention": {},
+    "timezone": "timezone"
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/telemetry/config`
+
+  Permission requise : `telemetry.manage`
+
+  Corps JSON :
+  - `ingestToken` (null | string)
+  - `fivemBase` (null | string)
+  - `alerts` (object)
+  - `retention` (object)
+  - `timezone` (string)
+}

@@ -1,0 +1,26 @@
+meta {
+  name: GET /telemetry/search
+  type: http
+  seq: 20
+}
+
+get {
+  url: {{baseUrl}}/api/telemetry/search
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~q: 
+  ~days: 
+}
+
+docs {
+  Consulter — `GET /api/telemetry/search`
+
+  Permission requise : `telemetry.view`
+
+  Paramètres de requête :
+  - `q` (string) — obligatoire
+  - `days` (integer)
+}

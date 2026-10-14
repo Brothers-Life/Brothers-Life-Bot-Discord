@@ -1,0 +1,26 @@
+meta {
+  name: GET /telemetry/anomalies
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/telemetry/anomalies
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~h: 
+  ~min: 
+}
+
+docs {
+  Consulter — `GET /api/telemetry/anomalies`
+
+  Permission requise : `telemetry.economy`
+
+  Paramètres de requête :
+  - `h` (integer)
+  - `min` (integer)
+}

@@ -1,0 +1,24 @@
+meta {
+  name: GET /telemetry/economy
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/api/telemetry/economy
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~h: 
+}
+
+docs {
+  Consulter — `GET /api/telemetry/economy`
+
+  Permission requise : `telemetry.economy`
+
+  Paramètres de requête :
+  - `h` (integer)
+}

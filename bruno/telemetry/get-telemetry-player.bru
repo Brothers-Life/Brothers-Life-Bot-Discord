@@ -1,0 +1,24 @@
+meta {
+  name: GET /telemetry/player
+  type: http
+  seq: 17
+}
+
+get {
+  url: {{baseUrl}}/api/telemetry/player
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~cid: 
+}
+
+docs {
+  Consulter — `GET /api/telemetry/player`
+
+  Permission requise : `telemetry.view`
+
+  Paramètres de requête :
+  - `cid` (string) — obligatoire
+}

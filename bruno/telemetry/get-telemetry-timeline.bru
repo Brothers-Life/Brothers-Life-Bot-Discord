@@ -1,0 +1,28 @@
+meta {
+  name: GET /telemetry/timeline
+  type: http
+  seq: 23
+}
+
+get {
+  url: {{baseUrl}}/api/telemetry/timeline
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~cid: 
+  ~before: 
+  ~limit: 
+}
+
+docs {
+  Consulter — `GET /api/telemetry/timeline`
+
+  Permission requise : `telemetry.view`
+
+  Paramètres de requête :
+  - `cid` (string) — obligatoire
+  - `before` (string)
+  - `limit` (integer)
+}

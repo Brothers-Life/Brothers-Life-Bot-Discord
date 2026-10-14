@@ -1,0 +1,34 @@
+meta {
+  name: POST /telemetry/commands
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/telemetry/commands
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "type": "announce",
+    "payload": {
+      "message": "message",
+      "title": "title",
+      "mode": "chat",
+      "type": "inform",
+      "duration": 3000
+    }
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/telemetry/commands`
+
+  Permission requise : `telemetry.announce`
+
+  Corps JSON :
+  - `type` ("announce")
+  - `payload` (object) — obligatoire
+}

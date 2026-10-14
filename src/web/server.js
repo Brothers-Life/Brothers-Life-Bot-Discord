@@ -49,6 +49,7 @@ import { registerTebexRoutes } from './routes/tebex.js';
 import { registerApiRoutes } from './routes/api.js';
 import { registerPublicPageRoutes } from './routes/publicPage.js';
 import { registerNotificationRoutes } from './routes/notifications.js';
+import { registerTelemetryRoutes, registerTelemetryIngestRoutes } from './routes/telemetry.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_STATIC_DIR = path.resolve(__dirname, '..', '..', 'web', 'dist');
@@ -129,6 +130,9 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	registerTebexRoutes(app, { core });
 	registerPublicPageRoutes(app, { core });
 	registerNotificationRoutes(app, { core });
+	registerTelemetryRoutes(app, { core });
+	// bl_telemetry (FiveM resource): /v1/batch, /v1/commands, own token
+	registerTelemetryIngestRoutes(app, { core, logger });
 	registerApiRoutes(app, { core, runtime, routes });
 	onRoutes?.(routes);
 

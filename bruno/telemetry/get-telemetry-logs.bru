@@ -1,0 +1,26 @@
+meta {
+  name: GET /telemetry/logs
+  type: http
+  seq: 14
+}
+
+get {
+  url: {{baseUrl}}/api/telemetry/logs
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~q: 
+  ~level: 
+}
+
+docs {
+  Consulter — `GET /api/telemetry/logs`
+
+  Permission requise : `telemetry.logs`
+
+  Paramètres de requête :
+  - `q` (string)
+  - `level` (string)
+}

@@ -19,9 +19,10 @@ const TYPES = {
 // Hop-by-hop headers are never forwarded
 const HOP = new Set(['connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade']);
 
-// Requests the API answers: its routes, the websockets, and the public page (shown only while switched on)
+// Requests the API answers: its routes, the websockets, the public page (shown only while switched on)
+// and the FiveM telemetry (/v1/…, bl_telemetry)
 export function goesToApi(pathname) {
-	return pathname === '/api' || pathname.startsWith('/api/') || pathname === '/public';
+	return pathname === '/api' || pathname.startsWith('/api/') || pathname === '/public' || pathname.startsWith('/v1/');
 }
 
 export function createFrontServer({ config, tls = null, logger = console, staticDir = DEFAULT_STATIC_DIR }) {

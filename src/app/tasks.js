@@ -55,6 +55,10 @@ export function startTasks({ core, every }) {
 		every(6 * HOUR, () => core.events.purge(), 'Events purge failed'),
 		// Roles whose Discord permissions drifted from their rank profile (reported, not fixed)
 		every(6 * HOUR, () => core.permissionSync.checkDrift(), 'Permission check failed', 'warn'),
+		// FiveM telemetry: server status and console, alerts, old rows
+		every(15_000, () => core.telemetry.scrapeTick(), 'Telemetry scrape failed', 'warn'),
+		every(60_000, () => core.telemetry.alertsTick(), 'Telemetry alerts failed'),
+		every(24 * HOUR, () => core.telemetry.purgeTick(), 'Telemetry purge failed'),
 	];
 }
 

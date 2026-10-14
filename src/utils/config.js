@@ -56,6 +56,9 @@ export function parseConfig(vars, { role: processRole = 'all' } = {}) {
 		TRUST_PROXY: str('TRUST_PROXY'),
 		// Front and bot: where to reach the API (http://api:3001); the bot dials API_URL/internal/bot
 		API_URL: str('API_URL').replace(/\/+$/, ''),
+		// FiveM telemetry (bl_telemetry): ingest token and server address until they are set from the panel
+		TELEMETRY_INGEST_TOKEN: str('TELEMETRY_INGEST_TOKEN'),
+		TELEMETRY_FIVEM_BASE: str('TELEMETRY_FIVEM_BASE').replace(/\/+$/, ''),
 	};
 
 	if (processRole !== 'front' && !SNOWFLAKE.test(config.OWNER_ID)) problems.push('OWNER_ID must be a single Discord user ID (17 to 20 digits)');

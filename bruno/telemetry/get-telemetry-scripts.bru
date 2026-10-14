@@ -1,0 +1,17 @@
+meta {
+  name: GET /telemetry/scripts
+  type: http
+  seq: 19
+}
+
+get {
+  url: {{baseUrl}}/api/telemetry/scripts
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/telemetry/scripts`
+
+  Permission requise : `telemetry.view`
+}

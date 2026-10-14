@@ -56,6 +56,7 @@ import { COMMANDS } from './commandCatalog.js';
 import { createPermissionSync } from './permissionSync.js';
 import { createAntinuke } from './antinuke.js';
 import { createNotifications } from './notifications.js';
+import { createTelemetry } from './telemetry/index.js';
 import { attachNotificationSources } from './notificationSources.js';
 import { createPublicPage } from './publicPage.js';
 import { definePermission } from './permissions.js';
@@ -218,6 +219,8 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	}
 
 	const core = { db, config, executor, files, variables, settings, audit, network, ranks, logs, sessions, apiKeys, sanctions, sanctionTemplates, music, memberInsights, channelFeatures, verification, embedBuilder, appeals, channelSchedules, archives, meetings, fivemData, fivemRoles, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents, antinuke, fivemEvents, feeds, tebex };
+	// FiveM telemetry (bl_telemetry): every process works on the database itself, the API takes the batches
+	core.telemetry = createTelemetry({ db, settings, logs, audit, config, logger, fetchImpl, notifications: () => core.notifications });
 	for (const name of BOT_SERVICES) core[name] = shared(name, core[name]);
 	core.remoteAudit = remoteAudit;
 

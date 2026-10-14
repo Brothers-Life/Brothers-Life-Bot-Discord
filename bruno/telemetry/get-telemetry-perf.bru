@@ -1,0 +1,24 @@
+meta {
+  name: GET /telemetry/perf
+  type: http
+  seq: 16
+}
+
+get {
+  url: {{baseUrl}}/api/telemetry/perf
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~h: 
+}
+
+docs {
+  Consulter — `GET /api/telemetry/perf`
+
+  Permission requise : `telemetry.view`
+
+  Paramètres de requête :
+  - `h` (integer)
+}

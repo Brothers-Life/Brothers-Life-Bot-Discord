@@ -1,0 +1,24 @@
+meta {
+  name: GET /telemetry/linked
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{baseUrl}}/api/telemetry/linked
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~cid: 
+}
+
+docs {
+  Consulter — `GET /api/telemetry/linked`
+
+  Permission requise : `telemetry.view`
+
+  Paramètres de requête :
+  - `cid` (string) — obligatoire
+}

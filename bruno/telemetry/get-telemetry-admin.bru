@@ -1,0 +1,17 @@
+meta {
+  name: GET /telemetry/admin
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/telemetry/admin
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/telemetry/admin`
+
+  Permission requise : `telemetry.view`
+}

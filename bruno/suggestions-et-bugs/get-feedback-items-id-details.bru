@@ -1,0 +1,21 @@
+meta {
+  name: GET /feedback/items/:id/details
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/api/feedback/items/:id/details
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Consulter — `GET /api/feedback/items/:id/details`
+
+  Permission requise : aucune (clé valide)
+}

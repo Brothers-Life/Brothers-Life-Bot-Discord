@@ -15,7 +15,7 @@ const out = path.join(root, 'bruno');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
 const noop = () => undefined;
-const { core } = createTestCore();
+const { core } = await createTestCore();
 let routes;
 const web = await createWebServer({
 	config: { ...core.config, WEB_PUBLIC_URL: 'https://IP:PORT' },

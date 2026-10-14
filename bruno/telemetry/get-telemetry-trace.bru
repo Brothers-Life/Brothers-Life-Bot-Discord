@@ -1,0 +1,28 @@
+meta {
+  name: GET /telemetry/trace
+  type: http
+  seq: 24
+}
+
+get {
+  url: {{baseUrl}}/api/telemetry/trace
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~cid: 
+  ~ts: 
+  ~min: 
+}
+
+docs {
+  Consulter — `GET /api/telemetry/trace`
+
+  Permission requise : `telemetry.economy`
+
+  Paramètres de requête :
+  - `cid` (string) — obligatoire
+  - `ts` (string)
+  - `min` (integer)
+}
