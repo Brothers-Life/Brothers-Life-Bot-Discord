@@ -73,10 +73,9 @@ test('a key stops working when its owner loses api.use', async () => {
 test('requests are limited per key', async () => {
 	const { core, owner, bearer } = await setup();
 	const call = bearer((await core.apiKeys.create(owner, { name: 'Spam' })).secret);
+	// The one-minute window may roll over during the loop: two windows' worth of calls always hit the limit
 	let last;
-	for (let i = 0; i <= API_RATE_LIMIT; i++) last = await call('GET', '/api/api-docs');
-	// The window may roll over during the loop: one more call settles it
-	if (last.statusCode !== 429) last = await call('GET', '/api/api-docs');
+	for (let i = 0; i <= 2 * API_RATE_LIMIT + 1 && last?.statusCode !== 429; i++) last = await call('GET', '/api/api-docs');
 	assert.equal(last.statusCode, 429);
 	assert.ok(last.headers['retry-after']);
 });
