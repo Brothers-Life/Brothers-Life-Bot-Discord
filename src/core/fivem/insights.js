@@ -102,21 +102,23 @@ export async function insightsReport({ query, when, groupsMap, canMoney, discord
 	const label = name => groups.get(name)?.label ?? name;
 
 	const [sessions, users, chars, staffSessions, reports, sanctions, vehicles, calls, health, weekStats, checkins, ticks, markets, balances] = await Promise.all([
-		when('bl_mc_sessions', () => query('SELECT user_id, joined_at, left_at FROM bl_mc_sessions WHERE joined_at > NOW() - INTERVAL 120 DAY ORDER BY joined_at LIMIT 100000')),
-		query('SELECT userid, username, discord FROM users'),
-		query('SELECT userId, citizenid, charinfo, job, gang, money FROM players'),
-		when('admindash_staff_sessions', () => query('SELECT staff_name, started_at, COALESCE(ended_at, last_seen_at) AS ended FROM admindash_staff_sessions WHERE started_at > NOW() - INTERVAL 30 DAY')),
-		when('admindash_reports', () => query('SELECT created_at, claimed_at, resolved_at, claimed_by_name, resolved_by_name, category FROM admindash_reports WHERE created_at > NOW() - INTERVAL 90 DAY')),
-		when('admindash_sanctions', () => query('SELECT target_dbid, target_name, type, issued_by_name, created_at FROM admindash_sanctions')),
-		when('player_vehicles', () => query('SELECT citizenid, vehicle, fuel, engine, body, state, owner_job FROM player_vehicles')),
-		when('sky_phone_calls', () => query('SELECT status, started_at, answered_at, duration_seconds FROM sky_phone_calls WHERE started_at > NOW() - INTERVAL 60 DAY')),
-		when('sky_phone_health_daily', () => query('SELECT activity_date, SUM(steps) AS steps, SUM(distance_meters) AS meters, COUNT(DISTINCT owner_identifier) AS people FROM sky_phone_health_daily WHERE activity_date > NOW() - INTERVAL 30 DAY GROUP BY activity_date ORDER BY activity_date')),
-		when('job_week_stats', () => query('SELECT job_name, week_start, stats, xp_gained, level_after FROM job_week_stats ORDER BY week_start DESC LIMIT 60')),
-		when('player_jobs_activity', () => query('SELECT job, last_checkin FROM player_jobs_activity WHERE last_checkin IS NOT NULL')),
-		canMoney ? when('sky_phone_crypto_market_ticks', () => query(`SELECT market_id, DATE_FORMAT(created_at, '%Y-%m-%d %H:00') AS d, AVG(price) AS price FROM sky_phone_crypto_market_ticks
-			WHERE created_at > (SELECT MAX(created_at) FROM sky_phone_crypto_market_ticks) - INTERVAL 30 DAY GROUP BY market_id, d ORDER BY d`)) : [],
-		canMoney ? when('sky_phone_crypto_markets', () => query('SELECT id, price, price_scale FROM sky_phone_crypto_markets')) : [],
-		canMoney ? when('sky_phone_crypto_balances', () => query('SELECT asset_id, COUNT(DISTINCT account_id) AS holders FROM sky_phone_crypto_balances WHERE available + locked > 0 GROUP BY asset_id')) : [],
+		when('bl_mc_sessions', () => query('SELECT user_id, joined_at, left_at FROM fivem.bl_mc_sessions WHERE joined_at > NOW() - INTERVAL \'120 days\' ORDER BY joined_at LIMIT 100000')),
+		query('SELECT userid, username, discord FROM fivem.users'),
+		query('SELECT "userId", citizenid, charinfo, job, gang, money FROM fivem.players'),
+		when('admindash_staff_sessions', () => query('SELECT staff_name, started_at, COALESCE(ended_at, last_seen_at) AS ended FROM fivem.admindash_staff_sessions WHERE started_at > NOW() - INTERVAL \'30 days\'')),
+		when('admindash_reports', () => query('SELECT created_at, claimed_at, resolved_at, claimed_by_name, resolved_by_name, category FROM fivem.admindash_reports WHERE created_at > NOW() - INTERVAL \'90 days\'')),
+		when('admindash_sanctions', () => query('SELECT target_dbid, target_name, type, issued_by_name, created_at FROM fivem.admindash_sanctions')),
+		when('player_vehicles', () => query('SELECT citizenid, vehicle, fuel, engine, body, state, owner_job FROM fivem.player_vehicles')),
+		when('sky_phone_calls', () => query('SELECT status, started_at, answered_at, duration_seconds FROM fivem.sky_phone_calls WHERE started_at > NOW() - INTERVAL \'60 days\'')),
+		// The day as text: a DATE would come back as a local midnight and could shift by one day
+		when('sky_phone_health_daily', () => query(`SELECT to_char(activity_date, 'YYYY-MM-DD') AS activity_date, SUM(steps) AS steps, SUM(distance_meters) AS meters, COUNT(DISTINCT owner_identifier) AS people
+			FROM fivem.sky_phone_health_daily WHERE activity_date > NOW() - INTERVAL '30 days' GROUP BY activity_date ORDER BY activity_date`)),
+		when('job_week_stats', () => query('SELECT job_name, week_start, stats, xp_gained, level_after FROM fivem.job_week_stats ORDER BY week_start DESC LIMIT 60')),
+		when('player_jobs_activity', () => query('SELECT job, last_checkin FROM fivem.player_jobs_activity WHERE last_checkin IS NOT NULL')),
+		canMoney ? when('sky_phone_crypto_market_ticks', () => query(`SELECT market_id, to_char(created_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD HH24:00') AS d, AVG(price) AS price FROM fivem.sky_phone_crypto_market_ticks
+			WHERE created_at > (SELECT MAX(created_at) FROM fivem.sky_phone_crypto_market_ticks) - INTERVAL '30 days' GROUP BY market_id, d ORDER BY d`)) : [],
+		canMoney ? when('sky_phone_crypto_markets', () => query('SELECT id, price, price_scale FROM fivem.sky_phone_crypto_markets')) : [],
+		canMoney ? when('sky_phone_crypto_balances', () => query('SELECT asset_id, COUNT(DISTINCT account_id) AS holders FROM fivem.sky_phone_crypto_balances WHERE available + locked > 0 GROUP BY asset_id')) : [],
 	]);
 
 	const intervals = sessions.map(s => [ms(s.joined_at), ms(s.left_at) ?? nowMs, s.user_id]).filter(([a, b]) => a && b >= a);

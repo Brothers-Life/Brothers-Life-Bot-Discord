@@ -7,7 +7,8 @@ import pg from 'pg';
 import { openDb, databaseOptions } from '../src/db/index.js';
 import { literal } from '../src/db/dump.js';
 
-const WRITE = /^\s*(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+"?(\w+)"?/i;
+// A table of another schema (fivem."players") is not one of ours: the FiveM mirror is dropped as a whole in reset()
+const WRITE = /^\s*(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+"?(\w+)"?(?![\w.])/i;
 
 function serverUrl() {
 	return process.env.TEST_DATABASE_URL ?? 'postgres://postgres:root@127.0.0.1:5432/postgres';
@@ -62,6 +63,9 @@ async function setup() {
 }
 
 async function reset({ db, dirty, seeds }) {
+	// Tables of the FiveM mirror (schema fivem), created by the tests that use it
+	const mirrored = (await db.query('SELECT tablename AS name FROM pg_tables WHERE schemaname = \'fivem\'')).map(r => `fivem."${r.name}"`);
+	if (mirrored.length) await db.exec(`DROP TABLE ${mirrored.join(', ')}`);
 	if (!dirty.size) return;
 	const tables = [...dirty];
 	dirty.clear();

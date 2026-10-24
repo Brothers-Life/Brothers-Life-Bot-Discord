@@ -17,6 +17,7 @@ import { createChannelSchedules } from './channelSchedules.js';
 import { createArchives } from './archives.js';
 import { createMeetings } from './meetings.js';
 import { createFivemData } from './fivemData.js';
+import { createFivemMirror } from './fivem/mirror.js';
 import { createFivemRoles } from './fivemRoles.js';
 import { createTebex } from './tebex.js';
 import { createRestrictions } from './restrictions.js';
@@ -146,7 +147,8 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const meetings = createMeetings({ db, network, ranks, audit, executor, logs, logger });
 	// The crossed FiveM stats compare play time with the Discord activity the bot records
 	const discordActivity = db.prepare('SELECT user_id, day, SUM(messages) AS messages, SUM(voice_seconds) AS voice_seconds FROM stats_activity WHERE day >= ? GROUP BY user_id, day');
-	const fivemData = createFivemData({ audit, settings, logger, discord: {
+	const fivemMirror = createFivemMirror({ db, logger });
+	const fivemData = createFivemData({ db, mirror: fivemMirror, audit, settings, logger, discord: {
 		activity: sinceDay => discordActivity.all(sinceDay),
 		members: async () => {
 			const mainId = await network.getMainId();
@@ -218,7 +220,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 		await network.replay(entry);
 	}
 
-	const core = { db, config, executor, files, variables, settings, audit, network, ranks, logs, sessions, apiKeys, sanctions, sanctionTemplates, music, memberInsights, channelFeatures, verification, embedBuilder, appeals, channelSchedules, archives, meetings, fivemData, fivemRoles, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents, antinuke, fivemEvents, feeds, tebex };
+	const core = { db, config, executor, files, variables, settings, audit, network, ranks, logs, sessions, apiKeys, sanctions, sanctionTemplates, music, memberInsights, channelFeatures, verification, embedBuilder, appeals, channelSchedules, archives, meetings, fivemMirror, fivemData, fivemRoles, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents, antinuke, fivemEvents, feeds, tebex };
 	// FiveM telemetry (bl_telemetry): every process works on the database itself, the API takes the batches
 	core.telemetry = createTelemetry({ db, settings, logs, audit, config, logger, fetchImpl, notifications: () => core.notifications });
 	for (const name of BOT_SERVICES) core[name] = shared(name, core[name]);

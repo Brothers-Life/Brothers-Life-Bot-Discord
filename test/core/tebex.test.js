@@ -2,7 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ForbiddenError, ValidationError } from '../../src/core/errors.js';
 import { createTebex, normalizePayment, statusKind, TEBEX_API } from '../../src/core/tebex.js';
-import { createFivemData } from '../../src/core/fivemData.js';
 import { ALICE, BOB, MAIN, withNetwork } from './../helpers.js';
 
 const SECRET = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0';
@@ -261,25 +260,4 @@ test('packages come from Tebex and from the payments already seen', async () => 
 	await tebex.poll();
 	const { packages } = await tebex.packages(owner);
 	assert.deepEqual(packages.map(p => p.id).sort(), ['10', '42']);
-});
-
-test('FiveM buyers are found by their CFX account id, then by an exact unique name (read only)', async () => {
-	const queries = [];
-	const pool = {
-		async query({ sql }, params) {
-			queries.push(sql);
-			if (!/^\s*SELECT/i.test(sql)) throw new Error('écriture interdite');
-			if (/WHERE fivem = \?/.test(sql)) return [params[0] === 'fivem:123' ? [{ userid: 7, username: 'Pedro', discord: `discord:${ALICE}` }] : []];
-			if (/WHERE username = \?/.test(sql)) return [params[0] === 'Solo' ? [{ userid: 8, username: 'Solo', discord: `discord:${BOB}` }] : params[0] === 'Twin' ? [{ userid: 9 }, { userid: 10 }] : []];
-			return [[]];
-		},
-		async end() { this.ended = true; },
-	};
-	const store = new Map([['fivemdb.config', { enabled: true, host: 'db', port: 3306, database: 'qbox', user: 'bot', password: 'x' }]]);
-	const data = createFivemData({ audit: { record: () => undefined }, settings: { get: (k, d) => store.get(k) ?? d, set: (k, v) => store.set(k, v) }, logger: { warn: () => undefined }, createPool: () => pool });
-	assert.deepEqual(await data.findByTebexPlayer({ uuid: '123', name: 'X' }), { userId: 7, username: 'Pedro', discordId: ALICE, method: 'fivem' });
-	assert.equal((await data.findByTebexPlayer({ uuid: '555', name: 'Solo' })).method, 'name');
-	assert.equal(await data.findByTebexPlayer({ uuid: '555', name: 'Twin' }), null);
-	assert.ok(queries.every(sql => /^\s*SELECT/i.test(sql)));
-	assert.ok(!queries.some(sql => /bl_mc_sessions|sky_phone/.test(sql)));
 });

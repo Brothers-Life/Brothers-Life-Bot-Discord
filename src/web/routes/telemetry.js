@@ -166,6 +166,26 @@ export function registerTelemetryIngestRoutes(app, { core, logger = console }) {
 			}
 		});
 
+		// Mirror of the game's database (bl_telemetry server/mirror.lua): where each table is, then the changes
+		scope.get('/v1/mirror/state', { onRequest: authorized }, async (request, reply) => {
+			try {
+				return { tables: await core.fivemMirror.state() };
+			}
+			catch (error) {
+				return fail(reply, error);
+			}
+		});
+
+		scope.post('/v1/mirror', { onRequest: authorized, bodyLimit: 5 * 1024 * 1024 }, async (request, reply) => {
+			if (!request.body || typeof request.body !== 'object' || !Array.isArray(request.body.tables)) return reply.code(400).send({ error: 'bad request' });
+			try {
+				return await core.fivemMirror.apply(request.body);
+			}
+			catch (error) {
+				return fail(reply, error);
+			}
+		});
+
 		scope.post('/v1/commands/:id/ack', { onRequest: authorized }, async (request, reply) => {
 			if (!/^\d+$/.test(request.params.id)) return reply.code(404).send({ error: 'inconnu' });
 			const body = request.body && typeof request.body === 'object' ? request.body : {};

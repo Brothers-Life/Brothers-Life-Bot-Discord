@@ -1,4 +1,4 @@
-import { unix } from './logSources.js';
+import { unix, seconds } from './sql.js';
 
 const ms = value => (value ? new Date(value).getTime() : null);
 const num = value => Number(value ?? 0);
@@ -15,6 +15,10 @@ const fullName = (charinfo, fallback) => {
 	return `${info.firstname ?? ''} ${info.lastname ?? ''}`.trim() || fallback;
 };
 const isoDay = date => new Date(date).toISOString().slice(0, 10);
+// A number of a JSON text column (NULL when absent or not a number, instead of failing the query)
+const jnum = (col, key) => `(CASE WHEN (fivem.j(${col}) ->> '${key}') ~ '^-?[0-9]+([.][0-9]+)?$' THEN (fivem.j(${col}) ->> '${key}')::numeric END)`;
+// Hours and weekdays as seen in France
+const paris = col => `(${col} AT TIME ZONE 'Europe/Paris')`;
 
 // Most players connected at once per day, from the sessions (sweep over joins and leaves)
 export function peaks(sessions, nowMs) {
@@ -36,11 +40,12 @@ export function peaks(sessions, nowMs) {
 	return byDay;
 }
 
-// Everything about the server as a whole; money only with the economy permission
-export async function serverReport({ query, when, groupsMap, canMoney, now = Date.now }) {
+// Everything about the server as a whole; money only with the economy permission.
+// rowCount(table): rows of a table only counted by the mirror (its rows are not copied), null when unknown
+export async function serverReport({ query, when, groupsMap, canMoney, now = Date.now, rowCount = async () => null }) {
 	const groups = await groupsMap();
 	const label = name => groups.get(name)?.label ?? name;
-	const days30 = 'INTERVAL 30 DAY';
+	const days30 = 'INTERVAL \'30 days\'';
 
 	const [
 		sessions30, firsts, hourly, drops, onlineNow, totals,
@@ -50,55 +55,59 @@ export async function serverReport({ query, when, groupsMap, canMoney, now = Dat
 		safezones, safezoneVisits, harvestZones, harvestTop, counts,
 		staffRoles, staffSessions, staffActions, staffSanctions, staffReports, staffMessages,
 	] = await Promise.all([
-		when('bl_mc_sessions', () => query(`SELECT user_id, joined_at, left_at FROM bl_mc_sessions WHERE joined_at > NOW() - ${days30} OR left_at IS NULL ORDER BY joined_at LIMIT 20000`)),
-		when('bl_mc_sessions', () => query(`SELECT DATE(f) AS d, COUNT(*) AS n FROM (SELECT MIN(joined_at) AS f FROM bl_mc_sessions GROUP BY user_id) x WHERE f > NOW() - ${days30} GROUP BY d`)),
-		when('bl_mc_sessions', () => query('SELECT WEEKDAY(joined_at) AS dow, HOUR(joined_at) AS h, COUNT(DISTINCT user_id) AS n FROM bl_mc_sessions WHERE joined_at > NOW() - INTERVAL 60 DAY GROUP BY dow, h')),
-		when('bl_mc_sessions', () => query(`SELECT LEFT(drop_reason, 80) AS reason, COUNT(*) AS n FROM bl_mc_sessions WHERE drop_reason IS NOT NULL AND drop_reason <> '' AND joined_at > NOW() - ${days30} GROUP BY reason ORDER BY n DESC LIMIT 10`)),
-		when('bl_mc_sessions', () => query('SELECT s.user_id, u.username, s.joined_at FROM bl_mc_sessions s JOIN users u ON u.userid = s.user_id WHERE s.left_at IS NULL AND s.joined_at > NOW() - INTERVAL 1 DAY ORDER BY s.joined_at')),
-		when('bl_mc_sessions', () => query(`SELECT COUNT(*) AS sessions, COUNT(DISTINCT user_id) AS players, AVG(TIMESTAMPDIFF(SECOND, joined_at, left_at)) AS avgSeconds,
-			SUM(TIMESTAMPDIFF(SECOND, joined_at, COALESCE(left_at, NOW()))) AS seconds FROM bl_mc_sessions WHERE joined_at > NOW() - ${days30}`), [{}]),
+		when('bl_mc_sessions', () => query(`SELECT user_id, joined_at, left_at FROM fivem.bl_mc_sessions WHERE joined_at > NOW() - ${days30} OR left_at IS NULL ORDER BY joined_at LIMIT 20000`)),
+		// The day as text: a DATE would come back as a local midnight and could shift by one day
+		when('bl_mc_sessions', () => query(`SELECT to_char(${paris('f')}, 'YYYY-MM-DD') AS d, COUNT(*) AS n FROM (SELECT MIN(joined_at) AS f FROM fivem.bl_mc_sessions GROUP BY user_id) x WHERE f > NOW() - ${days30} GROUP BY 1`)),
+		// Monday = 0, like WEEKDAY() before
+		when('bl_mc_sessions', () => query(`SELECT EXTRACT(ISODOW FROM ${paris('joined_at')}) - 1 AS dow, EXTRACT(HOUR FROM ${paris('joined_at')}) AS h, COUNT(DISTINCT user_id) AS n
+			FROM fivem.bl_mc_sessions WHERE joined_at > NOW() - INTERVAL '60 days' GROUP BY 1, 2`)),
+		when('bl_mc_sessions', () => query(`SELECT LEFT(drop_reason, 80) AS reason, COUNT(*) AS n FROM fivem.bl_mc_sessions WHERE drop_reason IS NOT NULL AND drop_reason <> '' AND joined_at > NOW() - ${days30} GROUP BY 1 ORDER BY n DESC LIMIT 10`)),
+		when('bl_mc_sessions', () => query('SELECT s.user_id, u.username, s.joined_at FROM fivem.bl_mc_sessions s JOIN fivem.users u ON u.userid = s.user_id WHERE s.left_at IS NULL AND s.joined_at > NOW() - INTERVAL \'1 day\' ORDER BY s.joined_at')),
+		when('bl_mc_sessions', () => query(`SELECT COUNT(*) AS sessions, COUNT(DISTINCT user_id) AS players, AVG(${seconds('joined_at', 'left_at')}) AS "avgSeconds",
+			SUM(${seconds('joined_at', 'COALESCE(left_at, NOW())')}) AS seconds FROM fivem.bl_mc_sessions WHERE joined_at > NOW() - ${days30}`), [{}]),
 
-		when('player_groups', () => query('SELECT `group` AS name, type, COUNT(*) AS members FROM player_groups GROUP BY `group`, type')),
-		query('SELECT JSON_VALUE(job, \'$.name\') AS name, SUM(JSON_VALUE(job, \'$.onduty\') = \'true\') AS onDuty FROM players GROUP BY name'),
-		when('job_duty_time', () => query('SELECT job_name, SUM(seconds) AS seconds FROM job_duty_time GROUP BY job_name')),
-		when('job_week_duty', () => query('SELECT job_name, SUM(seconds) AS seconds, COUNT(DISTINCT citizenid) AS people FROM job_week_duty WHERE week_start = (SELECT MAX(week_start) FROM job_week_duty) GROUP BY job_name')),
-		when('job_level_state', () => query('SELECT job_name, level, xp, title FROM job_level_state')),
-		when('job_open_state', () => query('SELECT job_name, is_open, changed_by, changed_at FROM job_open_state')),
-		canMoney ? when('job_payroll_runs', () => query('SELECT job_name, total_amount, employee_count, run_by_name, created_at FROM job_payroll_runs ORDER BY created_at DESC LIMIT 50')) : [],
-		canMoney ? when('selfmenu_invoices', () => query('SELECT job_name, COUNT(*) AS count, SUM(amount) AS total, SUM(IF(settled, 0, amount)) AS unpaid FROM selfmenu_invoices GROUP BY job_name')) : [],
-		when('job_safe_log', () => query(`SELECT job_name, COUNT(*) AS n FROM job_safe_log WHERE created_at > NOW() - ${days30} GROUP BY job_name`)),
-		when('qbx_gang_meta', () => query('SELECT gang_name, category, max_members, xp FROM qbx_gang_meta')),
+		when('player_groups', () => query('SELECT "group" AS name, type, COUNT(*) AS members FROM fivem.player_groups GROUP BY "group", type')),
+		query('SELECT fivem.j(job) ->> \'name\' AS name, SUM(CASE WHEN fivem.j(job) ->> \'onduty\' = \'true\' THEN 1 ELSE 0 END) AS "onDuty" FROM fivem.players GROUP BY 1'),
+		when('job_duty_time', () => query('SELECT job_name, SUM(seconds) AS seconds FROM fivem.job_duty_time GROUP BY job_name')),
+		when('job_week_duty', () => query('SELECT job_name, SUM(seconds) AS seconds, COUNT(DISTINCT citizenid) AS people FROM fivem.job_week_duty WHERE week_start = (SELECT MAX(week_start) FROM fivem.job_week_duty) GROUP BY job_name')),
+		when('job_level_state', () => query('SELECT job_name, level, xp, title FROM fivem.job_level_state')),
+		when('job_open_state', () => query('SELECT job_name, is_open, changed_by, changed_at FROM fivem.job_open_state')),
+		canMoney ? when('job_payroll_runs', () => query('SELECT job_name, total_amount, employee_count, run_by_name, created_at FROM fivem.job_payroll_runs ORDER BY created_at DESC LIMIT 50')) : [],
+		canMoney ? when('selfmenu_invoices', () => query('SELECT job_name, COUNT(*) AS count, SUM(amount) AS total, SUM(CASE WHEN settled <> 0 THEN 0 ELSE amount END) AS unpaid FROM fivem.selfmenu_invoices GROUP BY job_name')) : [],
+		when('job_safe_log', () => query(`SELECT job_name, COUNT(*) AS n FROM fivem.job_safe_log WHERE created_at > NOW() - ${days30} GROUP BY job_name`)),
+		when('qbx_gang_meta', () => query('SELECT gang_name, category, max_members, xp FROM fivem.qbx_gang_meta')),
 
-		when('player_vehicles', () => query('SELECT COUNT(*) AS total, SUM(state = 0) AS out_, SUM(state = 1) AS garage, SUM(state = 2) AS impound, SUM(engine < 500 OR body < 500) AS damaged, SUM(fakeplate IS NOT NULL AND fakeplate <> \'\') AS fakePlates FROM player_vehicles'), [{}]),
-		when('player_vehicles', () => query('SELECT vehicle AS model, COUNT(*) AS n FROM player_vehicles GROUP BY vehicle ORDER BY n DESC LIMIT 12')),
-		when('player_vehicles', () => query('SELECT garage, COUNT(*) AS n FROM player_vehicles WHERE garage IS NOT NULL AND state = 1 GROUP BY garage ORDER BY n DESC LIMIT 12')),
-		when('qbx_custom_garages', () => query('SELECT COUNT(*) AS n FROM qbx_custom_garages'), [{ n: 0 }]),
+		when('player_vehicles', () => query(`SELECT COUNT(*) AS total, SUM(CASE WHEN state = 0 THEN 1 ELSE 0 END) AS out_, SUM(CASE WHEN state = 1 THEN 1 ELSE 0 END) AS garage, SUM(CASE WHEN state = 2 THEN 1 ELSE 0 END) AS impound,
+			SUM(CASE WHEN engine < 500 OR body < 500 THEN 1 ELSE 0 END) AS damaged, SUM(CASE WHEN fakeplate IS NOT NULL AND fakeplate <> '' THEN 1 ELSE 0 END) AS "fakePlates" FROM fivem.player_vehicles`), [{}]),
+		when('player_vehicles', () => query('SELECT vehicle AS model, COUNT(*) AS n FROM fivem.player_vehicles GROUP BY vehicle ORDER BY n DESC LIMIT 12')),
+		when('player_vehicles', () => query('SELECT garage, COUNT(*) AS n FROM fivem.player_vehicles WHERE garage IS NOT NULL AND state = 1 GROUP BY garage ORDER BY n DESC LIMIT 12')),
+		when('qbx_custom_garages', () => query('SELECT COUNT(*) AS n FROM fivem.qbx_custom_garages'), [{ n: 0 }]),
 
-		when('xt_prison', () => query('SELECT x.identifier, x.jailtime, p.charinfo FROM xt_prison x LEFT JOIN players p ON p.citizenid = x.identifier WHERE x.jailtime > 0 ORDER BY x.jailtime DESC')),
-		when('admindash_sanctions', () => query(`SELECT type, COUNT(*) AS n FROM admindash_sanctions WHERE created_at > NOW() - ${days30} GROUP BY type`)),
-		when('admindash_sanctions', () => query('SELECT id, target_dbid, target_name, type, reason, duration_minutes, issued_by_name, created_at FROM admindash_sanctions ORDER BY created_at DESC LIMIT 30')),
-		when('bans', () => query('SELECT id, name, reason, expire, bannedby FROM bans ORDER BY id DESC')),
-		when('admindash_reports', () => query('SELECT id, sender_name, message, status, priority, category, claimed_by_name, resolved_by_name, created_at, resolved_at FROM admindash_reports ORDER BY created_at DESC LIMIT 30')),
-		when('mdt_calls', () => query(`SELECT id, code, title, place, priority, state, caller_name, closed_by, ${unix('created_at')} AS created, ${unix('closed_at')} AS closed FROM mdt_calls ORDER BY created_at DESC LIMIT 20`)),
+		when('xt_prison', () => query('SELECT x.identifier, x.jailtime, p.charinfo FROM fivem.xt_prison x LEFT JOIN fivem.players p ON p.citizenid = x.identifier WHERE x.jailtime > 0 ORDER BY x.jailtime DESC')),
+		when('admindash_sanctions', () => query(`SELECT type, COUNT(*) AS n FROM fivem.admindash_sanctions WHERE created_at > NOW() - ${days30} GROUP BY type`)),
+		when('admindash_sanctions', () => query('SELECT id, target_dbid, target_name, type, reason, duration_minutes, issued_by_name, created_at FROM fivem.admindash_sanctions ORDER BY created_at DESC LIMIT 30')),
+		when('bans', () => query('SELECT id, name, reason, expire, bannedby FROM fivem.bans ORDER BY id DESC')),
+		when('admindash_reports', () => query('SELECT id, sender_name, message, status, priority, category, claimed_by_name, resolved_by_name, created_at, resolved_at FROM fivem.admindash_reports ORDER BY created_at DESC LIMIT 30')),
+		when('mdt_calls', () => query(`SELECT id, code, title, place, priority, state, caller_name, closed_by, ${unix('created_at')} AS created, ${unix('closed_at')} AS closed FROM fivem.mdt_calls ORDER BY created_at DESC LIMIT 20`)),
 
-		when('bl_safezones_zones', () => query('SELECT name, is_active FROM bl_safezones_zones ORDER BY name')),
-		when('bl_safezones_visits', () => query('SELECT zone_name, COUNT(*) AS visits, SUM(seconds) AS seconds FROM bl_safezones_visits GROUP BY zone_name')),
-		when('harvest_zones', () => query('SELECT id, label, item, amount, enabled, stock_enabled, current_stock, max_stock, access, access_value FROM harvest_zones ORDER BY label')),
-		when('harvest_zone_player_stats', () => query('SELECT player_name, total_harvested FROM harvest_zone_player_stats ORDER BY total_harvested DESC LIMIT 10')),
+		when('bl_safezones_zones', () => query('SELECT name, is_active FROM fivem.bl_safezones_zones ORDER BY name')),
+		when('bl_safezones_visits', () => query('SELECT zone_name, COUNT(*) AS visits, SUM(seconds) AS seconds FROM fivem.bl_safezones_visits GROUP BY zone_name')),
+		when('harvest_zones', () => query('SELECT id, label, item, amount, enabled, stock_enabled, current_stock, max_stock, access, access_value FROM fivem.harvest_zones ORDER BY label')),
+		when('harvest_zone_player_stats', () => query('SELECT player_name, total_harvested FROM fivem.harvest_zone_player_stats ORDER BY total_harvested DESC LIMIT 10')),
 		Promise.all([
 			['blips', 'admindash_blips'], ['doors', 'ox_doorlock'], ['shops', 'shops'], ['markets', 'market_markets'], ['mapObjects', 'mapeditor_objects'],
 			['craftingTables', 'bl_crafting_tables'], ['recipes', 'bl_crafting_recipes'], ['tvScreens', 'tv_screens'], ['billboards', 'billboards'], ['djVenues', 'dj_venues'],
 			['teleports', 'qbx_teleport_overrides'], ['hotels', 'bl_hotels'], ['companies', 'sky_phone_company_profiles'], ['stashes', 'ox_inventory'], ['outfits', 'playerskins'],
-		].map(async ([key, table]) => [key, num((await when(table, () => query(`SELECT COUNT(*) AS n FROM \`${table}\``), [{ n: 0 }]))[0]?.n)])),
+		].map(async ([key, table]) => [key, num((await rowCount(table)) ?? (await when(table, () => query(`SELECT COUNT(*) AS n FROM fivem."${table}"`), [{ n: 0 }]))[0]?.n)])),
 
-		when('admindash_roles', () => query('SELECT r.id, r.name, r.label, r.protected, COUNT(a.action_key) AS actions FROM admindash_roles r LEFT JOIN admindash_role_actions a ON a.role_id = r.id GROUP BY r.id ORDER BY actions DESC')),
-		when('admindash_staff_sessions', () => query(`SELECT staff_name, role_name, COUNT(*) AS sessions, SUM(TIMESTAMPDIFF(SECOND, started_at, COALESCE(ended_at, last_seen_at))) AS seconds,
-			MAX(COALESCE(ended_at, last_seen_at)) AS lastSeen, MAX(ended_at IS NULL AND last_seen_at > NOW() - INTERVAL 10 MINUTE) AS active
-			FROM admindash_staff_sessions WHERE started_at > NOW() - ${days30} GROUP BY staff_name, role_name`)),
-		when('admindash_audit_log', () => query(`SELECT issued_by_name AS name, COUNT(*) AS n FROM admindash_audit_log WHERE created_at > NOW() - ${days30} GROUP BY name`)),
-		when('admindash_sanctions', () => query(`SELECT issued_by_name AS name, COUNT(*) AS n FROM admindash_sanctions WHERE created_at > NOW() - ${days30} GROUP BY name`)),
-		when('admindash_reports', () => query(`SELECT COALESCE(resolved_by_name, claimed_by_name) AS name, COUNT(*) AS n FROM admindash_reports WHERE created_at > NOW() - ${days30} AND COALESCE(resolved_by_name, claimed_by_name) IS NOT NULL GROUP BY name`)),
-		when('admindash_staffmsg_history', () => query('SELECT issued_by_name, line, target_label, created_at FROM admindash_staffmsg_history ORDER BY created_at DESC LIMIT 15')),
+		when('admindash_roles', () => query('SELECT r.id, r.name, r.label, r.protected, COUNT(a.action_key) AS actions FROM fivem.admindash_roles r LEFT JOIN fivem.admindash_role_actions a ON a.role_id = r.id GROUP BY r.id, r.name, r.label, r.protected ORDER BY actions DESC')),
+		when('admindash_staff_sessions', () => query(`SELECT staff_name, role_name, COUNT(*) AS sessions, SUM(${seconds('started_at', 'COALESCE(ended_at, last_seen_at)')}) AS seconds,
+			MAX(COALESCE(ended_at, last_seen_at)) AS "lastSeen", MAX(CASE WHEN ended_at IS NULL AND last_seen_at > NOW() - INTERVAL '10 minutes' THEN 1 ELSE 0 END) AS active
+			FROM fivem.admindash_staff_sessions WHERE started_at > NOW() - ${days30} GROUP BY staff_name, role_name`)),
+		when('admindash_audit_log', () => query(`SELECT issued_by_name AS name, COUNT(*) AS n FROM fivem.admindash_audit_log WHERE created_at > NOW() - ${days30} GROUP BY 1`)),
+		when('admindash_sanctions', () => query(`SELECT issued_by_name AS name, COUNT(*) AS n FROM fivem.admindash_sanctions WHERE created_at > NOW() - ${days30} GROUP BY 1`)),
+		when('admindash_reports', () => query(`SELECT COALESCE(resolved_by_name, claimed_by_name) AS name, COUNT(*) AS n FROM fivem.admindash_reports WHERE created_at > NOW() - ${days30} AND COALESCE(resolved_by_name, claimed_by_name) IS NOT NULL GROUP BY 1`)),
+		when('admindash_staffmsg_history', () => query('SELECT issued_by_name, line, target_label, created_at FROM fivem.admindash_staffmsg_history ORDER BY created_at DESC LIMIT 15')),
 	]);
 
 	// Activity per day over 30 days
@@ -207,22 +216,23 @@ export async function serverReport({ query, when, groupsMap, canMoney, now = Dat
 
 async function economy({ query, when }) {
 	const [[money = {}], fortunes, accounts, flows, premium, crates, topItems, gifts, promos, crypto, phoneTx] = await Promise.all([
-		query('SELECT SUM(JSON_VALUE(money, \'$.cash\')) AS cash, SUM(JSON_VALUE(money, \'$.bank\')) AS bank, SUM(JSON_VALUE(money, \'$.crypto\')) AS crypto FROM players'),
-		query('SELECT citizenid, charinfo, JSON_VALUE(money, \'$.cash\') AS cash, JSON_VALUE(money, \'$.bank\') AS bank FROM players ORDER BY COALESCE(JSON_VALUE(money, \'$.cash\'), 0) + COALESCE(JSON_VALUE(money, \'$.bank\'), 0) DESC LIMIT 10'),
-		when('bank_accounts_new', () => query('SELECT id, amount, creator, isfrozen, is_savings FROM bank_accounts_new ORDER BY amount DESC')),
-		when('bank_flows', () => query('SELECT kind, COUNT(*) AS n, SUM(amount) AS total FROM bank_flows WHERE created_at > NOW() - INTERVAL 30 DAY GROUP BY kind ORDER BY total DESC')),
+		query(`SELECT SUM(${jnum('money', 'cash')}) AS cash, SUM(${jnum('money', 'bank')}) AS bank, SUM(${jnum('money', 'crypto')}) AS crypto FROM fivem.players`),
+		query(`SELECT citizenid, charinfo, ${jnum('money', 'cash')} AS cash, ${jnum('money', 'bank')} AS bank FROM fivem.players
+			ORDER BY COALESCE(${jnum('money', 'cash')}, 0) + COALESCE(${jnum('money', 'bank')}, 0) DESC LIMIT 10`),
+		when('bank_accounts_new', () => query('SELECT id, amount, creator, isfrozen, is_savings FROM fivem.bank_accounts_new ORDER BY amount DESC NULLS LAST')),
+		when('bank_flows', () => query('SELECT kind, COUNT(*) AS n, SUM(amount) AS total FROM fivem.bank_flows WHERE created_at > NOW() - INTERVAL \'30 days\' GROUP BY kind ORDER BY total DESC NULLS LAST')),
 		Promise.all([
-			when('premium_points', () => query('SELECT SUM(balance) AS n FROM premium_points'), [{}]),
-			when('premium_loyalty', () => query('SELECT SUM(balance) AS n FROM premium_loyalty'), [{}]),
-			when('premium_shop_item_purchases', () => query('SELECT COUNT(*) AS n FROM premium_shop_item_purchases WHERE created_at > NOW() - INTERVAL 30 DAY'), [{}]),
-			when('premium_bundle_purchases', () => query('SELECT COUNT(*) AS n FROM premium_bundle_purchases WHERE created_at > NOW() - INTERVAL 30 DAY'), [{}]),
+			when('premium_points', () => query('SELECT SUM(balance) AS n FROM fivem.premium_points'), [{}]),
+			when('premium_loyalty', () => query('SELECT SUM(balance) AS n FROM fivem.premium_loyalty'), [{}]),
+			when('premium_shop_item_purchases', () => query('SELECT COUNT(*) AS n FROM fivem.premium_shop_item_purchases WHERE created_at > NOW() - INTERVAL \'30 days\''), [{}]),
+			when('premium_bundle_purchases', () => query('SELECT COUNT(*) AS n FROM fivem.premium_bundle_purchases WHERE created_at > NOW() - INTERVAL \'30 days\''), [{}]),
 		]),
-		when('premium_crate_openings', () => query('SELECT rarity, COUNT(*) AS n FROM premium_crate_openings GROUP BY rarity ORDER BY n DESC')),
-		when('premium_shop_item_purchases', () => query('SELECT i.label, COUNT(*) AS n, MAX(i.price) AS price FROM premium_shop_item_purchases p LEFT JOIN premium_shop_items i ON i.id = p.item_id GROUP BY p.item_id, i.label ORDER BY n DESC LIMIT 10')),
-		when('premium_gifts', () => query('SELECT COUNT(*) AS n, SUM(status = \'opened\') AS opened FROM premium_gifts'), [{}]),
-		when('premium_promo_redemptions', () => query('SELECT COUNT(*) AS n FROM premium_promo_redemptions'), [{ n: 0 }]),
-		when('sky_phone_crypto_markets', () => query('SELECT id, price, price_scale, issued_supply, status FROM sky_phone_crypto_markets ORDER BY id')),
-		when('sky_phone_bank_transactions', () => query('SELECT kind, COUNT(*) AS n, SUM(amount) AS total FROM sky_phone_bank_transactions GROUP BY kind')),
+		when('premium_crate_openings', () => query('SELECT rarity, COUNT(*) AS n FROM fivem.premium_crate_openings GROUP BY rarity ORDER BY n DESC')),
+		when('premium_shop_item_purchases', () => query('SELECT i.label, COUNT(*) AS n, MAX(i.price) AS price FROM fivem.premium_shop_item_purchases p LEFT JOIN fivem.premium_shop_items i ON i.id = p.item_id GROUP BY p.item_id, i.label ORDER BY n DESC LIMIT 10')),
+		when('premium_gifts', () => query('SELECT COUNT(*) AS n, SUM(CASE WHEN status = \'opened\' THEN 1 ELSE 0 END) AS opened FROM fivem.premium_gifts'), [{}]),
+		when('premium_promo_redemptions', () => query('SELECT COUNT(*) AS n FROM fivem.premium_promo_redemptions'), [{ n: 0 }]),
+		when('sky_phone_crypto_markets', () => query('SELECT id, price, price_scale, issued_supply, status FROM fivem.sky_phone_crypto_markets ORDER BY id')),
+		when('sky_phone_bank_transactions', () => query('SELECT kind, COUNT(*) AS n, SUM(amount) AS total FROM fivem.sky_phone_bank_transactions GROUP BY kind')),
 	]);
 	const one = rows => num(rows[0]?.n);
 	return {
