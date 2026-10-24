@@ -554,7 +554,7 @@ function CopyRolesDialog({ isOwner, onClose, onDone }: { isOwner: boolean; onClo
           <div className='grid gap-1.5'>
             <Label>Depuis</Label>
             <Select value={from} onValueChange={(id) => pickServer('from', id)}>
-              <SelectTrigger aria-label='Serveur source'><SelectValue placeholder='Serveur source…' /></SelectTrigger>
+              <SelectTrigger className='w-full' aria-label='Serveur source'><SelectValue placeholder='Serveur source…' /></SelectTrigger>
               <SelectContent>{servers.map((g) => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
@@ -562,7 +562,7 @@ function CopyRolesDialog({ isOwner, onClose, onDone }: { isOwner: boolean; onClo
           <div className='grid gap-1.5'>
             <Label>Vers</Label>
             <Select value={to} onValueChange={(id) => pickServer('to', id)}>
-              <SelectTrigger aria-label='Serveur cible'><SelectValue placeholder='Serveur cible…' /></SelectTrigger>
+              <SelectTrigger className='w-full' aria-label='Serveur cible'><SelectValue placeholder='Serveur cible…' /></SelectTrigger>
               <SelectContent>{servers.filter((g) => g.id !== from).map((g) => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
