@@ -8,7 +8,7 @@ import { attachInternalLink, remoteObject } from '../rpc/socket.js';
 // Subscriptions answered here from the bot's event stream: service -> [method, event]
 const SUBSCRIPTIONS = { tickets: ['subscribe', 'tickets'], dms: ['subscribe', 'dms'], music: ['onChange', 'music'], customCommands: ['onChange', null] };
 // Pure synchronous helpers of bot services, run on the local copy
-const LOCAL_METHODS = { tickets: new Set(['priorities']) };
+const LOCAL_METHODS = { tickets: new Set(['priorities']), fivemEvents: new Set(['types']) };
 
 export function createApiLink({ config, consoleLog, logger }) {
 	const events = new EventEmitter();
