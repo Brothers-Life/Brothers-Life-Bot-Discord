@@ -1,24 +1,21 @@
 import { useDeferredValue, useState } from 'react'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import {
   Activity, ArrowLeft, Backpack, Banknote, Briefcase, ChartNoAxesCombined, Link2, Car, Clock, Database, Gamepad2, Gavel, HeartPulse, IdCard, Search, Settings, ShieldCheck, Siren, Wallet, Users,
 } from 'lucide-react'
-import { toast } from 'sonner'
 import { api, errorMessage } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { dateTime } from '@/lib/format'
+import { ago, dateTime } from '@/lib/format'
 import { useMe } from '@/hooks/use-me'
 import { Page, Section, EmptyState, Pill, StatCards, UserAvatar, Notice } from '@/components/app/ui'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { hours, money } from '@/features/fivem/format'
-import type { Character, Item, Overview, Sheet, Summary } from '@/features/fivem/types'
+import type { Character, Item, MirrorState, Overview, Sheet, Summary } from '@/features/fivem/types'
 import { ActivityTab, EconomyTab, JobsTab, JusticeTab, ServerTab, StaffTab, VehiclesTab, WorldTab } from '@/features/fivem/server'
 import { GameLogs } from '@/features/fivem/logs'
 import { RolesTab } from '@/features/fivem/roles'
@@ -53,7 +50,7 @@ function FivemPlayersPage() {
       actions={
         <div className='flex gap-2'>
           {id && <Button variant='outline' onClick={() => navigate({ search: { id: undefined, tab } })}><ArrowLeft /> Retour</Button>}
-          {can('fivemdata.manage') && <Button variant='ghost' onClick={() => setSettings(true)}><Settings /> Connexion</Button>}
+          {can('fivemdata.manage') && <Button variant='ghost' onClick={() => setSettings(true)}><Settings /> Copie du jeu</Button>}
         </div>
       }
     >
@@ -71,8 +68,8 @@ function Directory({ tab, onTab, onOpen }: { tab: Tab; onTab: (tab: Tab) => void
 
   if (overview.error) {
     return (
-      <Notice tone='warning' title='Base FiveM indisponible'>
-        {errorMessage(overview.error)}{can('fivemdata.manage') ? ' Règle la connexion avec le bouton « Connexion ».' : ' Demande à un responsable de régler la connexion.'}
+      <Notice tone='warning' title='Données FiveM indisponibles'>
+        {errorMessage(overview.error)}{can('fivemdata.manage') ? ' Le bouton « Copie du jeu » montre ce qui est reçu et comment installer la ressource.' : ' Demande à un responsable de vérifier la ressource bl_telemetry.'}
       </Notice>
     )
   }
@@ -88,6 +85,7 @@ function Directory({ tab, onTab, onOpen }: { tab: Tab; onTab: (tab: Tab) => void
           { label: 'Heures jouées (7 j)', value: Math.round(o.week.seconds / 3600), icon: Clock, tone: 'warning', hint: `${o.week.players} joueurs` },
         ]} />
       ) : <Skeleton className='h-24 w-full' />}
+      {o?.syncedAt && <SyncedAt at={o.syncedAt} now={o.at} />}
 
       <Tabs value={tab} onValueChange={(v) => onTab(v as Tab)}>
         <TabsList className='h-auto max-w-full flex-wrap justify-start [&>button]:h-8 [&>button]:flex-none'>
@@ -411,54 +409,75 @@ function Items({ items }: { items: Item[] }) {
   )
 }
 
+// How fresh the game's data is: the last change bl_telemetry sent (now: the server's clock when it answered)
+function SyncedAt({ at, now }: { at: number; now: number }) {
+  const late = now - at > 15 * 60_000
+  return (
+    <p className={cn('-mt-3 flex items-center gap-1.5 text-xs', late ? 'text-warning' : 'text-muted-foreground')}>
+      <Database className='size-3.5' /> Données du jeu reçues {ago(at)}{late && ' : la ressource bl_telemetry n’envoie plus rien, vérifie le serveur de jeu.'}
+    </p>
+  )
+}
+
+const MODES: Record<MirrorState['detail'][number]['mode'], string> = {
+  append: 'Nouvelles lignes', updated: 'Lignes modifiées', hash: 'Lignes changées', replace: 'Table entière', count: 'Nombre de lignes',
+}
+
+// What the panel has of the game's tables (copied by the bl_telemetry resource), and how to install it
 function SettingsDialog({ onClose }: { onClose: () => void }) {
-  const qc = useQueryClient()
-  const { data } = useQuery({ queryKey: ['fivem-db-settings'], queryFn: () => api<{ enabled: boolean; host: string; port: number; database: string; user: string; hasPassword: boolean }>('/fivem-data/settings') })
-  const [form, setForm] = useState<{ enabled: boolean; host: string; port: number; database: string; user: string; password: string } | null>(null)
-  const f = form ?? (data ? { ...data, password: '' } : null)
-  const save = useMutation({
-    mutationFn: () => api('/fivem-data/settings', { method: 'PUT', body: f }),
-    onSuccess: () => { toast.success('Connexion enregistrée'); qc.invalidateQueries(); setForm(null) },
+  const { data, error, isLoading, dataUpdatedAt } = useQuery({
+    queryKey: ['fivem-mirror'],
+    queryFn: () => api<MirrorState>('/fivem-data/test', { method: 'POST', body: {} }),
+    refetchInterval: 15_000,
   })
-  const test = useMutation({
-    // Tests what is typed (not yet saved); an empty password reuses the saved one for the same host and user
-    mutationFn: () => api<{ version: string; tables: number; features: Record<string, boolean> }>('/fivem-data/test', { method: 'POST', body: f ? { host: f.host, port: f.port, database: f.database, user: f.user, password: f.password } : {} }),
-    onSuccess: (r) => toast.success(`Connecté : ${r.tables} tables (MariaDB ${r.version.split('-')[0]})`),
-  })
-  const set = (patch: Partial<NonNullable<typeof f>>) => f && setForm({ ...f, ...patch })
+  const [all, setAll] = useState(false)
+  const tables = [...(data?.detail ?? [])].sort((a, b) => b.syncedAt - a.syncedAt)
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className='sm:max-w-lg'>
+      <DialogContent className='sm:max-w-2xl'>
         <DialogHeader>
-          <DialogTitle className='flex items-center gap-2'><Database className='size-5' /> Base de données FiveM</DialogTitle>
-          <DialogDescription>Le bot ne fait que lire. Conseillé : un utilisateur MariaDB dédié avec seulement le droit SELECT sur la base du serveur.</DialogDescription>
+          <DialogTitle className='flex items-center gap-2'><Database className='size-5' /> Copie des données du jeu</DialogTitle>
+          <DialogDescription>
+            La ressource <code>bl_telemetry</code> envoie au panel les tables du serveur FiveM, seulement ce qui change, toutes les minutes. La base du jeu reste fermée à Internet ; les IP, tokens et mots de passe ne quittent jamais le serveur.
+          </DialogDescription>
         </DialogHeader>
-        {!f ? <Skeleton className='h-48' /> : (
-          <div className='grid gap-4'>
-            <label className='flex items-center gap-2 text-sm'><Switch checked={f.enabled} onCheckedChange={(enabled) => set({ enabled })} /> Activée</label>
-            <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-[minmax(0,1fr)_6rem]'>
-              <div className='grid gap-1.5'><Label htmlFor='db-host'>Hôte</Label><Input id='db-host' value={f.host} onChange={(e) => set({ host: e.target.value })} placeholder='127.0.0.1' /></div>
-              <div className='grid gap-1.5'><Label htmlFor='db-port'>Port</Label><Input id='db-port' type='number' value={f.port} onChange={(e) => set({ port: Number(e.target.value) })} /></div>
+        {isLoading ? <Skeleton className='h-48' /> : error ? <Notice tone='warning' title='État indisponible'>{errorMessage(error)}</Notice> : !data?.tables ? (
+          <div className='grid gap-3 text-sm'>
+            <Notice tone='info' title='Rien reçu pour l’instant'>Installe ou mets à jour <code>bl_telemetry</code> (version 1.5 ou plus) sur le serveur de jeu, puis redémarre-la.</Notice>
+            <ol className='grid list-decimal gap-1 pl-5 text-muted-foreground'>
+              <li>Dans le <code>server.cfg</code> : <code>set telemetry_url "{window.location.origin}"</code></li>
+              <li><code>set telemetry_token "…"</code> : le jeton d’ingestion de la page Télémétrie, réglages.</li>
+              <li><code>ensure bl_telemetry</code> après <code>oxmysql</code>, puis <code>restart bl_telemetry</code>.</li>
+            </ol>
+          </div>
+        ) : (
+          <div className='grid gap-3'>
+            <StatCards items={[
+              { label: 'Tables reçues', value: data.tables, icon: Database, tone: 'accent' },
+              { label: 'Dernier envoi', value: data.lastSync ? ago(data.lastSync) : '—', icon: Clock, tone: data.lastSync && dataUpdatedAt - data.lastSync < 15 * 60_000 ? 'success' : 'warning' },
+            ]} />
+            <div className='overflow-x-auto rounded-md border'>
+              <table className='w-full text-sm'>
+                <thead className='bg-muted/50 text-left text-xs text-muted-foreground'>
+                  <tr><th className='px-3 py-2 font-medium'>Table</th><th className='px-3 py-2 font-medium'>Copie</th><th className='px-3 py-2 text-right font-medium'>Lignes</th><th className='px-3 py-2 text-right font-medium'>Reçue</th></tr>
+                </thead>
+                <tbody>
+                  {(all ? tables : tables.slice(0, 12)).map((t) => (
+                    <tr key={t.name} className='border-t'>
+                      <td className='px-3 py-1.5 font-mono text-xs'>{t.name}</td>
+                      <td className='px-3 py-1.5 text-muted-foreground'>{MODES[t.mode] ?? t.mode}</td>
+                      <td className='px-3 py-1.5 text-right tabular-nums'>{t.rows.toLocaleString('fr-FR')}</td>
+                      <td className='px-3 py-1.5 text-right text-muted-foreground'>{ago(t.syncedAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
-              <div className='grid gap-1.5'><Label htmlFor='db-name'>Base</Label><Input id='db-name' value={f.database} onChange={(e) => set({ database: e.target.value })} placeholder='s10_qbox' /></div>
-              <div className='grid gap-1.5'><Label htmlFor='db-user'>Utilisateur</Label><Input id='db-user' value={f.user} onChange={(e) => set({ user: e.target.value })} autoComplete='off' /></div>
-            </div>
-            <div className='grid gap-1.5'><Label htmlFor='db-pass'>Mot de passe</Label><Input id='db-pass' type='password' value={f.password} onChange={(e) => set({ password: e.target.value })} placeholder={data?.hasPassword ? 'inchangé' : ''} autoComplete='new-password' /></div>
-            {test.data && (
-              <div className='grid gap-1 text-sm'>
-                <p className='text-success'>Connexion réussie : {test.data.tables} tables trouvées.</p>
-                <details className='text-xs text-muted-foreground'>
-                  <summary className='cursor-pointer'>Détails techniques (tables utilisées par le panel)</summary>
-                  <div className='mt-2 flex flex-wrap gap-1'>{Object.entries(test.data.features).map(([t, ok]) => <Pill key={t} tone={ok ? 'success' : 'neutral'}>{t}</Pill>)}</div>
-                </details>
-              </div>
-            )}
+            {tables.length > 12 && <Button variant='ghost' size='sm' className='justify-self-start' onClick={() => setAll(!all)}>{all ? 'Moins' : `Voir les ${tables.length} tables`}</Button>}
           </div>
         )}
         <DialogFooter>
-          <Button variant='outline' loading={test.isPending} onClick={() => test.mutate()}>Tester ces réglages</Button>
-          <Button loading={save.isPending} disabled={!f} onClick={() => save.mutate()}>Enregistrer</Button>
+          <Button variant='outline' onClick={onClose}>Fermer</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

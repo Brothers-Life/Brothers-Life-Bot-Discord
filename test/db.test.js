@@ -98,8 +98,8 @@ test('a backup restores every row, text with line breaks and binary data include
 	const dir = tmpDir();
 	await db.query('INSERT INTO settings (key, value) VALUES (?, ?), (?, ?)', 'a', '"ligne 1\nligne 2 ; DROP TABLE x;\n-- pas un commentaire"', 'b', '"é💬\'\\\\"');
 	await db.query('INSERT INTO files (id, kind, mime, size, gzip, data, created_at) VALUES (?, ?, ?, ?, 0, ?, 1)', 'upload:x', 'upload', 'image/png', 3, Buffer.from([0, 255, 10]));
-	const file = await dumpDatabase(db, dir, { label: 'test', schemaVersion: 2 });
-	assert.equal(listBackups(dir)[0].schemaVersion, 2);
+	const file = await dumpDatabase(db, dir, { label: 'test', schemaVersion: latestSchemaVersion() });
+	assert.equal(listBackups(dir)[0].schemaVersion, latestSchemaVersion());
 
 	await db.query('DELETE FROM settings');
 	await db.query('INSERT INTO settings (key, value) VALUES (?, ?)', 'c', '1');

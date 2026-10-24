@@ -59,6 +59,14 @@ export type Overview = {
   staff: { name: string; role: string; seconds: number; active: boolean }[]
   jobs: { name: string; label: string; type: string; members: number }[]
   topPlaytime: { userId: number; username: string; seconds: number }[]
+  syncedAt: number | null
+  at: number
+}
+
+// State of the copy of the game's tables sent by bl_telemetry
+export type MirrorState = {
+  version: string; tables: number; lastSync: number | null; features: Record<string, boolean>
+  detail: { name: string; mode: 'append' | 'updated' | 'hash' | 'replace' | 'count'; rows: number; syncedAt: number; fullAt: number | null }[]
 }
 
 export type Job = {

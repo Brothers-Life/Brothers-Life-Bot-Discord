@@ -598,6 +598,8 @@ export function createFivemData({ db, mirror, audit, logger = console, now = Dat
 				staff: staff.map(s => ({ name: s.staff_name, role: s.role_name, seconds: Number(s.seconds ?? 0), active: Boolean(s.active) })),
 				jobs: jobs.map(j => ({ name: j.name, label: groups.get(j.name)?.label ?? j.name, type: j.type, members: Number(j.members) })),
 				topPlaytime: topPlay.map(t => ({ userId: t.user_id, username: t.username, seconds: Number(t.seconds) })),
+				// Last change received from the game (bl_telemetry): how fresh these numbers are
+				syncedAt: (await mirror.status()).lastSync,
 				at: now(),
 			};
 		},
