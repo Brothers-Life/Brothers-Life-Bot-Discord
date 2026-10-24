@@ -8,6 +8,7 @@
 //     --project "Brothers Life Panel"   project name or id
 //     --branch main                     branch built by webgune
 //     --repo Brothers-Life/Brothers-Life-Bot-Discord
+//     --db brl-db                       name of the database service (another name: a fresh database)
 //     --with-bot                        also create the bot service (stop the old bot first)
 //     --dry-run                         show what would be done, change nothing
 // The key needs services:write and projects:write (services:read is enough for --dry-run).
@@ -26,7 +27,7 @@ const DRY = flag('dry-run');
 const PROJECT = option('project', 'Brothers Life Panel');
 const BRANCH = option('branch', 'main');
 const [OWNER, REPO] = option('repo', 'Brothers-Life/Brothers-Life-Bot-Discord').split('/');
-const NAMES = { db: 'brl-db', panel: 'brl-panel', bot: 'brl-bot' };
+const NAMES = { db: option('db', 'brl-db'), panel: 'brl-panel', bot: 'brl-bot' };
 const PORT = '3000';
 
 // Variable names of the old panel taken over by the bot (src/utils/config.js LEGACY_PANEL_VARS)
@@ -155,7 +156,9 @@ console.log(show(panelVars));
 if (!DRY && panel) await api('PUT', `/services/${panel.id}/env`, { vars: { ...panel.envVars, ...panelVars } });
 
 /* --- bot --- */
-const apiUrl = panel ? `http://${internalHost(panel, namespace)}:${PORT}` : 'http://brl-panel.<namespace>.svc.cluster.local:3000';
+// The public address: a bot pod cannot reach the panel's cluster address on webgune (handshake times out).
+// /internal/bot stays guarded by INTERNAL_TOKEN, over TLS.
+const apiUrl = publicUrl;
 const botVars = { ...common, APP_ROLE: 'bot', API_URL: apiUrl, WEB_PUBLIC_URL: publicUrl, ...(process.env.BOT_TOKEN ? { TOKEN: process.env.BOT_TOKEN } : {}) };
 const bot = byName(NAMES.bot);
 if (flag('with-bot')) {

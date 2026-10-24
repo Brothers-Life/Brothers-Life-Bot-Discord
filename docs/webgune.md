@@ -5,7 +5,7 @@ Tout le projet tient dans un projet webgune (« Brothers Life Panel ») : **une 
 ```
  Navigateur ─HTTPS─▶ brl-panel (web, APP_ROLE=api, SERVE_PANEL=true)  ◀── bl_telemetry (POST /v1/batch)
                         ▲   panel React + API + /v1 télémétrie
-     websocket interne  │   (http://brl-panel.<namespace>.svc.cluster.local:3000/internal/bot)
+  websocket (INTERNAL_TOKEN) │   (wss://<domaine du panel>/internal/bot)
                         │
                      brl-bot (Bot Discord, APP_ROLE=bot, aucun port)
                         │
@@ -49,7 +49,7 @@ Chaque reprise ne se fait qu'une fois et n'écrase jamais ce qui a été changé
 - `TELEMETRY_FIVEM_BASE` : `http://<ip>:30120` du serveur FiveM (statut et console).
 - `TELEMETRY_IMPORT_FROM` (une seule fois) : l'URL interne de l'ancienne base `panel-db`. Au premier démarrage, l'API recopie l'historique dans les tables `tel_*` (identifiants des joueurs retirés), puis ne le refait plus jamais. La variable peut être retirée ensuite.
 
-**brl-bot** : `APP_ROLE=bot`, `TOKEN` (token du bot), `API_URL=http://brl-panel.<namespace>.svc.cluster.local:3000`. Le bot se connecte à l'API par websocket : il n'a besoin d'aucun port.
+**brl-bot** : `APP_ROLE=bot`, `TOKEN` (token du bot), `API_URL=https://<domaine du panel>`. Le bot se connecte à l'API par websocket : il n'a besoin d'aucun port. L'adresse interne du cluster (`…svc.cluster.local:3000`) n'est pas joignable depuis un service Bot Discord (le websocket n'aboutit jamais) : le bot passe par l'adresse publique, en TLS, protégée par `INTERNAL_TOKEN`.
 
 Dans Discord > OAuth2 > Redirects : `https://<domaine du panel>/api/auth/callback`.
 
