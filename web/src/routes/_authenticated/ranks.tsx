@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, ChevronDown, Copy, Download, GitMerge, Network, Pencil, Plus, Search, Share2, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowRight, ArrowUp, ChevronDown, Copy, CopyPlus, Download, GitMerge, Network, Pencil, Plus, Search, Share2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Rank, RanksPayload, Role } from '@/lib/types'
@@ -45,6 +45,7 @@ function RanksPage() {
   const [draft, setDraft] = useState<Draft | null>(null)
   const [toDelete, setToDelete] = useState<Rank | null>(null)
   const [importing, setImporting] = useState(false)
+  const [copyingRoles, setCopyingRoles] = useState(false)
   const { confirm, dialog } = useConfirm()
 
   const myLevel = me?.isOwner ? Infinity : (me?.level ?? 0)
@@ -120,6 +121,9 @@ function RanksPage() {
               <Download /> Importer les rôles du serveur principal
             </Button>
           )}
+          <Button variant='outline' onClick={() => setCopyingRoles(true)}>
+            <CopyPlus /> Copier des rôles entre serveurs
+          </Button>
           <Button onClick={() => setDraft({ ...EMPTY, level: Math.min(10, Number.isFinite(myLevel) ? myLevel - 1 : 10) })}>
             <Plus /> Nouveau rang
           </Button>
@@ -193,6 +197,7 @@ function RanksPage() {
       )}
 
       {importing && <ImportDialog onClose={() => setImporting(false)} onDone={refresh} />}
+      {copyingRoles && <CopyRolesDialog isOwner={Boolean(me?.isOwner)} onClose={() => setCopyingRoles(false)} onDone={refresh} />}
 
       <ConfirmDialog
         open={Boolean(toDelete)}
@@ -477,6 +482,128 @@ function ImportDialog({ onClose, onDone }: { onClose: () => void; onDone: () => 
           <Button variant='outline' onClick={onClose}>Annuler</Button>
           <Button onClick={() => run.mutate()} disabled={!selected.size || run.isPending}>
             {run.isPending ? 'Import…' : 'Importer'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+type CopyCandidate = Role & { ranks: string[]; target: { id: string; editable?: boolean; dangerous?: boolean } | null }
+type CopyResult = { roleId: string; name: string; status: 'created' | 'updated' | 'error'; error?: string; ranks?: string[] }
+
+function CopyRolesDialog({ isOwner, onClose, onDone }: { isOwner: boolean; onClose: () => void; onDone: () => void }) {
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const ready = Boolean(from && to && from !== to)
+  const { data, isFetching } = useQuery({
+    queryKey: ['ranks-copy-roles', ready, from, to],
+    queryFn: () => api<{ servers: { id: string; name: string }[]; roles: CopyCandidate[] }>(`/ranks/copy-roles${ready ? `?from=${from}&to=${to}` : ''}`),
+  })
+  const servers = data?.servers ?? []
+  const roles = ready ? (data?.roles ?? []) : []
+  // What stops a role: admin permissions below the chief, or a role of the same name above the bot
+  const blocker = (role: CopyCandidate) => {
+    if (role.dangerous && !isOwner) return 'permissions d’administration : réservé au chef du réseau'
+    if (role.target && role.target.editable === false) return 'le rôle du même nom est au-dessus du bot sur le serveur cible'
+    if (role.target?.dangerous && !isOwner) return 'le rôle du même nom a des permissions d’administration'
+    return null
+  }
+  const available = roles.filter((r) => !blocker(r))
+  const chosen = available.filter((r) => selected.has(r.id))
+  const updates = chosen.filter((r) => r.target).length
+
+  const run = useMutation({
+    mutationFn: () => api<CopyResult[]>('/ranks/copy-roles', { method: 'POST', body: { from, to, roleIds: chosen.map((r) => r.id) } }),
+    onSuccess: (results) => {
+      const created = results.filter((r) => r.status === 'created').length
+      const updated = results.filter((r) => r.status === 'updated').length
+      const linked = results.reduce((n, r) => n + (r.ranks?.length ?? 0), 0)
+      toast.success(`${created} rôle(s) créé(s), ${updated} mis à jour${linked ? `, ${linked} liaison(s) de rang reprise(s)` : ''}.`)
+      results.filter((r) => r.status === 'error').forEach((f) => toast.error(`${f.name} : ${f.error}`))
+      onDone()
+      onClose()
+    },
+  })
+
+  const pickServer = (side: 'from' | 'to', id: string) => {
+    if (side === 'from') setFrom(id)
+    else setTo(id)
+    setSelected(new Set())
+  }
+  const toggle = (id: string) => setSelected((prev) => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
+  const allSelected = available.length > 0 && chosen.length === available.length
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className='max-h-[90svh] overflow-y-auto sm:max-w-xl'>
+        <DialogHeader>
+          <DialogTitle>Copier des rôles entre serveurs</DialogTitle>
+          <DialogDescription>
+            Les rôles cochés sont créés sur le serveur cible avec leur couleur, leur affichage séparé et leurs permissions, dans le même ordre.
+            Si un rôle du même nom existe déjà, il est mis à jour et garde sa place. Les liaisons avec les rangs suivent.
+          </DialogDescription>
+        </DialogHeader>
+        <div className='grid grid-cols-[minmax(0,1fr)] items-end gap-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]'>
+          <div className='grid gap-1.5'>
+            <Label>Depuis</Label>
+            <Select value={from} onValueChange={(id) => pickServer('from', id)}>
+              <SelectTrigger aria-label='Serveur source'><SelectValue placeholder='Serveur source…' /></SelectTrigger>
+              <SelectContent>{servers.map((g) => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <ArrowRight aria-hidden className='mb-2.5 hidden size-4 text-muted-foreground sm:block' />
+          <div className='grid gap-1.5'>
+            <Label>Vers</Label>
+            <Select value={to} onValueChange={(id) => pickServer('to', id)}>
+              <SelectTrigger aria-label='Serveur cible'><SelectValue placeholder='Serveur cible…' /></SelectTrigger>
+              <SelectContent>{servers.filter((g) => g.id !== from).map((g) => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+        </div>
+        {!ready ? (
+          <p className='text-sm text-muted-foreground'>Choisis le serveur d’où viennent les rôles et celui où les copier.</p>
+        ) : isFetching && !roles.length ? <Skeleton className='h-40 w-full' /> : !roles.length ? (
+          <EmptyState title='Aucun rôle à copier'>Ce serveur n’a pas de rôle que le bot peut lire (hors rôles de bots et d’intégrations).</EmptyState>
+        ) : (
+          <div className='grid gap-3'>
+            <div className='flex justify-between text-sm'>
+              <span className='text-muted-foreground'>{chosen.length} rôle(s) sélectionné(s){updates ? `, dont ${updates} déjà présent(s)` : ''}</span>
+              <button type='button' className='text-primary hover:underline' onClick={() => setSelected(allSelected ? new Set() : new Set(available.map((r) => r.id)))}>
+                {allSelected ? 'Tout décocher' : 'Tout cocher'}
+              </button>
+            </div>
+            <div className='grid max-h-80 gap-1 overflow-y-auto rounded-md border p-2'>
+              {roles.map((role) => {
+                const blocked = blocker(role)
+                return (
+                  <label key={role.id} className={cn('flex flex-wrap items-center gap-2 rounded px-2 py-1.5 text-sm', blocked ? 'opacity-60' : 'hover:bg-accent/50')}>
+                    <Checkbox checked={selected.has(role.id)} disabled={Boolean(blocked)} onCheckedChange={() => toggle(role.id)} />
+                    <span aria-hidden className='size-2 rounded-full' style={{ background: role.color === '#000000' ? 'var(--muted-foreground)' : role.color }} />
+                    <span className='min-w-0 truncate'>{role.name}</span>
+                    <span className='ms-auto flex flex-wrap gap-1'>
+                      {role.ranks.map((name) => <Pill key={name} tone='info'>rang {name}</Pill>)}
+                      {role.dangerous && <Pill tone='warning'>admin</Pill>}
+                      {blocked ? <Pill tone='danger'>bloqué</Pill> : role.target ? <Pill tone='neutral'>mis à jour</Pill> : <Pill tone='success'>nouveau</Pill>}
+                    </span>
+                    {blocked && <span className='w-full ps-6 text-xs text-muted-foreground'>{blocked}</span>}
+                  </label>
+                )
+              })}
+            </div>
+            <p className='text-xs text-muted-foreground'>Seuls les rôles sont copiés : aucun membre ne les reçoit. Le bot ne peut créer ou modifier que des rôles placés sous le sien.</p>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant='outline' onClick={onClose}>Annuler</Button>
+          <Button onClick={() => run.mutate()} disabled={!chosen.length || run.isPending}>
+            {run.isPending ? 'Copie…' : chosen.length ? `Copier ${chosen.length} rôle(s)` : 'Copier'}
           </Button>
         </DialogFooter>
       </DialogContent>

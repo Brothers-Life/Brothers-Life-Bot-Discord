@@ -143,6 +143,91 @@ export function createStaffSync({ db, network, ranks, audit, executor, logs, log
 			return { results, copiedPermissions: copyPermissions };
 		},
 
+		// Roles of one server next to the roles of another, to choose which ones to copy
+		async copyRolesPreview(fromId, toId) {
+			const servers = [];
+			for (const id of await network.activeIds()) {
+				const guild = await network.find(id);
+				if (guild?.botPresent) servers.push({ id, name: guild.name });
+			}
+			if (!fromId || !toId || fromId === toId) return { servers, roles: [] };
+			const [source, target] = await Promise.all([executor.listRoles(fromId), executor.listRoles(toId)]);
+			const rankOf = new Map((await ranks.list()).map(r => [r.id, r.name]));
+			const ranksOf = new Map();
+			for (const { rank_id: rankId, role_id: roleId } of await q.linksOf.all(fromId)) {
+				if (rankOf.has(rankId)) ranksOf.set(roleId, [...ranksOf.get(roleId) ?? [], rankOf.get(rankId)]);
+			}
+			return {
+				servers,
+				roles: source.map((role) => {
+					const match = target.find(r => r.name.toLowerCase() === role.name.toLowerCase());
+					return { ...role, ranks: ranksOf.get(role.id) ?? [], target: match ? { id: match.id, editable: match.editable, dangerous: match.dangerous } : null };
+				}),
+			};
+		},
+
+		// Chosen roles of one server copied to another: created, or updated when a role of the same name is there
+		// (color, display, mentions, permissions; its place in the list is kept). The rank links follow.
+		async copyRoles(actor, { from, to, roleIds }) {
+			if (!actor.can('ranks.manage')) throw new ForbiddenError('Permission manquante : ranks.manage');
+			if (from === to) throw new ValidationError('Choisis deux serveurs différents.');
+			for (const id of [from, to]) {
+				const guild = await network.find(id);
+				if (guild?.status !== 'active' || !guild.botPresent) throw new ValidationError(`${guild?.name ?? id} : serveur hors du réseau ou sans le bot.`);
+			}
+			if (!Array.isArray(roleIds) || !roleIds.length) throw new ValidationError('Choisis au moins un rôle.');
+			// Highest first: Discord puts each new role at the bottom, so the copies keep the order of the source
+			const source = (await executor.listRoles(from)).filter(r => roleIds.includes(r.id)).sort((a, b) => b.position - a.position);
+			if (source.length !== new Set(roleIds).size) throw new ValidationError('Certains rôles n’existent plus sur le serveur source.');
+			const target = await executor.listRoles(to);
+			const mainId = await network.getMainId();
+			const ranksOf = new Map();
+			for (const { rank_id: rankId, role_id: roleId } of await q.linksOf.all(from)) ranksOf.set(roleId, [...ranksOf.get(roleId) ?? [], rankId]);
+			const links = await linksOf(to);
+
+			const results = [];
+			for (const role of source) {
+				try {
+					// Otherwise someone below the chief could hand out admin roles on another server
+					if (role.dangerous && !actor.isOwner) throw new Error('permissions de modération ou d’administration : seul le chef du réseau peut le copier');
+					const data = { color: role.color === '#000000' ? 0 : role.color, hoist: Boolean(role.hoist), mentionable: Boolean(role.mentionable), permissions: role.permissions ?? '0', reason: 'Copie de rôles' };
+					const match = target.find(r => r.name.toLowerCase() === role.name.toLowerCase());
+					let id;
+					if (match) {
+						if (!match.editable) throw new Error('le rôle du même nom est au-dessus du rôle du bot sur ce serveur');
+						if (match.dangerous && !actor.isOwner) throw new Error('le rôle du même nom a des permissions de modération : seul le chef du réseau peut le modifier');
+						await executor.editRole(to, match.id, data);
+						id = match.id;
+					}
+					else {
+						id = await executor.createRole(to, { name: role.name, ...data });
+					}
+					const linked = [];
+					for (const rankId of ranksOf.get(role.id) ?? []) {
+						const rank = await ranks.get(rankId);
+						if (!actor.isOwner && rank.level >= actor.level) continue;
+						const current = links.get(rankId) ?? [];
+						if (current.includes(id)) continue;
+						if (to === mainId) await ranks.setRoleLinks(actor, rankId, [...current, id]);
+						else await q.add.run(rankId, to, id);
+						links.set(rankId, [...current, id]);
+						linked.push(rank.name);
+					}
+					results.push({ roleId: role.id, name: role.name, status: match ? 'updated' : 'created', targetId: id, ranks: linked });
+				}
+				catch (error) {
+					results.push({ roleId: role.id, name: role.name, status: 'error', error: error.message });
+				}
+			}
+			const [fromGuild, toGuild] = await Promise.all([network.find(from), network.find(to)]);
+			const names = status => results.filter(r => r.status === status).map(r => r.name);
+			await audit.record({
+				actorId: actor.id, source: actor.source ?? 'panel', action: 'staff_sync.copy_roles', guildId: to, target: toGuild?.name ?? to,
+				details: { depuis: fromGuild?.name ?? from, créés: names('created'), 'mis à jour': names('updated'), échecs: names('error') },
+			});
+			return results;
+		},
+
 		// One member, every server (e.g. their roles changed on the main server)
 		async syncUser(userId) {
 			const results = {};

@@ -108,5 +108,15 @@ export function registerMemberRoutes(app, { core }) {
 		schema: { body: { type: 'object', required: ['roleIds'], properties: { roleIds: { type: 'array', items: snowflake, minItems: 1, maxItems: 100 } } } },
 	}, async (request) => core.roleImport.importMainRoles(request.actor, request.body.roleIds));
 
+	app.get('/api/ranks/copy-roles', {
+		config: { permission: 'ranks.manage' },
+		schema: { querystring: { type: 'object', properties: { from: snowflake, to: snowflake } } },
+	}, async request => staffSync.copyRolesPreview(request.query.from, request.query.to));
+
+	app.post('/api/ranks/copy-roles', {
+		config: { permission: 'ranks.manage' },
+		schema: { body: { type: 'object', required: ['from', 'to', 'roleIds'], properties: { from: snowflake, to: snowflake, roleIds: { type: 'array', items: snowflake, minItems: 1, maxItems: 250 } } } },
+	}, async request => staffSync.copyRoles(request.actor, request.body));
+
 	app.post('/api/staff-roles/sync', { config: { permission: 'ranks.manage' } }, async () => staffSync.syncAll());
 }

@@ -645,7 +645,7 @@ export function createExecutor(client) {
 		async createRole(guildId, data) {
 			const role = await guildOf(guildId).roles.create({
 				name: data.name, colors: { primaryColor: data.color ?? 0 }, hoist: data.hoist, mentionable: data.mentionable,
-				permissions: BigInt(data.permissions ?? '0'), reason: 'Modèle de serveur',
+				permissions: BigInt(data.permissions ?? '0'), reason: data.reason ?? 'Modèle de serveur',
 			});
 			return role.id;
 		},
@@ -659,7 +659,7 @@ export function createExecutor(client) {
 				...(data.hoist !== undefined ? { hoist: data.hoist } : {}),
 				...(data.mentionable !== undefined ? { mentionable: data.mentionable } : {}),
 				permissions: BigInt(data.permissions ?? '0'),
-				reason: 'Modèle de serveur',
+				reason: data.reason ?? 'Modèle de serveur',
 			});
 		},
 
@@ -1247,6 +1247,8 @@ export function createExecutor(client) {
 					name: r.name,
 					color: r.hexColor,
 					position: r.position,
+					hoist: r.hoist,
+					mentionable: r.mentionable,
 					// The bot can only give roles below its own highest role
 					editable: r.editable,
 					dangerous: r.permissions.any(DANGEROUS_PERMISSIONS),
