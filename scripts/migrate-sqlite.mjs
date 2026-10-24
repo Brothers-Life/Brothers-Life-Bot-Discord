@@ -220,6 +220,12 @@ try {
 			files++;
 		}
 	}
+	// YouTube cookies of the music (read back by the bot at start, see src/bot/client.js)
+	const cookies = path.join(dataDir, 'youtube-cookies.txt');
+	if (fs.existsSync(cookies)) {
+		await put('secret:youtube-cookies', 'secret', 'text/plain', fs.readFileSync(cookies), true);
+		files++;
+	}
 	for (const { key, value } of kept) {
 		await client.query('INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value', [key, value]);
 	}

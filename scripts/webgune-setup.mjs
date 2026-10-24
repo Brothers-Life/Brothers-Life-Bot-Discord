@@ -63,9 +63,15 @@ async function api(method, path, body) {
 
 const internalHost = (service, namespace) => `${service.k8sDeploymentName}.${namespace}.svc.cluster.local`;
 
+// GET /services/:id leaves envVars empty: the variables live on /services/:id/env
+async function getService(id) {
+	const [service, env] = await Promise.all([api('GET', `/services/${id}`), api('GET', `/services/${id}/env`)]);
+	return { ...service, envVars: env?.vars ?? {} };
+}
+
 async function waitFor(id, check, label) {
 	for (let i = 0; i < 60; i++) {
-		const service = await api('GET', `/services/${id}`);
+		const service = await getService(id);
 		if (check(service)) return service;
 		await new Promise(resolve => setTimeout(resolve, 5000));
 	}
@@ -78,7 +84,7 @@ const projects = await api('GET', '/projects');
 const project = projects.find(p => p.id === PROJECT || p.name === PROJECT);
 if (!project) fail(`Projet « ${PROJECT} » introuvable (projets : ${projects.map(p => p.name).join(', ')}).`);
 const namespace = project.k8sNamespace;
-const services = await Promise.all(project.services.map(s => api('GET', `/services/${s.id}`)));
+const services = await Promise.all(project.services.map(s => getService(s.id)));
 const byName = name => services.find(s => s.name === name);
 
 // The old panel: its API (INGEST_TOKEN), its front (DISCORD_CLIENT_ID), its database

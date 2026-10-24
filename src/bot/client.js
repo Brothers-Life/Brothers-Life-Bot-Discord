@@ -12,6 +12,7 @@ import { createMusicResolver } from './music/resolver.js';
 import { createMusicBackend } from './music/player.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const YOUTUBE_COOKIES_FILE = 'secret:youtube-cookies';
 
 // The client is created before the core (the core needs the executor);
 // the core is attached afterwards with attachCore().
@@ -44,13 +45,23 @@ export function createBot({ dataDir = path.join(__dirname, '..', '..', 'data') }
 	const ytdlp = createYtDlp({ dataDir, logger });
 	executor.music = createMusicBackend(client, { ytdlp, ffmpeg: createFfmpeg({ dataDir, logger }), logger });
 	executor.musicResolver = createMusicResolver({ ytdlp });
-	// Cookies of a YouTube account (Netscape format) read by yt-dlp: kept next to it, set from the panel
+	// Cookies of a YouTube account (Netscape format) read by yt-dlp: kept next to it, set from the panel.
+	// Also kept in the database (files table): the disk of a container is wiped at each restart.
 	const cookiesFile = path.join(dataDir, 'youtube-cookies.txt');
-	executor.hasYoutubeCookies = async () => fs.existsSync(cookiesFile);
-	executor.setYoutubeCookies = async (content) => {
-		if (content === null) return fs.rmSync(cookiesFile, { force: true });
+	let files = null;
+	const writeCookies = (content) => {
 		fs.mkdirSync(path.dirname(cookiesFile), { recursive: true });
 		fs.writeFileSync(cookiesFile, content, { mode: 0o600 });
+	};
+	executor.hasYoutubeCookies = async () => fs.existsSync(cookiesFile);
+	executor.setYoutubeCookies = async (content) => {
+		if (content === null) {
+			fs.rmSync(cookiesFile, { force: true });
+			await files?.remove(YOUTUBE_COOKIES_FILE);
+			return;
+		}
+		writeCookies(content);
+		await files?.put(YOUTUBE_COOKIES_FILE, { kind: 'secret', mime: 'text/plain', data: content, compress: true });
 	};
 
 	return {
@@ -59,6 +70,15 @@ export function createBot({ dataDir = path.join(__dirname, '..', '..', 'data') }
 
 		async attachCore(core) {
 			client.core = core;
+			files = core.files;
+			// Cookies saved in the database come back on a fresh disk; a file already on disk (v1) goes to the database
+			const saved = await files.get(YOUTUBE_COOKIES_FILE).catch(() => null);
+			if (saved && !fs.existsSync(cookiesFile)) {
+				writeCookies(saved.data);
+			}
+			else if (!saved && fs.existsSync(cookiesFile)) {
+				await files.put(YOUTUBE_COOKIES_FILE, { kind: 'secret', mime: 'text/plain', data: fs.readFileSync(cookiesFile), compress: true }).catch(() => undefined);
+			}
 			executor.music.setHandlers({
 				onEnd: (guildId, error) => core.music.trackEnded(guildId, { error }).catch(e => logger.error('Music failed:', e)),
 				onLeft: (guildId) => core.music.leave(guildId, { reason: 'déconnecté du vocal' }).catch(() => undefined),
