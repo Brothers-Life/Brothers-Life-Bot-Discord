@@ -41,3 +41,20 @@ test('the old telemetry database is copied once, without player identifiers, ids
 	assert.equal(await importTelemetry({ db, url: old.options.connectionString, settings, logger: silent }), null);
 	assert.equal((await db.query('SELECT COUNT(*) AS n FROM tel_events'))[0].n, 3);
 });
+
+test('an interrupted copy resumes without duplicates, live rows from the game are kept', async () => {
+	const db = await openTestDb();
+	const settings = createSettings(db);
+	const old = await oldDatabase();
+	// State left by a copy cut by a restart: event 5 and one snapshot copied, plus a live snapshot sent by the game
+	await db.raw('INSERT INTO tel_events (id, type) VALUES (5, \'death\')');
+	await db.raw('INSERT INTO tel_economy_snapshots (ts, player_count) SELECT ts, player_count FROM (VALUES (now() - interval \'1 hour\', 12)) v(ts, player_count)');
+	await db.raw('INSERT INTO tel_economy_snapshots (ts, player_count) VALUES (now() + interval \'1 hour\', 30)');
+
+	const counts = await importTelemetry({ db, url: old.options.connectionString, settings, logger: silent });
+	assert.equal(counts.events, 1);
+	assert.deepEqual((await db.query('SELECT id FROM tel_events ORDER BY id')).map(e => e.id), [5, 9]);
+	assert.deepEqual((await db.query('SELECT player_count FROM tel_economy_snapshots ORDER BY player_count')).map(r => r.player_count), [12, 14, 30]);
+	await db.raw('INSERT INTO tel_events (type) VALUES (\'chat\')');
+	assert.equal((await db.query('SELECT MAX(id) AS id FROM tel_events'))[0].id, 10);
+});
