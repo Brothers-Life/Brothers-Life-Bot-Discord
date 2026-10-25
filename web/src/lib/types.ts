@@ -239,7 +239,7 @@ export type PersonProfile = {
 
 export type StaffRolesPayload = {
   ranks: RankSummary[]
-  guilds: { id: string; name: string; isMain: boolean; links: Record<string, string[]>; roles: Role[] }[]
+  guilds: { id: string; name: string; isMain: boolean; links: Record<string, string[]>; mirrored: Record<string, string[]>; roles: Role[] }[]
 }
 
 export type TicketPriority = 'low' | 'normal' | 'high' | 'urgent'

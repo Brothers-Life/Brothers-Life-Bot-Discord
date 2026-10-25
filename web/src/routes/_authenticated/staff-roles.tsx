@@ -63,7 +63,7 @@ function StaffRolesPage() {
   return (
     <Page
       title='Rôles du staff'
-      description='Pour chaque rang, choisis le rôle qui le représente sur chaque serveur. Sur le serveur principal, ce rôle donne le rang ; sur les autres, le bot donne ou retire automatiquement le rôle selon le rang de chacun. « Associer par nom » relie chaque rang au rôle du même nom sur les serveurs où il n’a pas encore de rôle.'
+      description='Pour chaque rang, choisis le rôle qui le représente sur chaque serveur. Sur le serveur principal, ce rôle donne le rang ; sur les autres, le bot donne ou retire automatiquement le rôle selon le rang de chacun. Un rôle du staff porté sur le serveur principal est aussi donné automatiquement sur chaque serveur qui a un rôle du même nom (« même nom »), sans rien lier. « Associer par nom » relie chaque rang au rôle du même nom sur les serveurs où il n’a pas encore de rôle.'
       actions={manage && (
         <>
           <Button variant='outline' onClick={() => linkByName.mutate()} disabled={linkByName.isPending}>
@@ -109,12 +109,19 @@ function StaffRolesPage() {
                         const selected = draft[cell] ?? guild.links[rank.id] ?? []
                         const changed = cell in draft
                         const names = selected.map((id) => guild.roles.find((r) => r.id === id)?.name ?? '?')
+                        // Given automatically: same name as a staff role of the main server
+                        const mirrored = (guild.mirrored?.[rank.id] ?? []).filter((id) => !selected.includes(id)).map((id) => guild.roles.find((r) => r.id === id)?.name ?? '?')
                         return (
                           <td key={guild.id} className='px-4 py-2'>
                             <Popover>
                               <PopoverTrigger asChild disabled={!editable}>
                                 <Button variant='ghost' size='sm' className={`h-auto max-w-56 justify-start px-2 py-1 text-start whitespace-normal ${changed ? 'ring-1 ring-primary' : ''}`}>
-                                  {names.length ? names.map((n) => `@${n}`).join(', ') : <span className='text-muted-foreground'>{editable ? 'Choisir…' : '—'}</span>}
+                                  {names.length || mirrored.length ? (
+                                    <span>
+                                      {names.map((n) => `@${n}`).join(', ')}
+                                      {mirrored.length > 0 && <span className='text-muted-foreground'>{names.length ? ', ' : ''}{mirrored.map((n) => `@${n}`).join(', ')} (même nom)</span>}
+                                    </span>
+                                  ) : <span className='text-muted-foreground'>{editable ? 'Choisir…' : '—'}</span>}
                                 </Button>
                               </PopoverTrigger>
                               <PopoverContent className='max-h-72 w-64 overflow-y-auto p-1'>

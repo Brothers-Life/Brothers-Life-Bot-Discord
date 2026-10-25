@@ -207,6 +207,8 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	if (!remote) {
 		audit.onRecord(reactToAudit);
 		network.on('activated', onActivated);
+		// Roles created or renamed on Discord can change the staff roles mirrored by name (bot events)
+		staffSync.scheduleSyncAll = scheduleResync;
 	}
 
 	// An audit entry recorded by the other process (bot or API): cached servers and ranks are refreshed,

@@ -165,3 +165,53 @@ test('members: the whole network by default, one entry per person, sorted and pa
 	assert.equal((await core.members.directory({ guildId: OTHER })).total, 2);
 	assert.equal((await core.members.directory({ bots: true })).total, 4);
 });
+
+test('same name: a staff role held on the main server is given on every server that has a role of that name', async () => {
+	const ctx = await withNetwork();
+	const { core, owner, executor } = ctx;
+	await core.network.activate(owner, OTHER);
+	const FONDA_MAIN = '800000000000000005';
+	const FONDA_OTHER = '810000000000000005';
+	executor.roles.set(MAIN, [{ id: FONDA_MAIN, name: 'Fondateur', editable: true }]);
+	executor.roles.set(OTHER, [{ id: FONDA_OTHER, name: 'fondateur', editable: true }, { id: '810000000000000006', name: 'Membre', editable: true }]);
+	const fonda = await core.ranks.create(owner, { name: 'Fonda', level: 90, permissions: [] });
+	await core.ranks.setRoleLinks(owner, fonda.id, [FONDA_MAIN]);
+	executor.memberRoles.set(`${MAIN}:${ALICE}`, [FONDA_MAIN]);
+	executor.memberRoles.set(`${OTHER}:${ALICE}`, []);
+	executor.memberRoles.set(`${OTHER}:${BOB}`, [FONDA_OTHER, '810000000000000006']);
+
+	// No link set on the other server: the name is enough
+	const { changed } = await core.staffSync.syncAll();
+	assert.equal(changed, 2);
+	assert.deepEqual(executor.memberRoles.get(`${OTHER}:${ALICE}`), [FONDA_OTHER]);
+	assert.deepEqual(executor.memberRoles.get(`${OTHER}:${BOB}`), ['810000000000000006']);
+
+	// The chief of the network too, when they hold the role on the main server
+	executor.memberRoles.set(`${MAIN}:${owner.id}`, [FONDA_MAIN]);
+	executor.memberRoles.set(`${OTHER}:${owner.id}`, []);
+	await core.staffSync.syncUser(owner.id);
+	assert.deepEqual(executor.memberRoles.get(`${OTHER}:${owner.id}`), [FONDA_OTHER]);
+
+	const overview = await core.staffSync.overview();
+	assert.deepEqual(overview.find(g => g.id === OTHER).mirrored[fonda.id], [FONDA_OTHER]);
+});
+
+test('same name: never a role above the bot, nor one with admin rights when the main role has none, nor a rank without sync', async () => {
+	const ctx = await withNetwork();
+	const { core, owner, executor } = ctx;
+	await core.network.activate(owner, OTHER);
+	executor.roles.set(MAIN, [{ id: '800000000000000005', name: 'Modo', editable: true }, { id: '800000000000000007', name: 'Helper', editable: true }, { id: '800000000000000008', name: 'Event', editable: true }]);
+	executor.roles.set(OTHER, [
+		{ id: '810000000000000005', name: 'Modo', editable: true, dangerous: true },
+		{ id: '810000000000000007', name: 'Helper', editable: false },
+		{ id: '810000000000000008', name: 'Event', editable: true },
+	]);
+	const modo = await core.ranks.create(owner, { name: 'Modo', level: 40, permissions: [] });
+	await core.ranks.setRoleLinks(owner, modo.id, ['800000000000000005', '800000000000000007']);
+	const event = await core.ranks.create(owner, { name: 'Event', level: 10, permissions: [], syncRoles: false });
+	await core.ranks.setRoleLinks(owner, event.id, ['800000000000000008']);
+	executor.memberRoles.set(`${MAIN}:${ALICE}`, ['800000000000000005', '800000000000000007', '800000000000000008']);
+	executor.memberRoles.set(`${OTHER}:${ALICE}`, []);
+	await core.staffSync.syncUser(ALICE);
+	assert.deepEqual(executor.memberRoles.get(`${OTHER}:${ALICE}`), []);
+});

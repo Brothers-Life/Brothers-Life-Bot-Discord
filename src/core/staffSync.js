@@ -2,7 +2,8 @@ import { ForbiddenError, ValidationError } from './errors.js';
 
 // Staff roles on every server: a rank can be linked to roles on each server of the network.
 // Holders of the rank (roles on the main server, or direct rank) get those roles; others lose them.
-// Only roles linked to a rank are ever touched.
+// A staff role of the main server is also mirrored by name: whoever holds it there gets the role of the same
+// name on every other server, without any link. Only linked or mirrored roles are ever touched.
 export function createStaffSync({ db, network, ranks, audit, executor, logs, logger = console }) {
 	logs.registerCategory('staff_sync', 'Synchronisation des rôles du staff');
 
@@ -28,19 +29,47 @@ export function createStaffSync({ db, network, ranks, audit, executor, logs, log
 		return map;
 	}
 
-	async function syncMember(guildId, userId, { reason = 'Synchronisation du staff' } = {}) {
+	// Staff roles of the main server (linked to a synced rank) -> role of the same name on this server.
+	// Skipped: roles above the bot, and roles with admin rights when the main role has none.
+	async function mirrorOf(guildId) {
+		const mainId = await network.getMainId();
+		const map = new Map();
+		if (!mainId || mainId === guildId) return map;
+		const staff = new Map();
+		for (const [rankId, roleIds] of await linksOf(mainId, { syncedOnly: true })) for (const id of roleIds) staff.set(id, rankId);
+		if (!staff.size) return map;
+		const target = new Map();
+		for (const role of await executor.listRoles(guildId)) {
+			const key = role.name.toLowerCase();
+			if (!target.has(key)) target.set(key, role);
+		}
+		for (const role of await executor.listRoles(mainId)) {
+			if (!staff.has(role.id)) continue;
+			const match = target.get(role.name.toLowerCase());
+			if (!match || !match.editable || (match.dangerous && !role.dangerous)) continue;
+			map.set(role.id, { roleId: match.id, rankId: staff.get(role.id) });
+		}
+		return map;
+	}
+
+	async function syncMember(guildId, userId, { reason = 'Synchronisation du staff', mirror = null } = {}) {
 		const links = await linksOf(guildId, { syncedOnly: true });
-		if (!links.size) return null;
+		mirror ??= await mirrorOf(guildId);
+		if (!links.size && !mirror.size) return null;
 		const current = await executor.getMemberRoleIds(guildId, userId);
 		if (!current) return null;
 
 		const principal = await ranks.resolve(userId);
 		const heldRankIds = new Set(principal.isOwner ? [] : principal.ranks.map(r => r.id));
-		const managed = new Set([...links.values()].flat());
-		const desired = new Set([...links].filter(([rankId]) => heldRankIds.has(rankId)).flatMap(([, roles]) => roles));
+		const mainRoles = mirror.size ? (await executor.getMemberRoleIds(await network.getMainId(), userId)) ?? [] : [];
+		const mirroredIds = new Set([...mirror.values()].map(m => m.roleId));
+		const managed = new Set([...links.values()].flat().concat([...mirroredIds]));
+		const desired = new Set([...links].filter(([rankId]) => heldRankIds.has(rankId)).flatMap(([, roles]) => roles)
+			.concat([...mirror].filter(([mainRoleId]) => mainRoles.includes(mainRoleId)).map(([, m]) => m.roleId)));
 
 		const toAdd = [...desired].filter(r => !current.includes(r));
-		const toRemove = current.filter(r => managed.has(r) && !desired.has(r));
+		// The chief holds no rank: only mirrored roles follow them, their linked roles are left alone
+		const toRemove = current.filter(r => managed.has(r) && !desired.has(r) && (!principal.isOwner || mirroredIds.has(r)));
 		if (!toAdd.length && !toRemove.length) return { added: [], removed: [] };
 
 		const errors = [];
@@ -70,7 +99,11 @@ export function createStaffSync({ db, network, ranks, audit, executor, logs, log
 		// Links of every rank on every server (main server links = roles that grant the rank)
 		async overview() {
 			const guilds = (await network.list()).filter(g => g.status === 'active' && g.botPresent);
-			return Promise.all(guilds.map(async g => ({ id: g.id, name: g.name, isMain: g.isMain, links: Object.fromEntries(await linksOf(g.id)) })));
+			return Promise.all(guilds.map(async g => {
+				const mirrored = {};
+				for (const { rankId, roleId } of (await mirrorOf(g.id)).values()) (mirrored[rankId] ??= []).push(roleId);
+				return { id: g.id, name: g.name, isMain: g.isMain, links: Object.fromEntries(await linksOf(g.id)), mirrored };
+			}));
 		},
 
 		async setLinks(actor, rankId, guildId, roleIds) {
@@ -247,11 +280,13 @@ export function createStaffSync({ db, network, ranks, audit, executor, logs, log
 			let changed = 0;
 			for (const guildId of await satelliteIds()) {
 				const links = await linksOf(guildId, { syncedOnly: true });
-				if (!links.size) continue;
+				const mirror = await mirrorOf(guildId);
+				if (!links.size && !mirror.size) continue;
 				const people = new Set(holders);
-				for (const m of await executor.listMembersWithAnyRole(guildId, [...links.values()].flat())) people.add(m.id);
+				const roleIds = [...links.values()].flat().concat([...mirror.values()].map(m => m.roleId));
+				for (const m of await executor.listMembersWithAnyRole(guildId, roleIds)) people.add(m.id);
 				for (const userId of people) {
-					const result = await syncMember(guildId, userId).catch(() => null);
+					const result = await syncMember(guildId, userId, { mirror }).catch(() => null);
 					if (result && (result.added.length || result.removed.length)) changed++;
 				}
 			}
