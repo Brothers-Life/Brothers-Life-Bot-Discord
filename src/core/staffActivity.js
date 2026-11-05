@@ -13,7 +13,7 @@ const TIME_ZONE = 'Europe/Paris';
 const API_KEY_FIELD = 'Clé d’API';
 
 // Weight of each activity in the score (shown in the panel, so the ranking is explained)
-export const WEIGHTS = { ticketsClosed: 5, ticketReplies: 1, sanctions: 3, dmReplies: 1, panelActions: 0.5, voiceHours: 2, messages: 0.05 };
+export const WEIGHTS = { ticketsClosed: 5, ticketReplies: 1, sanctions: 3, dmReplies: 1, panelActions: 0.5, voiceHours: 2, messages: 0.05, ingameHours: 2 };
 
 // Everyone who holds a rank: through a role on the main server, or given directly in the panel
 export async function listStaff({ ranks, network, executor }) {
@@ -46,8 +46,9 @@ export function scoreOf(m) {
 	return Math.round(Object.entries(WEIGHTS).reduce((n, [k, w]) => n + (m[k] ?? 0) * w, 0));
 }
 
-// What each staff member did over a period: tickets, sanctions, private messages, panel, presence on Discord, absences
-export function createStaffActivity({ db, network, ranks, audit, executor, settings, logs, logger = console, now = Date.now }) {
+// What each staff member did over a period: tickets, sanctions, private messages, panel, presence on Discord,
+// time on duty in game (admin menu sessions of the FiveM account linked to their Discord), absences
+export function createStaffActivity({ db, network, ranks, audit, executor, settings, logs, fivemData = null, logger = console, now = Date.now }) {
 	logs.registerCategory('staffactivity', 'Rapport mensuel du staff');
 
 	const count = async (sql, ...args) => {
@@ -85,6 +86,15 @@ export function createStaffActivity({ db, network, ranks, audit, executor, setti
 		const activity = await count('SELECT user_id, SUM(messages) AS messages, SUM(voice_seconds) AS voice FROM stats_activity WHERE day BETWEEN ? AND ? GROUP BY user_id', dayOf(from), dayOf(to));
 		const absences = await db.prepare('SELECT user_id, start_at, end_at FROM absences WHERE status IN (\'approved\', \'active\', \'ended\') AND start_at < ? AND end_at > ?').all(to, from);
 
+		// The game copy may be missing or broken: the rest of the report stands without it
+		const duty = new Map();
+		try {
+			for (const d of await fivemData?.staffDuty({ from, to }) ?? []) duty.set(d.discordId, d);
+		}
+		catch (error) {
+			logger.warn('Staff duty in game unavailable:', error.message);
+		}
+
 		const members = staff.map((s) => {
 			const absent = absences.filter(a => a.user_id === s.id).reduce((n, a) => n + (Math.min(a.end_at, to) - Math.max(a.start_at, from)), 0);
 			const m = {
@@ -99,13 +109,14 @@ export function createStaffActivity({ db, network, ranks, audit, executor, setti
 				panelActions: panel.get(s.id)?.n ?? 0,
 				messages: activity.get(s.id)?.messages ?? 0,
 				voiceHours: Math.round(((activity.get(s.id)?.voice ?? 0) / 3600) * 10) / 10,
+				ingameHours: Math.round(((duty.get(s.id)?.seconds ?? 0) / 3600) * 10) / 10,
 				absentDays: Math.round((absent / DAY) * 10) / 10,
 				// A validated absence overlaps the period: the score is to be read with that in mind
 				absent: absent > 0,
 			};
 			return { ...m, score: scoreOf(m) };
 		}).sort((a, b) => b.score - a.score);
-		return { from, to, weights: WEIGHTS, members };
+		return { from, to, weights: WEIGHTS, ingame: Boolean(fivemData), members };
 	}
 
 	function monthRange(at) {
@@ -144,7 +155,7 @@ export function createStaffActivity({ db, network, ranks, audit, executor, setti
 			const { members } = await report(range);
 			const top = members.slice(0, 10);
 			const medals = ['🥇', '🥈', '🥉'];
-			const lines = top.map((m, i) => `${medals[i] ?? `**${i + 1}.**`} <@${m.userId}> — **${m.score}** pts · ${m.ticketsClosed} tickets · ${m.sanctions} sanctions · ${m.voiceHours} h vocal`);
+			const lines = top.map((m, i) => `${medals[i] ?? `**${i + 1}.**`} <@${m.userId}> — **${m.score}** pts · ${m.ticketsClosed} tickets · ${m.sanctions} sanctions · ${m.voiceHours} h vocal${m.ingameHours ? ` · ${m.ingameHours} h en jeu` : ''}`);
 			await executor.sendMessage(c.channelId, {
 				payload: {
 					content: '',

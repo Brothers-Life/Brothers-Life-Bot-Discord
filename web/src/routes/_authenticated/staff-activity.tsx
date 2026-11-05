@@ -22,11 +22,11 @@ export const Route = createFileRoute('/_authenticated/staff-activity')({
 type Member = {
   userId: string; name: string; avatar: string | null; level: number; ranks: { id: number; name: string; color: string | null }[]
   ticketsClosed: number; ticketsClaimed: number; ticketReplies: number; rating: number | null; sanctions: number; sanctionsDetail: { bans: number; warns: number; timeouts: number }
-  dmReplies: number; panelActions: number; messages: number; voiceHours: number; absentDays: number; score: number
+  dmReplies: number; panelActions: number; messages: number; voiceHours: number; ingameHours: number; absentDays: number; score: number
   absent?: boolean
 }
 type Data = { from: number; to: number; weights: Record<string, number>; members: Member[]; config: { enabled: boolean; guildId: string | null; channelId: string | null } | null; guilds: { id: string; name: string; channels: Channel[] }[] }
-type SortKey = 'score' | 'ticketsClosed' | 'ticketReplies' | 'sanctions' | 'dmReplies' | 'panelActions' | 'messages' | 'voiceHours' | 'absentDays'
+type SortKey = 'score' | 'ticketsClosed' | 'ticketReplies' | 'sanctions' | 'dmReplies' | 'panelActions' | 'messages' | 'voiceHours' | 'ingameHours' | 'absentDays'
 
 const DAY = 86_400_000
 const COLUMNS: { key: SortKey; label: string; hint?: string }[] = [
@@ -38,6 +38,7 @@ const COLUMNS: { key: SortKey; label: string; hint?: string }[] = [
   { key: 'panelActions', label: 'Panel', hint: 'actions' },
   { key: 'messages', label: 'Messages' },
   { key: 'voiceHours', label: 'Vocal', hint: 'heures' },
+  { key: 'ingameHours', label: 'En jeu', hint: 'heures de service' },
   { key: 'absentDays', label: 'Absence', hint: 'jours' },
 ]
 
@@ -97,7 +98,7 @@ function StaffActivityPage() {
                     <div className='font-display text-lg font-semibold'>{m.name}</div>
                     {m.absent && <Pill tone='info'>absent</Pill>}
                     <div className='font-display text-3xl font-bold text-primary tabular-nums'>{m.score}</div>
-                    <div className='text-xs text-muted-foreground'>{m.ticketsClosed} tickets · {m.sanctions} sanctions · {m.voiceHours} h vocal</div>
+                    <div className='text-xs text-muted-foreground'>{m.ticketsClosed} tickets · {m.sanctions} sanctions · {m.voiceHours} h vocal{m.ingameHours ? ` · ${m.ingameHours} h en jeu` : ''}</div>
                   </div>
                 )
               })}

@@ -162,7 +162,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const templates = createTemplates({ db, network, audit, executor, events, automod, tickets, logs, settings, logger });
 	const rpEvents = createRpEvents({ db, network, audit, executor, uploads, logger });
 	logs.registerCategory('rpevents', 'Événements RP');
-	const staffActivity = createStaffActivity({ db, network, ranks, audit, executor, settings, logs, logger });
+	const staffActivity = createStaffActivity({ db, network, ranks, audit, executor, settings, logs, fivemData, logger });
 	const backups = createBackups({ db, network, audit, executor, settings, templates, logs, logger });
 	const customCommands = createCustomCommands({ db, network, ranks, audit, executor, logs, members, moderation, sanctions, reservedNames: COMMANDS.map(c => c.name), variables, logger });
 	logs.registerCategory('absences', 'Absences du staff');

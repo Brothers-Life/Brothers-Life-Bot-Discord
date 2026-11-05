@@ -550,6 +550,29 @@ export function createFivemData({ db, mirror, audit, logger = console, now = Dat
 			});
 		},
 
+		// Time on duty as staff in game (admin menu sessions) per linked Discord account, cut to the period.
+		// An open session counts up to its last sign of life. No game copy: empty.
+		async staffDuty({ from, to }) {
+			if (!(await enabled())) return [];
+			return when('admindash_staff_sessions', async () => {
+				const rows = await query(`
+					WITH s AS (
+						SELECT regexp_replace(license, '^license2?:', '') AS lic,
+							GREATEST(started_at, to_timestamp(? / 1000.0)) AS a,
+							LEAST(COALESCE(ended_at, last_seen_at, started_at), to_timestamp(? / 1000.0)) AS b
+						FROM fivem.admindash_staff_sessions
+						WHERE started_at < to_timestamp(? / 1000.0) AND COALESCE(ended_at, last_seen_at, started_at) > to_timestamp(? / 1000.0)
+					), u AS (
+						SELECT DISTINCT regexp_replace(discord, '^discord:', '') AS "discordId", regexp_replace(l, '^license2?:', '') AS lic
+						FROM fivem.users, unnest(ARRAY[license, license2]) AS l
+						WHERE discord LIKE 'discord:%' AND l IS NOT NULL
+					)
+					SELECT u."discordId", COUNT(*) AS sessions, SUM(GREATEST(0, EXTRACT(EPOCH FROM (s.b - s.a)))) AS seconds
+					FROM s JOIN u ON u.lic = s.lic GROUP BY u."discordId"`, [from, to, to, from]);
+				return rows.map(r => ({ discordId: r.discordId, sessions: Number(r.sessions), seconds: Math.round(Number(r.seconds) || 0) }));
+			});
+		},
+
 		// Every job, gang and staff role of the game, to link them to Discord roles
 		async catalog(actor) {
 			need(actor, 'fivemdata.view');

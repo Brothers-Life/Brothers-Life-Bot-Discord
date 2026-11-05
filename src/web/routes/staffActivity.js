@@ -21,8 +21,8 @@ export function registerStaffActivityRoutes(app, { core }) {
 	});
 	app.get('/api/staff-activity/export', { config: { permission: 'staffactivity.view' }, schema: { querystring: range } }, async (request, reply) => {
 		const { members } = await staffActivity.report(period(request.query));
-		const rows = [['Membre', 'Score', 'Tickets fermés', 'Tickets pris', 'Réponses en ticket', 'Note moyenne', 'Sanctions', 'MP envoyés', 'Actions panel', 'Messages', 'Heures vocal', 'Jours d’absence'],
-			...members.map(m => [m.name, m.score, m.ticketsClosed, m.ticketsClaimed, m.ticketReplies, m.rating ?? '', m.sanctions, m.dmReplies, m.panelActions, m.messages, m.voiceHours, m.absentDays])];
+		const rows = [['Membre', 'Score', 'Tickets fermés', 'Tickets pris', 'Réponses en ticket', 'Note moyenne', 'Sanctions', 'MP envoyés', 'Actions panel', 'Messages', 'Heures vocal', 'Heures en jeu', 'Jours d’absence'],
+			...members.map(m => [m.name, m.score, m.ticketsClosed, m.ticketsClaimed, m.ticketReplies, m.rating ?? '', m.sanctions, m.dmReplies, m.panelActions, m.messages, m.voiceHours, m.ingameHours, m.absentDays])];
 		return reply.type('text/csv; charset=utf-8').header('Content-Disposition', 'attachment; filename="activite-staff.csv"')
 			.send(`${String.fromCharCode(0xfeff)}${rows.map(r => r.map(csvCell).join(';')).join('\n')}\n`);
 	});

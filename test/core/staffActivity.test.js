@@ -78,3 +78,24 @@ test('report: tickets credited to the claimer or the close requester, revoked sa
 	assert.equal(alice.panelActions, 2);
 	assert.deepEqual([alice.absent, bob.absent], [true, false]);
 });
+
+test('report: hours on duty in game count in the score, a missing game copy leaves the rest', async () => {
+	const { core, owner, executor } = await withNetwork();
+	const staff = await core.ranks.create(owner, { name: 'Modo', level: 20, permissions: ['panel.access'] });
+	await core.ranks.assignDirect(owner, ALICE, staff.id);
+	await core.ranks.assignDirect(owner, BOB, staff.id);
+	const range = { from: Date.UTC(2026, 9, 1), to: Date.UTC(2026, 10, 1) - 1 };
+	const fivemData = { staffDuty: async ({ from, to }) => (from === range.from && to === range.to ? [{ discordId: ALICE, sessions: 3, seconds: 5 * 3600 + 1800 }] : []) };
+	const activity = createStaffActivity({ db: core.db, network: core.network, ranks: core.ranks, audit: core.audit, executor, settings: core.settings, logs: core.logs, fivemData });
+	const { members, weights } = await activity.report(range);
+	const alice = members.find(m => m.userId === ALICE);
+	assert.equal(weights.ingameHours, 2);
+	assert.equal(alice.ingameHours, 5.5);
+	assert.equal(alice.score, 11);
+	assert.equal(members.find(m => m.userId === BOB).ingameHours, 0);
+
+	const broken = createStaffActivity({ db: core.db, network: core.network, ranks: core.ranks, audit: core.audit, executor, settings: core.settings, logs: core.logs, logger: { warn: () => undefined }, fivemData: { staffDuty: async () => { throw new Error('mirror down'); } } });
+	const again = await broken.report(range);
+	assert.equal(again.members.length, 2);
+	assert.ok(again.members.every(m => m.ingameHours === 0));
+});

@@ -244,3 +244,18 @@ test('fivem data: most players at once per day', () => {
 	], day + 16 * 3_600_000);
 	assert.equal(byDay.get('2026-10-01'), 3);
 });
+
+test('fivem data: staff duty per linked Discord, cut to the period, prefixes of the license ignored', async () => {
+	const { data } = await setup();
+	const all = await data.staffDuty({ from: Date.now() - 6 * HOUR, to: Date.now() });
+	assert.equal(all.length, 1);
+	assert.equal(all[0].discordId, ALICE);
+	assert.equal(all[0].sessions, 2);
+	// 1 h closed session + the open one up to its last sign of life (19 min)
+	assert.ok(Math.abs(all[0].seconds - (3600 + 19 * 60)) < 5, String(all[0].seconds));
+	const cut = await data.staffDuty({ from: recent - 30 * 60_000, to: recent + 60_000 });
+	assert.ok(Math.abs(cut[0].seconds - 30 * 60) < 5, String(cut[0].seconds));
+	assert.deepEqual(await data.staffDuty({ from: Date.now() - 100 * 86_400_000, to: Date.now() - 90 * 86_400_000 }), []);
+	const empty = await setup({ tables: false });
+	assert.deepEqual(await empty.data.staffDuty({ from: 0, to: Date.now() }), []);
+});
