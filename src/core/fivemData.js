@@ -550,6 +550,19 @@ export function createFivemData({ db, mirror, audit, logger = console, now = Dat
 			});
 		},
 
+		// Sanctions of the in-game admin menu after a given id (oldest first), with the Discord linked to the account.
+		// `last` alone: the highest id, to start from there. No game copy: null.
+		async sanctionsAfter(afterId, { limit = 50 } = {}) {
+			if (!(await enabled()) || !(await has('admindash_sanctions'))) return null;
+			const [{ last }] = await query('SELECT MAX(id) AS last FROM fivem.admindash_sanctions');
+			if (afterId === null) return { last: Number(last ?? 0), rows: [] };
+			const rows = await query(`SELECT s.id, s.target_dbid AS "userId", s.target_name AS "targetName", s.type, s.reason, s.duration_minutes AS minutes,
+				s.issued_by_name AS "issuedBy", s.created_at AS at, regexp_replace(u.discord, '^discord:', '') AS "discordId", u.username
+				FROM fivem.admindash_sanctions s LEFT JOIN fivem.users u ON u.userid = s.target_dbid
+				WHERE s.id > ? ORDER BY s.id LIMIT ?`, [afterId, limit]);
+			return { last: Number(last ?? 0), rows: rows.map(r => ({ ...r, id: Number(r.id), minutes: r.minutes === null ? null : Number(r.minutes), at: ms(r.at), discordId: r.discordId || null })) };
+		},
+
 		// Time on duty as staff in game (admin menu sessions) per linked Discord account, cut to the period.
 		// An open session counts up to its last sign of life. No game copy: empty.
 		async staffDuty({ from, to }) {

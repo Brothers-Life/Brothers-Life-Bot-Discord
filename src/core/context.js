@@ -19,6 +19,7 @@ import { createMeetings } from './meetings.js';
 import { createFivemData } from './fivemData.js';
 import { createFivemMirror } from './fivem/mirror.js';
 import { createFivemRoles } from './fivemRoles.js';
+import { createGameSanctionsLog } from './fivem/sanctionsLog.js';
 import { createTebex } from './tebex.js';
 import { createRestrictions } from './restrictions.js';
 import { createModeration } from './moderation.js';
@@ -156,6 +157,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 		},
 	} });
 	const fivemRoles = createFivemRoles({ fivemData, settings, executor, network, audit, logs, logger });
+	const gameSanctions = createGameSanctionsLog({ fivemData, settings, logs, logger });
 	// Notifications are created later in this function: looked up when a purchase comes in
 	const tebex = createTebex({ db, network, audit, executor, settings, logs, variables, fivemData, notify: n => core.notifications?.push(n).catch(error => logger.warn('Notification failed:', error?.message)), fetchImpl, logger });
 	const dms = createDms({ db, audit, executor, settings, logs, uploads, logger });
@@ -222,7 +224,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 		await network.replay(entry);
 	}
 
-	const core = { db, config, executor, files, variables, settings, audit, network, ranks, logs, sessions, apiKeys, sanctions, sanctionTemplates, music, memberInsights, channelFeatures, verification, embedBuilder, appeals, channelSchedules, archives, meetings, fivemMirror, fivemData, fivemRoles, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents, antinuke, fivemEvents, feeds, tebex };
+	const core = { db, config, executor, files, variables, settings, audit, network, ranks, logs, sessions, apiKeys, sanctions, sanctionTemplates, music, memberInsights, channelFeatures, verification, embedBuilder, appeals, channelSchedules, archives, meetings, fivemMirror, fivemData, fivemRoles, gameSanctions, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents, antinuke, fivemEvents, feeds, tebex };
 	// FiveM telemetry (bl_telemetry): every process works on the database itself, the API takes the batches
 	core.telemetry = createTelemetry({ db, settings, logs, audit, config, logger, fetchImpl, notifications: () => core.notifications });
 	for (const name of BOT_SERVICES) core[name] = shared(name, core[name]);

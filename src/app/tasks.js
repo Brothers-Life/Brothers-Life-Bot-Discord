@@ -31,6 +31,8 @@ export function startTasks({ core, every }) {
 		every(30_000, () => core.fivem.presenceTick(), 'Bot status failed'),
 		// Discord roles following jobs, gangs and staff roles of the game (when the automatic sync is on)
 		every(5 * 60_000, () => core.fivemRoles.tick(), 'FiveM roles sync failed', 'warn'),
+		// Sanctions given with the in-game admin menu, logged on Discord
+		every(60_000, () => core.gameSanctions.tick(), 'In-game sanctions log failed', 'warn'),
 		// Tebex store: new payments (roles, logs, thanks), refunds and chargebacks
 		every(2 * 60_000, () => core.tebex.tick(), 'Tebex poll failed', 'warn'),
 		// Streams and videos to announce

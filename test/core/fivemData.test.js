@@ -259,3 +259,15 @@ test('fivem data: staff duty per linked Discord, cut to the period, prefixes of 
 	const empty = await setup({ tables: false });
 	assert.deepEqual(await empty.data.staffDuty({ from: 0, to: Date.now() }), []);
 });
+
+test('fivem data: in-game sanctions after an id, with the linked Discord', async () => {
+	const { data } = await setup();
+	assert.deepEqual(await data.sanctionsAfter(null), { last: 2, rows: [] });
+	const { rows } = await data.sanctionsAfter(0);
+	assert.deepEqual(rows.map(r => [r.id, r.type, r.discordId, r.issuedBy]), [[1, 'warn', ALICE, 'Kenzo'], [2, 'jail', ALICE, 'Kenzo']]);
+	assert.equal(rows[1].minutes, 30);
+	assert.ok(rows[0].at > 0);
+	assert.deepEqual((await data.sanctionsAfter(2)).rows, []);
+	const empty = await setup({ tables: false });
+	assert.equal(await empty.data.sanctionsAfter(0), null);
+});
