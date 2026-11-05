@@ -63,6 +63,19 @@ export function createFivemData({ db, mirror, audit, logger = console, now = Dat
 		}
 	}
 
+	// The whole-server reports read entire tables: computed at most once every 2 minutes per process, and two
+	// pages asking at the same time share the same computation
+	const REPORT_TTL = 2 * 60_000;
+	const cachedReports = new Map();
+	function cachedReport(key, build) {
+		const hit = cachedReports.get(key);
+		if (hit && hit.until > now()) return hit.value;
+		const value = build();
+		cachedReports.set(key, { value, until: now() + REPORT_TTL });
+		value.catch(() => cachedReports.delete(key));
+		return value;
+	}
+
 	// Which tables the mirror has (features without their table are skipped)
 	const has = async name => (await mirror.tables()).has(name);
 	const enabled = () => has('users');
@@ -602,14 +615,16 @@ export function createFivemData({ db, mirror, audit, logger = console, now = Dat
 		async insights(actor) {
 			need(actor, 'fivemdata.view');
 			await ready();
-			return insightsReport({ query, when, groupsMap, canMoney: actor.can('fivemdata.economy'), discordActivity: discord?.activity, discordMembers: discord?.members, now });
+			const canMoney = actor.can('fivemdata.economy');
+			return cachedReport(`insights:${canMoney}`, () => insightsReport({ query, when, groupsMap, canMoney, discordActivity: discord?.activity, discordMembers: discord?.members, now }));
 		},
 
 		// The whole server: activity, jobs and gangs, vehicles, justice, world, staff, economy
 		async server(actor) {
 			need(actor, 'fivemdata.view');
 			await ready();
-			return serverReport({ query, when, groupsMap, canMoney: actor.can('fivemdata.economy'), now, rowCount: name => mirror.counted(name) });
+			const canMoney = actor.can('fivemdata.economy');
+			return cachedReport(`server:${canMoney}`, () => serverReport({ query, when, groupsMap, canMoney, now, rowCount: name => mirror.counted(name) }));
 		},
 
 		// Server overview: players, online now, playtime, staff in service, jobs headcount

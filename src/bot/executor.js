@@ -1382,6 +1382,13 @@ export function createExecutor(client) {
 			}
 		},
 
+		// Several users in one call (the API resolves names in one round trip): id -> user or null
+		async getUsers(userIds) {
+			const unique = [...new Set((userIds ?? []).map(String))].slice(0, 500);
+			const users = await Promise.all(unique.map(id => this.getUser(id)));
+			return Object.fromEntries(unique.map((id, i) => [id, users[i]]));
+		},
+
 		// Full profile (banner and accent color need a forced fetch)
 		async getUserProfile(userId) {
 			try {

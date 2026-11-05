@@ -33,10 +33,16 @@ export async function listStaff({ ranks, network, executor }) {
 			}
 		}
 	}
-	for (const assignment of await ranks.listDirectAssignments()) {
+	const assignments = await ranks.listDirectAssignments();
+	// Users not met on the main server, fetched in one call when the executor can
+	const unknown = [...new Set(assignments.map(a => a.discordId).filter(id => !members.has(id)))];
+	const users = typeof executor.getUsers === 'function'
+		? await executor.getUsers(unknown).catch(() => ({}))
+		: Object.fromEntries(await Promise.all(unknown.map(async id => [id, await executor.getUser(id)])));
+	for (const assignment of assignments) {
 		const rank = allRanks.find(r => r.id === assignment.rankId);
 		if (!rank) continue;
-		const member = members.get(assignment.discordId) ?? entry(assignment.discordId, await executor.getUser(assignment.discordId));
+		const member = members.get(assignment.discordId) ?? entry(assignment.discordId, users?.[assignment.discordId] ?? null);
 		member.ranks.push({ id: rank.id, name: rank.name, level: rank.level, color: rank.color, via: 'direct', addedBy: assignment.addedBy, addedAt: assignment.addedAt });
 	}
 	return [...members.values()].map(m => ({ ...m, level: Math.max(0, ...m.ranks.map(r => r.level)) })).sort((a, b) => b.level - a.level);

@@ -6,6 +6,8 @@ import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
 import fastifyStatic from '@fastify/static';
+import fastifyCompress from '@fastify/compress';
+import zlib from 'node:zlib';
 import { getTlsOptions, ensureSelfSigned } from './tls.js';
 import { SECURITY_HEADERS } from './headers.js';
 import { errorHandler, sendError } from './errors.js';
@@ -89,6 +91,15 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	await app.register(cookie);
 	await app.register(rateLimit, { global: false });
 	await app.register(websocket, { options: { maxPayload: 4096 } });
+	// API answers compressed (fast brotli level: they are made per request); the panel's built files are compressed
+	// once at build time (preCompressed below)
+	await app.register(fastifyCompress, {
+		global: true,
+		threshold: 1024,
+		encodings: ['br', 'gzip'],
+		brotliOptions: { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 4 } },
+		zlibOptions: { level: 6 },
+	});
 	const routes = registerGuard(app, core);
 
 	registerAuthRoutes(app, { config, core, fetchImpl });
@@ -144,7 +155,16 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 		return reply.type('text/html').header('Cache-Control', 'no-cache').sendFile('index.html');
 	};
 	if (hasPanel) {
-		await app.register(fastifyStatic, { root: staticDir, index: false });
+		await app.register(fastifyStatic, {
+			root: staticDir,
+			index: false,
+			// .br / .gz written next to each built file (see web/vite.config.ts)
+			preCompressed: true,
+			// Built files carry a hash in their name: cached for good; the app page always fresh
+			setHeaders(reply, file) {
+				reply.header('Cache-Control', /[\\/]assets[\\/]/.test(file) ? 'public, max-age=31536000, immutable' : 'no-cache');
+			},
+		});
 	}
 	// "/" is a directory for @fastify/static, which refuses it (403) when index is off: serve the app explicitly
 	app.get('/', (request, reply) => sendPanel(reply));

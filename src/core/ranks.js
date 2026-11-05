@@ -10,6 +10,7 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 
 	const q = {
 		all: db.prepare('SELECT * FROM ranks ORDER BY level DESC, name'),
+		count: db.prepare('SELECT COUNT(*) AS n FROM ranks'),
 		get: db.prepare('SELECT * FROM ranks WHERE id = ?'),
 		perms: db.prepare('SELECT permission FROM rank_permissions WHERE rank_id = ? ORDER BY permission'),
 		roles: db.prepare('SELECT guild_id, role_id FROM rank_roles WHERE rank_id = ?'),
@@ -134,6 +135,11 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 
 	const service = {
 		system: SYSTEM,
+
+		// Number of ranks, without loading each one with its permissions and roles
+		async count() {
+			return (await q.count.get()).n;
+		},
 
 		async list() {
 			return Promise.all((await q.all.all()).map(hydrate));

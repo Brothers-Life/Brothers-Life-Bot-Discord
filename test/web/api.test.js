@@ -372,3 +372,37 @@ test('the HTML transcript of a closed ticket opens from the panel, without scrip
 	assert.doesNotMatch(res.headers['content-security-policy'], /script-src[^;]*unsafe-inline/);
 	assert.match(res.body, /Ticket #0001/);
 });
+
+test('the panel files are sent precompressed and cached for good, API answers compressed', async () => {
+	const fs = await import('node:fs');
+	const os = await import('node:os');
+	const path = await import('node:path');
+	const zlib = await import('node:zlib');
+	const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), 'brl-panel-'));
+	fs.writeFileSync(path.join(staticDir, 'index.html'), '<!doctype html><title>panel</title>');
+	fs.mkdirSync(path.join(staticDir, 'assets'));
+	const js = `console.log(${JSON.stringify('x'.repeat(4000))})`;
+	fs.writeFileSync(path.join(staticDir, 'assets', 'app.js'), js);
+	fs.writeFileSync(path.join(staticDir, 'assets', 'app.js.br'), zlib.brotliCompressSync(js));
+
+	const ctx = await withNetwork();
+	const web = await createWebServer({
+		config: ctx.core.config, core: ctx.core, runtime: { info: () => ({}), installState: () => null },
+		consoleLog: { lines: () => [], subscribe: () => noop }, versions: {}, logger: silent, staticDir, tls: null,
+	});
+	const asset = await web.app.inject({ method: 'GET', url: '/assets/app.js', headers: { 'accept-encoding': 'br, gzip' } });
+	assert.equal(asset.headers['content-encoding'], 'br');
+	assert.match(asset.headers['cache-control'], /immutable/);
+	assert.equal(zlib.brotliDecompressSync(asset.rawPayload).toString(), js);
+	const page = await web.app.inject({ method: 'GET', url: '/network' });
+	assert.equal(page.headers['cache-control'], 'no-cache');
+
+	const { app } = await setup();
+	const cookies = await sessionFor(app, OWNER);
+	const plain = await app.inject({ method: 'GET', url: '/api/permissions', cookies });
+	const zipped = await app.inject({ method: 'GET', url: '/api/permissions', cookies, headers: { 'accept-encoding': 'gzip' } });
+	assert.equal(zipped.statusCode, 200);
+	assert.ok(plain.rawPayload.length > 1024, 'a big enough answer to be compressed');
+	assert.equal(zipped.headers['content-encoding'], 'gzip');
+	assert.deepEqual(JSON.parse(zlib.gunzipSync(zipped.rawPayload).toString()), plain.json());
+});

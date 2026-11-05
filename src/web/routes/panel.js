@@ -3,6 +3,7 @@ import { listPermissions } from '../../core/permissions.js';
 import { NotFoundError, ForbiddenError } from '../../core/errors.js';
 import { MIRROR } from '../../core/logRouting.js';
 import { listStaff } from '../../core/staffActivity.js';
+import { fetchUsers } from './helpers.js';
 
 const SNOWFLAKE = { type: 'string', pattern: '^\\d{17,20}$' };
 const idParam = { type: 'object', properties: { id: SNOWFLAKE }, required: ['id'] };
@@ -18,7 +19,7 @@ export function registerPanelRoutes(app, { core, runtime }) {
 	// Audit entries only store IDs: add the Discord name of each author for display
 	async function withActorNames(entries) {
 		const ids = [...new Set(entries.map(e => e.actorId).filter(id => /^\d{17,20}$/.test(id)))];
-		const users = new Map(await Promise.all(ids.map(async id => [id, await executor.getUser(id)])));
+		const users = await fetchUsers(executor, ids);
 		return entries.map(e => ({ ...e, actorName: users.get(e.actorId)?.globalName ?? users.get(e.actorId)?.username ?? null }));
 	}
 
@@ -63,7 +64,7 @@ export function registerPanelRoutes(app, { core, runtime }) {
 				pending: guilds.filter(g => g.status === 'pending' && g.botPresent).length,
 				removed: guilds.filter(g => g.status === 'removed').length,
 			},
-			ranks: (await ranks.list()).length,
+			ranks: await ranks.count(),
 			recent: request.actor.can('audit.view') ? await withActorNames(await audit.query({ limit: 8 })) : null,
 		};
 	});

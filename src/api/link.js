@@ -57,9 +57,57 @@ export function createApiLink({ config, consoleLog, logger }) {
 		},
 	};
 
+	// Discord users change rarely: names and avatars kept a few minutes here, so pages listing people do not ask the
+	// bot for each of them on every load (unknown users are kept for a shorter time)
+	const users = new Map();
+	const USER_TTL = 10 * 60_000;
+	const MISSING_TTL = 60_000;
+	const cachedUser = (id) => {
+		const hit = users.get(id);
+		return hit && hit.until > Date.now() ? hit : null;
+	};
+	const remember = (id, user) => {
+		if (users.size > 5000) users.clear();
+		users.set(id, { user, until: Date.now() + (user ? USER_TTL : MISSING_TTL) });
+	};
+	async function getUsers(ids) {
+		const wanted = [...new Set((ids ?? []).map(String))];
+		const missing = wanted.filter(id => !cachedUser(id));
+		if (missing.length) {
+			const found = await rpc.call('executor', 'getUsers', [missing]);
+			for (const id of missing) remember(id, found?.[id] ?? null);
+		}
+		return Object.fromEntries(wanted.map(id => [id, cachedUser(id)?.user ?? null]));
+	}
+
+	// Channel, role and emoji lists of a server are read by many pages (and polled): kept 20 s here. Any other
+	// Discord action done through this process (creating a role, a channel…) clears them, so a change shows at once.
+	const LIST_TTL = 20_000;
+	const lists = new Map();
+	const CACHED_LISTS = ['listTextChannels', 'listVoiceChannels', 'listCategoryChannels', 'listRoles', 'listEmojis', 'listStickers', 'getGuildInfo'];
+	const cachedLists = Object.fromEntries(CACHED_LISTS.map(method => [method, (...args) => {
+		const key = `${method}:${JSON.stringify(args)}`;
+		const hit = lists.get(key);
+		if (hit && hit.until > Date.now()) return hit.value;
+		const value = rpc.call('executor', method, args);
+		lists.set(key, { value, until: Date.now() + LIST_TTL });
+		value.catch(() => lists.delete(key));
+		return value;
+	}]));
+	const READS = /^(get|list|status|guildIcon|guildIds|botUserId)/;
+	const calls = {
+		call(target, method, args, service) {
+			if (target === 'executor' && !READS.test(method)) lists.clear();
+			return rpc.call(target, method, args, service);
+		},
+	};
+
 	// Discord actions are done by the bot; the few synchronous answers come from its last snapshot
-	const executor = remoteObject(rpc, 'executor', {
+	const executor = remoteObject(calls, 'executor', {
 		local: {
+			...cachedLists,
+			getUsers,
+			getUser: async id => (await getUsers([id]))[String(id)] ?? null,
 			botUserId: () => snapshot.botUserId,
 			status: () => ({ ...snapshot.status, ready: Boolean(current) && snapshot.status.ready }),
 			guildIcon: guildId => snapshot.icons[guildId] ?? null,

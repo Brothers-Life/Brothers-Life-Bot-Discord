@@ -1,10 +1,24 @@
 const SNOWFLAKE = /^\d{17,20}$/;
 
+// Discord users for a list of IDs in one call when the executor can (one round trip to the bot), else one by one
+export async function fetchUsers(executor, ids) {
+	const unique = [...new Set(ids.map(String))];
+	if (!unique.length) return new Map();
+	if (typeof executor.getUsers === 'function') {
+		const found = await executor.getUsers(unique).catch(() => ({}));
+		return new Map(unique.map(id => [id, found?.[id] ?? null]));
+	}
+	return new Map(await Promise.all(unique.map(async id => [id, await executor.getUser(id).catch(() => null)])));
+}
+
 // Discord display names for a list of IDs (discord.js caches users, so this stays cheap)
 export async function resolveNames(executor, ids) {
 	const unique = [...new Set(ids.filter(id => SNOWFLAKE.test(String(id))))];
-	const users = await Promise.all(unique.map(async id => [id, await executor.getUser(id).catch(() => null)]));
-	return new Map(users.map(([id, user]) => [id, user ? { name: user.globalName ?? user.username, avatar: user.avatar } : null]));
+	const users = await fetchUsers(executor, unique);
+	return new Map(unique.map((id) => {
+		const user = users.get(id);
+		return [id, user ? { name: user.globalName ?? user.username, avatar: user.avatar } : null];
+	}));
 }
 
 // One cell of a CSV export (";" separated). Text typed by members starting with = + - @ would run
