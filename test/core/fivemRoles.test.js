@@ -87,3 +87,76 @@ test('fivem roles: fixing applies only what the check found, and needs the permi
 	const again = await roles.check(owner);
 	assert.equal(again.issues.some(i => i.userId === COP || i.userId === EX_COP), false);
 });
+
+test('fivem roles: the automatic sync applies what the check finds, only once switched on', async () => {
+	const { roles, owner, executor, core } = await setup();
+	assert.equal(await roles.tick(), null);
+	assert.equal(executor.calls.some(c => c[0] === 'addRole'), false);
+
+	await roles.setAuto(owner, { enabled: true });
+	const out = await roles.tick();
+	// Cop gets LSPD, admin gets Staff, ex-cop and stranger lose LSPD; the role above the bot is left alone
+	assert.deepEqual(out, { done: 4, failed: 0, held: 0 });
+	assert.deepEqual(executor.memberRoles.get(`${MAIN}:${COP}`), [LSPD]);
+	assert.deepEqual(executor.memberRoles.get(`${MAIN}:${EX_COP}`), []);
+	assert.deepEqual(executor.memberRoles.get(`${MAIN}:${STRANGER}`), [TOO_HIGH]);
+	const state = await roles.autoConfig();
+	assert.deepEqual(state.last, { added: 2, removed: 2, failed: 0 });
+	const audit = await core.db.prepare('SELECT action, actor_id AS "actorId", source FROM audit_log WHERE action IN (\'fivemroles.add\', \'fivemroles.remove\') ORDER BY id').all();
+	assert.equal(audit.length, 4);
+	assert.ok(audit.every(a => a.actorId === 'system' && a.source === 'system'));
+
+	// Nothing left to do
+	assert.deepEqual(await roles.tick(), { done: 0, failed: 0, held: 0 });
+	const someone = { id: '100000000000000099', source: 'panel', can: () => false };
+	await assert.rejects(roles.setAuto(someone, { enabled: false }), ForbiddenError);
+});
+
+test('fivem roles: the automatic sync holds back mass removals and waits for the game copy', async () => {
+	const ctx = await withNetwork();
+	const { core, executor, owner } = ctx;
+	executor.roles.set(MAIN, [{ id: LSPD, name: 'LSPD', color: '#0000ff', editable: true }]);
+	const holders = Array.from({ length: 12 }, (_, i) => `3000000000000002${String(i).padStart(2, '0')}`);
+	for (const id of holders) executor.memberRoles.set(`${MAIN}:${id}`, [LSPD]);
+	let accounts = [];
+	const roles = createFivemRoles({ fivemData: { memberships: async () => accounts }, settings: core.settings, executor, network: core.network, audit: core.audit, logs: core.logs, logger: { warn: () => undefined } });
+	await roles.setLinks(owner, [{ kind: 'job', name: 'police', minGrade: 0, guildId: MAIN, roleId: LSPD }]);
+	await roles.setAuto(owner, { enabled: true });
+
+	// No game data at all: nothing compared, nothing removed
+	assert.equal(await roles.tick(), null);
+	// Game data says nobody is a cop any more: 12 removals for 1 linked account, held back
+	accounts = [{ userId: 1, username: 'cop', discordId: COP, groups: [group('police', 'job', 0, 'LSPD')], staff: null }];
+	executor.memberRoles.set(`${MAIN}:${COP}`, []);
+	const out = await roles.tick();
+	assert.deepEqual(out, { done: 1, failed: 0, held: 12 });
+	assert.ok(holders.every(id => executor.memberRoles.get(`${MAIN}:${id}`).includes(LSPD)));
+	assert.equal((await roles.autoConfig()).held, 12);
+});
+
+test('fivem roles: a member joining gets their roles, arrivals grouped', async () => {
+	const ctx = await withNetwork();
+	const { core, executor, owner } = ctx;
+	executor.roles.set(MAIN, [{ id: LSPD, name: 'LSPD', color: '#0000ff', editable: true }]);
+	executor.memberRoles.set(`${MAIN}:${COP}`, []);
+	executor.memberRoles.set(`${MAIN}:${EX_COP}`, [LSPD]);
+	let passes = 0;
+	const fivemData = {
+		memberships: async () => {
+			passes++;
+			return ACCOUNTS;
+		},
+	};
+	const roles = createFivemRoles({ fivemData, settings: core.settings, executor, network: core.network, audit: core.audit, logs: core.logs, logger: { warn: () => undefined }, joinDelay: 20 });
+	await roles.setLinks(owner, [{ kind: 'job', name: 'police', minGrade: 0, guildId: MAIN, roleId: LSPD }]);
+	await roles.setAuto(owner, { enabled: true });
+
+	roles.syncMember(MAIN, COP);
+	roles.syncMember(MAIN, COP);
+	const deadline = Date.now() + 3000;
+	while (!executor.memberRoles.get(`${MAIN}:${COP}`).includes(LSPD) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+	assert.deepEqual(executor.memberRoles.get(`${MAIN}:${COP}`), [LSPD]);
+	assert.equal(passes, 1);
+	// Only the newcomer: the ex-cop keeps their role until the periodic pass
+	assert.deepEqual(executor.memberRoles.get(`${MAIN}:${EX_COP}`), [LSPD]);
+});

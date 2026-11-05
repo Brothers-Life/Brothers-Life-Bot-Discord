@@ -7,6 +7,10 @@ definePermission('fivemdata.roles', { label: 'Vérifier et corriger les rôles D
 const SNOWFLAKE = /^\d{17,20}$/;
 const KINDS = ['job', 'gang', 'staff'];
 const MAX_LINKS = 200;
+const AUTO_KEY = 'fivemroles.auto';
+// More removals than this in one automatic pass, and more than half the linked accounts: the game copy is
+// probably incomplete (tables not received yet…), removals are held back until someone checks
+const MASS_REMOVAL = 10;
 
 export function normalizeLinks(input) {
 	if (!Array.isArray(input)) throw new ValidationError('Liste de liaisons invalide.');
@@ -23,7 +27,7 @@ export function normalizeLinks(input) {
 
 // Discord roles checked against the game: links say "this job (from this grade) / gang / staff role gives this Discord role".
 // The check lists who is missing a role and who holds one the game no longer justifies; a fix only applies what the check found.
-export function createFivemRoles({ fivemData, settings, executor, network, audit, logs, logger = console }) {
+export function createFivemRoles({ fivemData, settings, executor, network, audit, logs, logger = console, joinDelay = 5000 }) {
 	logs?.registerCategory('fivemroles', 'Rôles Discord selon le jeu (check et corrections)');
 	const links = async () => settings.get('fivemroles.links', []);
 
@@ -103,8 +107,99 @@ export function createFivemRoles({ fivemData, settings, executor, network, audit
 		return { issues, guilds, unlinked, accounts: accounts.length, linked: byDiscord.size };
 	}
 
+	// Gives or takes one role found by the check; the audit names who did it (a staff member or the automatic sync)
+	async function apply(issue, { actorId, source, prefix }) {
+		if (!issue.fixable) return { key: issue.key, ok: false, error: issue.notMember ? 'pas sur le serveur' : 'rôle au-dessus du bot' };
+		try {
+			const reason = `${prefix} : ${issue.reason}`.slice(0, 400);
+			const outcome = issue.action === 'add'
+				? await executor.addRole(issue.guildId, issue.userId, issue.roleId, reason)
+				: await executor.removeRole(issue.guildId, issue.userId, issue.roleId, reason);
+			if (outcome === 'not_member') throw new Error('pas sur le serveur');
+			await audit.record({ actorId, source, action: issue.action === 'add' ? 'fivemroles.add' : 'fivemroles.remove', guildId: issue.guildId, target: issue.userId, details: { rôle: issue.roleId, raison: issue.reason } });
+			return { key: issue.key, ok: true };
+		}
+		catch (error) {
+			logger.warn('FiveM roles fix:', error.message);
+			return { key: issue.key, ok: false, error: error.message };
+		}
+	}
+
+	// Arrivals waiting for their pass, per server
+	const joins = new Map();
+
+	async function autoConfig() {
+		const c = await settings.get(AUTO_KEY, {});
+		return { enabled: Boolean(c.enabled), lastRun: c.lastRun ?? null, last: c.last ?? null, held: c.held ?? null };
+	}
+
+	// Automatic pass: everything the check finds and the bot can do is applied (only linked roles are touched)
+	async function sync({ guildId = null, userIds = null } = {}) {
+		const c = await autoConfig();
+		if (!c.enabled || !(await links()).length) return null;
+		const result = await run();
+		// No account at all: the game copy is not there (yet), nothing to compare with
+		if (!result.accounts) return null;
+		const scoped = result.issues.filter(i => i.fixable && (!guildId || i.guildId === guildId) && (!userIds || userIds.has(i.userId)));
+		const removals = scoped.filter(i => i.action === 'remove');
+		const hold = !userIds && removals.length > MASS_REMOVAL && removals.length > result.linked / 2;
+		const todo = hold ? scoped.filter(i => i.action === 'add') : scoped;
+		const results = [];
+		for (const issue of todo) results.push({ issue, ...await apply(issue, { actorId: 'system', source: 'system', prefix: 'Synchro auto des rôles FiveM' }) });
+		const done = results.filter(r => r.ok);
+		const failed = results.filter(r => !r.ok);
+
+		// One log per server with what changed (and what could not be done)
+		for (const gid of [...new Set(results.map(r => r.issue.guildId))]) {
+			const line = r => `${r.issue.action === 'add' ? '➕' : '➖'} <@${r.issue.userId}> <@&${r.issue.roleId}> — ${r.issue.reason}${r.ok ? '' : ` (échec : ${r.error})`}`;
+			const rows = results.filter(r => r.issue.guildId === gid);
+			const shown = rows.slice(0, 25).map(line);
+			if (rows.length > 25) shown.push(`… et ${rows.length - 25} autres`);
+			await logs?.log(gid, 'fivemroles', {
+				title: 'Rôles synchronisés avec le jeu',
+				description: shown.join('\n').slice(0, 4000),
+				color: rows.some(r => !r.ok) ? 'warning' : 'info',
+				footer: 'Synchro automatique des rôles FiveM',
+			});
+		}
+		if (hold && c.held !== removals.length) {
+			await logs?.log(null, 'fivemroles', {
+				title: 'Retraits de rôles mis en attente',
+				description: `La synchro automatique voulait retirer **${removals.length}** rôles d’un coup, sur ${result.linked} comptes liés : la copie du jeu est peut-être incomplète. Rien n’a été retiré ; vérifie dans le panel (Données FiveM › Rôles Discord) et corrige à la main si c’est voulu.`,
+				color: 'warning',
+			});
+		}
+		if (!userIds) await settings.set(AUTO_KEY, { ...c, lastRun: Date.now(), last: { added: done.filter(r => r.issue.action === 'add').length, removed: done.filter(r => r.issue.action === 'remove').length, failed: failed.length }, held: hold ? removals.length : null });
+		return { done: done.length, failed: failed.length, held: hold ? removals.length : 0 };
+	}
+
 	return {
 		links,
+		autoConfig,
+
+		async setAuto(actor, input) {
+			need(actor, 'fivemdata.manage');
+			const c = await autoConfig();
+			const next = { ...c, enabled: Boolean(input?.enabled) };
+			await settings.set(AUTO_KEY, next);
+			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'fivemroles.auto', details: { synchro: next.enabled ? 'activée' : 'désactivée' } });
+			return next;
+		},
+
+		// Periodic pass (bot process)
+		tick: () => sync(),
+
+		// A member joining a server gets the roles the game gives them there (arrivals grouped for a few seconds)
+		syncMember(guildId, userId) {
+			const pending = joins.get(guildId) ?? joins.set(guildId, { users: new Set(), timer: null }).get(guildId);
+			pending.users.add(userId);
+			if (pending.timer) return;
+			pending.timer = setTimeout(() => {
+				joins.delete(guildId);
+				sync({ guildId, userIds: pending.users }).catch(error => logger.warn('FiveM roles sync on join:', error.message));
+			}, joinDelay);
+			pending.timer.unref?.();
+		},
 
 		async setLinks(actor, input) {
 			need(actor, 'fivemdata.manage');
@@ -127,25 +222,7 @@ export function createFivemRoles({ fivemData, settings, executor, network, audit
 			const { issues } = await run();
 			const wanted = new Set(keys.map(String));
 			const results = [];
-			for (const issue of issues.filter(i => wanted.has(i.key))) {
-				if (!issue.fixable) {
-					results.push({ key: issue.key, ok: false, error: issue.notMember ? 'pas sur le serveur' : 'rôle au-dessus du bot' });
-					continue;
-				}
-				try {
-					const reason = `Check rôles FiveM : ${issue.reason}`.slice(0, 400);
-					const outcome = issue.action === 'add'
-						? await executor.addRole(issue.guildId, issue.userId, issue.roleId, reason)
-						: await executor.removeRole(issue.guildId, issue.userId, issue.roleId, reason);
-					if (outcome === 'not_member') throw new Error('pas sur le serveur');
-					await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: issue.action === 'add' ? 'fivemroles.add' : 'fivemroles.remove', guildId: issue.guildId, target: issue.userId, details: { rôle: issue.roleId, raison: issue.reason } });
-					results.push({ key: issue.key, ok: true });
-				}
-				catch (error) {
-					logger.warn('FiveM roles fix:', error.message);
-					results.push({ key: issue.key, ok: false, error: error.message });
-				}
-			}
+			for (const issue of issues.filter(i => wanted.has(i.key))) results.push(await apply(issue, { actorId: actor.id, source: actor.source ?? 'panel', prefix: 'Check rôles FiveM' }));
 			const gone = keys.filter(k => !issues.some(i => i.key === k));
 			for (const key of gone) results.push({ key, ok: false, error: 'déjà réglé' });
 			return { done: results.filter(r => r.ok).length, failed: results.filter(r => !r.ok), results };

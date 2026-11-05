@@ -57,6 +57,7 @@ export function registerFivemDataRoutes(app, { core }) {
 	const { fivemRoles } = core;
 	app.get('/api/fivem-data/roles/setup', { config: { permission: 'fivemdata.roles' } }, async request => ({
 		links: await fivemRoles.links(),
+		auto: await fivemRoles.autoConfig(),
 		catalog: await fivemData.catalog(request.actor),
 		guilds: await Promise.all((await core.network.list()).filter(g => g.status === 'active' && g.botPresent).map(async g => ({
 			id: g.id, name: g.name, isMain: g.isMain,
@@ -67,6 +68,10 @@ export function registerFivemDataRoutes(app, { core }) {
 		config: { permission: 'fivemdata.manage' },
 		schema: { body: { type: 'array', maxItems: 200, items: { type: 'object' } } },
 	}, async request => fivemRoles.setLinks(request.actor, request.body));
+	app.put('/api/fivem-data/roles/auto', {
+		config: { permission: 'fivemdata.manage' },
+		schema: { body: { type: 'object', required: ['enabled'], properties: { enabled: { type: 'boolean' } } } },
+	}, async request => fivemRoles.setAuto(request.actor, request.body));
 	app.get('/api/fivem-data/roles/check', { config: { permission: 'fivemdata.roles' } }, async (request) => {
 		const result = await fivemRoles.check(request.actor);
 		const names = await resolveNames(executor, result.issues.map(i => i.userId));

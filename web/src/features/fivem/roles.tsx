@@ -11,12 +11,16 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
+import { ago } from '@/lib/format'
 
 type Kind = 'job' | 'gang' | 'staff'
 type RoleLink = { id?: string; kind: Kind; name: string; minGrade: number; guildId: string; roleId: string }
 type DiscordRole = { id: string; name: string; color: string; editable: boolean }
+type Auto = { enabled: boolean; lastRun: number | null; last: { added: number; removed: number; failed: number } | null; held: number | null }
 type Setup = {
   links: RoleLink[]
+  auto: Auto
   catalog: { jobs: { name: string; label: string; grades: { grade: number; name: string }[] }[]; gangs: { name: string; label: string; grades: { grade: number; name: string }[] }[]; staff: { name: string; label: string }[] }
   guilds: { id: string; name: string; isMain: boolean; roles: DiscordRole[] }[]
 }
@@ -41,8 +45,40 @@ export function RolesTab({ onOpen }: { onOpen: (userId: number) => void }) {
   return (
     <div className='grid grid-cols-[minmax(0,1fr)] gap-6'>
       <Links setup={setup.data} editable={can('fivemdata.manage')} />
+      {setup.data.links.length > 0 && <AutoSync auto={setup.data.auto} editable={can('fivemdata.manage')} />}
       {setup.data.links.length > 0 && <Report onOpen={onOpen} />}
     </div>
+  )
+}
+
+// Automatic sync: every 5 minutes and when a member joins, the bot applies what the check finds
+function AutoSync({ auto, editable }: { auto: Auto; editable: boolean }) {
+  const qc = useQueryClient()
+  const { confirm, dialog } = useConfirm()
+  const save = useMutation({
+    mutationFn: (enabled: boolean) => api<Auto>('/fivem-data/roles/auto', { method: 'PUT', body: { enabled } }),
+    onSuccess: (next) => { toast.success(next.enabled ? 'Synchro automatique activée' : 'Synchro automatique désactivée'); qc.invalidateQueries({ queryKey: ['fivem-roles-setup'] }) },
+    onError: (e) => toast.error(errorMessage(e)),
+  })
+  const toggle = async (enabled: boolean) => {
+    if (enabled && !(await confirm({ title: 'Activer la synchro automatique ?', desc: 'Toutes les 5 minutes et à chaque arrivée sur un serveur, le bot donnera les rôles liés qui manquent et retirera ceux que le jeu ne justifie plus. Seuls les rôles des liaisons ci-dessus sont touchés.', confirmText: 'Activer' }))) return
+    save.mutate(enabled)
+  }
+  return (
+    <Section
+      title='Synchro automatique'
+      description='Le jeu fait foi : les rôles liés suivent les métiers, gangs et rôles staff, sans passer par le check.'
+      actions={<label className='flex items-center gap-2 text-sm'><Switch checked={auto.enabled} disabled={!editable || save.isPending} onCheckedChange={toggle} /> {auto.enabled ? 'Activée' : 'Désactivée'}</label>}
+    >
+      <div className='grid gap-3 px-4 pb-4 text-sm text-muted-foreground'>
+        {auto.enabled && (auto.lastRun
+          ? <p>Dernier passage {ago(auto.lastRun)} : {auto.last?.added ?? 0} rôle(s) ajouté(s), {auto.last?.removed ?? 0} retiré(s){auto.last?.failed ? `, ${auto.last.failed} échec(s)` : ''}.</p>
+          : <p>Premier passage dans les 5 minutes.</p>)}
+        {!auto.enabled && <p>Désactivée : les écarts restent à corriger à la main avec le check ci-dessous.</p>}
+        {auto.enabled && auto.held ? <Notice tone='warning' title='Retraits mis en attente'>La synchro voulait retirer {auto.held} rôles d’un coup : la copie du jeu est peut-être incomplète. Rien n’a été retiré, vérifie le check et corrige à la main si c’est voulu.</Notice> : null}
+      </div>
+      {dialog}
+    </Section>
   )
 }
 
