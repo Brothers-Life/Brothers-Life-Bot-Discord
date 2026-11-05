@@ -6,6 +6,11 @@ import { WebSocketServer } from 'ws';
 
 export const INTERNAL_PATH = '/internal/bot';
 export const MAX_MESSAGE = 64 * 1024 * 1024;
+// The API answers with its instance id; the bot sends the ids it is already linked to. Behind a load balancer
+// (several API replicas), the bot keeps one link per replica and a dial reaching a linked replica is refused (409)
+// instead of replacing the link that works.
+export const INSTANCE_HEADER = 'x-brl-instance';
+export const LINKED_HEADER = 'x-brl-linked';
 const PING_MS = 15_000;
 
 export function sameSecret(given, expected) {
@@ -16,9 +21,10 @@ export function sameSecret(given, expected) {
 
 // Takes the upgrades of `path` on an HTTP server before @fastify/websocket sees them; the others go on as before.
 // onConnection(socket) for each authenticated bot connection.
-export function attachInternalLink(server, { token, onConnection, path = INTERNAL_PATH, logger = console }) {
+export function attachInternalLink(server, { token, onConnection, instanceId = crypto.randomUUID(), path = INTERNAL_PATH, logger = console }) {
 	if (!token || token.length < 32) throw new Error('INTERNAL_TOKEN must be set (32 characters or more) to link the bot and the API.');
 	const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE, perMessageDeflate: false });
+	wss.on('headers', headers => headers.push(`${INSTANCE_HEADER}: ${instanceId}`));
 	const others = server.listeners('upgrade');
 	server.removeAllListeners('upgrade');
 
@@ -40,6 +46,11 @@ export function attachInternalLink(server, { token, onConnection, path = INTERNA
 			socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
 			return;
 		}
+		const linked = String(req.headers[LINKED_HEADER] ?? '').split(',').map(id => id.trim());
+		if (linked.includes(instanceId)) {
+			socket.end(`HTTP/1.1 409 Conflict\r\n${INSTANCE_HEADER}: ${instanceId}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
+			return;
+		}
 		wss.handleUpgrade(req, socket, head, (ws) => {
 			// A dead connection (bot killed, network cut) is noticed within two pings
 			let alive = true;
@@ -59,6 +70,7 @@ export function attachInternalLink(server, { token, onConnection, path = INTERNA
 	server.on('upgrade', onUpgrade);
 
 	return {
+		instanceId,
 		close() {
 			server.off('upgrade', onUpgrade);
 			for (const listener of others) server.on('upgrade', listener);
