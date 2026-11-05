@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
-import { Textarea } from '@/components/ui/textarea'
+import { MarkdownTextarea } from '@/components/app/markdown-toolbar'
 import { EMPTY_EMBED, EmbedFields, cleanEmbed } from '@/features/announcements/embed-editor'
 import { DuplicateButton } from '@/components/app/duplicate-button'
 
@@ -179,7 +179,7 @@ function FeatureDialog({ guild, kind, label, feature, onClose }: { guild: GuildD
           {kind === 'sticky' && c.payload && (
             <>
               {number('delaySeconds', 'Revient en bas après (secondes de calme)', 3, 300)}
-              <div className='grid gap-1.5'><Label htmlFor='sticky-content'>Texte</Label><Textarea id='sticky-content' rows={2} maxLength={2000} value={c.payload.content} onChange={(e) => set({ payload: { ...c.payload!, content: e.target.value } })} /></div>
+              <div className='grid gap-1.5'><Label htmlFor='sticky-content'>Texte</Label><MarkdownTextarea id='sticky-content' rows={2} maxLength={2000} value={c.payload.content} onChange={(e) => set({ payload: { ...c.payload!, content: e.target.value } })} /></div>
               <label className='flex items-center gap-2 text-sm'><Switch checked={c.payload.embed.enabled} onCheckedChange={(enabled) => set({ payload: { ...c.payload!, embed: { ...c.payload!.embed, enabled } } })} /> Avec un embed</label>
               {c.payload.embed.enabled && <EmbedFields embed={c.payload.embed} idPrefix='sticky' onChange={(patch) => set({ payload: { ...c.payload!, embed: { ...c.payload!.embed, ...patch } } })} />}
             </>

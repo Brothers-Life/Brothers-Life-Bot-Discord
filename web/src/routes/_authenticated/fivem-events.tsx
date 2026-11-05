@@ -22,7 +22,7 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Textarea } from '@/components/ui/textarea'
+import { MarkdownTextarea } from '@/components/app/markdown-toolbar'
 
 export const Route = createFileRoute('/_authenticated/fivem-events')({
   component: FivemEventsPage,
@@ -338,7 +338,7 @@ function PayloadEditor({ value, onChange, idPrefix, guilds, target, extra }: { v
       <div ref={box} className='grid content-start gap-4'>
         <div className='grid gap-1.5'>
           <Label htmlFor={`${idPrefix}-content`}>Texte</Label>
-          <Textarea id={`${idPrefix}-content`} rows={2} maxLength={2000} value={value.content} onChange={(e) => onChange({ ...value, content: e.target.value })} />
+          <MarkdownTextarea id={`${idPrefix}-content`} rows={2} maxLength={2000} value={value.content} onChange={(e) => onChange({ ...value, content: e.target.value })} />
           <div className='flex flex-wrap items-center gap-2'>
             <VariableButton scope='server' container={box} extra={extra} />
             <span className='text-xs text-muted-foreground'>Insérée dans le dernier champ cliqué (texte, titre, champs de l’embed…).</span>

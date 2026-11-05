@@ -2,14 +2,22 @@ import { ExternalLink } from 'lucide-react'
 import type { AnnouncementEmbed, AnnouncementTarget } from '@/lib/types'
 import { imageUrl } from '@/features/uploads/upload'
 import { EmojiView } from '@/components/app/emoji-picker'
+import { DiscordMarkdown } from '@/lib/discord-markdown'
 import { StickerImage } from '@/components/app/sticker-picker'
 
 export type PreviewExtras = { gallery?: string[]; attachments?: string[]; buttons?: { label: string; url: string; emoji: string | null }[]; reactions?: string[]; stickers?: { id: string; name: string; format: number; description: string }[] }
 
 // Text with the server emojis (<:name:id>) drawn as images, like Discord does
-function Rich({ text }: { text: string }) {
+function emojis(text: string) {
   const parts = text.split(/(<a?:\w{2,32}:\d{17,20}>)/g)
   return <>{parts.map((part, i) => (i % 2 ? <EmojiView key={i} value={part} /> : part))}</>
+}
+function Rich({ text }: { text: string }) {
+  return emojis(text)
+}
+// Same, plus the markdown Discord renders (bold, italic, quotes, code, spoilers...)
+function Md({ text }: { text: string }) {
+  return <DiscordMarkdown text={text} leaf={emojis} />
 }
 
 // Rough rendering of the Discord message, to check the look before sending.
@@ -48,10 +56,9 @@ export function DiscordPreview({ content, embed, target, roles, botName = 'Broth
             <span className='text-xs text-[#949ba4]'>Aujourd’hui à {new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
           </div>
           {(content || (target && target.ping !== 'none')) && (
-            <div className='whitespace-pre-wrap break-words'>
+            <div className='break-words'>
               <Pings target={target} roles={roles} />
-              {target && target.ping !== 'none' && content ? '\n' : ''}
-              <Rich text={content} />
+              <Md text={content} />
             </div>
           )}
           {embed.enabled && (
@@ -67,13 +74,13 @@ export function DiscordPreview({ content, embed, target, roles, botName = 'Broth
                   {embed.title && (
                     <div className={embed.url ? 'font-semibold text-[#00a8fc] hover:underline' : 'font-semibold text-white'}><Rich text={embed.title} /></div>
                   )}
-                  {embed.description && <div className='text-sm whitespace-pre-wrap break-words'><Rich text={embed.description} /></div>}
+                  {embed.description && <div className='text-sm break-words'><Md text={embed.description} /></div>}
                   {inline.length > 0 && (
                     <div className='mt-2 grid grid-cols-3 gap-2'>
                       {inline.map((f, i) => (
                         <div key={i} className={f.inline ? 'col-span-1' : 'col-span-3'}>
                           <div className='text-sm font-semibold text-white'><Rich text={f.name} /></div>
-                          <div className='text-sm whitespace-pre-wrap break-words'><Rich text={f.value} /></div>
+                          <div className='text-sm break-words'><Md text={f.value} /></div>
                         </div>
                       ))}
                     </div>

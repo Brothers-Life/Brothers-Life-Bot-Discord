@@ -22,7 +22,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
-import { Textarea } from '@/components/ui/textarea'
+import { MarkdownTextarea } from '@/components/app/markdown-toolbar'
 import { VariableButton } from '@/components/app/variable-picker'
 
 export const Route = createFileRoute('/_authenticated/announcements/$id')({
@@ -178,7 +178,7 @@ function Editor({ announcement, guilds }: { announcement: Announcement | null; g
               </div>
               <div className='grid gap-1.5'>
                 <Label htmlFor='a-content'>Texte au-dessus de l’embed <span className='text-muted-foreground'>({draft.content.length}/2000)</span></Label>
-                <Textarea id='a-content' rows={3} maxLength={2000} value={draft.content} disabled={!editable} onChange={(ev) => setDraft({ ...draft, content: ev.target.value })} placeholder='Markdown Discord accepté : **gras**, *italique*, liens…' />
+                <MarkdownTextarea id='a-content' rows={3} maxLength={2000} value={draft.content} disabled={!editable} onChange={(ev) => setDraft({ ...draft, content: ev.target.value })} placeholder='Markdown Discord accepté : **gras**, *italique*, liens…' />
                 <div className='flex flex-wrap items-center gap-2'>
                   <VariableButton scope='server' container={varsBox} disabled={!editable} />
                   <span className='text-xs text-muted-foreground'>Remplies pour chaque serveur. Insérée dans le dernier champ cliqué.</span>

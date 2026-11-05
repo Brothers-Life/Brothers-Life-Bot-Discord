@@ -23,7 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Textarea } from '@/components/ui/textarea'
+import { MarkdownTextarea } from '@/components/app/markdown-toolbar'
 import { DuplicateButton } from '@/components/app/duplicate-button'
 import { copyOf } from '@/lib/utils'
 import { FeedsSection } from '@/features/feeds/feeds-section'
@@ -222,7 +222,7 @@ function PayloadEditor({ value, onChange, idPrefix, guilds, target }: { value: P
       <div className='grid content-start gap-4'>
         <div className='grid gap-1.5'>
           <Label htmlFor={`${idPrefix}-content`}>Texte</Label>
-          <Textarea id={`${idPrefix}-content`} rows={2} maxLength={2000} value={value.content} onChange={(e) => onChange({ ...value, content: e.target.value })} />
+          <MarkdownTextarea id={`${idPrefix}-content`} rows={2} maxLength={2000} value={value.content} onChange={(e) => onChange({ ...value, content: e.target.value })} />
           <span className='text-xs text-muted-foreground'>Variables : {'{streamer} {title} {game} {viewers} {url} {thumbnail}'} (les deux dernières marchent aussi dans les champs d’image et de lien), aussi en français : {'{chaine.nom} {video.titre} {video.lien} {video.image}'}, et celles du serveur : {'{server} {date} {time}'}.</span>
         </div>
         <EmbedFields embed={value.embed} onChange={(patch) => onChange({ ...value, embed: { ...value.embed, ...patch } })} idPrefix={idPrefix} />

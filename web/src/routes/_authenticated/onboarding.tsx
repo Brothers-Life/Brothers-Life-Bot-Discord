@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Textarea } from '@/components/ui/textarea'
+import { MarkdownTextarea } from '@/components/app/markdown-toolbar'
 import { EmojiField } from '@/components/app/emoji-picker'
 import { VariableButton } from '@/components/app/variable-picker'
 import { ButtonStylePicker } from '@/components/app/color-picker'
@@ -296,7 +296,7 @@ function PayloadEditor({ payload, onChange, disabled, idPrefix, withPreview = fa
     <div className='grid gap-3' ref={box}>
       <div className='grid gap-1.5'>
         <Label htmlFor={`${idPrefix}-content`}>Texte</Label>
-        <Textarea id={`${idPrefix}-content`} rows={2} maxLength={2000} value={payload.content} disabled={disabled} onChange={(e) => onChange({ ...payload, content: e.target.value })} />
+        <MarkdownTextarea id={`${idPrefix}-content`} rows={2} maxLength={2000} value={payload.content} disabled={disabled} onChange={(e) => onChange({ ...payload, content: e.target.value })} />
         <div className='flex flex-wrap items-center gap-2'>
           <VariableButton container={box} extra={WELCOME_VARIABLES} disabled={disabled} />
           <span className='text-xs text-muted-foreground'>Insérée dans le dernier champ cliqué (texte, titre, champs de l’embed…).</span>

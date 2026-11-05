@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { Plus, X } from 'lucide-react'
 import type { AnnouncementEmbed } from '@/lib/types'
 import { Button } from '@/components/ui/button'
@@ -7,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { ImageInput } from '@/features/uploads/image-input'
 import { ColorPicker } from '@/components/app/color-picker'
+import { MarkdownToolbar } from '@/components/app/markdown-toolbar'
 
 export const EMPTY_EMBED: AnnouncementEmbed = {
   enabled: true, title: '', url: null, description: '', color: '#d6a249', authorName: '', authorIconUrl: null,
@@ -28,8 +30,9 @@ export function EmbedFields({ embed: e, onChange, disabled, idPrefix = 'e', uplo
   uploads?: boolean
 }) {
   const id = (name: string) => `${idPrefix}-${name}`
+  const box = useRef<HTMLDivElement>(null)
   return (
-    <div className='grid gap-4'>
+    <div ref={box} className='grid gap-4'>
       <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-[1fr_8rem]'>
         <div className='grid gap-1.5'>
           <Label htmlFor={id('title')}>Titre</Label>
@@ -46,7 +49,8 @@ export function EmbedFields({ embed: e, onChange, disabled, idPrefix = 'e', uplo
       </div>
       <div className='grid gap-1.5'>
         <Label htmlFor={id('desc')}>Description <span className='text-muted-foreground'>({e.description.length}/4096)</span></Label>
-        <Textarea id={id('desc')} rows={6} maxLength={4096} value={e.description} disabled={disabled} onChange={(ev) => onChange({ description: ev.target.value })} />
+        <MarkdownToolbar container={box} disabled={disabled} />
+        <Textarea data-md='' id={id('desc')} rows={6} maxLength={4096} value={e.description} disabled={disabled} onChange={(ev) => onChange({ description: ev.target.value })} />
       </div>
       <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
         <div className='grid gap-1.5'>
@@ -84,7 +88,7 @@ export function EmbedFields({ embed: e, onChange, disabled, idPrefix = 'e', uplo
         {e.fields.map((f, i) => (
           <div key={i} className='grid grid-cols-[minmax(0,1fr)] gap-2 rounded-md border p-2 sm:grid-cols-[1fr_1.5fr_auto_auto] sm:items-center'>
             <Input value={f.name} maxLength={256} placeholder='Titre du champ' aria-label={`Titre du champ ${i + 1}`} disabled={disabled} onChange={(ev) => onChange({ fields: e.fields.map((x, j) => (j === i ? { ...x, name: ev.target.value } : x)) })} />
-            <Input value={f.value} maxLength={1024} placeholder='Contenu' aria-label={`Contenu du champ ${i + 1}`} disabled={disabled} onChange={(ev) => onChange({ fields: e.fields.map((x, j) => (j === i ? { ...x, value: ev.target.value } : x)) })} />
+            <Textarea data-md='' rows={2} value={f.value} maxLength={1024} placeholder='Contenu' aria-label={`Contenu du champ ${i + 1}`} disabled={disabled} onChange={(ev) => onChange({ fields: e.fields.map((x, j) => (j === i ? { ...x, value: ev.target.value } : x)) })} />
             <label className='flex items-center gap-1.5 text-xs'>
               <Checkbox checked={f.inline} disabled={disabled} onCheckedChange={(v) => onChange({ fields: e.fields.map((x, j) => (j === i ? { ...x, inline: v === true } : x)) })} />
               Côte à côte

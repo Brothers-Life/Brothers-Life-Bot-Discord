@@ -20,6 +20,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
+import { MarkdownTextarea } from '@/components/app/markdown-toolbar'
 import { EMPTY_EMBED, EmbedFields, cleanEmbed } from '@/features/announcements/embed-editor'
 import { DiscordPreview } from '@/features/announcements/discord-preview'
 import { EmojiField, useServerEmojis } from '@/components/app/emoji-picker'
@@ -185,7 +186,7 @@ function Editor({ saved, guilds, onSaved, onDeleted, onDirty }: { saved?: Saved;
       >
         <div className='grid gap-5 p-4'>
           <div className='grid gap-1.5'><Label htmlFor='emb-name'>Nom (pour le retrouver)</Label><Input id='emb-name' value={name} maxLength={80} onChange={(e) => setName(e.target.value)} placeholder='Règlement, liens utiles…' disabled={!manage} /></div>
-          <div className='grid gap-1.5'><Label htmlFor='emb-content'>Texte au-dessus des embeds</Label><Textarea id='emb-content' rows={2} maxLength={2000} value={b.content} onChange={(e) => setB({ ...b, content: e.target.value })} disabled={!manage} /></div>
+          <div className='grid gap-1.5'><Label htmlFor='emb-content'>Texte au-dessus des embeds</Label><MarkdownTextarea id='emb-content' rows={2} maxLength={2000} value={b.content} onChange={(e) => setB({ ...b, content: e.target.value })} disabled={!manage} /></div>
 
           <div className='grid gap-3 rounded-lg border p-3'>
             <div className='flex flex-wrap items-center gap-1.5' role='tablist' aria-label='Embeds'>

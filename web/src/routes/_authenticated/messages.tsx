@@ -22,7 +22,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
-import { Textarea } from '@/components/ui/textarea'
+import { MarkdownTextarea } from '@/components/app/markdown-toolbar'
 import { VariableButton } from '@/components/app/variable-picker'
 import { DuplicateButton } from '@/components/app/duplicate-button'
 
@@ -198,7 +198,7 @@ function Editor({ message, guilds, onSaved, onDeleted, onDirty }: { message: Liv
             </div>
             <div className='grid gap-1.5'>
               <Label htmlFor='lm-content'>Texte</Label>
-              <Textarea id='lm-content' rows={3} maxLength={2000} value={d.content} disabled={!manage} onChange={(e) => set({ content: e.target.value })} />
+              <MarkdownTextarea id='lm-content' rows={3} maxLength={2000} value={d.content} disabled={!manage} onChange={(e) => set({ content: e.target.value })} />
               <VariableButton scope='server' container={varsBox} disabled={!manage} extra={[
                 { title: 'Compteurs', items: BUILT_IN.map((key) => ({ key, label: COUNTER_LABELS[key] ?? key })) },
                 ...(d.variables.some(([k]) => k) ? [{ title: 'Variables libres', items: d.variables.filter(([k]) => k).map(([k, v]) => ({ key: `var.${k}`, label: v || 'vide' })) }] : []),
