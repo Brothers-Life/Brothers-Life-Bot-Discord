@@ -10,6 +10,7 @@ import { Readable } from 'node:stream';
 import { listMigrations } from './migrate.js';
 
 const BATCH_BYTES = 1024 * 1024;
+const FETCH_ROWS = 200;
 const KEEP_BACKUPS = 10;
 // Written by the app before migrating, read by launcher.js to roll back data with code
 export const LAST_MIGRATION = 'last-migration.json';
@@ -61,21 +62,27 @@ async function* dumpLines(db, schemaVersion) {
 		yield `-- schema:${schemaVersion ?? 0}`;
 		for (const name of await tablesInOrder(client)) {
 			if (name === 'schema_migrations') continue;
-			const result = await client.query(`SELECT * FROM ${name}`);
-			if (!result.rows.length) continue;
-			const columns = result.fields.map(f => f.name);
+			// Read through a cursor, a few rows at a time: a big table (telemetry, stored files) never sits whole in memory
+			await client.query(`DECLARE dump_rows NO SCROLL CURSOR FOR SELECT * FROM ${name}`);
+			let columns = null;
 			let values = [];
 			let size = 0;
-			for (const row of result.rows) {
-				const tuple = `(${columns.map(c => literal(row[c])).join(', ')})`;
-				values.push(tuple);
-				size += tuple.length;
-				if (size >= BATCH_BYTES) {
-					yield `INSERT INTO ${name} (${columns.join(', ')}) VALUES ${values.join(', ')};`;
-					values = [];
-					size = 0;
+			for (;;) {
+				const result = await client.query(`FETCH ${FETCH_ROWS} FROM dump_rows`);
+				if (!result.rows.length) break;
+				columns ??= result.fields.map(f => f.name);
+				for (const row of result.rows) {
+					const tuple = `(${columns.map(c => literal(row[c])).join(', ')})`;
+					values.push(tuple);
+					size += tuple.length;
+					if (size >= BATCH_BYTES) {
+						yield `INSERT INTO ${name} (${columns.join(', ')}) VALUES ${values.join(', ')};`;
+						values = [];
+						size = 0;
+					}
 				}
 			}
+			await client.query('CLOSE dump_rows');
 			if (values.length) yield `INSERT INTO ${name} (${columns.join(', ')}) VALUES ${values.join(', ')};`;
 		}
 		await client.query('COMMIT');
