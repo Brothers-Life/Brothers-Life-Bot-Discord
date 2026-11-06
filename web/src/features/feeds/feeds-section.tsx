@@ -232,8 +232,8 @@ function FeedDialog({ initial, guilds, variables, onClose }: { initial: Partial<
                 </Select>
               </div>
               <div className='grid gap-1.5'>
-                <Label htmlFor='fd-require'>Doit contenir un de ces mots</Label>
-                <Input id='fd-require' value={require} onChange={(ev) => setRequire(ev.target.value)} placeholder='RP, event (vide = tout)' />
+                <Label htmlFor='fd-require'>Doit contenir un de ces mots ou #hashtags</Label>
+                <Input id='fd-require' value={require} onChange={(ev) => setRequire(ev.target.value)} placeholder='#BrothersLife, RP (vide = tout)' />
               </div>
               <div className='grid gap-1.5'>
                 <Label htmlFor='fd-exclude'>Ignorer si contient</Label>

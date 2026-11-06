@@ -302,12 +302,12 @@ function SubscriptionDialog({ initial, guilds, onClose }: { initial: Partial<Sub
             </div>
             <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-3'>
               <div className='grid gap-1.5'>
-                <Label htmlFor='st-require'>Le titre doit contenir un de ces mots</Label>
-                <Input id='st-require' value={require} onChange={(e) => setRequire(e.target.value)} placeholder='RP, event (vide = tout)' />
+                <Label htmlFor='st-require'>Doit contenir un de ces mots ou #hashtags</Label>
+                <Input id='st-require' value={require} onChange={(e) => setRequire(e.target.value)} placeholder='#BrothersLife, RP (vide = tout)' />
               </div>
               <div className='grid gap-1.5'>
-                <Label htmlFor='st-exclude'>Ignorer si le titre contient</Label>
-                <Input id='st-exclude' value={exclude} onChange={(e) => setExclude(e.target.value)} placeholder='rediffusion, test' />
+                <Label htmlFor='st-exclude'>Ignorer si contient</Label>
+                <Input id='st-exclude' value={exclude} onChange={(e) => setExclude(e.target.value)} placeholder='rediffusion, #test' />
               </div>
               <div className='grid gap-1.5'>
                 <Label>À la fin du live</Label>

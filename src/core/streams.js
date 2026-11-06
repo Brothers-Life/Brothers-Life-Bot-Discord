@@ -2,6 +2,7 @@ import { definePermission } from './permissions.js';
 import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
 import { normalizePayload, normalizeTargets } from './announcements.js';
 import { fillPayload } from './onboarding.js';
+import { filterWords, passesWords } from './wordFilter.js';
 import { createTokenCache, kickLive, tiktokLive, twitchLive, youtubeChannelId, youtubeLive, youtubeVideos } from './streamProviders.js';
 
 definePermission('notifications.view', { label: 'Voir les notifications de streams et vidéos', category: 'Communauté' });
@@ -27,10 +28,6 @@ export function defaultPayloads(platform) {
 	};
 }
 
-function words(list) {
-	return [...new Set((Array.isArray(list) ? list : []).map(w => String(w).trim().toLowerCase()).filter(Boolean))].slice(0, 20).map(w => w.slice(0, 50));
-}
-
 export function normalizeStreamConfig(input = {}) {
 	const role = input.liveRole ?? {};
 	const roles = {};
@@ -39,17 +36,17 @@ export function normalizeStreamConfig(input = {}) {
 		lives: input.lives !== false,
 		videos: input.videos !== false,
 		shorts: Boolean(input.shorts),
-		requireWords: words(input.requireWords),
-		excludeWords: words(input.excludeWords),
+		requireWords: filterWords(input.requireWords),
+		excludeWords: filterWords(input.excludeWords),
 		endAction: ['edit', 'delete', 'none'].includes(input.endAction) ? input.endAction : 'edit',
 		liveRole: { userId: SNOWFLAKE.test(role.userId ?? '') ? role.userId : null, roleByGuild: roles },
 	};
 }
 
-function passes(config, title) {
-	const t = String(title ?? '').toLowerCase();
-	if (config.requireWords.length && !config.requireWords.some(w => t.includes(w))) return false;
-	return !config.excludeWords.some(w => t.includes(w));
+// Text checked by the word filters: the title, the live's tags (Twitch) as #tags, the video's description (YouTube,
+// where hashtags usually are)
+function filterText(item) {
+	return [item.title, ...(item.tags ?? []).map(t => `#${t}`), item.description].filter(Boolean).join('\n');
 }
 
 function durationText(ms) {
@@ -157,7 +154,7 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 
 	async function liveStarted(s, live) {
 		let messages = [];
-		const shown = s.config.lives && passes(s.config, live.title);
+		const shown = s.config.lives && passesWords(s.config, filterText(live));
 		if (shown) {
 			({ messages } = await notify(s, 'live', live));
 			await record(system, 'stream.live', s, { title: live.title, url: live.url });
@@ -220,7 +217,7 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 		const fresh = videos.filter(v => v.publishedAt > s.state.lastVideoAt && v.id !== s.state.lastVideoId).reverse().slice(-3);
 		for (const v of fresh) {
 			if (v.short ? !s.config.shorts : !s.config.videos) continue;
-			if (!passes(s.config, v.title)) continue;
+			if (!passesWords(s.config, filterText(v))) continue;
 			await notify(s, v.short ? 'short' : 'video', v);
 			await record(system, 'stream.video', s, { title: v.title, url: v.url });
 		}

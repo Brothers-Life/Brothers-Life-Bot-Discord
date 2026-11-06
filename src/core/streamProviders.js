@@ -45,7 +45,7 @@ export async function twitchLive({ fetchImpl, token, clientId, clientSecret }, l
 		if (!response.ok) throw new Error(`Twitch a répondu HTTP ${response.status}.`);
 		for (const s of (await response.json()).data ?? []) {
 			live.set(s.user_login.toLowerCase(), {
-				id: s.id, title: s.title ?? '', game: s.game_name ?? '', viewers: s.viewer_count ?? 0, name: s.user_name ?? s.user_login,
+				id: s.id, title: s.title ?? '', game: s.game_name ?? '', viewers: s.viewer_count ?? 0, name: s.user_name ?? s.user_login, tags: s.tags ?? [],
 				thumbnail: (s.thumbnail_url ?? '').replace('{width}', '1280').replace('{height}', '720') + `?t=${Date.now()}`,
 				startedAt: Date.parse(s.started_at) || null, url: `https://twitch.tv/${s.user_login}`,
 			});

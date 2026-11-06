@@ -18,7 +18,7 @@ function text(body, status = 200) {
 function feed(videos) {
 	return `<feed><author><name>Chaîne BRL</name></author>${videos.map(v => `<entry><yt:videoId>${v.id}</yt:videoId><title>${v.title}</title>
 		<link rel="alternate" href="https://www.youtube.com/${v.short ? 'shorts/' : 'watch?v='}${v.id}"/><published>${new Date(v.at).toISOString()}</published>
-		<media:thumbnail url="https://i.ytimg.com/vi/${v.id}/hq.jpg"/></entry>`).join('')}</feed>`;
+		<media:thumbnail url="https://i.ytimg.com/vi/${v.id}/hq.jpg"/>${v.description ? `<media:group><media:description>${v.description}</media:description></media:group>` : ''}</entry>`).join('')}</feed>`;
 }
 
 async function setup() {
@@ -182,4 +182,41 @@ test('tiktok: profile link accepted, live announced once (no key), account asked
 	advance(60_000);
 	await streams.tick();
 	assert.match((await streams.get(sub.id)).state.error, /introuvable/);
+});
+
+test('hashtags: a live is announced only with the tag (title or Twitch tags), a YouTube video when its description has it', async () => {
+	const { streams, owner, executor, world, advance } = await setup();
+	const tt = await streams.save(owner, { platform: 'tiktok', channel: 'brl.officiel', targets: [target], config: { requireWords: ['#BrothersLife'] } });
+	assert.deepEqual(tt.config.requireWords, ['#brotherslife']);
+	world.tiktok = tiktokRoom(2, { title: 'Course #BrothersLifeRP' });
+	await streams.tick();
+	assert.equal(executor.announcements.length, 0, 'another tag');
+	await streams.remove(owner, tt.id);
+
+	await streams.save(owner, { platform: 'tiktok', channel: 'brl.officiel', targets: [target], config: { requireWords: ['#BrothersLife'] } });
+	world.tiktok = tiktokRoom(2, { title: 'Course de la bêta #brotherslife' });
+	advance(60_000);
+	await streams.tick();
+	assert.equal(executor.announcements.length, 1);
+
+	await streams.setCredentials(owner, { twitch: { clientId: 'abc', clientSecret: 'secret' } });
+	await streams.save(owner, { platform: 'twitch', channel: 'brl_tv', targets: [target], config: { requireWords: ['#brl'] } });
+	world.twitch = [twitchStream('t1', { title: 'Soirée RP', tags: ['BRL', 'Français'] })];
+	advance(60_000);
+	await streams.tick();
+	assert.equal(executor.announcements.length, 2, 'tag of the Twitch live');
+
+	const yt = await streams.save(owner, { platform: 'youtube', channel: UC, displayName: 'BRL', targets: [target], config: { lives: false, requireWords: ['#brl'] } });
+	world.videos = [{ id: 'old00000001', title: 'Ancienne', at: Date.UTC(2026, 8, 1) }];
+	await streams.tick();
+	world.videos = [
+		{ id: 'tag00000001', title: 'Course folle', description: 'Sur le serveur #BRL', at: Date.UTC(2026, 9, 1, 18, 30) },
+		{ id: 'tag00000002', title: 'Autre vidéo', description: 'sans tag', at: Date.UTC(2026, 9, 1, 18, 20) },
+		...world.videos,
+	];
+	advance(10 * 60_000);
+	await streams.tick();
+	assert.equal(executor.announcements.length, 3);
+	assert.equal(executor.announcements.at(-1).payload.embed.title, 'Course folle');
+	assert.equal((await streams.get(yt.id)).state.lastVideoId, 'tag00000001');
 });

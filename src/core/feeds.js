@@ -5,6 +5,7 @@ import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
 import { normalizePayload, normalizeTargets } from './announcements.js';
 import { fillPayload } from './onboarding.js';
 import { parseFeed } from './feedParser.js';
+import { filterWords, passesWords } from './wordFilter.js';
 import { blockedHost, blockedUrl } from './netGuard.js';
 import { createVariables } from './variables.js';
 
@@ -48,24 +49,15 @@ export function defaultFeedPayload(kind) {
 	return { content: '📰 Nouveau sur **{flux.nom}**', embed: { title: '{item.titre}', url: '{item.lien}', description: '{item.description}', imageUrl: '{item.image}', color: COLORS.rss, timestamp: true } };
 }
 
-function words(list) {
-	return [...new Set((Array.isArray(list) ? list : []).map(w => String(w).trim().toLowerCase()).filter(Boolean))].slice(0, 20).map(w => w.slice(0, 50));
-}
-
 export function normalizeFeedConfig(input = {}, kind = 'rss') {
 	const minutes = Math.round(Number(input.intervalMinutes));
 	return {
 		intervalMinutes: Number.isFinite(minutes) ? Math.min(1440, Math.max(5, minutes)) : kind === 'tiktok' ? 30 : 15,
-		requireWords: words(input.requireWords),
-		excludeWords: words(input.excludeWords),
+		requireWords: filterWords(input.requireWords),
+		excludeWords: filterWords(input.excludeWords),
 	};
 }
 
-function passes(config, text) {
-	const t = String(text ?? '').toLowerCase();
-	if (config.requireWords.length && !config.requireWords.some(w => t.includes(w))) return false;
-	return !config.excludeWords.some(w => t.includes(w));
-}
 
 const cut = (text, max) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
 const keyOf = item => createHash('sha1').update(String(item.id ?? item.link ?? item.title)).digest('hex');
@@ -326,7 +318,7 @@ export function createFeeds({ db, network, audit, executor, logs, fetchImpl = fe
 			.slice(-MAX_PER_CHECK);
 		let posted = 0;
 		for (const item of candidates) {
-			if (!passes(s.config, `${item.title} ${item.description}`)) continue;
+			if (!passesWords(s.config, `${item.title}\n${item.description}`)) continue;
 			await notify(s, item, feed);
 			await record(system, 'feed.item', s, { title: item.title, url: item.link });
 			posted++;
