@@ -8,6 +8,7 @@ import { parseFeed } from './feedParser.js';
 import { filterWords, passesWords } from './wordFilter.js';
 import { blockedHost, blockedUrl } from './netGuard.js';
 import { createVariables } from './variables.js';
+import { tiktokVideos } from './streamProviders.js';
 
 // Content feeds announced on Discord: any RSS / Atom feed, and TikTok through an RSS bridge (TikTok has no
 // public API: its pages need signed requests, so a bridge such as RSSHub's /tiktok/user/@name route is used).
@@ -52,7 +53,7 @@ export function defaultFeedPayload(kind) {
 export function normalizeFeedConfig(input = {}, kind = 'rss') {
 	const minutes = Math.round(Number(input.intervalMinutes));
 	return {
-		intervalMinutes: Number.isFinite(minutes) ? Math.min(1440, Math.max(5, minutes)) : kind === 'tiktok' ? 30 : 15,
+		intervalMinutes: Number.isFinite(minutes) ? Math.min(1440, Math.max(5, minutes)) : 15,
 		requireWords: filterWords(input.requireWords),
 		excludeWords: filterWords(input.excludeWords),
 	};
@@ -60,6 +61,13 @@ export function normalizeFeedConfig(input = {}, kind = 'rss') {
 
 
 const cut = (text, max) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
+// A TikTok account is read directly (its public page), an RSS address of the account still works
+const TIKTOK_PROFILE = /^https:\/\/www\.tiktok\.com\/@([a-z0-9_.]{2,24})$/;
+export function tiktokProfileUrl(input) {
+	const name = /^@?([a-z0-9_.]{2,24})$/i.exec(input)?.[1] ?? /^https?:\/\/(?:www\.|m\.)?tiktok\.com\/@([a-z0-9_.]{2,24})(?:[/?#].*)?$/i.exec(input)?.[1];
+	return name ? `https://www.tiktok.com/@${name.toLowerCase()}` : null;
+}
+
 const keyOf = item => createHash('sha1').update(String(item.id ?? item.link ?? item.title)).digest('hex');
 const httpsOrNull = value => (typeof value === 'string' && /^https?:\/\/\S+$/.test(value) ? value : null);
 
@@ -294,13 +302,12 @@ export function createFeeds({ db, network, audit, executor, logs, fetchImpl = fe
 
 	async function check(s) {
 		const row = await q.state.get(s.id);
-		const result = await fetchFeed(s.url, row?.initialized_at ? { etag: row.etag, lastModified: row.last_modified } : {});
+		const { feed, result } = await load(s.url, row?.initialized_at ? { etag: row.etag, lastModified: row.last_modified } : {});
 		const interval = s.config.intervalMinutes * 60_000;
 		if (result.notModified) {
 			await setState(s.id, { checked_at: now(), next_check_at: now() + interval, failures: 0, error: null });
 			return 0;
 		}
-		const feed = parseFeed(result.text);
 		if (!row?.initialized_at) {
 			await initialize(s.id, feed, result);
 			return 0;
@@ -342,11 +349,12 @@ export function createFeeds({ db, network, audit, executor, logs, fetchImpl = fe
 	async function validate(actor, input, current) {
 		const kind = current?.kind ?? input.kind;
 		if (!FEED_KINDS[kind]) throw new ValidationError('Type de flux inconnu.');
-		const url = String(input.url ?? current?.url ?? '').trim();
-		if (url.length > 500) throw new ValidationError('Adresse du flux trop longue.');
+		const typed = String(input.url ?? current?.url ?? '').trim();
+		if (typed.length > 500) throw new ValidationError('Adresse du flux trop longue.');
+		const url = (kind === 'tiktok' && tiktokProfileUrl(typed)) || typed;
 		if (!/^https?:\/\//i.test(url)) {
 			throw new ValidationError(kind === 'tiktok'
-				? 'Pour TikTok, colle l’adresse d’un flux RSS du compte (par exemple une instance RSSHub : https://…/tiktok/user/@pseudo).'
+				? 'Pour TikTok, mets le @pseudo du compte ou le lien de son profil (https://www.tiktok.com/@pseudo).'
 				: 'Colle l’adresse complète du flux (https://…).');
 		}
 		const targets = normalizeTargets(input.targets ?? current?.targets ?? []);
@@ -364,12 +372,18 @@ export function createFeeds({ db, network, audit, executor, logs, fetchImpl = fe
 		};
 	}
 
+	// A TikTok account (its public page) or a feed address -> { feed, result: { notModified, etag, lastModified } }
+	async function load(url, meta = {}) {
+		const tiktok = TIKTOK_PROFILE.exec(url)?.[1];
+		if (tiktok) return { feed: await tiktokVideos({ fetchImpl }, tiktok), result: { notModified: false, etag: null, lastModified: null } };
+		const result = await fetchFeed(url, meta);
+		return { feed: result.notModified ? null : parseFeed(result.text), result };
+	}
+
 	// Reads the feed now: a wrong address is refused at once, and what it holds is not announced
 	async function read(url) {
-		let result;
 		try {
-			result = await fetchFeed(url);
-			return { feed: parseFeed(result.text), result };
+			return await load(url);
 		}
 		catch (error) {
 			if (error instanceof ValidationError) throw error;
@@ -393,7 +407,8 @@ export function createFeeds({ db, network, audit, executor, logs, fetchImpl = fe
 		// Title and latest items of a feed, before following it
 		async preview(actor, url) {
 			requireManage(actor);
-			const { feed } = await read(String(url ?? '').trim());
+			const typed = String(url ?? '').trim();
+			const { feed } = await read(tiktokProfileUrl(typed) ?? typed);
 			return { title: feed.title, link: feed.link, items: feed.items.slice(0, 5).map(i => ({ title: i.title, link: i.link, image: i.image, author: i.author, publishedAt: i.publishedAt })) };
 		},
 

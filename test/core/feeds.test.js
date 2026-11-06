@@ -17,11 +17,20 @@ function response(body, { status = 200, headers = {} } = {}) {
 	return { ok: status >= 200 && status < 300, status, headers: { get: k => h.get(k.toLowerCase()) ?? null }, text: async () => body };
 }
 
+// Public embed page of a TikTok account, as TikTok serves it (state in a script tag)
+function tiktokPage({ user, videos }) {
+	const state = { source: { data: { [`/embed/@${user.uniqueId}`]: { isReady: true, userInfo: user, videoList: videos } } } };
+	return `<html><body><script id="__FRONTITY_CONNECT_STATE__" type="application/json">${JSON.stringify(state)}</script></body></html>`;
+}
+// TikTok video ids carry their creation time in the upper 32 bits
+const tiktokId = (at, n = 1) => String((BigInt(Math.floor(at / 1000)) << 32n) + BigInt(n));
+
 async function setup() {
 	let clock = Date.UTC(2026, 9, 1, 18, 0);
 	const world = { items: [], status: 200, calls: [], hosts: { 'brl.example': '93.184.216.34', 'rsshub.example': '93.184.216.35', 'evil.example': '10.0.0.5', 'redirect.example': '93.184.216.36' } };
 	const fetchImpl = async (url, init) => {
 		world.calls.push({ url, headers: init.headers });
+		if (url.startsWith('https://www.tiktok.com/embed/@')) return world.tiktok ? response(tiktokPage(world.tiktok)) : response('<html></html>', { status: 400 });
 		if (url.startsWith('https://redirect.example/')) return response('', { status: 302, headers: { location: 'http://127.0.0.1/admin' } });
 		if (world.status !== 200) return response('erreur', { status: world.status });
 		if (init.headers['If-None-Match'] === '"v-same"' && world.etag === '"v-same"') return response('', { status: 304 });
@@ -109,9 +118,9 @@ test('words filter, template variables (item, server), HTTP cache and backoff on
 
 test('TikTok through an RSS bridge: video variables, clear message without URL', async () => {
 	const { feeds, owner, executor, world, advance, now } = await setup();
-	await assert.rejects(feeds.save(owner, { kind: 'tiktok', url: '@brl', targets: [target] }), /RSSHub/);
+	await assert.rejects(feeds.save(owner, { kind: 'tiktok', url: 'pas un compte !', targets: [target] }), /@pseudo/);
 	const sub = await feeds.save(owner, { kind: 'tiktok', url: TIKTOK_URL, displayName: 'BRL', targets: [target] });
-	assert.equal(sub.config.intervalMinutes, 30);
+	assert.equal(sub.config.intervalMinutes, 15);
 	world.items = [{ id: 'v1', title: 'Clip du serveur', at: now() + 1000, image: 'https://p16.example/cover.jpg' }];
 	advance(30 * 60_000);
 	await feeds.tick();
@@ -170,4 +179,44 @@ test('preview, permissions, removal', async () => {
 	const sub = await feeds.save(owner, { kind: 'rss', url: FEED_URL, targets: [target] });
 	await feeds.remove(owner, sub.id);
 	assert.equal((await feeds.list()).length, 0);
+});
+
+test('TikTok read directly from the account: @pseudo or profile link, new videos announced once, hashtag filter', async () => {
+	const { feeds, owner, executor, world, advance, now } = await setup();
+	const user = { uniqueId: 'brl.officiel', nickname: 'Brothers Life', privateAccount: false };
+	world.tiktok = { user, videos: [{ id: tiktokId(now() - 86_400_000), desc: 'Ancienne vidéo', coverUrl: 'https://p16.example/old.jpg' }] };
+	const preview = await feeds.preview(owner, '@BRL.Officiel');
+	assert.equal(preview.title, 'Brothers Life');
+	assert.equal(preview.items[0].link, `https://www.tiktok.com/@brl.officiel/video/${tiktokId(now() - 86_400_000)}`);
+
+	const sub = await feeds.save(owner, { kind: 'tiktok', url: 'https://www.tiktok.com/@BRL.Officiel?lang=fr', targets: [target], config: { requireWords: ['#brotherslife'] } });
+	assert.equal(sub.url, 'https://www.tiktok.com/@brl.officiel');
+	assert.equal(sub.displayName, 'Brothers Life', 'the account name is the default name');
+	assert.equal(sub.config.intervalMinutes, 15);
+
+	world.tiktok.videos = [
+		{ id: tiktokId(now() + 60_000, 2), desc: 'Course de la bêta #BrothersLife', coverUrl: 'https://p16.example/new.jpg' },
+		{ id: tiktokId(now() + 30_000, 3), desc: 'Sans le tag #BrothersLifeRP' },
+		...world.tiktok.videos,
+	];
+	advance(15 * 60_000);
+	await feeds.tick();
+	assert.equal(executor.announcements.length, 1);
+	const p = executor.announcements[0].payload;
+	assert.equal(p.content, '🎵 Nouvelle vidéo TikTok de **Brothers Life** !');
+	assert.equal(p.embed.title, 'Course de la bêta #BrothersLife');
+	assert.equal(p.embed.url, `https://www.tiktok.com/@brl.officiel/video/${tiktokId(now() - 15 * 60_000 + 60_000, 2)}`);
+	assert.equal(p.embed.imageUrl, 'https://p16.example/new.jpg');
+
+	advance(15 * 60_000);
+	await feeds.tick();
+	assert.equal(executor.announcements.length, 1, 'announced once');
+
+	world.tiktok = { user: { ...user, privateAccount: true }, videos: [] };
+	advance(15 * 60_000);
+	await feeds.tick();
+	assert.match((await feeds.get(sub.id)).state.error, /privé/);
+
+	world.tiktok = null;
+	await assert.rejects(feeds.preview(owner, '@inconnu'), /introuvable/);
 });

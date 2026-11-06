@@ -38,7 +38,7 @@ type Preview = { title: string; link: string | null; items: { title: string; lin
 
 const KIND: Record<Kind, { label: string; color: string; hint: string }> = {
   rss: { label: 'RSS / Atom', color: '#ff9628', hint: 'https://site.fr/feed.xml' },
-  tiktok: { label: 'TikTok', color: '#ff0050', hint: 'https://<instance-rsshub>/tiktok/user/@pseudo' },
+  tiktok: { label: 'TikTok', color: '#ff0050', hint: '@pseudo ou https://www.tiktok.com/@pseudo' },
 }
 const INTERVALS = [5, 10, 15, 30, 60, 180, 360, 720, 1440]
 const minutesText = (m: number) => (m < 60 ? `${m} min` : m % 60 ? `${Math.floor(m / 60)} h ${m % 60}` : `${m / 60} h`)
@@ -205,10 +205,9 @@ function FeedDialog({ initial, guilds, variables, onClose }: { initial: Partial<
               </div>
             </div>
             {kind === 'tiktok' && (
-              <Notice tone='info' title='TikTok passe par un flux RSS'>
-                TikTok n’a pas d’API publique pour lire les vidéos d’un compte, et ses pages demandent des requêtes signées qui changent souvent.
-                Le bot lit donc un flux RSS du compte, fourni par un service comme RSSHub (route <code>/tiktok/user/@pseudo</code>, sur une instance publique ou que tu héberges).
-                Si l’instance tombe ou est bloquée par TikTok, le flux passe en erreur ici.
+              <Notice tone='info' title='Vidéos TikTok'>
+                Mets le <code>@pseudo</code> du compte ou le lien de son profil : le bot lit ses 10 dernières vidéos sur sa page publique TikTok, sans clé.
+                Le compte doit être public. Une adresse de flux RSS (RSSHub) marche aussi. Si TikTok bloque, le flux passe en erreur ici.
               </Notice>
             )}
             {preview && (

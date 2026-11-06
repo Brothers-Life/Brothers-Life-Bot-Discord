@@ -137,6 +137,7 @@ const TIKTOK_LIVE = 2;
 
 export async function tiktokLive({ fetchImpl }, username) {
 	const response = await fetchImpl(`https://www.tiktok.com/api-live/user/room/?aid=1988&app_name=tiktok_web&device_platform=web_pc&sourceType=54&uniqueId=${encodeURIComponent(username)}`, { headers: TIKTOK_HEADERS });
+	if (response.status === 429) throw new Error('TikTok limite les requêtes pour le moment : nouvel essai à la prochaine vérification.');
 	if (!response.ok) throw new Error(`TikTok a répondu HTTP ${response.status}.`);
 	const body = await response.json().catch(() => null);
 	if (body?.message === 'user_not_found') throw new Error('Compte TikTok introuvable.');
@@ -150,4 +151,32 @@ export async function tiktokLive({ fetchImpl }, username) {
 		name: user.nickname || user.uniqueId, thumbnail: room.coverUrl ?? '', startedAt: room.startTime ? room.startTime * 1000 : null,
 		url: `https://www.tiktok.com/@${user.uniqueId}/live`,
 	};
+}
+
+// Latest videos of a TikTok account (the 10 newest), read from the account's public embed page, which holds them in
+// its page state: no key, no signed request. -> { title, link, items: [{ id, title, link, description, image, author,
+// publishedAt }] } like a parsed feed. Video ids carry their creation time (upper 32 bits, in seconds).
+export async function tiktokVideos({ fetchImpl }, username) {
+	const response = await fetchImpl(`https://www.tiktok.com/embed/@${encodeURIComponent(username)}`, { headers: TIKTOK_HEADERS });
+	if (response.status === 400 || response.status === 404) throw new Error('Compte TikTok introuvable.');
+	if (response.status === 429) throw new Error('TikTok limite les requêtes pour le moment : nouvel essai plus tard.');
+	if (!response.ok) throw new Error(`TikTok a répondu HTTP ${response.status}.`);
+	const html = await response.text();
+	const raw = /<script id="__FRONTITY_CONNECT_STATE__"[^>]*>([\s\S]*?)<\/script>/.exec(html)?.[1];
+	let page = null;
+	try {
+		page = raw ? Object.values(JSON.parse(raw).source?.data ?? {}).find(d => d?.userInfo) : null;
+	}
+	catch {
+		page = null;
+	}
+	if (!page) throw new Error('TikTok n’a pas donné les vidéos du compte (réessai plus tard).');
+	if (page.errorCode || !page.userInfo?.nickname) throw new Error('Compte TikTok introuvable.');
+	if (page.userInfo.privateAccount) throw new Error('Ce compte TikTok est privé : ses vidéos ne sont pas visibles.');
+	const user = page.userInfo;
+	const items = (page.videoList ?? []).filter(v => /^\d+$/.test(String(v.id ?? '')) && !v.privateItem).map(v => ({
+		id: String(v.id), title: v.desc ?? '', description: v.desc ?? '', link: `https://www.tiktok.com/@${user.uniqueId}/video/${v.id}`,
+		image: v.coverUrl || v.originCoverUrl || null, author: user.nickname, publishedAt: Number(BigInt(v.id) >> 32n) * 1000,
+	})).sort((a, b) => b.publishedAt - a.publishedAt);
+	return { title: user.nickname, link: `https://www.tiktok.com/@${user.uniqueId}`, items };
 }
