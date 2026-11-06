@@ -3,15 +3,25 @@ import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
 import { normalizePayload, normalizeTargets } from './announcements.js';
 import { fillPayload } from './onboarding.js';
 import { filterWords, passesWords } from './wordFilter.js';
-import { createTokenCache, kickLive, tiktokLive, twitchLive, youtubeChannelId, youtubeLive, youtubeVideos } from './streamProviders.js';
+import { createTokenCache, kickLive, tiktokLive, twitchClips, twitchLive, youtubeChannelId, youtubeLive, youtubeVideos } from './streamProviders.js';
 
 definePermission('notifications.view', { label: 'Voir les notifications de streams et vidéos', category: 'Communauté' });
 definePermission('notifications.manage', { label: 'Gérer les notifications de streams et vidéos (et les clés des plateformes)', category: 'Communauté' });
 
 const SNOWFLAKE = /^\d{17,20}$/;
 const YOUTUBE_EVERY = 5 * 60_000;
+const CLIPS_EVERY = 5 * 60_000;
+// A clip can reach the Twitch API after a newer one: the recent ones are read again, the history tells which are done
+const CLIP_WINDOW = 30 * 60_000;
+const PER_CHECK = 3;
 const COLORS = { twitch: '#9146ff', youtube: '#ff0000', kick: '#53fc18', tiktok: '#ff0050' };
 export const PLATFORMS = { twitch: 'Twitch', youtube: 'YouTube', kick: 'Kick', tiktok: 'TikTok' };
+// What each platform can announce. `clip` = Twitch clips and YouTube Shorts
+export const STREAM_KINDS = { twitch: ['live', 'clip'], youtube: ['live', 'video', 'clip'], kick: ['live'], tiktok: ['live'] };
+const KIND_LABELS = { live: 'les lives', video: 'les vidéos', clip: 'les clips' };
+const KIND_ENABLED = { live: 'lives', video: 'videos', clip: 'shorts' };
+// Stored in stream_history, whose CHECK has one kind for short formats
+const HISTORY_KINDS = { clip: 'short' };
 
 // Page of a followed channel
 export function channelUrl(platform, channel) {
@@ -25,7 +35,18 @@ export function defaultPayloads(platform) {
 	return {
 		live: { content: '🔴 **{streamer}** est en live !', embed: { title: '{title}', url: '{url}', description: platform === 'tiktok' ? '👀 {viewers} spectateurs' : '🎮 {game}\n👀 {viewers} spectateurs', imageUrl: '{thumbnail}', color, timestamp: true } },
 		video: { content: '📺 Nouvelle vidéo de **{streamer}** !', embed: { title: '{title}', url: '{url}', imageUrl: '{thumbnail}', color, timestamp: true } },
+		clip: { content: `🎬 Nouveau ${platform === 'youtube' ? 'Short' : 'clip'} de **{streamer}** !`, embed: { title: '{title}', url: '{url}', imageUrl: '{thumbnail}', color, timestamp: true } },
 	};
+}
+
+// Channels of a kind: videos and clips use the lives' channels unless they have their own
+function targetsOf(s, kind) {
+	return (kind !== 'live' && s.config[`${kind}Targets`]) || s.targets;
+}
+
+// Subscriptions saved before clips had a message: Shorts used the video message
+function withClipPayload(platform, payloads) {
+	return { ...payloads, clip: payloads.clip ?? (platform === 'youtube' ? payloads.video : normalizePayload(defaultPayloads(platform).clip)) };
 }
 
 export function normalizeStreamConfig(input = {}) {
@@ -40,6 +61,9 @@ export function normalizeStreamConfig(input = {}) {
 		excludeWords: filterWords(input.excludeWords),
 		endAction: ['edit', 'delete', 'none'].includes(input.endAction) ? input.endAction : 'edit',
 		liveRole: { userId: SNOWFLAKE.test(role.userId ?? '') ? role.userId : null, roleByGuild: roles },
+		// null = same channels as the lives
+		videoTargets: Array.isArray(input.videoTargets) ? normalizeTargets(input.videoTargets.slice(0, 50)) : null,
+		clipTargets: Array.isArray(input.clipTargets) ? normalizeTargets(input.clipTargets.slice(0, 50)) : null,
 	};
 }
 
@@ -58,6 +82,7 @@ function durationText(ms) {
 export function createStreams({ db, network, audit, executor, settings, logs, variables = null, fetchImpl = fetch, logger = console, now = Date.now }) {
 	logs.registerCategory('stream', 'Notifications de streams et vidéos');
 	const token = createTokenCache({ fetchImpl, now });
+	const twitchIds = new Map();
 
 	const q = {
 		all: db.prepare('SELECT * FROM stream_subscriptions ORDER BY platform, lower(display_name), id'),
@@ -71,6 +96,7 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 		state: db.prepare('SELECT * FROM stream_state WHERE subscription_id = ?'),
 		ensureState: db.prepare('INSERT INTO stream_state (subscription_id) VALUES (?) ON CONFLICT DO NOTHING'),
 		history: db.prepare('INSERT INTO stream_history (subscription_id, kind, title, url, channels, at) VALUES (?, ?, ?, ?, ?, ?)'),
+		announced: db.prepare('SELECT url FROM stream_history WHERE subscription_id = ? AND at >= ?'),
 		recent: db.prepare(`
 			SELECT h.*, s.display_name, s.platform FROM stream_history h JOIN stream_subscriptions s ON s.id = h.subscription_id
 			ORDER BY h.at DESC, h.id DESC LIMIT ?
@@ -96,7 +122,7 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 		if (!row) return null;
 		return {
 			id: row.id, platform: row.platform, channel: row.channel, displayName: row.display_name, targets: JSON.parse(row.targets),
-			payloads: JSON.parse(row.payloads), config: normalizeStreamConfig(JSON.parse(row.config)), enabled: Boolean(row.enabled),
+			payloads: withClipPayload(row.platform, JSON.parse(row.payloads)), config: normalizeStreamConfig(JSON.parse(row.config)), enabled: Boolean(row.enabled),
 			createdBy: row.created_by, createdAt: row.created_at, state: toState(await q.state.get(row.id)),
 		};
 	}
@@ -121,19 +147,19 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 
 	const system = { id: 'system', source: 'system' };
 
-	// Message of a live or a video, sent to every channel of the subscription
-	// `logAs`: kind written in the history (a test uses the live message)
-	async function notify(s, kind, data, logAs = kind) {
+	// Message of a live, a video or a clip, sent to the channels of that kind
+	// `logAs`: kind written in the history (`test` for a test)
+	async function notify(s, kind, data, logAs = HISTORY_KINDS[kind] ?? kind) {
 		const own = {
 			streamer: data.name || s.displayName, title: data.title, game: data.game || '—', url: data.url, thumbnail: data.thumbnail, viewers: data.viewers ?? 0,
 			// French names shared with the feed messages
-			'chaine.nom': data.name || s.displayName, 'video.titre': data.title, 'video.lien': data.url, 'video.image': data.thumbnail,
+			'chaine.nom': data.name || s.displayName, 'video.titre': data.title, 'video.lien': data.url, 'video.image': data.thumbnail, 'clip.auteur': data.creator ?? '',
 		};
-		const template = s.payloads[kind === 'live' ? 'live' : 'video'];
+		const template = s.payloads[kind];
 		const servers = new Map();
 		let payload = fillPayload(template, own);
 		const messages = [];
-		for (const target of s.targets) {
+		for (const target of targetsOf(s, kind)) {
 			try {
 				// Common server variables ({server}, {date}…) of the target's server
 				if (variables) {
@@ -218,10 +244,26 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 		for (const v of fresh) {
 			if (v.short ? !s.config.shorts : !s.config.videos) continue;
 			if (!passesWords(s.config, filterText(v))) continue;
-			await notify(s, v.short ? 'short' : 'video', v);
+			await notify(s, v.short ? 'clip' : 'video', v);
 			await record(system, 'stream.video', s, { title: v.title, url: v.url });
 		}
 		if (newest.publishedAt >= s.state.lastVideoAt) await setState(s.id, { last_video_id: newest.id, last_video_at: newest.publishedAt });
+	}
+
+	async function handleClips(s, clips) {
+		// First look at the channel: only clips made from now on. This date never moves: a clip can show up late
+		if (s.state.lastVideoAt === null) {
+			await setState(s.id, { last_video_at: now() });
+			return;
+		}
+		const recent = clips.filter(c => c.publishedAt > s.state.lastVideoAt && passesWords(s.config, filterText(c)));
+		if (!recent.length) return;
+		const done = new Set((await q.announced.all(s.id, now() - CLIP_WINDOW)).map(h => h.url));
+		// Oldest first: what goes over the limit is taken by the next check
+		for (const c of recent.filter(x => !done.has(x.url)).reverse().slice(0, PER_CHECK)) {
+			await notify(s, 'clip', c);
+			await record(system, 'stream.clip', s, { title: c.title, url: c.url });
+		}
 	}
 
 	async function validate(actor, input, current) {
@@ -233,8 +275,14 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 		if (platform === 'tiktok' && !/^[a-z0-9_.]{2,24}$/.test(channel)) throw new ValidationError('Nom de compte TikTok invalide (le @nom du profil).');
 		if (platform === 'youtube') channel = await youtubeChannelId({ fetchImpl }, input.channel ?? current.channel).catch((error) => { throw new ValidationError(error.message); });
 		const targets = normalizeTargets(input.targets ?? current?.targets ?? []);
-		if (!targets.length) throw new ValidationError('Choisis au moins un salon.');
-		for (const t of targets) {
+		const config = normalizeStreamConfig(input.config ?? current?.config ?? {});
+		for (const kind of ['video', 'clip']) if (!STREAM_KINDS[platform].includes(kind)) config[`${kind}Targets`] = null;
+		const all = [...targets, ...(config.videoTargets ?? []), ...(config.clipTargets ?? [])];
+		if (!all.length) throw new ValidationError('Choisis au moins un salon.');
+		for (const kind of STREAM_KINDS[platform]) {
+			if (config[KIND_ENABLED[kind]] && !targetsOf({ targets, config }, kind).length) throw new ValidationError(`Choisis au moins un salon pour ${KIND_LABELS[kind]}.`);
+		}
+		for (const t of all) {
 			if ((await network.find(t.guildId))?.status !== 'active') throw new ValidationError('Un des serveurs choisis ne fait pas partie du réseau.');
 			if ((t.ping === 'everyone' || t.ping === 'here') && !actor.can('announcements.everyone')) throw new ForbiddenError('Permission manquante pour mentionner @everyone ou @here.');
 		}
@@ -242,9 +290,10 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 		const payloads = {
 			live: normalizePayload(input.payloads?.live ?? current?.payloads.live ?? defaults.live),
 			video: normalizePayload(input.payloads?.video ?? current?.payloads.video ?? defaults.video),
+			clip: normalizePayload(input.payloads?.clip ?? current?.payloads.clip ?? defaults.clip),
 		};
 		const displayName = String(input.displayName ?? current?.displayName ?? '').trim().slice(0, 100) || channel;
-		return { platform, channel, displayName, targets, payloads, config: normalizeStreamConfig(input.config ?? current?.config ?? {}), enabled: input.enabled ?? current?.enabled ?? true };
+		return { platform, channel, displayName, targets, payloads, config, enabled: input.enabled ?? current?.enabled ?? true };
 	}
 
 	return {
@@ -273,17 +322,18 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 			await record(actor, 'stream.delete', s);
 		},
 
-		// Sample message in the subscription's channels
-		async test(actor, id) {
+		// Sample message of one kind in that kind's channels
+		async test(actor, id, kind = 'live') {
 			requireManage(actor);
 			const s = await getOrThrow(id);
-			const { messages } = await notify(s, 'live', {
-				name: s.displayName, title: 'Live de test · ceci est un exemple', game: 'Grand Theft Auto V', viewers: 42,
+			if (!STREAM_KINDS[s.platform].includes(kind)) throw new ValidationError('Ce type de message n’existe pas pour cette plateforme.');
+			const { messages } = await notify(s, kind, {
+				name: s.displayName, title: `${{ live: 'Live', video: 'Vidéo', clip: 'Clip' }[kind]} de test · ceci est un exemple`, game: 'Grand Theft Auto V', viewers: 42, creator: 'Un membre',
 				url: channelUrl(s.platform, s.channel),
 				thumbnail: 'https://static-cdn.jtvnw.net/ttv-static/404_preview-1280x720.jpg',
 			}, 'test');
 			await record(actor, 'stream.test', s, { channels: messages.length });
-			return { sent: messages.length, total: s.targets.length };
+			return { sent: messages.length, total: targetsOf(s, kind).length };
 		},
 
 		// Keys are never sent back: only whether they are set
@@ -314,7 +364,7 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 			return this.credentials();
 		},
 
-		// Every minute: Twitch and Kick in batches, TikTok account by account, YouTube every 5 minutes per channel
+		// Every minute: Twitch and Kick in batches, TikTok account by account; YouTube and Twitch clips every 5 minutes per channel
 		async tick() {
 			const subs = (await Promise.all((await q.all.all()).map(toSubscription))).filter(s => s.enabled);
 			const c = await credentials();
@@ -335,6 +385,22 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 				catch (error) {
 					logger.warn(`${platform} check failed:`, error.message);
 					for (const s of list) await setState(s.id, { checked_at: now(), error: error.message });
+				}
+			}
+			if (c.twitch?.clientId && c.twitch?.clientSecret) {
+				const clips = new Map();
+				for (const s of subs.filter(x => x.platform === 'twitch' && x.config.shorts)) {
+					const row = await q.state.get(s.id);
+					if (row?.videos_checked_at && now() - row.videos_checked_at < CLIPS_EVERY) continue;
+					try {
+						if (!clips.has(s.channel)) clips.set(s.channel, await twitchClips({ fetchImpl, token, ids: twitchIds, ...c.twitch }, s.channel, now() - CLIP_WINDOW));
+						await handleClips(s, clips.get(s.channel));
+						await setState(s.id, { videos_checked_at: now() });
+					}
+					catch (error) {
+						logger.warn('twitch clips check failed:', error.message);
+						await setState(s.id, { videos_checked_at: now(), error: error.message });
+					}
 				}
 			}
 			// The same account followed twice (other channels, other messages) is asked once

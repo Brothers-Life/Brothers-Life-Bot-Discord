@@ -255,6 +255,7 @@ const TITLES = {
 	'stream.credentials': 'Clés des plateformes de stream modifiées',
 	'stream.live': 'Live annoncé',
 	'stream.video': 'Vidéo annoncée',
+	'stream.clip': 'Clip annoncé',
 	'feed.create': 'Flux ajouté',
 	'feed.update': 'Flux modifié',
 	'feed.delete': 'Flux supprimé',

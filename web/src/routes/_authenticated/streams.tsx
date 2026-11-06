@@ -17,6 +17,7 @@ import { EMPTY_EMBED, EmbedFields, cleanEmbed } from '@/features/announcements/e
 import { TargetsEditor } from '@/features/announcements/targets-editor'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -37,9 +38,13 @@ type Payload = { content: string; embed: AnnouncementEmbed }
 type Config = {
   lives: boolean; videos: boolean; shorts: boolean; requireWords: string[]; excludeWords: string[]; endAction: 'edit' | 'delete' | 'none'
   liveRole: { userId: string | null; roleByGuild: Record<string, string> }
+  // null = same channels as the lives
+  videoTargets: AnnouncementTarget[] | null; clipTargets: AnnouncementTarget[] | null
 }
+type Payloads = { live: Payload; video: Payload; clip: Payload }
+type Kind = keyof Payloads
 type Subscription = {
-  id: number; platform: Platform; channel: string; displayName: string; targets: AnnouncementTarget[]; payloads: { live: Payload; video: Payload }; config: Config; enabled: boolean
+  id: number; platform: Platform; channel: string; displayName: string; targets: AnnouncementTarget[]; payloads: Payloads; config: Config; enabled: boolean
   state: { live: boolean; title: string | null; game: string | null; peakViewers: number; startedAt: number | null; lastVideoAt: number | null; checkedAt: number | null; error: string | null }
 }
 type History = { id: number; subscriptionId: number; displayName: string; platform: Platform; kind: 'live' | 'video' | 'short' | 'end' | 'test'; title: string | null; url: string | null; channels: number; at: number }
@@ -52,13 +57,23 @@ const PLATFORM: Record<Platform, { label: string; color: string; hint: string }>
   kick: { label: 'Kick', color: '#53fc18', hint: 'Nom de la chaîne (kick.com/…)' },
   tiktok: { label: 'TikTok', color: '#ff0050', hint: '@nom du compte (tiktok.com/@…)' },
 }
-const KIND: Record<History['kind'], string> = { live: '🔴 Live', video: '📺 Vidéo', short: '📱 Short', end: '⚫ Fin de live', test: '🧪 Test' }
+const KIND: Record<History['kind'], string> = { live: '🔴 Live', video: '📺 Vidéo', short: '🎬 Clip ou Short', end: '⚫ Fin de live', test: '🧪 Test' }
+const KINDS: Record<Platform, Kind[]> = { twitch: ['live', 'clip'], youtube: ['live', 'video', 'clip'], kick: ['live'], tiktok: ['live'] }
+const clipLabel = (platform: Platform) => (platform === 'youtube' ? 'Shorts' : 'Clips')
+const kindLabel = (kind: Kind, platform: Platform) => ({ live: 'Lives', video: 'Vidéos', clip: clipLabel(platform) })[kind]
+const ENABLED: Record<Kind, 'lives' | 'videos' | 'shorts'> = { live: 'lives', video: 'videos', clip: 'shorts' }
+const targetsOf = (s: Pick<Subscription, 'targets' | 'config'>, kind: Kind) => (kind === 'live' ? s.targets : s.config[`${kind}Targets`] ?? s.targets)
+// The kinds a channel announces, with the channels they go to
+const announced = (s: Pick<Subscription, 'targets' | 'config' | 'platform'>) => KINDS[s.platform].filter((k) => s.config[ENABLED[k]])
+const salonCount = (s: Subscription) => new Set(announced(s).flatMap((k) => targetsOf(s, k).map((t) => t.channelId))).size
+const withEmbed = (p: Payload): Payload => ({ ...p, embed: { ...EMPTY_EMBED, ...p.embed } })
 
-const DEFAULTS = (platform: Platform): { live: Payload; video: Payload } => ({
+const DEFAULTS = (platform: Platform): Payloads => ({
   live: { content: '🔴 **{streamer}** est en live !', embed: { ...EMPTY_EMBED, title: '{title}', url: '{url}', description: platform === 'tiktok' ? '👀 {viewers} spectateurs' : '🎮 {game}\n👀 {viewers} spectateurs', imageUrl: '{thumbnail}', color: PLATFORM[platform].color, timestamp: true } },
   video: { content: '📺 Nouvelle vidéo de **{streamer}** !', embed: { ...EMPTY_EMBED, title: '{title}', url: '{url}', imageUrl: '{thumbnail}', color: PLATFORM[platform].color, timestamp: true } },
+  clip: { content: `🎬 Nouveau ${platform === 'youtube' ? 'Short' : 'clip'} de **{streamer}** !`, embed: { ...EMPTY_EMBED, title: '{title}', url: '{url}', imageUrl: '{thumbnail}', color: PLATFORM[platform].color, timestamp: true } },
 })
-const EMPTY_CONFIG: Config = { lives: true, videos: true, shorts: false, requireWords: [], excludeWords: [], endAction: 'edit', liveRole: { userId: null, roleByGuild: {} } }
+const EMPTY_CONFIG: Config = { lives: true, videos: true, shorts: false, requireWords: [], excludeWords: [], endAction: 'edit', liveRole: { userId: null, roleByGuild: {} }, videoTargets: null, clipTargets: null }
 
 function PlatformBadge({ platform }: { platform: Platform }) {
   return <span className='rounded px-1.5 py-0.5 text-xs font-semibold text-white' style={{ background: PLATFORM[platform].color, color: platform === 'kick' ? '#000' : '#fff' }}>{PLATFORM[platform].label}</span>
@@ -76,18 +91,18 @@ function StreamsPage() {
   const refresh = () => qc.invalidateQueries({ queryKey: ['streams'] })
   const toggle = useMutation({ mutationFn: (s: Subscription) => api(`/streams/${s.id}`, { method: 'PUT', body: { enabled: !s.enabled } }), onSuccess: refresh })
   const test = useMutation({
-    mutationFn: (s: Subscription) => api<{ sent: number; total: number }>(`/streams/${s.id}/test`, { method: 'POST' }),
+    mutationFn: ({ s, kind }: { s: Subscription; kind: Kind }) => api<{ sent: number; total: number }>(`/streams/${s.id}/test?kind=${kind}`, { method: 'POST' }),
     onSuccess: (r) => { if (r.sent === r.total) toast.success('Essai envoyé, sans mention'); else toast.warning(`Essai envoyé dans ${r.sent} salon(s) sur ${r.total}`); refresh() },
   })
-  const runTest = async (s: Subscription) => {
-    if (await confirm(testConfirm(s.targets, data?.guilds ?? [], `un exemple d’annonce de live de ${s.displayName}`))) test.mutate(s)
+  const runTest = async (s: Subscription, kind: Kind) => {
+    if (await confirm(testConfirm(targetsOf(s, kind), data?.guilds ?? [], `un exemple d’annonce (${kindLabel(kind, s.platform).toLowerCase()}) de ${s.displayName}`))) test.mutate({ s, kind })
   }
   const remove = useMutation({ mutationFn: (s: Subscription) => api(`/streams/${s.id}`, { method: 'DELETE', body: { confirm: true } }), onSuccess: () => { toast.success('Abonnement supprimé'); setDeleting(null); refresh() } })
 
   return (
     <Page
       title='Streams, vidéos et flux'
-      description='Le bot annonce les lives Twitch, Kick, YouTube et TikTok, les nouvelles vidéos et Shorts YouTube, les vidéos TikTok et les nouveautés de n’importe quel flux RSS dans les salons que tu choisis. Un live n’est annoncé qu’une fois, et le message est mis à jour à la fin.'
+      description='Le bot annonce les lives Twitch, Kick, YouTube et TikTok, les clips Twitch, les vidéos et Shorts YouTube, les vidéos TikTok et les nouveautés de n’importe quel flux RSS. Lives, vidéos et clips peuvent aller dans des salons différents, avec leur propre message. Un live n’est annoncé qu’une fois, et le message est mis à jour à la fin.'
       actions={manage && tab === 'channels' && <Button onClick={() => setEditing({})}><Plus /> Ajouter une chaîne</Button>}
     >
       {!data ? <Skeleton className='h-96 w-full' /> : (
@@ -123,16 +138,25 @@ function StreamsPage() {
                             {!s.enabled && <Pill tone='warning'>En pause</Pill>}
                           </div>
                           <div className='truncate text-xs text-muted-foreground'>
-                            {s.state.live && s.state.title ? `${s.state.title}${s.state.game ? ` · ${s.state.game}` : ''} · depuis ${ago(s.state.startedAt)}` : `${s.targets.length} salon(s)`}
-                            {s.state.lastVideoAt ? ` · dernière vidéo ${ago(s.state.lastVideoAt)}` : ''}
+                            {s.state.live && s.state.title ? `${s.state.title}${s.state.game ? ` · ${s.state.game}` : ''} · depuis ${ago(s.state.startedAt)}` : `${announced(s).map((k) => kindLabel(k, s.platform)).join(', ') || 'Rien à annoncer'} · ${salonCount(s)} salon(s)`}
+                            {s.platform === 'youtube' && s.state.lastVideoAt ? ` · dernière vidéo ${ago(s.state.lastVideoAt)}` : ''}
                             {s.state.checkedAt ? ` · vérifié ${ago(s.state.checkedAt)}` : ' · pas encore vérifié'}
                           </div>
                           {s.state.error && <div className='text-xs text-destructive'>{s.state.error}</div>}
                         </div>
                         {manage && (
-                          <div className='flex items-center gap-2'>
+                          <div className='flex flex-wrap items-center gap-2'>
                             <Switch checked={s.enabled} onCheckedChange={() => toggle.mutate(s)} aria-label={`Activer ${s.displayName}`} />
-                            <Button size='sm' variant='outline' onClick={() => void runTest(s)} disabled={test.isPending || !s.targets.length}><FlaskConical /> {TEST_LABEL}</Button>
+                            {announced(s).length > 1 ? (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild><Button size='sm' variant='outline' disabled={test.isPending}><FlaskConical /> {TEST_LABEL}</Button></DropdownMenuTrigger>
+                                <DropdownMenuContent align='end'>
+                                  {announced(s).map((k) => <DropdownMenuItem key={k} onSelect={() => void runTest(s, k)}>{kindLabel(k, s.platform)}</DropdownMenuItem>)}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            ) : (
+                              <Button size='sm' variant='outline' onClick={() => void runTest(s, announced(s)[0] ?? 'live')} disabled={test.isPending || !targetsOf(s, announced(s)[0] ?? 'live').length}><FlaskConical /> {TEST_LABEL}</Button>
+                            )}
                             <Button size='icon' variant='ghost' aria-label={`Modifier ${s.displayName}`} onClick={() => setEditing(s)}><Pencil /></Button>
                             <DuplicateButton name={s.displayName} onClick={() => setEditing(copyOf(s))} />
                             <Button size='icon' variant='danger-ghost' aria-label={`Supprimer ${s.displayName}`} onClick={() => setDeleting(s)}><Trash2 /></Button>
@@ -239,14 +263,26 @@ function PayloadEditor({ value, onChange, idPrefix, guilds, target }: { value: P
   )
 }
 
+// Channels of videos or clips: the lives' ones until the kind gets its own
+function RouteEditor({ own, lives, onChange, guilds }: { own: AnnouncementTarget[] | null; lives: AnnouncementTarget[]; onChange: (targets: AnnouncementTarget[] | null) => void; guilds: AnnouncementTargetsPayload }) {
+  return (
+    <div className='grid gap-3'>
+      <label className='flex items-center gap-2 text-sm'>
+        <Switch checked={own === null} onCheckedChange={(same) => onChange(same ? null : lives)} /> Mêmes salons et mentions que les lives
+      </label>
+      {own !== null && <TargetsEditor guilds={guilds} targets={own} onChange={onChange} disabled={false} />}
+    </div>
+  )
+}
+
 function SubscriptionDialog({ initial, guilds, onClose }: { initial: Partial<Subscription>; guilds: AnnouncementTargetsPayload; onClose: () => void }) {
   const isNew = !initial.id
   const [platform, setPlatform] = useState<Platform>(initial.platform ?? 'twitch')
   const [channel, setChannel] = useState(initial.channel ?? '')
   const [displayName, setDisplayName] = useState(initial.displayName ?? '')
   const [targets, setTargets] = useState<AnnouncementTarget[]>(initial.targets ?? [])
-  const [payloads, setPayloads] = useState(() => initial.payloads
-    ? { live: { ...initial.payloads.live, embed: { ...EMPTY_EMBED, ...initial.payloads.live.embed } }, video: { ...initial.payloads.video, embed: { ...EMPTY_EMBED, ...initial.payloads.video.embed } } }
+  const [payloads, setPayloads] = useState<Payloads>(() => initial.payloads
+    ? { live: withEmbed(initial.payloads.live), video: withEmbed(initial.payloads.video), clip: withEmbed(initial.payloads.clip) }
     : DEFAULTS('twitch'))
   const [config, setConfig] = useState<Config>(initial.config ?? EMPTY_CONFIG)
   const [require, setRequire] = useState((initial.config?.requireWords ?? []).join(', '))
@@ -257,7 +293,7 @@ function SubscriptionDialog({ initial, guilds, onClose }: { initial: Partial<Sub
     mutationFn: () => {
       const body = {
         platform, channel, displayName, targets,
-        payloads: { live: { ...payloads.live, embed: cleanEmbed(payloads.live.embed) }, video: { ...payloads.video, embed: cleanEmbed(payloads.video.embed) } },
+        payloads: { live: { ...payloads.live, embed: cleanEmbed(payloads.live.embed) }, video: { ...payloads.video, embed: cleanEmbed(payloads.video.embed) }, clip: { ...payloads.clip, embed: cleanEmbed(payloads.clip.embed) } },
         config: { ...config, requireWords: split(require), excludeWords: split(exclude) },
       }
       return isNew ? api('/streams', { method: 'POST', body }) : api(`/streams/${initial.id}`, { method: 'PUT', body })
@@ -265,16 +301,20 @@ function SubscriptionDialog({ initial, guilds, onClose }: { initial: Partial<Sub
     onSuccess: () => { toast.success(isNew ? 'Chaîne ajoutée' : 'Chaîne modifiée'); onClose() },
   })
   const youtube = platform === 'youtube'
+  const clips = KINDS[platform].includes('clip')
+  const draft = { platform, targets, config }
+  const routes = announced(draft).map((k) => targetsOf(draft, k))
+  const noChannel = (!routes.length && !targets.length) || routes.some((r) => !r.length)
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className='max-h-[92svh] overflow-y-auto sm:max-w-5xl'>
         <DialogHeader><DialogTitle>{isNew ? 'Suivre une chaîne' : `Modifier ${initial.displayName}`}</DialogTitle></DialogHeader>
         <Tabs defaultValue='general'>
-          <TabsList className='flex-wrap'>
+          <TabsList className='h-auto flex-wrap [&>button]:h-8 [&>button]:flex-none'>
             <TabsTrigger value='general'>Chaîne</TabsTrigger>
-            <TabsTrigger value='targets'>Salons ({targets.length})</TabsTrigger>
-            <TabsTrigger value='live'>Message de live</TabsTrigger>
-            {youtube && <TabsTrigger value='video'>Message de vidéo</TabsTrigger>}
+            <TabsTrigger value='live'>Lives ({targets.length})</TabsTrigger>
+            {youtube && <TabsTrigger value='video'>Vidéos ({targetsOf(draft, 'video').length})</TabsTrigger>}
+            {clips && <TabsTrigger value='clip'>{clipLabel(platform)} ({targetsOf(draft, 'clip').length})</TabsTrigger>}
             <TabsTrigger value='role'>Rôle en live</TabsTrigger>
           </TabsList>
           <TabsContent value='general' className='mt-4 grid gap-4'>
@@ -298,7 +338,7 @@ function SubscriptionDialog({ initial, guilds, onClose }: { initial: Partial<Sub
             <div className='flex flex-wrap gap-6'>
               <label className='flex items-center gap-2 text-sm'><Switch checked={config.lives} onCheckedChange={(v) => set({ lives: v })} /> Annoncer les lives</label>
               {youtube && <label className='flex items-center gap-2 text-sm'><Switch checked={config.videos} onCheckedChange={(v) => set({ videos: v })} /> Nouvelles vidéos</label>}
-              {youtube && <label className='flex items-center gap-2 text-sm'><Switch checked={config.shorts} onCheckedChange={(v) => set({ shorts: v })} /> Shorts</label>}
+              {clips && <label className='flex items-center gap-2 text-sm'><Switch checked={config.shorts} onCheckedChange={(v) => set({ shorts: v })} /> {youtube ? 'Shorts' : 'Clips'}</label>}
             </div>
             <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-3'>
               <div className='grid gap-1.5'>
@@ -322,15 +362,21 @@ function SubscriptionDialog({ initial, guilds, onClose }: { initial: Partial<Sub
               </div>
             </div>
           </TabsContent>
-          <TabsContent value='targets' className='mt-4'>
+          <TabsContent value='live' className='mt-4 grid gap-6'>
             <TargetsEditor guilds={guilds} targets={targets} onChange={setTargets} disabled={false} />
-          </TabsContent>
-          <TabsContent value='live' className='mt-4'>
             <PayloadEditor idPrefix='live' value={payloads.live} onChange={(live) => setPayloads({ ...payloads, live })} guilds={guilds} target={targets[0]} />
           </TabsContent>
           {youtube && (
-            <TabsContent value='video' className='mt-4'>
-              <PayloadEditor idPrefix='video' value={payloads.video} onChange={(video) => setPayloads({ ...payloads, video })} guilds={guilds} target={targets[0]} />
+            <TabsContent value='video' className='mt-4 grid gap-6'>
+              <RouteEditor own={config.videoTargets} lives={targets} onChange={(videoTargets) => set({ videoTargets })} guilds={guilds} />
+              <PayloadEditor idPrefix='video' value={payloads.video} onChange={(video) => setPayloads({ ...payloads, video })} guilds={guilds} target={targetsOf(draft, 'video')[0]} />
+            </TabsContent>
+          )}
+          {clips && (
+            <TabsContent value='clip' className='mt-4 grid gap-6'>
+              {!youtube && <p className='text-sm text-muted-foreground'>Le bot regarde les nouveaux clips de la chaîne toutes les 5 min et en annonce 3 au plus à chaque fois. Le filtre de mots s’applique au titre du clip. {'{clip.auteur}'} donne le nom de la personne qui l’a créé.</p>}
+              <RouteEditor own={config.clipTargets} lives={targets} onChange={(clipTargets) => set({ clipTargets })} guilds={guilds} />
+              <PayloadEditor idPrefix='clip' value={payloads.clip} onChange={(clip) => setPayloads({ ...payloads, clip })} guilds={guilds} target={targetsOf(draft, 'clip')[0]} />
             </TabsContent>
           )}
           <TabsContent value='role' className='mt-4 grid gap-4'>
@@ -354,7 +400,7 @@ function SubscriptionDialog({ initial, guilds, onClose }: { initial: Partial<Sub
         </Tabs>
         <DialogFooter>
           <Button variant='outline' onClick={onClose}>Annuler</Button>
-          <Button onClick={() => save.mutate()} disabled={!channel.trim() || !targets.length || save.isPending}><Save /> Enregistrer</Button>
+          <Button onClick={() => save.mutate()} disabled={!channel.trim() || noChannel || save.isPending}><Save /> Enregistrer</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

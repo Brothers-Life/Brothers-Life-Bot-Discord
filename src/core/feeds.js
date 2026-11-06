@@ -50,7 +50,7 @@ export function defaultFeedPayload(kind) {
 	return { content: '📰 Nouveau sur **{flux.nom}**', embed: { title: '{item.titre}', url: '{item.lien}', description: '{item.description}', imageUrl: '{item.image}', color: COLORS.rss, timestamp: true } };
 }
 
-export function normalizeFeedConfig(input = {}, kind = 'rss') {
+export function normalizeFeedConfig(input = {}) {
 	const minutes = Math.round(Number(input.intervalMinutes));
 	return {
 		intervalMinutes: Number.isFinite(minutes) ? Math.min(1440, Math.max(5, minutes)) : 15,
@@ -229,7 +229,7 @@ export function createFeeds({ db, network, audit, executor, logs, fetchImpl = fe
 		if (!row) return null;
 		return {
 			id: row.id, kind: row.kind, url: row.url, displayName: row.display_name, targets: JSON.parse(row.targets), payload: JSON.parse(row.payload),
-			config: normalizeFeedConfig(JSON.parse(row.config), row.kind), enabled: Boolean(row.enabled), createdBy: row.created_by, createdAt: row.created_at,
+			config: normalizeFeedConfig(JSON.parse(row.config)), enabled: Boolean(row.enabled), createdBy: row.created_by, createdAt: row.created_at,
 			state: toState(await q.state.get(row.id)),
 		};
 	}
@@ -367,7 +367,7 @@ export function createFeeds({ db, network, audit, executor, logs, fetchImpl = fe
 		return {
 			kind, url, targets, payload,
 			displayName: String(input.displayName ?? current?.displayName ?? '').trim().slice(0, 100),
-			config: normalizeFeedConfig(input.config ?? current?.config ?? {}, kind),
+			config: normalizeFeedConfig(input.config ?? current?.config ?? {}),
 			enabled: input.enabled ?? current?.enabled ?? true,
 		};
 	}

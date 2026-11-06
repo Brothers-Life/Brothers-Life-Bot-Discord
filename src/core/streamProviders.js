@@ -54,6 +54,24 @@ export async function twitchLive({ fetchImpl, token, clientId, clientSecret }, l
 	return live;
 }
 
+// Clips of a channel made since `since`, newest first (Twitch sorts them by views). `ids` keeps login -> broadcaster id
+export async function twitchClips({ fetchImpl, token, clientId, clientSecret, ids }, login, since) {
+	const access = await token('twitch', 'https://id.twitch.tv/oauth2/token', clientId, clientSecret);
+	const headers = { 'Client-Id': clientId, Authorization: `Bearer ${access}` };
+	if (!ids.has(login)) {
+		const response = await fetchImpl(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(login)}`, { headers });
+		if (!response.ok) throw new Error(`Twitch a répondu HTTP ${response.status}.`);
+		const user = (await response.json()).data?.[0];
+		if (!user) throw new Error('Chaîne Twitch introuvable.');
+		ids.set(login, user.id);
+	}
+	const response = await fetchImpl(`https://api.twitch.tv/helix/clips?broadcaster_id=${ids.get(login)}&first=100&started_at=${encodeURIComponent(new Date(since).toISOString())}`, { headers });
+	if (!response.ok) throw new Error(`Twitch a répondu HTTP ${response.status}.`);
+	return ((await response.json()).data ?? [])
+		.map(c => ({ id: c.id, title: c.title ?? '', url: c.url, thumbnail: c.thumbnail_url ?? '', name: c.broadcaster_name ?? login, creator: c.creator_name ?? '', publishedAt: Date.parse(c.created_at) || 0 }))
+		.sort((a, b) => b.publishedAt - a.publishedAt);
+}
+
 // --- Kick (public API) ------------------------------------------------------------------------------
 export async function kickLive({ fetchImpl, token, clientId, clientSecret }, slugs) {
 	const access = await token('Kick', 'https://id.kick.com/oauth/token', clientId, clientSecret);

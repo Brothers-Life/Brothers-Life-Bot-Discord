@@ -41,7 +41,10 @@ export function registerStreamRoutes(app, { core }) {
 		await streams.remove(request.actor, request.params.id);
 		return { ok: true };
 	});
-	app.post('/api/streams/:id/test', { config: { permission: 'notifications.manage' }, schema: { params: idParam } }, async (request) => streams.test(request.actor, request.params.id));
+	app.post('/api/streams/:id/test', {
+		config: { permission: 'notifications.manage' },
+		schema: { params: idParam, querystring: { type: 'object', properties: { kind: { type: 'string', enum: ['live', 'video', 'clip'] } } } },
+	}, async (request) => streams.test(request.actor, request.params.id, request.query.kind));
 	app.put('/api/streams/credentials', {
 		config: { permission: 'notifications.manage' },
 		schema: { body: { type: 'object', properties: { twitch: { type: ['object', 'null'] }, kick: { type: ['object', 'null'] }, youtubeApiKey: { type: ['string', 'null'], maxLength: 200 } } } },
