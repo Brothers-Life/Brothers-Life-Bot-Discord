@@ -2,20 +2,27 @@ import { definePermission } from './permissions.js';
 import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
 import { normalizePayload, normalizeTargets } from './announcements.js';
 import { fillPayload } from './onboarding.js';
-import { createTokenCache, kickLive, twitchLive, youtubeChannelId, youtubeLive, youtubeVideos } from './streamProviders.js';
+import { createTokenCache, kickLive, tiktokLive, twitchLive, youtubeChannelId, youtubeLive, youtubeVideos } from './streamProviders.js';
 
 definePermission('notifications.view', { label: 'Voir les notifications de streams et vidéos', category: 'Communauté' });
 definePermission('notifications.manage', { label: 'Gérer les notifications de streams et vidéos (et les clés des plateformes)', category: 'Communauté' });
 
 const SNOWFLAKE = /^\d{17,20}$/;
 const YOUTUBE_EVERY = 5 * 60_000;
-const COLORS = { twitch: '#9146ff', youtube: '#ff0000', kick: '#53fc18' };
-export const PLATFORMS = { twitch: 'Twitch', youtube: 'YouTube', kick: 'Kick' };
+const COLORS = { twitch: '#9146ff', youtube: '#ff0000', kick: '#53fc18', tiktok: '#ff0050' };
+export const PLATFORMS = { twitch: 'Twitch', youtube: 'YouTube', kick: 'Kick', tiktok: 'TikTok' };
+
+// Page of a followed channel
+export function channelUrl(platform, channel) {
+	if (platform === 'youtube') return `https://www.youtube.com/channel/${channel}`;
+	if (platform === 'tiktok') return `https://www.tiktok.com/@${channel}/live`;
+	return `https://${platform === 'twitch' ? 'twitch.tv' : 'kick.com'}/${channel}`;
+}
 
 export function defaultPayloads(platform) {
 	const color = COLORS[platform];
 	return {
-		live: { content: '🔴 **{streamer}** est en live !', embed: { title: '{title}', url: '{url}', description: '🎮 {game}\n👀 {viewers} spectateurs', imageUrl: '{thumbnail}', color, timestamp: true } },
+		live: { content: '🔴 **{streamer}** est en live !', embed: { title: '{title}', url: '{url}', description: platform === 'tiktok' ? '👀 {viewers} spectateurs' : '🎮 {game}\n👀 {viewers} spectateurs', imageUrl: '{thumbnail}', color, timestamp: true } },
 		video: { content: '📺 Nouvelle vidéo de **{streamer}** !', embed: { title: '{title}', url: '{url}', imageUrl: '{thumbnail}', color, timestamp: true } },
 	};
 }
@@ -223,9 +230,10 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 	async function validate(actor, input, current) {
 		const platform = current?.platform ?? input.platform;
 		if (!PLATFORMS[platform]) throw new ValidationError('Plateforme inconnue.');
-		let channel = String(input.channel ?? current?.channel ?? '').trim().replace(/^https?:\/\/(www\.)?(twitch\.tv|kick\.com)\//i, '').replace(/\/.*$/, '').toLowerCase();
+		let channel = String(input.channel ?? current?.channel ?? '').trim().replace(/^https?:\/\/(www\.|m\.)?(twitch\.tv|kick\.com|tiktok\.com)\//i, '').replace(/[/?#].*$/, '').replace(/^@/, '').toLowerCase();
 		if (platform === 'twitch' && !/^[a-z0-9_]{3,25}$/.test(channel)) throw new ValidationError('Nom de chaîne Twitch invalide.');
 		if (platform === 'kick' && !/^[a-z0-9_-]{2,25}$/.test(channel)) throw new ValidationError('Nom de chaîne Kick invalide.');
+		if (platform === 'tiktok' && !/^[a-z0-9_.]{2,24}$/.test(channel)) throw new ValidationError('Nom de compte TikTok invalide (le @nom du profil).');
 		if (platform === 'youtube') channel = await youtubeChannelId({ fetchImpl }, input.channel ?? current.channel).catch((error) => { throw new ValidationError(error.message); });
 		const targets = normalizeTargets(input.targets ?? current?.targets ?? []);
 		if (!targets.length) throw new ValidationError('Choisis au moins un salon.');
@@ -274,7 +282,7 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 			const s = await getOrThrow(id);
 			const { messages } = await notify(s, 'live', {
 				name: s.displayName, title: 'Live de test · ceci est un exemple', game: 'Grand Theft Auto V', viewers: 42,
-				url: s.platform === 'youtube' ? `https://www.youtube.com/channel/${s.channel}` : `https://${s.platform === 'twitch' ? 'twitch.tv' : 'kick.com'}/${s.channel}`,
+				url: channelUrl(s.platform, s.channel),
 				thumbnail: 'https://static-cdn.jtvnw.net/ttv-static/404_preview-1280x720.jpg',
 			}, 'test');
 			await record(actor, 'stream.test', s, { channels: messages.length });
@@ -309,7 +317,7 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 			return this.credentials();
 		},
 
-		// Every minute: Twitch and Kick in batches, YouTube every 5 minutes per channel
+		// Every minute: Twitch and Kick in batches, TikTok account by account, YouTube every 5 minutes per channel
 		async tick() {
 			const subs = (await Promise.all((await q.all.all()).map(toSubscription))).filter(s => s.enabled);
 			const c = await credentials();
@@ -330,6 +338,18 @@ export function createStreams({ db, network, audit, executor, settings, logs, va
 				catch (error) {
 					logger.warn(`${platform} check failed:`, error.message);
 					for (const s of list) await setState(s.id, { checked_at: now(), error: error.message });
+				}
+			}
+			// The same account followed twice (other channels, other messages) is asked once
+			const tiktok = new Map();
+			for (const s of subs.filter(x => x.platform === 'tiktok')) {
+				try {
+					if (!tiktok.has(s.channel)) tiktok.set(s.channel, await tiktokLive({ fetchImpl }, s.channel));
+					await handleLive(s, tiktok.get(s.channel));
+					await setState(s.id, { checked_at: now(), error: null });
+				}
+				catch (error) {
+					await setState(s.id, { checked_at: now(), error: error.message });
 				}
 			}
 			for (const s of subs.filter(x => x.platform === 'youtube')) {

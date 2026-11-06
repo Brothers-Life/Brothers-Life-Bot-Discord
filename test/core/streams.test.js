@@ -23,7 +23,7 @@ function feed(videos) {
 
 async function setup() {
 	let clock = Date.UTC(2026, 9, 1, 18, 0);
-	const world = { twitch: [], videos: [], tokenCalls: 0 };
+	const world = { twitch: [], videos: [], tiktok: null, tokenCalls: 0, tiktokCalls: 0 };
 	const fetchImpl = async (url) => {
 		if (url.startsWith('https://id.twitch.tv/')) {
 			world.tokenCalls++;
@@ -31,6 +31,10 @@ async function setup() {
 		}
 		if (url.startsWith('https://api.twitch.tv/helix/streams')) return json({ data: world.twitch });
 		if (url.startsWith('https://www.youtube.com/feeds/')) return text(feed(world.videos));
+		if (url.startsWith('https://www.tiktok.com/api-live/user/room/')) {
+			world.tiktokCalls++;
+			return json(world.tiktok);
+		}
 		if (url.includes('/live')) return text('<html>offline</html>');
 		return json({}, 404);
 	};
@@ -129,4 +133,53 @@ test('test message and permissions', async () => {
 	await assert.rejects(streams.save(nobody, { platform: 'kick', channel: 'x2', targets: [target] }), /notifications.manage/);
 	await streams.remove(owner, sub.id);
 	assert.equal((await streams.list()).length, 0);
+});
+
+const tiktokRoom = (status, extra = {}) => ({
+	statusCode: 0, message: '',
+	data: {
+		user: { uniqueId: 'brl.officiel', nickname: 'Brothers Life', roomId: status === 2 ? '7704837379474852622' : '', status },
+		liveRoom: { title: 'Course de la bêta', status, startTime: 1793922307, coverUrl: 'https://cover.tiktokcdn/x.webp', liveRoomStats: { userCount: 37 }, ...extra },
+	},
+});
+
+test('tiktok: profile link accepted, live announced once (no key), account asked once, unknown account reported', async () => {
+	const { streams, owner, executor, world, advance } = await setup();
+	const sub = await streams.save(owner, { platform: 'tiktok', channel: 'https://www.tiktok.com/@BRL.Officiel?lang=fr', targets: [target] });
+	assert.equal(sub.channel, 'brl.officiel');
+	assert.equal(sub.payloads.live.embed.description, '👀 {viewers} spectateurs', 'TikTok gives no game');
+	await assert.rejects(streams.save(owner, { platform: 'tiktok', channel: 'pas valide !', targets: [target] }), /TikTok invalide/);
+	// The same account followed a second time (other message): one call per check
+	await streams.save(owner, { platform: 'tiktok', channel: '@brl.officiel', targets: [target], config: { lives: true } });
+
+	world.tiktok = tiktokRoom(4);
+	await streams.tick();
+	assert.equal(executor.announcements.length, 0);
+	assert.equal((await streams.get(sub.id)).state.error, null);
+	assert.equal(world.tiktokCalls, 1);
+
+	world.tiktok = tiktokRoom(2);
+	advance(60_000);
+	await streams.tick();
+	assert.equal(executor.announcements.length, 2, 'one message per subscription');
+	const sent = executor.announcements[0];
+	assert.match(sent.payload.content, /Brothers Life\*\* est en live/);
+	assert.equal(sent.payload.embed.title, 'Course de la bêta');
+	assert.equal(sent.payload.embed.url, 'https://www.tiktok.com/@brl.officiel/live');
+	assert.equal(sent.payload.embed.description, '👀 37 spectateurs');
+
+	advance(60_000);
+	await streams.tick();
+	assert.equal(executor.announcements.length, 2, 'same live: no second message');
+	assert.equal((await streams.get(sub.id)).state.live, true);
+
+	world.tiktok = tiktokRoom(4);
+	advance(60_000);
+	await streams.tick();
+	assert.equal((await streams.get(sub.id)).state.live, false);
+
+	world.tiktok = { data: null, message: 'user_not_found', statusCode: 19881007 };
+	advance(60_000);
+	await streams.tick();
+	assert.match((await streams.get(sub.id)).state.error, /introuvable/);
 });

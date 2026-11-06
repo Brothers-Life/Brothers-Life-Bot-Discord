@@ -2,7 +2,7 @@ const idParam = { type: 'object', properties: { id: { type: 'integer' } }, requi
 const body = {
 	type: 'object',
 	properties: {
-		platform: { type: 'string', enum: ['twitch', 'youtube', 'kick'] },
+		platform: { type: 'string', enum: ['twitch', 'youtube', 'kick', 'tiktok'] },
 		channel: { type: 'string', maxLength: 200 },
 		displayName: { type: 'string', maxLength: 100 },
 		targets: { type: 'array', maxItems: 50 },

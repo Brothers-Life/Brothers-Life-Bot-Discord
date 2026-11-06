@@ -129,3 +129,25 @@ export async function youtubeLive({ fetchImpl, apiKey }, channelId) {
 	const viewers = Number(/"concurrentViewers":"(\d+)"/.exec(html)?.[1] ?? 0);
 	return { id, title, game: '', viewers, name, thumbnail: `https://i.ytimg.com/vi/${id}/maxresdefault_live.jpg`, startedAt: null, url: `https://www.youtube.com/watch?v=${id}` };
 }
+
+// TikTok has no public API for lives: the endpoint of its own web site answers without a key, one account per call
+// (an empty answer without a browser User-Agent)
+const TIKTOK_HEADERS = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36', Accept: 'application/json', 'Accept-Language': 'fr-FR,fr;q=0.9' };
+const TIKTOK_LIVE = 2;
+
+export async function tiktokLive({ fetchImpl }, username) {
+	const response = await fetchImpl(`https://www.tiktok.com/api-live/user/room/?aid=1988&app_name=tiktok_web&device_platform=web_pc&sourceType=54&uniqueId=${encodeURIComponent(username)}`, { headers: TIKTOK_HEADERS });
+	if (!response.ok) throw new Error(`TikTok a répondu HTTP ${response.status}.`);
+	const body = await response.json().catch(() => null);
+	if (body?.message === 'user_not_found') throw new Error('Compte TikTok introuvable.');
+	const user = body?.data?.user;
+	if (!user) throw new Error('TikTok n’a pas donné l’état du compte (réessai à la prochaine vérification).');
+	const room = body.data.liveRoom ?? {};
+	if (room.status !== TIKTOK_LIVE && user.status !== TIKTOK_LIVE) return null;
+	return {
+		// One room per live
+		id: String(user.roomId || room.startTime), title: room.title ?? '', game: '', viewers: room.liveRoomStats?.userCount ?? 0,
+		name: user.nickname || user.uniqueId, thumbnail: room.coverUrl ?? '', startedAt: room.startTime ? room.startTime * 1000 : null,
+		url: `https://www.tiktok.com/@${user.uniqueId}/live`,
+	};
+}

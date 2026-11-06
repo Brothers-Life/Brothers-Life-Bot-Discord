@@ -32,7 +32,7 @@ export const Route = createFileRoute('/_authenticated/streams')({
   component: StreamsPage,
 })
 
-type Platform = 'twitch' | 'youtube' | 'kick'
+type Platform = 'twitch' | 'youtube' | 'kick' | 'tiktok'
 type Payload = { content: string; embed: AnnouncementEmbed }
 type Config = {
   lives: boolean; videos: boolean; shorts: boolean; requireWords: string[]; excludeWords: string[]; endAction: 'edit' | 'delete' | 'none'
@@ -50,11 +50,12 @@ const PLATFORM: Record<Platform, { label: string; color: string; hint: string }>
   twitch: { label: 'Twitch', color: '#9146ff', hint: 'Nom de la chaîne (twitch.tv/…)' },
   youtube: { label: 'YouTube', color: '#ff0000', hint: '@nom de la chaîne ou identifiant UC…' },
   kick: { label: 'Kick', color: '#53fc18', hint: 'Nom de la chaîne (kick.com/…)' },
+  tiktok: { label: 'TikTok', color: '#ff0050', hint: '@nom du compte (tiktok.com/@…)' },
 }
 const KIND: Record<History['kind'], string> = { live: '🔴 Live', video: '📺 Vidéo', short: '📱 Short', end: '⚫ Fin de live', test: '🧪 Test' }
 
 const DEFAULTS = (platform: Platform): { live: Payload; video: Payload } => ({
-  live: { content: '🔴 **{streamer}** est en live !', embed: { ...EMPTY_EMBED, title: '{title}', url: '{url}', description: '🎮 {game}\n👀 {viewers} spectateurs', imageUrl: '{thumbnail}', color: PLATFORM[platform].color, timestamp: true } },
+  live: { content: '🔴 **{streamer}** est en live !', embed: { ...EMPTY_EMBED, title: '{title}', url: '{url}', description: platform === 'tiktok' ? '👀 {viewers} spectateurs' : '🎮 {game}\n👀 {viewers} spectateurs', imageUrl: '{thumbnail}', color: PLATFORM[platform].color, timestamp: true } },
   video: { content: '📺 Nouvelle vidéo de **{streamer}** !', embed: { ...EMPTY_EMBED, title: '{title}', url: '{url}', imageUrl: '{thumbnail}', color: PLATFORM[platform].color, timestamp: true } },
 })
 const EMPTY_CONFIG: Config = { lives: true, videos: true, shorts: false, requireWords: [], excludeWords: [], endAction: 'edit', liveRole: { userId: null, roleByGuild: {} } }
@@ -86,13 +87,13 @@ function StreamsPage() {
   return (
     <Page
       title='Streams, vidéos et flux'
-      description='Le bot annonce les lives Twitch, Kick et YouTube, les nouvelles vidéos et Shorts YouTube, les vidéos TikTok et les nouveautés de n’importe quel flux RSS dans les salons que tu choisis. Un live n’est annoncé qu’une fois, et le message est mis à jour à la fin.'
+      description='Le bot annonce les lives Twitch, Kick, YouTube et TikTok, les nouvelles vidéos et Shorts YouTube, les vidéos TikTok et les nouveautés de n’importe quel flux RSS dans les salons que tu choisis. Un live n’est annoncé qu’une fois, et le message est mis à jour à la fin.'
       actions={manage && tab === 'channels' && <Button onClick={() => setEditing({})}><Plus /> Ajouter une chaîne</Button>}
     >
       {!data ? <Skeleton className='h-96 w-full' /> : (
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className='h-auto flex-wrap [&>button]:h-8 [&>button]:flex-none'>
-            <TabsTrigger value='channels'><Tv /> Chaînes (Twitch, Kick, YouTube)</TabsTrigger>
+            <TabsTrigger value='channels'><Tv /> Chaînes (Twitch, Kick, YouTube, TikTok)</TabsTrigger>
             <TabsTrigger value='feeds'><Rss /> Flux RSS et TikTok</TabsTrigger>
           </TabsList>
           <TabsContent value='feeds' className='mt-4'>
@@ -107,7 +108,7 @@ function StreamsPage() {
                 { label: 'Chaînes en erreur', value: data.subscriptions.filter((s) => s.state.error).length, icon: AlertTriangle, tone: data.subscriptions.some((s) => s.state.error) ? 'warning' : 'neutral' },
               ]} />
               <Section title={`${data.subscriptions.length} chaîne${data.subscriptions.length > 1 ? 's' : ''} suivie${data.subscriptions.length > 1 ? 's' : ''}`}>
-                {!data.subscriptions.length ? <EmptyState title='Aucune chaîne suivie'>Ajoute une chaîne Twitch, YouTube ou Kick à annoncer.</EmptyState> : (
+                {!data.subscriptions.length ? <EmptyState title='Aucune chaîne suivie'>Ajoute une chaîne Twitch, YouTube, Kick ou un compte TikTok à annoncer.</EmptyState> : (
                   <ul className='divide-y'>
                     {data.subscriptions.map((s) => (
                       <li key={s.id} className='flex flex-wrap items-center gap-3 px-4 py-3'>
@@ -191,7 +192,7 @@ function CredentialsSection({ credentials: c }: { credentials: Credentials }) {
   return (
     <Section
       title='Clés des plateformes'
-      description='Twitch et Kick demandent une application développeur (ID client et secret). YouTube marche sans clé ; une clé API YouTube Data détecte les lives de façon plus fiable. Les secrets ne sont jamais réaffichés.'
+      description='Twitch et Kick demandent une application développeur (ID client et secret). YouTube et TikTok marchent sans clé ; une clé API YouTube Data détecte les lives de façon plus fiable. Les secrets ne sont jamais réaffichés.'
       actions={<Button size='sm' onClick={() => save.mutate()} disabled={save.isPending}><KeyRound /> Enregistrer</Button>}
     >
       <div className='grid grid-cols-[minmax(0,1fr)] gap-5 p-4 lg:grid-cols-3'>
