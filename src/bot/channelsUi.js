@@ -20,11 +20,16 @@ export function captchaModal() {
 	);
 }
 
-// The code drawn with noise, lines and slanted letters: easy for people, annoying for bots
+// The code drawn with noise, lines and slanted letters: easy for people, annoying for bots.
+// 16:9 with the letters in the middle: Discord on phones crops images wider than that (the first and last
+// letters were cut off on the old 320×110 image)
+export const CAPTCHA_SIZE = { width: 480, height: 270 };
+// Horizontal band where the letters are drawn, away from the edges
+const CAPTCHA_TEXT_BAND = [80, 400];
+
 export function captchaImage(code) {
 	registerFonts();
-	const width = 320;
-	const height = 110;
+	const { width, height } = CAPTCHA_SIZE;
 	const canvas = createCanvas(width, height);
 	const ctx = canvas.getContext('2d');
 	const random = (min, max) => min + Math.random() * (max - min);
@@ -42,13 +47,16 @@ export function captchaImage(code) {
 		ctx.bezierCurveTo(random(0, width), random(0, height), random(0, width), random(0, height), random(0, width), random(0, height));
 		ctx.stroke();
 	}
-	const step = (width - 40) / code.length;
+	// Each letter centred in its own slot of the band, turned around its own centre: it never leaves the image
+	const [left, right] = CAPTCHA_TEXT_BAND;
+	const step = (right - left) / code.length;
 	[...code].forEach((char, i) => {
 		ctx.save();
-		ctx.translate(30 + i * step + random(-4, 4), height / 2 + random(-10, 10));
-		ctx.rotate(random(-0.45, 0.45));
-		ctx.font = `${Math.round(random(44, 56))}px "Poppins Bold"`;
+		ctx.translate(left + (i + 0.5) * step + random(-4, 4), height / 2 + random(-14, 14));
+		ctx.rotate(random(-0.4, 0.4));
+		ctx.font = `${Math.round(random(52, 62))}px "Poppins Bold"`;
 		ctx.fillStyle = `hsl(${Math.round(random(20, 45))}, 100%, ${Math.round(random(60, 80))}%)`;
+		ctx.textAlign = 'center';
 		ctx.textBaseline = 'middle';
 		ctx.fillText(char, 0, 0);
 		ctx.restore();
