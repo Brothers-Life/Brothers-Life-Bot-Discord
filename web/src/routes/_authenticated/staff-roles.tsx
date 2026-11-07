@@ -3,6 +3,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Crown, RefreshCw, Wand2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { showRoleOrder, type RoleOrder } from '@/features/staff/role-order'
 import { api } from '@/lib/api'
 import type { StaffRolesPayload } from '@/lib/types'
 import { useMe } from '@/hooks/use-me'
@@ -56,8 +57,12 @@ function StaffRolesPage() {
     },
   })
   const sync = useMutation({
-    mutationFn: () => api<{ changed: number }>('/staff-roles/sync', { method: 'POST' }),
-    onSuccess: (r) => toast.success(r.changed ? `${r.changed} membre(s) mis à jour` : 'Tout est déjà à jour'),
+    mutationFn: () => api<{ changed: number; order: RoleOrder[] }>('/staff-roles/sync', { method: 'POST' }),
+    onSuccess: (r) => {
+      if (r.changed) toast.success(`${r.changed} membre(s) mis à jour`)
+      else if (!r.order.some((o) => o.moved)) toast.success('Tout est déjà à jour')
+      showRoleOrder(r.order)
+    },
   })
 
   return (

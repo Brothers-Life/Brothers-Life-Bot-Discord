@@ -3,6 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, ArrowRight, ArrowUp, ChevronDown, Copy, CopyPlus, Download, GitMerge, Network, Pencil, Plus, Search, Share2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { showRoleOrder, type RoleOrder } from '@/features/staff/role-order'
 import { api } from '@/lib/api'
 import type { Rank, RanksPayload, Role } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -491,6 +492,7 @@ function ImportDialog({ onClose, onDone }: { onClose: () => void; onDone: () => 
 
 type CopyCandidate = Role & { ranks: string[]; target: { id: string; editable?: boolean; dangerous?: boolean } | null }
 type CopyResult = { roleId: string; name: string; status: 'created' | 'updated' | 'error'; error?: string; ranks?: string[] }
+type CopyResponse = { results: CopyResult[]; order: RoleOrder | null }
 
 function CopyRolesDialog({ isOwner, onClose, onDone }: { isOwner: boolean; onClose: () => void; onDone: () => void }) {
   const [from, setFrom] = useState('')
@@ -515,13 +517,14 @@ function CopyRolesDialog({ isOwner, onClose, onDone }: { isOwner: boolean; onClo
   const updates = chosen.filter((r) => r.target).length
 
   const run = useMutation({
-    mutationFn: () => api<CopyResult[]>('/ranks/copy-roles', { method: 'POST', body: { from, to, roleIds: chosen.map((r) => r.id) } }),
-    onSuccess: (results) => {
+    mutationFn: () => api<CopyResponse>('/ranks/copy-roles', { method: 'POST', body: { from, to, roleIds: chosen.map((r) => r.id) } }),
+    onSuccess: ({ results, order }) => {
       const created = results.filter((r) => r.status === 'created').length
       const updated = results.filter((r) => r.status === 'updated').length
       const linked = results.reduce((n, r) => n + (r.ranks?.length ?? 0), 0)
       toast.success(`${created} rôle(s) créé(s), ${updated} mis à jour${linked ? `, ${linked} liaison(s) de rang reprise(s)` : ''}.`)
       results.filter((r) => r.status === 'error').forEach((f) => toast.error(`${f.name} : ${f.error}`))
+      if (order) showRoleOrder([order])
       onDone()
       onClose()
     },
@@ -546,8 +549,8 @@ function CopyRolesDialog({ isOwner, onClose, onDone }: { isOwner: boolean; onClo
         <DialogHeader>
           <DialogTitle>Copier des rôles entre serveurs</DialogTitle>
           <DialogDescription>
-            Les rôles cochés sont créés sur le serveur cible avec leur couleur, leur affichage séparé et leurs permissions, dans le même ordre.
-            Si un rôle du même nom existe déjà, il est mis à jour et garde sa place. Les liaisons avec les rangs suivent.
+            Les rôles cochés sont créés sur le serveur cible avec leur couleur, leur affichage séparé et leurs permissions, ou mis à jour si un rôle du même nom existe.
+            Sur un serveur secondaire, ils se placent au-dessus de ses propres rôles, dans l’ordre du serveur principal. Les liaisons avec les rangs suivent.
           </DialogDescription>
         </DialogHeader>
         <div className='grid grid-cols-[minmax(0,1fr)] items-end gap-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]'>

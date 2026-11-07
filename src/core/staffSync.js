@@ -4,7 +4,21 @@ import { ForbiddenError, ValidationError } from './errors.js';
 // Holders of the rank (roles on the main server, or direct rank) get those roles; others lose them.
 // A staff role of the main server is also mirrored by name: whoever holds it there gets the role of the same
 // name on every other server, without any link. Only linked or mirrored roles are ever touched.
-export function createStaffSync({ db, network, ranks, audit, executor, logs, logger = console }) {
+
+// New places of a server's roles so that the network roles sit on top, in the given order. `all`: roles from the
+// lowest to the highest; `block`: ids from the highest to the lowest. Other bots' roles and what is above the bot
+// stay where they are. Empty when everything is already in place.
+export function roleArrangement(all, block) {
+	const movable = all.filter(r => r.belowBot && !r.managed);
+	const ids = new Set(movable.map(r => r.id));
+	const top = new Set(block);
+	const wanted = [...movable.filter(r => !top.has(r.id)).map(r => r.id), ...block.filter(id => ids.has(id)).reverse()];
+	return wanted.some((id, i) => id !== movable[i].id) ? wanted.map((role, i) => ({ role, position: movable[i].position })) : [];
+}
+
+const COPIED_KEY = 'staffSync.copiedRoles';
+
+export function createStaffSync({ db, network, ranks, audit, executor, settings, logs, logger = console }) {
 	logs.registerCategory('staff_sync', 'Synchronisation des rôles du staff');
 
 	const q = {
@@ -50,6 +64,49 @@ export function createStaffSync({ db, network, ranks, audit, executor, logs, log
 			map.set(role.id, { roleId: match.id, rankId: staff.get(role.id) });
 		}
 		return map;
+	}
+
+	// Network roles of a server, from the highest to the lowest: the order of the main server, then the others
+	async function networkRoles(guildId) {
+		const mainId = await network.getMainId();
+		if (!mainId || mainId === guildId) return [];
+		const [mainRoles, roles, mainLinks, links, mirror, copied] = await Promise.all([
+			executor.listRoles(mainId), executor.listRoles(guildId), linksOf(mainId), linksOf(guildId), mirrorOf(guildId), settings.get(COPIED_KEY, {}),
+		]);
+		const place = new Map(roles.map((r, i) => [r.id, i]));
+		const byPlace = list => list.filter(id => place.has(id)).sort((a, b) => place.get(a) - place.get(b));
+		const named = new Set([...[...mirror.values()].map(m => m.roleId), ...copied[guildId] ?? []]);
+		const block = new Set();
+		for (const main of mainRoles) {
+			for (const [rankId, roleIds] of mainLinks) {
+				if (roleIds.includes(main.id)) for (const id of byPlace(links.get(rankId) ?? [])) block.add(id);
+			}
+			const same = roles.find(r => r.name.toLowerCase() === main.name.toLowerCase());
+			if (same && named.has(same.id)) block.add(same.id);
+		}
+		for (const id of byPlace([...links.values()].flat().concat([...named]))) block.add(id);
+		return [...block];
+	}
+
+	// Puts the network roles of a server on top of its own roles, in the same order everywhere.
+	// `stuck`: roles above the bot's own role, which it can neither move nor pass
+	async function alignRoles(guildId) {
+		const name = (await network.find(guildId))?.name ?? guildId;
+		try {
+			const block = await networkRoles(guildId);
+			if (!block.length) return null;
+			const all = await executor.listRolePositions(guildId);
+			const positions = roleArrangement(all, block);
+			if (positions.length) {
+				await executor.moveRoles(guildId, positions);
+				await audit.record({ actorId: 'system', source: 'system', action: 'staff_sync.order', guildId, target: name, details: { rôles: block.length } });
+			}
+			return { guildId, name, moved: positions.length > 0, stuck: all.filter(r => r.aboveBot && !r.managed).map(r => r.name) };
+		}
+		catch (error) {
+			logger.warn(`Role order not applied on ${name}:`, error.message);
+			return { guildId, name, moved: false, stuck: [], error: error.message };
+		}
 	}
 
 	async function syncMember(guildId, userId, { reason = 'Synchronisation du staff', mirror = null } = {}) {
@@ -200,7 +257,8 @@ export function createStaffSync({ db, network, ranks, audit, executor, logs, log
 		},
 
 		// Chosen roles of one server copied to another: created, or updated when a role of the same name is there
-		// (color, display, mentions, permissions; its place in the list is kept). The rank links follow.
+		// (color, display, mentions, permissions). The rank links follow. On a server other than the main one
+		// they join the network roles: same order as the main server, above the server's own roles.
 		async copyRoles(actor, { from, to, roleIds }) {
 			if (!actor.can('ranks.manage')) throw new ForbiddenError('Permission manquante : ranks.manage');
 			if (from === to) throw new ValidationError('Choisis deux serveurs différents.');
@@ -252,13 +310,20 @@ export function createStaffSync({ db, network, ranks, audit, executor, logs, log
 					results.push({ roleId: role.id, name: role.name, status: 'error', error: error.message });
 				}
 			}
+			const copied = results.filter(r => r.targetId).map(r => r.targetId);
+			let order = null;
+			if (to !== mainId && copied.length) {
+				const known = await settings.get(COPIED_KEY, {});
+				await settings.set(COPIED_KEY, { ...known, [to]: [...new Set([...known[to] ?? [], ...copied])] });
+				order = await alignRoles(to);
+			}
 			const [fromGuild, toGuild] = await Promise.all([network.find(from), network.find(to)]);
 			const names = status => results.filter(r => r.status === status).map(r => r.name);
 			await audit.record({
 				actorId: actor.id, source: actor.source ?? 'panel', action: 'staff_sync.copy_roles', guildId: to, target: toGuild?.name ?? to,
 				details: { depuis: fromGuild?.name ?? from, créés: names('created'), 'mis à jour': names('updated'), échecs: names('error') },
 			});
-			return results;
+			return { results, order };
 		},
 
 		// One member, every server (e.g. their roles changed on the main server)
@@ -278,7 +343,10 @@ export function createStaffSync({ db, network, ranks, audit, executor, logs, log
 			}
 
 			let changed = 0;
+			const order = [];
 			for (const guildId of await satelliteIds()) {
+				const aligned = await alignRoles(guildId);
+				if (aligned) order.push(aligned);
 				const links = await linksOf(guildId, { syncedOnly: true });
 				const mirror = await mirrorOf(guildId);
 				if (!links.size && !mirror.size) continue;
@@ -290,7 +358,7 @@ export function createStaffSync({ db, network, ranks, audit, executor, logs, log
 					if (result && (result.added.length || result.removed.length)) changed++;
 				}
 			}
-			return { changed };
+			return { changed, order };
 		},
 	};
 }

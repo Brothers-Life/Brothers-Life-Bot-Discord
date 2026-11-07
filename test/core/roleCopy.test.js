@@ -30,7 +30,7 @@ test('chosen roles are created on the other server in the same order, a role of 
 	assert.deepEqual(preview.servers.map(s => s.id).sort(), [MAIN, OTHER]);
 	assert.deepEqual(preview.roles.map(r => [r.name, r.target?.id ?? null, r.ranks]), [['Admin', null, []], ['Modérateur', null, ['Modo']], ['Joueur', '810000000000000001', []]]);
 
-	const results = await core.staffSync.copyRoles(owner, { from: MAIN, to: OTHER, roleIds: ['800000000000000001', '800000000000000002', '800000000000000003'] });
+	const { results } = await core.staffSync.copyRoles(owner, { from: MAIN, to: OTHER, roleIds: ['800000000000000001', '800000000000000002', '800000000000000003'] });
 	assert.deepEqual(results.map(r => [r.name, r.status]), [['Admin', 'created'], ['Modérateur', 'created'], ['Joueur', 'updated']]);
 	const model = executor.model(OTHER).roles;
 	// Highest created first: each new role lands at the bottom, Admin ends up above Modérateur
@@ -52,7 +52,7 @@ test('below the chief: roles with admin permissions and links of higher ranks ar
 	await core.ranks.assignDirect(owner, BOB, manager.id);
 	const bob = await core.ranks.resolve(BOB);
 
-	const results = await core.staffSync.copyRoles(bob, { from: MAIN, to: OTHER, roleIds: ['800000000000000003', '800000000000000002'] });
+	const { results } = await core.staffSync.copyRoles(bob, { from: MAIN, to: OTHER, roleIds: ['800000000000000003', '800000000000000002'] });
 	assert.equal(results[0].status, 'error');
 	assert.match(results[0].error, /chef du réseau/);
 	assert.deepEqual([results[1].status, results[1].ranks], ['created', []]);

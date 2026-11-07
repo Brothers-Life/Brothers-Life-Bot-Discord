@@ -216,6 +216,7 @@ const TITLES = {
 	'staffactivity.report': 'Rapport mensuel du staff publié',
 	'staff_sync.copy_role': 'Rôle d’un rang copié sur les serveurs',
 	'staff_sync.copy_roles': 'Rôles copiés vers un autre serveur',
+	'staff_sync.order': 'Rôles du réseau remis dans l’ordre',
 	'backups.create': 'Sauvegarde du serveur faite',
 	'backups.auto': 'Sauvegardes automatiques de la nuit',
 	'backups.delete': 'Sauvegarde supprimée',

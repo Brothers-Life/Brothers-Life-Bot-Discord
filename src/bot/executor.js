@@ -673,6 +673,22 @@ export function createExecutor(client) {
 			await guild.roles.setPositions(roleIds.map((role, i) => ({ role, position: i + 1 })));
 		},
 
+		// Every role from the lowest to the highest, with its place compared to the bot's highest role
+		async listRolePositions(guildId) {
+			const guild = client.guilds.cache.get(guildId);
+			if (!guild?.members.me) return [];
+			const top = guild.members.me.roles.highest.position;
+			return [...guild.roles.cache.values()]
+				.filter(r => r.id !== guild.id)
+				.sort((a, b) => a.position - b.position)
+				.map(r => ({ id: r.id, name: r.name, position: r.position, managed: r.managed, belowBot: r.position < top, aboveBot: r.position > top }));
+		},
+
+		// [{ role, position }]
+		async moveRoles(guildId, positions) {
+			await guildOf(guildId).roles.setPositions(positions);
+		},
+
 		async createChannel(guildId, data) {
 			const guild = guildOf(guildId);
 			const channel = await guild.channels.create(templateChannelOptions(guild, data));

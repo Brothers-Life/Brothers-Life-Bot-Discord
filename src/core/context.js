@@ -102,7 +102,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	logs.registerCategory('sanctions', 'Sanctions (ban, kick, timeout, warn)');
 	const events = createEvents({ db, network, logs, settings });
 	const automod = createAutomod({ db, network, sanctions, ranks, audit, executor, logs, logger });
-	const staffSync = createStaffSync({ db, network, ranks, audit, executor, logs, logger });
+	const staffSync = createStaffSync({ db, network, ranks, audit, executor, settings, logs, logger });
 	const members = createMembers({ db, network, ranks, sanctions, audit, executor });
 	const moderation = createModeration({ db, network, ranks, audit, executor, settings, members, logs, logger });
 	const roleImport = createRoleImport({ db, network, ranks, staffSync, executor, audit });

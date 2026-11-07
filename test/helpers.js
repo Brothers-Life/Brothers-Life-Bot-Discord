@@ -58,6 +58,23 @@ export function createFakeExecutor() {
 		async listRoles(guildId) {
 			return this.roles.get(guildId) ?? [];
 		},
+		// Lists are written from the highest role to the lowest, as listRoles returns them
+		roleMoves: [],
+		async listRolePositions(guildId) {
+			const list = this.roles.get(guildId) ?? [];
+			return list.map((r, i) => ({
+				id: r.id, name: r.name, position: list.length - i, managed: Boolean(r.managed),
+				belowBot: r.belowBot ?? r.editable !== false, aboveBot: r.aboveBot ?? r.editable === false,
+			})).reverse();
+		},
+		async moveRoles(guildId, positions) {
+			if (this.failOn.has(`move:${guildId}`)) throw new Error('Missing Permissions');
+			this.roleMoves.push({ guildId, positions });
+			const list = this.roles.get(guildId) ?? [];
+			const place = new Map(list.map((r, i) => [r.id, list.length - i]));
+			for (const { role, position } of positions) place.set(role, position);
+			this.roles.set(guildId, [...list].sort((a, b) => place.get(b.id) - place.get(a.id)));
+		},
 		// guildId -> [{ id, username, globalName, nickname }]
 		guildMembers: new Map(),
 		async listMembers(guildId) {
