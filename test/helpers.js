@@ -580,6 +580,11 @@ export function createFakeExecutor() {
 		async publishRecruitmentPanel(channelId, messageId) {
 			return messageId ?? '820000000000000001';
 		},
+		takeoverPanels: [],
+		async publishTakeoverPanel(channelId, messageId, view) {
+			this.takeoverPanels.push({ channelId, messageId, view });
+			return messageId ?? '820000000000000002';
+		},
 		interviews: [],
 		async createInterviewChannel(guildId, options) {
 			this.interviews.push({ guildId, ...options });

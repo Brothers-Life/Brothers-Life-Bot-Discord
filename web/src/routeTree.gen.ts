@@ -56,6 +56,7 @@ import { Route as AuthenticatedStaffActivityRouteImport } from './routes/_authen
 import { Route as AuthenticatedStaffRolesRouteImport } from './routes/_authenticated/staff-roles'
 import { Route as AuthenticatedStatsRouteImport } from './routes/_authenticated/stats'
 import { Route as AuthenticatedStreamsRouteImport } from './routes/_authenticated/streams'
+import { Route as AuthenticatedTakeoversRouteImport } from './routes/_authenticated/takeovers'
 import { Route as AuthenticatedTebexRouteImport } from './routes/_authenticated/tebex'
 import { Route as AuthenticatedTemplatesRouteImport } from './routes/_authenticated/templates'
 import { Route as AuthenticatedTicketsRouteImport } from './routes/_authenticated/tickets'
@@ -325,6 +326,11 @@ const AuthenticatedStreamsRoute = AuthenticatedStreamsRouteImport.update({
   path: '/streams',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedTakeoversRoute = AuthenticatedTakeoversRouteImport.update({
+  id: '/takeovers',
+  path: '/takeovers',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedTebexRoute = AuthenticatedTebexRouteImport.update({
   id: '/tebex',
   path: '/tebex',
@@ -523,6 +529,7 @@ export interface FileRoutesByFullPath {
   '/staff-roles': typeof AuthenticatedStaffRolesRoute
   '/stats': typeof AuthenticatedStatsRoute
   '/streams': typeof AuthenticatedStreamsRoute
+  '/takeovers': typeof AuthenticatedTakeoversRoute
   '/tebex': typeof AuthenticatedTebexRoute
   '/templates': typeof AuthenticatedTemplatesRoute
   '/tickets': typeof AuthenticatedTicketsRoute
@@ -596,6 +603,7 @@ export interface FileRoutesByTo {
   '/staff-roles': typeof AuthenticatedStaffRolesRoute
   '/stats': typeof AuthenticatedStatsRoute
   '/streams': typeof AuthenticatedStreamsRoute
+  '/takeovers': typeof AuthenticatedTakeoversRoute
   '/tebex': typeof AuthenticatedTebexRoute
   '/templates': typeof AuthenticatedTemplatesRoute
   '/tickets': typeof AuthenticatedTicketsRoute
@@ -672,6 +680,7 @@ export interface FileRoutesById {
   '/_authenticated/staff-roles': typeof AuthenticatedStaffRolesRoute
   '/_authenticated/stats': typeof AuthenticatedStatsRoute
   '/_authenticated/streams': typeof AuthenticatedStreamsRoute
+  '/_authenticated/takeovers': typeof AuthenticatedTakeoversRoute
   '/_authenticated/tebex': typeof AuthenticatedTebexRoute
   '/_authenticated/templates': typeof AuthenticatedTemplatesRoute
   '/_authenticated/tickets': typeof AuthenticatedTicketsRoute
@@ -749,6 +758,7 @@ export interface FileRouteTypes {
     | '/staff-roles'
     | '/stats'
     | '/streams'
+    | '/takeovers'
     | '/tebex'
     | '/templates'
     | '/tickets'
@@ -822,6 +832,7 @@ export interface FileRouteTypes {
     | '/staff-roles'
     | '/stats'
     | '/streams'
+    | '/takeovers'
     | '/tebex'
     | '/templates'
     | '/tickets'
@@ -897,6 +908,7 @@ export interface FileRouteTypes {
     | '/_authenticated/staff-roles'
     | '/_authenticated/stats'
     | '/_authenticated/streams'
+    | '/_authenticated/takeovers'
     | '/_authenticated/tebex'
     | '/_authenticated/templates'
     | '/_authenticated/tickets'
@@ -1263,6 +1275,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStreamsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/takeovers': {
+      id: '/_authenticated/takeovers'
+      path: '/takeovers'
+      fullPath: '/takeovers'
+      preLoaderRoute: typeof AuthenticatedTakeoversRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/tebex': {
       id: '/_authenticated/tebex'
       path: '/tebex'
@@ -1492,6 +1511,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedStaffRolesRoute: typeof AuthenticatedStaffRolesRoute
   AuthenticatedStatsRoute: typeof AuthenticatedStatsRoute
   AuthenticatedStreamsRoute: typeof AuthenticatedStreamsRoute
+  AuthenticatedTakeoversRoute: typeof AuthenticatedTakeoversRoute
   AuthenticatedTebexRoute: typeof AuthenticatedTebexRoute
   AuthenticatedTemplatesRoute: typeof AuthenticatedTemplatesRoute
   AuthenticatedTicketsRoute: typeof AuthenticatedTicketsRoute
@@ -1565,6 +1585,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedStaffRolesRoute: AuthenticatedStaffRolesRoute,
   AuthenticatedStatsRoute: AuthenticatedStatsRoute,
   AuthenticatedStreamsRoute: AuthenticatedStreamsRoute,
+  AuthenticatedTakeoversRoute: AuthenticatedTakeoversRoute,
   AuthenticatedTebexRoute: AuthenticatedTebexRoute,
   AuthenticatedTemplatesRoute: AuthenticatedTemplatesRoute,
   AuthenticatedTicketsRoute: AuthenticatedTicketsRoute,

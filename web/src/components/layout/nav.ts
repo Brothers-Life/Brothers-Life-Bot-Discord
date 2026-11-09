@@ -11,6 +11,7 @@ import {
   Radio,
   Music,
   UserPlus,
+  Building2,
   CalendarOff,
   Network,
   ShieldHalf,
@@ -216,6 +217,7 @@ export const navSections: NavSection[] = [
     items: [
       { title: 'Membres du réseau', url: '/people', icon: UserSearch, permission: 'members.view', keywords: 'joueur profil fiche' },
       { title: 'Recrutement', url: '/recruitment', icon: UserPlus, permission: 'recruitment.view', keywords: 'candidature' },
+      { title: 'Reprises', url: '/takeovers', icon: Building2, permission: 'takeovers.view', keywords: 'entreprise groupe illégal gang reprise inscription' },
       { title: 'Réunions', url: '/meetings', icon: Presentation, permission: 'meetings.view', keywords: 'réu convocation présence staff' },
       { title: 'Absences', url: '/absences', icon: CalendarOff, permission: null },
       { title: 'Activité du staff', url: '/staff-activity', icon: Trophy, permission: 'staffactivity.view' },

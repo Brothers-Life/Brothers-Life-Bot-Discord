@@ -22,6 +22,7 @@ export function startTasks({ core, every }) {
 		every(60_000, () => core.feedback.tick(), 'Feedback reminders failed'),
 		// RP events: reminders, start and end
 		every(60_000, () => core.rpEvents.tick(), 'RP events failed'),
+		every(60_000, () => core.takeovers.tick(), 'Takeovers failed'),
 		// Monthly staff activity report
 		every(10 * 60_000, () => core.staffActivity.tick(), 'Staff report failed'),
 		// Nightly server backups

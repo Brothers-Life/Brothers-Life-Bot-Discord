@@ -43,6 +43,7 @@ import { createPolls } from './polls.js';
 import { createGiveaways } from './giveaways.js';
 import { createFeedback } from './feedback.js';
 import { createRecruitment } from './recruitment.js';
+import { createTakeovers } from './takeovers.js';
 import { createAbsences } from './absences.js';
 import { createStreams } from './streams.js';
 import { createFeeds } from './feeds.js';
@@ -128,6 +129,8 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	logs.registerCategory('feedback', 'Suggestions et bugs (nouveaux, statuts)');
 	const recruitment = createRecruitment({ db, network, ranks, audit, executor, sanctions, stats, variables, logger });
 	logs.registerCategory('recruitment', 'Recrutement (candidatures, décisions)');
+	const takeovers = createTakeovers({ db, network, audit, executor, settings, logger });
+	logs.registerCategory('takeovers', 'Reprises (entreprises, groupes illégaux)');
 	const absences = createAbsences({ db, network, ranks, audit, executor, settings, logger });
 	const streams = createStreams({ db, network, audit, executor, settings, logs, variables, fetchImpl, logger });
 	const feeds = createFeeds({ db, network, audit, executor, logs, variables, fetchImpl, logger });
@@ -224,7 +227,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 		await network.replay(entry);
 	}
 
-	const core = { db, config, executor, files, variables, settings, audit, network, ranks, logs, sessions, apiKeys, sanctions, sanctionTemplates, music, memberInsights, channelFeatures, verification, embedBuilder, appeals, channelSchedules, archives, meetings, fivemMirror, fivemData, fivemRoles, gameSanctions, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents, antinuke, fivemEvents, feeds, tebex };
+	const core = { db, config, executor, files, variables, settings, audit, network, ranks, logs, sessions, apiKeys, sanctions, sanctionTemplates, music, memberInsights, channelFeatures, verification, embedBuilder, appeals, channelSchedules, archives, meetings, fivemMirror, fivemData, fivemRoles, gameSanctions, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, takeovers, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents, antinuke, fivemEvents, feeds, tebex };
 	// FiveM telemetry (bl_telemetry): every process works on the database itself, the API takes the batches
 	core.telemetry = createTelemetry({ db, settings, logs, audit, config, logger, fetchImpl, notifications: () => core.notifications });
 	for (const name of BOT_SERVICES) core[name] = shared(name, core[name]);

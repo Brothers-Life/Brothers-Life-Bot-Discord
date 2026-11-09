@@ -6,6 +6,7 @@ import { pollPayload, pollResultsPayload } from './pollsUi.js';
 import { giveawayPayload, winnersPayload } from './giveawaysUi.js';
 import { boxPanelPayload, feedbackPayload, reviewPayload } from './feedbackUi.js';
 import { applicationPayload, recruitmentPanelPayload } from './recruitmentUi.js';
+import { takeoverPanelPayload } from './takeoversUi.js';
 import { fivemPayload } from './fivemUi.js';
 import { rpEventPayload } from './rpEventsUi.js';
 import { absencePayload } from './absencesUi.js';
@@ -800,6 +801,19 @@ export function createExecutor(client) {
 		async publishRecruitmentPanel(channelId, messageId, positions) {
 			const channel = await client.channels.fetch(channelId);
 			const payload = recruitmentPanelPayload(positions);
+			if (messageId) {
+				const existing = await channel.messages.fetch(messageId).catch(() => null);
+				if (existing) {
+					await existing.edit(payload);
+					return existing.id;
+				}
+			}
+			return (await channel.send(payload)).id;
+		},
+
+		async publishTakeoverPanel(channelId, messageId, view) {
+			const channel = await client.channels.fetch(channelId);
+			const payload = takeoverPanelPayload(view);
 			if (messageId) {
 				const existing = await channel.messages.fetch(messageId).catch(() => null);
 				if (existing) {
