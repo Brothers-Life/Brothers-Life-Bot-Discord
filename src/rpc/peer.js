@@ -3,13 +3,13 @@
 //   { t: 'call', id, target, service, method, args }   API → bot: do this
 //   { t: 'result', id, ok, result | error }             bot → API: the answer
 //   { t: 'event', type, data }                          either way: something happened (tickets, console, audit…)
+import { AppError } from '../core/errors.js';
 import { encode, decode } from './codec.js';
 
-export class BotUnavailableError extends Error {
+// Expected while the bot restarts: answered as a 503 with this message, not logged as an internal error
+export class BotUnavailableError extends AppError {
 	constructor(cause) {
-		super('Le bot ne répond pas pour le moment (redémarrage ou panne). Réessaie dans un instant.');
-		this.code = 'BOT_UNAVAILABLE';
-		this.status = 503;
+		super('BOT_UNAVAILABLE', 'Le bot ne répond pas pour le moment (redémarrage ou panne). Réessaie dans un instant.', 503);
 		this.cause = cause;
 	}
 }

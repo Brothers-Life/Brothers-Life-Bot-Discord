@@ -8,9 +8,30 @@ import { attachInternalLink, remoteObject } from '../src/rpc/socket.js';
 import { encode, decode } from '../src/rpc/codec.js';
 import { createPrincipal } from '../src/core/permissions.js';
 import { ValidationError } from '../src/core/errors.js';
+import { errorHandler } from '../src/web/errors.js';
 
 const TOKEN = 'x'.repeat(40);
 const quiet = { warn: () => undefined };
+
+test('the bot being away is an expected answer, not an internal error', () => {
+	const logged = [];
+	let sent;
+	const reply = {
+		code(status) {
+			sent = { status };
+			return this;
+		},
+		send(body) {
+			sent.body = body;
+			return this;
+		},
+	};
+	errorHandler({ error: (...args) => logged.push(args) })(new BotUnavailableError(), { method: 'GET', url: '/api/x' }, reply);
+	assert.equal(sent.status, 503);
+	assert.equal(sent.body.error.code, 'BOT_UNAVAILABLE');
+	assert.match(sent.body.error.message, /ne répond pas/);
+	assert.deepEqual(logged, []);
+});
 
 // Two peers wired back to back (what the websocket does)
 function pair(onCall, onEvent = () => undefined) {
