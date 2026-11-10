@@ -104,7 +104,7 @@ function Takeovers({ guildId }: { guildId: string }) {
 function statePill(t: Takeover) {
   if (t.finishedAt) return <Pill tone='success'>Reprise par {t.entries.find((e) => e.userId === t.winnerId)?.name ?? t.winnerName ?? t.winnerId}</Pill>
   if (t.convokedAt) return <Pill tone='info'>MP envoyés</Pill>
-  return t.open ? <Pill tone='success'>Inscriptions ouvertes</Pill> : <Pill>Inscriptions fermées</Pill>
+  return t.open ? <Pill tone='success'>Disponible</Pill> : <Pill>Déjà pris</Pill>
 }
 
 function TakeoverList({ data, guildId, category }: { data: Payload; guildId: string; category: Category }) {
@@ -129,7 +129,7 @@ function TakeoverList({ data, guildId, category }: { data: Payload; guildId: str
   }
   const setOpen = useMutation({
     mutationFn: ({ t, open }: { t: Takeover; open: boolean }) => api(`/takeovers/items/${t.id}/open`, { method: 'POST', body: { open } }),
-    onSuccess: (_, v) => { toast.success(v.open ? `Inscriptions ouvertes : ${v.t.name}` : `Inscriptions fermées : ${v.t.name}`); refresh() },
+    onSuccess: (_, v) => { toast.success(v.open ? `Disponible : ${v.t.name}` : `Déjà pris : ${v.t.name}`); refresh() },
   })
   const remove = useMutation({
     mutationFn: (t: Takeover) => api(`/takeovers/items/${t.id}`, { method: 'DELETE', body: { confirm: true } }),
@@ -182,8 +182,8 @@ function TakeoverList({ data, guildId, category }: { data: Payload; guildId: str
         <div className='flex flex-wrap items-center gap-2'>
           {manage && !t.finishedAt && (
             <label className='flex items-center gap-2 text-sm'>
-              <Switch checked={t.open} disabled={setOpen.isPending || Boolean(t.convokedAt)} onCheckedChange={(open) => setOpen.mutate({ t, open })} aria-label={`Inscriptions ${t.name}`} />
-              <span className='hidden sm:inline'>Inscriptions</span>
+              <Switch checked={t.open} disabled={setOpen.isPending || Boolean(t.convokedAt)} onCheckedChange={(open) => setOpen.mutate({ t, open })} aria-label={`Disponible : ${t.name}`} />
+              <span className='hidden sm:inline'>Disponible</span>
             </label>
           )}
           <Button size='sm' variant='outline' onClick={() => setViewing(t.id)}><Users /> Inscrits</Button>
@@ -289,7 +289,7 @@ function EditDialog({ draft, groups, guildId, onClose, onSaved }: { draft: Draft
             <Input id='to-date' type='datetime-local' disabled={t.locked} value={t.date} onChange={(e) => setT({ ...t, date: e.target.value })} />
             <p className='text-xs text-muted-foreground'>{t.locked ? 'Les inscrits ont déjà reçu leur MP.' : 'À cette date, les inscriptions se ferment et chaque inscrit reçoit un MP.'}</p>
           </div>
-          <p className='text-xs text-muted-foreground'>La reprise est créée inscriptions fermées : ouvre-les depuis la liste quand tu es prêt.</p>
+          <p className='text-xs text-muted-foreground'>La reprise est créée en « Déjà pris » : passe-la en Disponible depuis la liste quand tu es prêt.</p>
         </div>
         <DialogFooter>
           <Button variant='outline' onClick={onClose}>Annuler</Button>

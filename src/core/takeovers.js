@@ -411,7 +411,7 @@ export function createTakeovers({ db, network, audit, executor, settings, logger
 			const entry = toEntry(await q.entryOf.get(id, userId));
 			if (entry?.status === 'removed') throw new ValidationError('Ta demande pour cette reprise a été écartée par le staff.');
 			if (entry) return { takeover, already: true };
-			if (!takeover.open || takeover.finishedAt) throw new ValidationError('Les inscriptions pour cette reprise sont fermées.');
+			if (!takeover.open || takeover.finishedAt) throw new ValidationError('Cette reprise est déjà prise.');
 			if (takeover.mode === 'simple') return { takeover, step: null };
 			const { form } = (await readConfig(takeover.guildId))[takeover.category];
 			const step = nextStep(form, 0, []);
@@ -428,7 +428,7 @@ export function createTakeovers({ db, network, audit, executor, settings, logger
 			const group = groupId ? sameType.find(g => g.id === groupId) : null;
 			if (groupId && !group) throw new ValidationError('Cette catégorie n’existe plus.');
 			const takeovers = rows.map(toTakeover).filter(t => t.category === category && t.open && !t.finishedAt && t.groupId === (group?.id ?? null));
-			if (!takeovers.length) throw new ValidationError('Plus aucune inscription ouverte ici pour le moment.');
+			if (!takeovers.length) throw new ValidationError('Plus rien de disponible ici pour le moment.');
 			return { name: group?.name ?? (sameType.length ? 'Autres' : CATEGORIES[category].label), takeovers };
 		},
 
@@ -455,7 +455,7 @@ export function createTakeovers({ db, network, audit, executor, settings, logger
 			const takeover = await getTakeover(id);
 			await assertReachable(takeover.guildId, takeover.category, guildId);
 			// The form may have been open for a while: the staff can have closed in the meantime
-			if (!takeover.open || takeover.finishedAt) throw new ValidationError('Les inscriptions pour cette reprise viennent de fermer.');
+			if (!takeover.open || takeover.finishedAt) throw new ValidationError('Cette reprise vient d’être prise.');
 			const { changes } = await q.insertEntry.run(id, takeover.guildId, userId, userName ?? null, JSON.stringify(answers), now());
 			if (!changes) throw new ValidationError('Tu es déjà inscrit à cette reprise.');
 			await record({ id: userId, source: 'bot' }, 'takeovers.register', takeover, { member: `<@${userId}>` });

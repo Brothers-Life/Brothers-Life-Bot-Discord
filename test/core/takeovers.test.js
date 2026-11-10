@@ -20,7 +20,7 @@ const entries = async (t, owner, id) => (await t.overview(owner, MAIN)).takeover
 test('a takeover starts closed and only the staff opens it', async () => {
 	const { t, owner, item } = await setup();
 	assert.equal(item.open, false);
-	await assert.rejects(t.start(item.id, ALICE, MAIN), /fermées/);
+	await assert.rejects(t.start(item.id, ALICE, MAIN), /déjà prise/);
 	await t.setOpen(owner, item.id, true);
 	assert.deepEqual((await t.start(item.id, ALICE, MAIN)).step, null);
 	await assert.rejects(t.save({ id: 'x', can: () => false }, MAIN, { name: 'A', category: 'business', mode: 'simple' }), /rang/);
@@ -214,7 +214,7 @@ test('the button of a category lists only what can be joined in it', async () =>
 	const garages = await t.saveGroup(owner, MAIN, { category: 'business', name: 'Garages' });
 	await t.save(owner, MAIN, { id: item.id, name: 'Benny’s', category: 'business', mode: 'simple', groupId: garages.id, interviewAt: FUTURE });
 	const loose = await t.save(owner, MAIN, { name: 'Bahama', category: 'business', mode: 'simple' });
-	await assert.rejects(t.openIn(MAIN, MAIN, 'business', garages.id), /Plus aucune/);
+	await assert.rejects(t.openIn(MAIN, MAIN, 'business', garages.id), /Plus rien/);
 	await t.setOpen(owner, item.id, true);
 	await t.setOpen(owner, loose.id, true);
 	assert.deepEqual((await t.openIn(MAIN, MAIN, 'business', garages.id)).takeovers.map(x => x.id), [item.id]);

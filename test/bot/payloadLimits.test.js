@@ -52,25 +52,28 @@ test('takeover panel: categories in order, one button each', () => {
 			{ ...base, id: 13, name: 'Rien', groupId: 3, open: false },
 		],
 	});
-	const fields = payload.embeds[0].toJSON().fields;
-	assert.deepEqual(fields.slice(3).map(f => f.name), ['🔧 Garages (2)', 'Fermé (1)', 'Autres (1)']);
-	assert.deepEqual(fields.slice(0, 3).map(f => f.value), ['**4**', '**2**', '**8**']);
-	assert.ok(fields[3].value.indexOf('Fermée') < fields[3].value.indexOf('Benny'));
+	const [header, ...cards] = payload.embeds.map(e => e.toJSON());
+	assert.deepEqual(header.fields.map(f => f.value), ['**4**', '**2**', '**8**']);
+	assert.deepEqual(cards.map(c => c.title), ['🔧 Garages · 2', 'Fermé · 1', 'Autres · 1'], 'one card per category, empty ones left out');
+	assert.ok(cards[0].description.indexOf('Fermée') < cards[0].description.indexOf('Benny'));
+	assert.match(cards[0].description, /\*\*Benny\*\* `🟢 DISPONIBLE` `📋 DOSSIER` `👥 2`/);
+	assert.match(cards[0].description, /\*\*Fermée\*\* `🔴 DÉJÀ PRIS`/);
+	assert.ok(cards.at(-1).footer && !header.footer, 'the footer closes the last card');
 	const buttons = payload.components[0].components.map(b => b.toJSON());
 	assert.deepEqual(buttons.map(b => b.custom_id), ['to:list:2:business:900000000000000001', 'to:list:3:business:900000000000000001', 'to:list:0:business:900000000000000001']);
 	assert.deepEqual(buttons.map(b => b.label), ['Garages', 'Fermé', 'Autres']);
 	assert.deepEqual(buttons.map(b => Boolean(b.disabled)), [false, true, false], 'nothing open in it: greyed out');
 });
 
-test('takeover panel: many long takeovers fit in one embed and what is cut is announced', () => {
+test('takeover panel: many long takeovers fit in one message and what is cut is announced', () => {
 	const takeovers = Array.from({ length: 60 }, (_, i) => ({ id: i + 1, name: long(60), description: long(1000), mode: 'form', open: true, groupId: (i % 22) + 1, interviewAt: Date.now() + 1000, convokedAt: null, registered: 1 }));
 	const groups = Array.from({ length: 22 }, (_, i) => ({ id: i + 1, name: long(40), emoji: '<:abcdefghijklmnopqrstuvwxyz:123456789012345678>' }));
 	const payload = takeoverPanelPayload({ title: long(100), description: long(1000), groups, takeovers, guild: { name: long(100), icon: 'https://cdn.discordapp.com/icons/1/a.png' } });
-	const embed = payload.embeds[0].toJSON();
-	assert.ok(embedLength(payload.embeds[0]) <= 6000);
-	assert.ok(embed.fields.length <= 25);
-	assert.ok(embed.fields.every(f => f.value.length <= 1024 && f.value.length > 0));
-	assert.match(embed.footer.text, /autres reprises/);
+	assert.ok(payload.embeds.length <= 10);
+	assert.ok(payload.embeds.reduce((sum, e) => sum + embedLength(e), 0) <= 6000, 'the limit is on the whole message');
+	assert.ok(payload.embeds.every(e => (e.toJSON().description?.length ?? 0) <= 4096));
+	assert.match(payload.embeds.at(-1).toJSON().footer.text, /autres reprises/);
+	assert.match(payload.embeds[0].toJSON().fields.at(-1).name, /Prochains entretiens/);
 	assert.equal(payload.components.flatMap(row => row.components).length, 22, 'one button per category');
 });
 
