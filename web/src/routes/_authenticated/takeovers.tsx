@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Save, Send, Trash2, Users } from 'lucide-react'
+import { FolderPlus, Pencil, Plus, Save, Send, Trash2, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Channel, FormDef, Guild } from '@/lib/types'
@@ -10,7 +10,11 @@ import { useMe } from '@/hooks/use-me'
 import { Page, Section, EmptyState, Pill, UserAvatar, GuildIcon } from '@/components/app/ui'
 import { ChannelSelect } from '@/components/app/pickers'
 import { useConfirm } from '@/components/app/confirm'
+import { ColorPicker } from '@/components/app/color-picker'
+import { EmojiField, EmojiView } from '@/components/app/emoji-picker'
 import { FormBuilder } from '@/features/forms/form-builder'
+import { SortableBoard, type BoardColumn } from '@/features/takeovers/sortable-board'
+import { ImageInput } from '@/features/uploads/image-input'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -30,14 +34,21 @@ type Entry = {
   id: number; userId: string; name: string; avatar: string | null; answers: { id: string; label: string; value: string }[]
   status: 'active' | 'removed'; dmStatus: 'sent' | 'failed' | null; createdAt: number
 }
+type Group = { id: number; category: Category; name: string; emoji: string | null }
 type Takeover = {
-  id: number; category: Category; name: string; description: string; mode: 'form' | 'simple'; open: boolean
+  id: number; category: Category; groupId: number | null; name: string; description: string; mode: 'form' | 'simple'; open: boolean
   interviewAt: number | null; convokedAt: number | null; winnerId: string | null; winnerName: string | null; finishedAt: number | null; entries: Entry[]
 }
-type CategoryConfig = { panelChannelId: string | null; panelMessageId: string | null; announceChannelId: string | null; convokeMessage: string; announceMessage: string; form: FormDef }
+type Link = { guildId: string; panelChannelId: string | null; panelMessageId: string | null; announceChannelId: string | null }
+type CategoryConfig = {
+  panelChannelId: string | null; panelMessageId: string | null; announceChannelId: string | null; convokeMessage: string; announceMessage: string; form: FormDef
+  panelTitle: string; panelDescription: string; color: string; thumbnailUrl: string | null; imageUrl: string | null; links: Link[]
+}
 type Config = Record<Category, CategoryConfig>
-type Payload = { config: Config; takeovers: Takeover[]; channels: Channel[] }
-type Draft = { id?: number; category: Category; name: string; description: string; mode: 'form' | 'simple'; date: string; locked: boolean }
+type LinkableGuild = { id: string; name: string; icon: string | null; channels: Channel[] }
+type Payload = { config: Config; groups: Group[]; takeovers: Takeover[]; channels: Channel[]; linkable: LinkableGuild[] }
+type Draft = { id?: number; category: Category; groupId: number | null; name: string; description: string; mode: 'form' | 'simple'; date: string; locked: boolean }
+type GroupDraft = { id?: number; category: Category; name: string; emoji: string | null }
 
 const LABELS: Record<Category, { tab: string; one: string; hint: string }> = {
   business: { tab: 'Entreprises', one: 'entreprise', hint: 'Par exemple « Benny’s » ou « Bahama Mamas ».' },
@@ -58,7 +69,7 @@ function TakeoversPage() {
   return (
     <Page
       title='Reprises'
-      description='Liste les entreprises et groupes illégaux à reprendre. Les joueurs s’inscrivent depuis Discord, reçoivent un MP à la date des entretiens, puis tu annonces qui reprend.'
+      description='Range les entreprises et groupes illégaux à reprendre par catégories, dans l’ordre que tu veux. Les joueurs s’inscrivent depuis Discord, reçoivent un MP à la date des entretiens, puis tu annonces qui reprend.'
       actions={current && (
         <div className='flex items-center gap-2'>
           <Label htmlFor='to-guild' className='text-muted-foreground'>Serveur</Label>
@@ -85,7 +96,7 @@ function Takeovers({ guildId }: { guildId: string }) {
         {can('takeovers.manage') && <TabsTrigger value='settings'>Réglages</TabsTrigger>}
       </TabsList>
       {CATEGORIES.map((c) => <TabsContent key={c} value={c} className='mt-4'><TakeoverList data={data} guildId={guildId} category={c} /></TabsContent>)}
-      {can('takeovers.manage') && <TabsContent value='settings' className='mt-4'><Settings config={data.config} channels={data.channels} guildId={guildId} /></TabsContent>}
+      {can('takeovers.manage') && <TabsContent value='settings' className='mt-4'><Settings config={data.config} channels={data.channels} linkable={data.linkable} guildId={guildId} /></TabsContent>}
     </Tabs>
   )
 }
@@ -102,8 +113,20 @@ function TakeoverList({ data, guildId, category }: { data: Payload; guildId: str
   const qc = useQueryClient()
   const { confirm, dialog } = useConfirm()
   const [editing, setEditing] = useState<Draft | null>(null)
+  const [editingGroup, setEditingGroup] = useState<GroupDraft | null>(null)
   const [viewing, setViewing] = useState<number | null>(null)
   const refresh = () => qc.invalidateQueries({ queryKey: ['takeovers', guildId] })
+  const reorder = useMutation({
+    mutationFn: (groups: BoardColumn[]) => api(`/takeovers/${guildId}/order`, { method: 'PUT', body: { category, groups } }),
+    onSuccess: () => refresh(),
+  })
+  const removeGroup = useMutation({
+    mutationFn: (g: Group) => api(`/takeovers/${guildId}/groups/${g.id}`, { method: 'DELETE', body: { confirm: true } }),
+    onSuccess: () => { toast.success('Catégorie supprimée'); void refresh() },
+  })
+  const askRemoveGroup = async (g: Group) => {
+    if (await confirm({ title: `Supprimer la catégorie ${g.name} ?`, desc: 'Ses reprises restent, sans catégorie.', confirmText: 'Supprimer', destructive: true })) removeGroup.mutate(g)
+  }
   const setOpen = useMutation({
     mutationFn: ({ t, open }: { t: Takeover; open: boolean }) => api(`/takeovers/items/${t.id}/open`, { method: 'POST', body: { open } }),
     onSuccess: (_, v) => { toast.success(v.open ? `Inscriptions ouvertes : ${v.t.name}` : `Inscriptions fermées : ${v.t.name}`); refresh() },
@@ -119,10 +142,36 @@ function TakeoverList({ data, guildId, category }: { data: Payload; guildId: str
   const running = list.filter((t) => !t.finishedAt)
   const finished = list.filter((t) => t.finishedAt)
   const viewed = data.takeovers.find((t) => t.id === viewing)
+  const groups = data.groups.filter((g) => g.category === category)
+  const columns: BoardColumn[] = [
+    ...groups.map((g) => ({ id: g.id, items: running.filter((t) => t.groupId === g.id).map((t) => t.id) })),
+    { id: null, items: running.filter((t) => !groups.some((g) => g.id === t.groupId)).map((t) => t.id) },
+  ]
+  const newDraft = (groupId: number | null): Draft => ({ category, groupId, name: '', description: '', mode: 'simple', date: '', locked: false })
+  const header = (id: number | null, handle: ReactNode) => {
+    if (id === null && !groups.length) return null
+    const group = groups.find((g) => g.id === id)
+    return (
+      <div className='flex flex-wrap items-center gap-2 border-b bg-muted/40 px-2 py-1.5'>
+        {handle}
+        <div className='flex min-w-32 flex-1 items-center gap-2 px-1 font-medium'>
+          {group?.emoji && <EmojiView value={group.emoji} className='size-5' />}
+          <span className='truncate'>{group?.name ?? 'Sans catégorie'}</span>
+        </div>
+        {manage && group && (
+          <div className='flex items-center gap-1'>
+            <Button size='sm' variant='ghost' aria-label={`Ajouter une reprise dans ${group.name}`} onClick={() => setEditing(newDraft(group.id))}><Plus /></Button>
+            <Button size='sm' variant='ghost' aria-label={`Modifier la catégorie ${group.name}`} onClick={() => setEditingGroup(group)}><Pencil /></Button>
+            <Button size='sm' variant='danger-ghost' aria-label={`Supprimer la catégorie ${group.name}`} onClick={() => void askRemoveGroup(group)}><Trash2 /></Button>
+          </div>
+        )}
+      </div>
+    )
+  }
   const row = (t: Takeover) => {
     const count = t.entries.filter((e) => e.status === 'active').length
     return (
-      <li key={t.id} className='flex flex-wrap items-center gap-3 px-4 py-3'>
+      <div className='flex flex-wrap items-center gap-3 px-3 py-3'>
         <div className='min-w-48 flex-1'>
           <div className='flex flex-wrap items-center gap-2 font-medium'>{t.name} {statePill(t)}</div>
           <div className='text-xs text-muted-foreground'>
@@ -138,29 +187,72 @@ function TakeoverList({ data, guildId, category }: { data: Payload; guildId: str
             </label>
           )}
           <Button size='sm' variant='outline' onClick={() => setViewing(t.id)}><Users /> Inscrits</Button>
-          {manage && !t.finishedAt && <Button size='sm' variant='outline' onClick={() => setEditing({ id: t.id, category, name: t.name, description: t.description, mode: t.mode, date: t.interviewAt ? toInput(t.interviewAt) : '', locked: Boolean(t.convokedAt) })}>Modifier</Button>}
+          {manage && !t.finishedAt && <Button size='sm' variant='outline' onClick={() => setEditing({ id: t.id, category, groupId: t.groupId, name: t.name, description: t.description, mode: t.mode, date: t.interviewAt ? toInput(t.interviewAt) : '', locked: Boolean(t.convokedAt) })}>Modifier</Button>}
           {manage && <Button size='sm' variant='danger-ghost' aria-label={`Supprimer ${t.name}`} onClick={() => void askRemove(t)}><Trash2 /></Button>}
         </div>
-      </li>
+      </div>
     )
   }
+  const named = (id: number) => running.find((t) => t.id === id)
   return (
     <div className='grid grid-cols-[minmax(0,1fr)] gap-6'>
-      <Section title={`À reprendre (${running.length})`} actions={manage && <Button size='sm' onClick={() => setEditing({ category, name: '', description: '', mode: 'simple', date: '', locked: false })}><Plus /> Nouvelle reprise</Button>}>
-        {!running.length ? <EmptyState title={`Aucun ${LABELS[category].one} à reprendre`}>{LABELS[category].hint}</EmptyState> : <ul className='divide-y'>{running.map(row)}</ul>}
+      <Section title={`À reprendre (${running.length})`} actions={manage && (
+        <div className='flex flex-wrap gap-2'>
+          <Button size='sm' variant='outline' onClick={() => setEditingGroup({ category, name: '', emoji: null })}><FolderPlus /> Nouvelle catégorie</Button>
+          <Button size='sm' onClick={() => setEditing(newDraft(null))}><Plus /> Nouvelle reprise</Button>
+        </div>
+      )}>
+        {!running.length && !groups.length
+          ? <EmptyState title={`Aucun ${LABELS[category].one} à reprendre`}>{LABELS[category].hint}</EmptyState>
+          : (
+            <SortableBoard
+              columns={columns}
+              editable={manage}
+              onChange={(next) => reorder.mutateAsync(next)}
+              columnLabel={(id) => groups.find((g) => g.id === id)?.name ?? ''}
+              itemLabel={(id) => named(id)?.name ?? ''}
+              renderHeader={header}
+              renderItem={(id) => { const t = named(id); return t ? row(t) : null }}
+              empty={manage ? 'Glisse une reprise ici' : 'Rien pour le moment'}
+            />
+          )}
       </Section>
-      {finished.length > 0 && <Section title={`Terminées (${finished.length})`}><ul className='divide-y'>{finished.map(row)}</ul></Section>}
-      {editing && <EditDialog draft={editing} guildId={guildId} onClose={() => setEditing(null)} onSaved={refresh} />}
+      {finished.length > 0 && <Section title={`Terminées (${finished.length})`}><ul className='divide-y'>{finished.map((t) => <li key={t.id}>{row(t)}</li>)}</ul></Section>}
+      {editing && <EditDialog draft={editing} groups={groups} guildId={guildId} onClose={() => setEditing(null)} onSaved={refresh} />}
+      {editingGroup && <GroupDialog draft={editingGroup} guildId={guildId} onClose={() => setEditingGroup(null)} onSaved={refresh} />}
       {viewed && <EntriesDialog takeover={viewed} manage={manage} onClose={() => setViewing(null)} onChanged={refresh} />}
       {dialog}
     </div>
   )
 }
 
-function EditDialog({ draft, guildId, onClose, onSaved }: { draft: Draft; guildId: string; onClose: () => void; onSaved: () => void }) {
+function GroupDialog({ draft, guildId, onClose, onSaved }: { draft: GroupDraft; guildId: string; onClose: () => void; onSaved: () => void }) {
+  const [g, setG] = useState(draft)
+  const save = useMutation({
+    mutationFn: () => api(`/takeovers/${guildId}/groups`, { method: 'PUT', body: { id: g.id, category: g.category, name: g.name, emoji: g.emoji } }),
+    onSuccess: () => { toast.success('Catégorie enregistrée'); onSaved(); onClose() },
+  })
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className='sm:max-w-md'>
+        <DialogHeader><DialogTitle>{g.id ? `Modifier ${draft.name}` : `Nouvelle catégorie : ${LABELS[g.category].tab.toLowerCase()}`}</DialogTitle></DialogHeader>
+        <div className='grid grid-cols-[minmax(0,1fr)] gap-4'>
+          <div className='grid gap-1.5'><Label htmlFor='to-group-name'>Nom</Label><Input id='to-group-name' maxLength={40} placeholder='Par exemple « Garages »' value={g.name} onChange={(e) => setG({ ...g, name: e.target.value })} /></div>
+          <div className='grid gap-1.5'><Label htmlFor='to-group-emoji'>Émoji (facultatif)</Label><EmojiField id='to-group-emoji' value={g.emoji} onChange={(emoji) => setG({ ...g, emoji: emoji || null })} /></div>
+        </div>
+        <DialogFooter>
+          <Button variant='outline' onClick={onClose}>Annuler</Button>
+          <Button loading={save.isPending} disabled={!g.name.trim()} onClick={() => save.mutate()}><Save /> Enregistrer</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function EditDialog({ draft, groups, guildId, onClose, onSaved }: { draft: Draft; groups: Group[]; guildId: string; onClose: () => void; onSaved: () => void }) {
   const [t, setT] = useState(draft)
   const save = useMutation({
-    mutationFn: () => api(`/takeovers/${guildId}/items`, { method: 'PUT', body: { id: t.id, category: t.category, name: t.name, description: t.description, mode: t.mode, interviewAt: t.date ? fromInput(t.date) : null } }),
+    mutationFn: () => api(`/takeovers/${guildId}/items`, { method: 'PUT', body: { id: t.id, category: t.category, groupId: t.groupId, name: t.name, description: t.description, mode: t.mode, interviewAt: t.date ? fromInput(t.date) : null } }),
     onSuccess: () => { toast.success('Reprise enregistrée'); onSaved(); onClose() },
   })
   return (
@@ -170,6 +262,18 @@ function EditDialog({ draft, guildId, onClose, onSaved }: { draft: Draft; guildI
         <div className='grid grid-cols-[minmax(0,1fr)] gap-4'>
           <div className='grid gap-1.5'><Label htmlFor='to-name'>Nom</Label><Input id='to-name' maxLength={60} value={t.name} onChange={(e) => setT({ ...t, name: e.target.value })} /></div>
           <div className='grid gap-1.5'><Label htmlFor='to-desc'>Description</Label><Textarea id='to-desc' rows={3} maxLength={1000} value={t.description} onChange={(e) => setT({ ...t, description: e.target.value })} /></div>
+          {groups.length > 0 && (
+            <div className='grid gap-1.5'>
+              <Label htmlFor='to-group'>Catégorie</Label>
+              <Select value={t.groupId === null ? 'none' : String(t.groupId)} onValueChange={(v) => setT({ ...t, groupId: v === 'none' ? null : Number(v) })}>
+                <SelectTrigger id='to-group'><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='none'>Sans catégorie</SelectItem>
+                  {groups.map((g) => <SelectItem key={g.id} value={String(g.id)}>{g.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className='grid gap-1.5'>
             <Label htmlFor='to-mode'>Type d’inscription</Label>
             <Select value={t.mode} onValueChange={(mode) => setT({ ...t, mode: mode as Draft['mode'] })}>
@@ -269,10 +373,43 @@ function EntriesDialog({ takeover: t, manage, onClose, onChanged }: { takeover: 
   )
 }
 
-function Settings({ config, channels, guildId }: { config: Config; channels: Channel[]; guildId: string }) {
+function LinkedServers({ links, linkable, onChange }: { links: Link[]; linkable: LinkableGuild[]; onChange: (links: Link[]) => void }) {
+  const free = linkable.filter((g) => !links.some((l) => l.guildId === g.id))
+  const patch = (index: number, change: Partial<Link>) => onChange(links.map((l, i) => (i === index ? { ...l, ...change } : l)))
+  return (
+    <div className='grid grid-cols-[minmax(0,1fr)] gap-2'>
+      <Label>Salons reliés sur d’autres serveurs</Label>
+      <p className='text-xs text-muted-foreground'>Le même panneau et la même annonce y sont publiés, et tous les inscrits arrivent dans cette liste. Après avoir ajouté un serveur, enregistre puis clique sur Republier le panneau.</p>
+      {links.map((l, i) => {
+        const guild = linkable.find((g) => g.id === l.guildId)
+        return (
+          <div key={l.guildId} className='grid grid-cols-[minmax(0,1fr)] gap-3 rounded-md border p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end'>
+            <div className='flex h-9 min-w-0 items-center gap-2 font-medium'>
+              {guild && <GuildIcon src={guild.icon} name={guild.name} className='size-5' />}
+              <span className='truncate'>{guild?.name ?? l.guildId}</span>
+            </div>
+            <div className='grid gap-1.5'><Label>Salon du panneau</Label><ChannelSelect label={`Salon du panneau sur ${guild?.name ?? l.guildId}`} channels={guild?.channels ?? []} value={l.panelChannelId} onChange={(panelChannelId) => patch(i, { panelChannelId })} /></div>
+            <div className='grid gap-1.5'><Label>Salon d’annonce</Label><ChannelSelect label={`Salon d’annonce sur ${guild?.name ?? l.guildId}`} channels={guild?.channels ?? []} value={l.announceChannelId} onChange={(announceChannelId) => patch(i, { announceChannelId })} /></div>
+            <Button size='sm' variant='danger-ghost' aria-label={`Retirer ${guild?.name ?? l.guildId}`} onClick={() => onChange(links.filter((_, x) => x !== i))}><Trash2 /></Button>
+          </div>
+        )
+      })}
+      {free.length > 0 && (
+        <Select value='' onValueChange={(guildId) => onChange([...links, { guildId, panelChannelId: null, panelMessageId: null, announceChannelId: null }])}>
+          <SelectTrigger className='w-full sm:w-72' aria-label='Relier un autre serveur'><SelectValue placeholder='Relier un autre serveur…' /></SelectTrigger>
+          <SelectContent>{free.map((g) => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
+        </Select>
+      )}
+    </div>
+  )
+}
+
+function Settings({ config, channels, linkable, guildId }: { config: Config; channels: Channel[]; linkable: LinkableGuild[]; guildId: string }) {
   const qc = useQueryClient()
   const [draft, setDraft] = useState(config)
-  const dirty = JSON.stringify(draft) !== JSON.stringify(config)
+  // Publishing changes the message ids on the server: that is not an edit waiting to be saved
+  const comparable = (c: Config) => JSON.stringify(c, (key, value: unknown) => (key === 'panelMessageId' ? undefined : value))
+  const dirty = comparable(draft) !== comparable(config)
   const set = (c: Category, patch: Partial<CategoryConfig>) => setDraft({ ...draft, [c]: { ...draft[c], ...patch } })
   const refresh = () => qc.invalidateQueries({ queryKey: ['takeovers', guildId] })
   const save = useMutation({
@@ -293,6 +430,19 @@ function Settings({ config, channels, guildId }: { config: Config; channels: Cha
             <div className='grid gap-4 sm:grid-cols-2'>
               <div className='grid gap-1.5'><Label>Salon du panneau</Label><ChannelSelect label='Salon du panneau' channels={channels} value={draft[c].panelChannelId} onChange={(panelChannelId) => set(c, { panelChannelId })} /></div>
               <div className='grid gap-1.5'><Label>Salon d’annonce du repreneur</Label><ChannelSelect label='Salon d’annonce du repreneur' channels={channels} value={draft[c].announceChannelId} onChange={(announceChannelId) => set(c, { announceChannelId })} /></div>
+            </div>
+            <LinkedServers links={draft[c].links} linkable={linkable} onChange={(links) => set(c, { links })} />
+            <div className='grid gap-4 rounded-md border p-3'>
+              <p className='text-sm font-medium'>Apparence du panneau</p>
+              <div className='grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto]'>
+                <div className='grid gap-1.5'><Label htmlFor={`to-title-${c}`}>Titre</Label><Input id={`to-title-${c}`} maxLength={100} value={draft[c].panelTitle} onChange={(e) => set(c, { panelTitle: e.target.value })} /></div>
+                <div className='grid gap-1.5'><Label htmlFor={`to-color-${c}`}>Couleur</Label><ColorPicker id={`to-color-${c}`} value={draft[c].color} onChange={(color) => set(c, { color })} /></div>
+              </div>
+              <div className='grid gap-1.5'><Label htmlFor={`to-intro-${c}`}>Texte d’introduction</Label><Textarea id={`to-intro-${c}`} rows={3} maxLength={1000} value={draft[c].panelDescription} onChange={(e) => set(c, { panelDescription: e.target.value })} /></div>
+              <div className='grid gap-4 sm:grid-cols-2'>
+                <div className='grid gap-1.5'><Label htmlFor={`to-thumb-${c}`}>Vignette (logo du serveur si vide)</Label><ImageInput id={`to-thumb-${c}`} uploads={false} value={draft[c].thumbnailUrl} onChange={(thumbnailUrl) => set(c, { thumbnailUrl })} /></div>
+                <div className='grid gap-1.5'><Label htmlFor={`to-image-${c}`}>Bannière</Label><ImageInput id={`to-image-${c}`} uploads={false} value={draft[c].imageUrl} onChange={(imageUrl) => set(c, { imageUrl })} /></div>
+              </div>
             </div>
             <div className='grid gap-1.5'>
               <Label htmlFor={`to-convoke-${c}`}>MP envoyé aux inscrits</Label>

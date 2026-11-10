@@ -813,7 +813,7 @@ export function createExecutor(client) {
 
 		async publishTakeoverPanel(channelId, messageId, view) {
 			const channel = await client.channels.fetch(channelId);
-			const payload = takeoverPanelPayload(view);
+			const payload = takeoverPanelPayload({ ...view, guild: { name: channel.guild.name, icon: channel.guild.iconURL() } });
 			if (messageId) {
 				const existing = await channel.messages.fetch(messageId).catch(() => null);
 				if (existing) {
