@@ -24,6 +24,7 @@ export function latestSchemaVersion(dir = MIGRATIONS_DIR) {
 const VERSION_TABLE = 'CREATE TABLE IF NOT EXISTS schema_migrations (version INT PRIMARY KEY, applied_at BIGINT NOT NULL)';
 // Same number for every process of the bot: pg_advisory_lock serialises their migrations
 const LOCK_KEY = 'brl_migrate';
+const LOCK_WAIT = '15min';
 
 export async function schemaVersion(db) {
 	await db.query(VERSION_TABLE);
@@ -37,8 +38,13 @@ export async function schemaVersion(db) {
 export async function migrate(db, dir = MIGRATIONS_DIR, { beforeMigrate = null } = {}) {
 	const client = await db.pool.connect();
 	try {
-		await client.query('SET lock_timeout = \'120s\'');
+		// The holder can keep the lock for minutes (backup before migrating): waiting has to outlast the
+		// statement timeout of the pool, or this process crashes and restarts in a loop. Bounded in case it hangs
+		await client.query('SET statement_timeout = 0');
+		await client.query(`SET lock_timeout = '${LOCK_WAIT}'`);
 		await client.query('SELECT pg_advisory_lock(hashtext($1))', [LOCK_KEY]);
+		await client.query('RESET statement_timeout');
+		await client.query('SET lock_timeout = \'120s\'');
 		try {
 			const from = await schemaVersion(db);
 			const latest = latestSchemaVersion(dir);
@@ -66,6 +72,7 @@ export async function migrate(db, dir = MIGRATIONS_DIR, { beforeMigrate = null }
 		}
 	}
 	finally {
+		await client.query('RESET statement_timeout; RESET lock_timeout').catch(() => undefined);
 		client.release();
 	}
 }

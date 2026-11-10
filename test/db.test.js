@@ -47,6 +47,32 @@ test('refuses a database newer than the code', async () => {
 	await assert.rejects(() => migrate(db, dir), /newer/);
 });
 
+test('waiting for another process to finish migrating outlasts the statement timeout', async () => {
+	const dir = tmpDir();
+	fs.writeFileSync(path.join(dir, '001_ok.sql'), 'CREATE TABLE a (x INTEGER);');
+	const db = await createScratchDatabase({ migrate: false });
+	const holder = await db.pool.connect();
+	await holder.query('SELECT pg_advisory_lock(hashtext($1))', ['brl_migrate']);
+
+	// Same situation as production, with a timeout short enough for a test
+	const connect = db.pool.connect.bind(db.pool);
+	let used;
+	db.pool.connect = async () => {
+		used = await connect();
+		await used.query('SET statement_timeout = 150');
+		return used;
+	};
+	const migrating = migrate(db, dir);
+	await new Promise(resolve => setTimeout(resolve, 500));
+	await holder.query('SELECT pg_advisory_unlock(hashtext($1))', ['brl_migrate']);
+	holder.release();
+	db.pool.connect = connect;
+
+	assert.deepEqual(await migrating, { from: 0, to: 1 });
+	assert.equal((await used.query('SHOW lock_timeout')).rows[0].lock_timeout, '0', 'the pooled connection is given back as it was');
+	assert.equal((await used.query('SHOW statement_timeout')).rows[0].statement_timeout, '1min');
+});
+
 test('settings store JSON values and delete on null', async () => {
 	const settings = createSettings(await openTestDb());
 	assert.equal(await settings.get('x', 'default'), 'default');
