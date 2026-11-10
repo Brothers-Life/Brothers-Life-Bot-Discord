@@ -4,6 +4,7 @@ import { welcomePayload } from '../../src/bot/ticketsUi.js';
 import { applicationPayload } from '../../src/bot/recruitmentUi.js';
 import { appealPayload } from '../../src/bot/appealsUi.js';
 import { takeoverPanelPayload, takeoverPickerPayload } from '../../src/bot/takeoversUi.js';
+import { fivemPayload } from '../../src/bot/fivemUi.js';
 
 // Discord refuses a whole message whose embed is over 6000 characters: long form answers must be cut
 const embedLength = (embed) => {
@@ -98,4 +99,41 @@ test('takeover picker: long lists are split and every text fits', () => {
 	assert.equal(options.length, 30);
 	assert.ok(options.every(o => o.label.length <= 100 && o.description.length <= 100));
 	assert.equal(options[0].value, '1');
+});
+
+const fivemServer = { name: 'BRL', joinCode: null, config: { color: '#ff9628', showPlayers: true } };
+const fivemStatus = list => ({ online: true, players: list.length, max: 64, list, checkedAt: Date.now(), onlineSince: Date.now() - 60_000 });
+const players = (count, name) => Array.from({ length: count }, (_, i) => ({ id: i + 1, name, ping: 40 }));
+
+test('FiveM status: the connected players are side by side and the whole message fits', () => {
+	for (const count of [6, 64, 400, 2000]) {
+		const embed = fivemPayload({ server: fivemServer, status: fivemStatus(players(count, 'x'.repeat(64))) }).embeds[0];
+		const { fields } = embed.toJSON();
+		assert.ok(embedLength(embed) <= 6000, `${count} players`);
+		assert.ok(fields.length <= 25, `${count} players`);
+		assert.ok(fields.every(f => f.value.length > 0 && f.value.length <= 1024), `${count} players`);
+		assert.ok(fields.slice(3).every(f => f.inline), `${count} players`);
+	}
+	const crowded = fivemPayload({ server: fivemServer, status: fivemStatus(players(2000, 'x'.repeat(64))) }).embeds[0].toJSON();
+	assert.match(crowded.fields.at(-1).value, /… et \d+ autres/);
+});
+
+test('FiveM status: fill bar, average ping and a short list in one column', () => {
+	const list = [{ id: 7, name: '**Jo**', ping: 30 }, { id: 12, name: 'Un nom vraiment beaucoup trop long', ping: 50 }];
+	const embed = fivemPayload({ server: fivemServer, status: fivemStatus(list), guild: { icon: 'https://cdn.discordapp.com/icons/1/a.png' } }).embeds[0].toJSON();
+	assert.equal(embed.fields[1].value, '**2** / 64\n▰▱▱▱▱▱▱▱▱▱');
+	assert.equal(embed.fields[3].name, '👥 Connectés (2)');
+	assert.equal(embed.fields[3].inline, false);
+	assert.match(embed.fields[3].value, /^` {2}7` Jo\n` 12` Un nom vraiment b…\n$/);
+	assert.match(embed.footer.text, /Ping moyen 40 ms/);
+	assert.equal(embed.thumbnail.url, 'https://cdn.discordapp.com/icons/1/a.png');
+});
+
+test('FiveM status: nobody connected and server down still give a valid message', () => {
+	const empty = fivemPayload({ server: fivemServer, status: fivemStatus([]) }).embeds[0].toJSON();
+	assert.match(empty.fields.at(-1).value, /Personne/);
+	assert.equal(empty.footer.text, 'Mis à jour');
+	const down = fivemPayload({ server: fivemServer, status: { online: false, players: 0, max: 64, list: [], checkedAt: Date.now() } }).embeds[0].toJSON();
+	assert.match(down.description, /ne répond pas/);
+	assert.equal(down.fields[1].value, '—');
 });
