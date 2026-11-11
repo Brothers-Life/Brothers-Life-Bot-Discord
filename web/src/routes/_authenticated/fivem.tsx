@@ -21,7 +21,7 @@ import { Switch } from '@/components/ui/switch'
 import { ColorPicker } from '@/components/app/color-picker'
 import { VariablePicker } from '@/components/app/variable-picker'
 import { DuplicateButton } from '@/components/app/duplicate-button'
-import { StatusImageDialog, type StatusImage } from '@/features/fivem/status-image-editor'
+import { StatusMessageDialog, type StatusEmbed, type StatusImage } from '@/features/fivem/status-image-editor'
 
 export const Route = createFileRoute('/_authenticated/fivem')({
   component: FivemPage,
@@ -29,7 +29,7 @@ export const Route = createFileRoute('/_authenticated/fivem')({
 
 type Status = { online: boolean; players: number; max: number; hostname: string | null; list: { id: number; name: string; ping: number | null }[]; checkedAt: number; error: string | null; onlineSince: number | null; peak: number }
 type Server = {
-  id: number; name: string; address: string; joinCode: string | null; config: { showPlayers: boolean; showImage: boolean; image: StatusImage; color: string }
+  id: number; name: string; address: string; joinCode: string | null; config: { showPlayers: boolean; showImage: boolean; image: StatusImage; embed: StatusEmbed; color: string }
   status: Status | null; messages: { id: number; guildId: string; channelId: string; messageId: string | null }[]
 }
 type Presence = { enabled: boolean; serverIds: number[]; text: string; offlineText: string }
@@ -64,7 +64,7 @@ function FivemPage() {
         </div>
       )}
       {editing && <ServerDialog initial={editing} onClose={() => { setEditing(null); qc.invalidateQueries({ queryKey: ['fivem'] }) }} />}
-      {imaging && <StatusImageDialog server={imaging} onClose={() => setImaging(null)} />}
+      {imaging && <StatusMessageDialog server={imaging} onClose={() => setImaging(null)} />}
     </Page>
   )
 }
@@ -131,8 +131,8 @@ function ServerCard({ server: s, data, manage, onEdit, onImage, onDuplicate }: {
       <div className='grid gap-2 border-t pt-3'>
         <div className='flex flex-wrap items-center gap-2'>
           <h3 className='me-auto text-sm font-medium'>Messages de statut</h3>
-          <Pill tone={s.config.image.enabled ? 'success' : undefined}>{s.config.image.enabled ? 'Image activée' : 'Image désactivée'}</Pill>
-          {manage && <Button size='sm' variant='outline' onClick={onImage}><ImageIcon /> Image de statut</Button>}
+          <Pill>{s.config.image.enabled && s.config.embed.enabled ? 'Image + embed' : s.config.image.enabled ? 'Image seule' : 'Embed seul'}</Pill>
+          {manage && <Button size='sm' variant='outline' onClick={onImage}><ImageIcon /> Personnaliser</Button>}
         </div>
         {s.messages.map((m) => (
           <div key={m.id} className='flex items-center gap-2 text-sm'>
@@ -161,11 +161,10 @@ function ServerDialog({ initial, onClose }: { initial: Partial<Server>; onClose:
   const [name, setName] = useState(initial.name ?? '')
   const [address, setAddress] = useState(initial.address ?? '')
   const [joinCode, setJoinCode] = useState(initial.joinCode ?? '')
-  const [showPlayers, setShowPlayers] = useState(initial.config?.showPlayers ?? true)
   const [color, setColor] = useState(initial.config?.color ?? '#d6a249')
   const save = useMutation({
     mutationFn: () => {
-      const body = { name, address, joinCode: joinCode || null, config: { showPlayers, color } }
+      const body = { name, address, joinCode: joinCode || null, config: { color } }
       return initial.id ? api(`/fivem/${initial.id}`, { method: 'PUT', body }) : api('/fivem', { method: 'POST', body })
     },
     onSuccess: () => { toast.success('Serveur enregistré'); onClose() },
@@ -187,7 +186,7 @@ function ServerDialog({ initial, onClose }: { initial: Partial<Server>; onClose:
             <span className='text-xs text-muted-foreground'>Ajoute un bouton « Se connecter » aux messages.</span>
           </div>
           <div className='flex flex-wrap items-center gap-6'>
-            <label className='flex items-center gap-2 text-sm'><Switch checked={showPlayers} onCheckedChange={setShowPlayers} /> Liste des joueurs dans les messages</label>            <label className='flex items-center gap-2 text-sm'>Couleur <ColorPicker className='w-36' value={color} onChange={(hex) => setColor(hex)} /></label>
+            <label className='flex items-center gap-2 text-sm'>Couleur <ColorPicker className='w-36' value={color} onChange={(hex) => setColor(hex)} /></label>
           </div>
         </div>
         <DialogFooter>

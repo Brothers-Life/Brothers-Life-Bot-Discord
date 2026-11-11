@@ -138,6 +138,26 @@ test('FiveM status: with the picture, the state lives in the image and the playe
 	assert.deepEqual(fivemPayload({ server: fivemServer, status: fivemStatus([]) }).files, []);
 });
 
+test('FiveM status: the embed follows its settings, and comes back when there is no picture', () => {
+	const server = { ...fivemServer, joinCode: 'abc123', config: { ...fivemServer.config, embed: { enabled: false, buttonLabel: 'Rejoindre' } } };
+	const png = Buffer.from('png');
+	const only = fivemPayload({ server, status: fivemStatus(players(3, 'Jo')), image: png });
+	assert.deepEqual(only.embeds, [], 'the picture alone');
+	assert.equal(only.files.length, 1);
+	assert.equal(only.components[0].components[0].toJSON().label, 'Rejoindre');
+	assert.equal(fivemPayload({ server, status: fivemStatus([]) }).embeds.length, 1, 'no picture: the embed comes back');
+
+	const custom = { ...fivemServer, joinCode: 'abc123', config: { ...fivemServer.config, showPlayers: false, embed: { title: '{name} · {players}/{max}', description: 'Statut : {status}', fields: false, footer: false, thumbnail: false, button: false } } };
+	const payload = fivemPayload({ server: custom, status: fivemStatus(players(3, 'Jo')), guild: { icon: 'https://cdn.discordapp.com/icons/1/a.png' } });
+	const embed = payload.embeds[0].toJSON();
+	assert.equal(embed.title, 'BRL · 3/64');
+	assert.equal(embed.description, 'Statut : En ligne');
+	assert.equal(embed.fields, undefined);
+	assert.equal(embed.footer, undefined);
+	assert.equal(embed.thumbnail, undefined);
+	assert.deepEqual(payload.components, []);
+});
+
 test('FiveM status: nobody connected and server down still give a valid message', () => {
 	const empty = fivemPayload({ server: fivemServer, status: fivemStatus([]) }).embeds[0].toJSON();
 	assert.match(empty.fields.at(-1).value, /Personne/);

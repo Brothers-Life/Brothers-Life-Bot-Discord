@@ -3,6 +3,7 @@ import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
 import { fetchImage, fillVars } from './cards.js';
 import { blockedHost } from './netGuard.js';
 import { HISTORY_MAX, normalizeStatusImage, renderStatusCard } from './fivem/statusCard.js';
+import { normalizeStatusEmbed } from './fivem/statusEmbed.js';
 
 definePermission('fivem.view', { label: 'Voir l’état des serveurs FiveM', category: 'FiveM' });
 definePermission('fivem.manage', { label: 'Gérer les serveurs FiveM, leurs messages de statut et le statut du bot', category: 'FiveM' });
@@ -53,7 +54,7 @@ export function createFivem({ db, network, audit, executor, settings, logs, uplo
 		const image = normalizeStatusImage(config.image ?? { enabled: config.showImage !== false });
 		return {
 			id: row.id, name: row.name, address: row.address, joinCode: row.join_code,
-			config: { showPlayers: config.showPlayers !== false, showImage: image.enabled, image, color: /^#[0-9a-f]{6}$/i.test(config.color ?? '') ? config.color : '#d6a249' },
+			config: { showPlayers: config.showPlayers !== false, showImage: image.enabled, image, embed: normalizeStatusEmbed(config.embed), color: /^#[0-9a-f]{6}$/i.test(config.color ?? '') ? config.color : '#d6a249' },
 			status: cache.get(row.id) ?? null,
 			maintenance,
 			messages: (await q.messagesOf.all(row.id)).map(m => ({ id: m.id, guildId: m.guild_id, channelId: m.channel_id, messageId: m.message_id })),
@@ -181,7 +182,9 @@ export function createFivem({ db, network, audit, executor, settings, logs, uplo
 		const config = { ...current?.config, ...input.config };
 		// The picture editor sends the whole design; an older client only switches it on or off
 		const image = normalizeStatusImage(input.config?.image ?? { ...current?.config?.image, ...(input.config?.showImage === undefined ? {} : { enabled: input.config.showImage !== false }) });
-		return { name, address, joinCode: code || null, image, config: JSON.stringify({ showPlayers: config.showPlayers !== false, image, color: /^#[0-9a-f]{6}$/i.test(config.color ?? '') ? config.color : '#d6a249' }) };
+		const embed = normalizeStatusEmbed(config.embed);
+		if (!image.enabled && !embed.enabled) throw new ValidationError('Garde au moins l’image ou l’embed : sinon le message de statut serait vide.');
+		return { name, address, joinCode: code || null, image, config: JSON.stringify({ showPlayers: config.showPlayers !== false, image, embed, color: /^#[0-9a-f]{6}$/i.test(config.color ?? '') ? config.color : '#d6a249' }) };
 	}
 
 	async function presence() {

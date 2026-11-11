@@ -75,6 +75,20 @@ test('status picture: sent with every refresh, and left out when the server turn
 	assert.equal((await fivem.get(server.id)).config.image.enabled, false);
 });
 
+test('embed settings: kept per server, and the message never ends up empty', async () => {
+	const { fivem, owner } = await setup();
+	const server = await fivem.save(owner, { name: 'BRL RP', address: '51.75.12.34:30120' });
+	assert.equal(server.config.embed.title, '🎮 {name}', 'defaults');
+	const saved = await fivem.save(owner, { id: server.id, config: { embed: { ...server.config.embed, title: 'Statut de {name}', footer: false, buttonLabel: '' }, showPlayers: false } });
+	assert.equal(saved.config.embed.title, 'Statut de {name}');
+	assert.equal(saved.config.embed.footer, false);
+	assert.equal(saved.config.embed.buttonLabel, 'Se connecter', 'an empty label goes back to the default one');
+	assert.equal(saved.config.showPlayers, false);
+	await fivem.save(owner, { id: server.id, config: { embed: { ...saved.config.embed, enabled: false } } });
+	await assert.rejects(fivem.save(owner, { id: server.id, config: { showImage: false } }), /au moins l’image ou l’embed/);
+	assert.equal((await fivem.get(server.id)).config.image.enabled, true, 'nothing saved');
+});
+
 test('picture editor: the design is kept, checked, previewed, and the messages follow at once', async () => {
 	const { core, fivem, owner, executor } = await setup();
 	const server = await fivem.save(owner, { name: 'BRL RP', address: '51.75.12.34:30120' });

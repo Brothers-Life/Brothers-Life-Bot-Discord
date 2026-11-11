@@ -1,5 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { STATUS_IMAGE_NAME } from '../core/fivem/statusCard.js';
+import { normalizeStatusEmbed, statusVars } from '../core/fivem/statusEmbed.js';
+import { fillVars } from '../core/cards.js';
 
 const NAME_MAX = 18;
 const COLUMNS = 3;
@@ -57,20 +59,33 @@ function averagePing(list) {
 // Status message of a FiveM server (channel message kept up to date, and /fivem). `image`: PNG of the status, sent as an
 // attachment (shown wider than an embed image), which then carries the state and the players count instead of the fields
 export function fivemPayload({ server, status, guild = null, image = null }) {
+	const settings = normalizeStatusEmbed(server.config.embed);
+	const files = image ? [{ attachment: image, name: STATUS_IMAGE_NAME }] : [];
+	const components = server.joinCode && settings.button
+		? [new ActionRowBuilder().addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(settings.buttonLabel).setEmoji('🎮').setURL(`https://cfx.re/join/${server.joinCode}`))]
+		: [];
+	// Embed turned off: the picture says it all. Without a picture (off, or not drawn) the embed comes back
+	if (!settings.enabled && image) return { embeds: [], components, files };
+
 	const online = Boolean(status?.online);
 	const maintenance = server.maintenance ?? null;
 	const statusText = maintenance ? '🛠️ Maintenance' : status ? (online ? '🟢 En ligne' : '🔴 Hors ligne') : '⏳ Vérification…';
 	const ping = online ? averagePing(status.list) : null;
+	const vars = statusVars(server, status);
 	const embed = new EmbedBuilder()
 		.setColor(maintenance ? 0xf0b232 : online ? Number.parseInt(server.config.color.slice(1), 16) : 0xed4245)
-		.setTitle(`🎮 ${server.name}`)
-		.setThumbnail(image ? null : guild?.icon ?? null)
-		.setFooter({ text: ping === null ? 'Mis à jour' : `Ping moyen ${ping} ms · Mis à jour`, iconURL: guild?.icon ?? undefined })
-		.setTimestamp(status?.checkedAt ? new Date(status.checkedAt) : new Date());
+		.setTitle(fillVars(settings.title, vars).slice(0, 256))
+		.setThumbnail(settings.thumbnail && !image ? guild?.icon ?? null : null);
+	if (settings.footer) {
+		embed
+			.setFooter({ text: ping === null ? 'Mis à jour' : `Ping moyen ${ping} ms · Mis à jour`, iconURL: guild?.icon ?? undefined })
+			.setTimestamp(status?.checkedAt ? new Date(status.checkedAt) : new Date());
+	}
 	if (maintenance) embed.setDescription(`🛠️ **Maintenance en cours**${maintenance.since ? ` depuis <t:${Math.round(maintenance.since / 1000)}:R>` : ''}${maintenance.reason ? `\n${maintenance.reason.slice(0, 300)}` : ''}`);
+	else if (settings.description) embed.setDescription(fillVars(settings.description, vars).slice(0, 4000));
 	else if (online && status.hostname && status.hostname !== server.name) embed.setDescription(status.hostname.slice(0, 300));
 	else if (status && !online) embed.setDescription('Le serveur ne répond pas pour le moment.');
-	if (!image) {
+	if (!image && settings.fields) {
 		embed.addFields(
 			{ name: '📡 Statut', value: statusText, inline: true },
 			{ name: '👥 Joueurs', value: online ? `**${status.players}** / ${status.max}${fillBar(status.players, status.max)}` : '—', inline: true },
@@ -78,8 +93,5 @@ export function fivemPayload({ server, status, guild = null, image = null }) {
 		if (online && status.onlineSince) embed.addFields({ name: '⏱️ En ligne depuis', value: `<t:${Math.floor(status.onlineSince / 1000)}:R>`, inline: true });
 	}
 	if (online && server.config.showPlayers) embed.addFields(...playerFields(status.list));
-	const components = server.joinCode
-		? [new ActionRowBuilder().addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Se connecter').setEmoji('🎮').setURL(`https://cfx.re/join/${server.joinCode}`))]
-		: [];
-	return { embeds: [embed], components, files: image ? [{ attachment: image, name: STATUS_IMAGE_NAME }] : [] };
+	return { embeds: [embed], components, files };
 }
