@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, Gamepad2, MessageSquarePlus, Pencil, Plus, Save, Server, Trash2, Users, X } from 'lucide-react'
+import { ChevronDown, Gamepad2, ImageIcon, MessageSquarePlus, Pencil, Plus, Save, Server, Trash2, Users, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Channel } from '@/lib/types'
@@ -21,6 +21,7 @@ import { Switch } from '@/components/ui/switch'
 import { ColorPicker } from '@/components/app/color-picker'
 import { VariablePicker } from '@/components/app/variable-picker'
 import { DuplicateButton } from '@/components/app/duplicate-button'
+import { StatusImageDialog, type StatusImage } from '@/features/fivem/status-image-editor'
 
 export const Route = createFileRoute('/_authenticated/fivem')({
   component: FivemPage,
@@ -28,7 +29,7 @@ export const Route = createFileRoute('/_authenticated/fivem')({
 
 type Status = { online: boolean; players: number; max: number; hostname: string | null; list: { id: number; name: string; ping: number | null }[]; checkedAt: number; error: string | null; onlineSince: number | null; peak: number }
 type Server = {
-  id: number; name: string; address: string; joinCode: string | null; config: { showPlayers: boolean; showImage: boolean; color: string }
+  id: number; name: string; address: string; joinCode: string | null; config: { showPlayers: boolean; showImage: boolean; image: StatusImage; color: string }
   status: Status | null; messages: { id: number; guildId: string; channelId: string; messageId: string | null }[]
 }
 type Presence = { enabled: boolean; serverIds: number[]; text: string; offlineText: string }
@@ -39,6 +40,7 @@ function FivemPage() {
   const manage = can('fivem.manage')
   const { data } = useQuery({ queryKey: ['fivem'], queryFn: () => api<Data>('/fivem'), refetchInterval: 20_000 })
   const [editing, setEditing] = useState<Partial<Server> | null>(null)
+  const [imaging, setImaging] = useState<Server | null>(null)
   const qc = useQueryClient()
   return (
     <Page
@@ -57,16 +59,17 @@ function FivemPage() {
           )}
           {!data.servers.length
             ? <Section title='Serveurs'><EmptyState title='Aucun serveur FiveM'>Ajoute l’adresse ip:port de ton serveur.</EmptyState></Section>
-            : <div className='stagger grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2'>{data.servers.map((s) => <ServerCard key={s.id} server={s} data={data} manage={manage} onEdit={() => setEditing(s)} onDuplicate={() => setEditing(copyOf(s, 'name'))} />)}</div>}
+            : <div className='stagger grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2'>{data.servers.map((s) => <ServerCard key={s.id} server={s} data={data} manage={manage} onEdit={() => setEditing(s)} onImage={() => setImaging(s)} onDuplicate={() => setEditing(copyOf(s, 'name'))} />)}</div>}
           {manage && data.servers.length > 0 && <PresenceSection key={JSON.stringify(data.presence)} data={data} />}
         </div>
       )}
       {editing && <ServerDialog initial={editing} onClose={() => { setEditing(null); qc.invalidateQueries({ queryKey: ['fivem'] }) }} />}
+      {imaging && <StatusImageDialog server={imaging} onClose={() => setImaging(null)} />}
     </Page>
   )
 }
 
-function ServerCard({ server: s, data, manage, onEdit, onDuplicate }: { server: Server; data: Data; manage: boolean; onEdit: () => void; onDuplicate: () => void }) {
+function ServerCard({ server: s, data, manage, onEdit, onImage, onDuplicate }: { server: Server; data: Data; manage: boolean; onEdit: () => void; onImage: () => void; onDuplicate: () => void }) {
   const qc = useQueryClient()
   const refresh = () => qc.invalidateQueries({ queryKey: ['fivem'] })
   const [showPlayers, setShowPlayers] = useState(false)
@@ -126,7 +129,11 @@ function ServerCard({ server: s, data, manage, onEdit, onDuplicate }: { server: 
       )}
 
       <div className='grid gap-2 border-t pt-3'>
-        <h3 className='text-sm font-medium'>Messages de statut</h3>
+        <div className='flex flex-wrap items-center gap-2'>
+          <h3 className='me-auto text-sm font-medium'>Messages de statut</h3>
+          <Pill tone={s.config.image.enabled ? 'success' : undefined}>{s.config.image.enabled ? 'Image activée' : 'Image désactivée'}</Pill>
+          {manage && <Button size='sm' variant='outline' onClick={onImage}><ImageIcon /> Image de statut</Button>}
+        </div>
         {s.messages.map((m) => (
           <div key={m.id} className='flex items-center gap-2 text-sm'>
             <span className='flex-1 truncate'>{data.guilds.find((g) => g.id === m.guildId)?.name ?? m.guildId} · #{channelName(m.guildId, m.channelId)}</span>
@@ -155,11 +162,10 @@ function ServerDialog({ initial, onClose }: { initial: Partial<Server>; onClose:
   const [address, setAddress] = useState(initial.address ?? '')
   const [joinCode, setJoinCode] = useState(initial.joinCode ?? '')
   const [showPlayers, setShowPlayers] = useState(initial.config?.showPlayers ?? true)
-  const [showImage, setShowImage] = useState(initial.config?.showImage ?? true)
   const [color, setColor] = useState(initial.config?.color ?? '#d6a249')
   const save = useMutation({
     mutationFn: () => {
-      const body = { name, address, joinCode: joinCode || null, config: { showPlayers, showImage, color } }
+      const body = { name, address, joinCode: joinCode || null, config: { showPlayers, color } }
       return initial.id ? api(`/fivem/${initial.id}`, { method: 'PUT', body }) : api('/fivem', { method: 'POST', body })
     },
     onSuccess: () => { toast.success('Serveur enregistré'); onClose() },
@@ -181,9 +187,7 @@ function ServerDialog({ initial, onClose }: { initial: Partial<Server>; onClose:
             <span className='text-xs text-muted-foreground'>Ajoute un bouton « Se connecter » aux messages.</span>
           </div>
           <div className='flex flex-wrap items-center gap-6'>
-            <label className='flex items-center gap-2 text-sm'><Switch checked={showPlayers} onCheckedChange={setShowPlayers} /> Liste des joueurs dans les messages</label>
-            <label className='flex items-center gap-2 text-sm'><Switch checked={showImage} onCheckedChange={setShowImage} /> Image de statut (jauge et courbe)</label>
-            <label className='flex items-center gap-2 text-sm'>Couleur <ColorPicker className='w-36' value={color} onChange={(hex) => setColor(hex)} /></label>
+            <label className='flex items-center gap-2 text-sm'><Switch checked={showPlayers} onCheckedChange={setShowPlayers} /> Liste des joueurs dans les messages</label>            <label className='flex items-center gap-2 text-sm'>Couleur <ColorPicker className='w-36' value={color} onChange={(hex) => setColor(hex)} /></label>
           </div>
         </div>
         <DialogFooter>

@@ -17,7 +17,7 @@ async function setup() {
 	const ctx = await withNetwork();
 	const { core, executor } = ctx;
 	executor.channels.set(CHANNEL, { guildId: MAIN, name: 'statut' });
-	const fivem = createFivem({ db: core.db, network: core.network, audit: core.audit, executor, settings: core.settings, logs: core.logs, fetchImpl, logger: { warn: () => undefined } });
+	const fivem = createFivem({ db: core.db, network: core.network, audit: core.audit, executor, settings: core.settings, logs: core.logs, uploads: core.uploads, fetchImpl, logger: { warn: () => undefined } });
 	return { ...ctx, fivem, world };
 }
 
@@ -72,6 +72,34 @@ test('status picture: sent with every refresh, and left out when the server turn
 	await fivem.save(owner, { id: server.id, config: { showImage: false } });
 	await fivem.tick();
 	assert.equal(executor.fivemMessages.at(-1).data.image, null);
+	assert.equal((await fivem.get(server.id)).config.image.enabled, false);
+});
+
+test('picture editor: the design is kept, checked, previewed, and the messages follow at once', async () => {
+	const { core, fivem, owner, executor } = await setup();
+	const server = await fivem.save(owner, { name: 'BRL RP', address: '51.75.12.34:30120' });
+	assert.deepEqual(server.config.image.stats, { ping: true, peak: true, fill: true }, 'defaults');
+	await fivem.addStatusMessage(owner, server.id, MAIN, CHANNEL);
+
+	const design = { ...server.config.image, title: 'Brothers', background: 'none', gauge: false, chartHours: 24, darkness: 500 };
+	const sent = executor.fivemMessages.length;
+	const saved = await fivem.save(owner, { id: server.id, config: { image: design, color: '#123456' } });
+	assert.equal(saved.config.image.title, 'Brothers');
+	assert.equal(saved.config.image.darkness, 100, 'clamped');
+	assert.equal(saved.config.image.chartHours, 24);
+	assert.equal(saved.config.color, '#123456');
+	assert.equal(saved.name, 'BRL RP', 'name and address untouched');
+	assert.equal(executor.fivemMessages.length, sent + 1, 'the message is redrawn right away');
+
+	await assert.rejects(fivem.save(owner, { id: server.id, config: { image: { ...design, background: 'custom' } } }), /image de fond/);
+	await assert.rejects(fivem.save(owner, { id: server.id, config: { image: { ...design, logo: 'custom', logoImage: `upload:${'a'.repeat(32)}.png` } } }), /n’existe plus/);
+	const png = await fivem.previewImage(owner, server.id, { image: { ...design, background: 'car' } });
+	const { id: uploadId } = await core.uploads.save(Buffer.from(png));
+	const withLogo = await fivem.save(owner, { id: server.id, config: { image: { ...design, logo: 'custom', logoImage: `upload:${uploadId}` } } });
+	assert.equal(withLogo.config.image.logoImage, `upload:${uploadId}`);
+
+	assert.equal(Buffer.from(await fivem.previewImage(owner, server.id, { image: { background: 'custom' } })).subarray(1, 4).toString(), 'PNG', 'a preview without its picture still draws');
+	await assert.rejects(fivem.previewImage({ id: 'x', can: () => false }, server.id, {}), /fivem.manage/);
 });
 
 test('addresses: link-local and metadata endpoints refused, local network accepted for FiveM', async () => {

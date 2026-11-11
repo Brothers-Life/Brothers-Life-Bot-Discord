@@ -1,8 +1,8 @@
 import { definePermission } from './permissions.js';
 import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
-import { fillVars } from './cards.js';
+import { fetchImage, fillVars } from './cards.js';
 import { blockedHost } from './netGuard.js';
-import { HISTORY_WINDOW, renderStatusCard } from './fivem/statusCard.js';
+import { HISTORY_MAX, normalizeStatusImage, renderStatusCard } from './fivem/statusCard.js';
 
 definePermission('fivem.view', { label: 'Voir l’état des serveurs FiveM', category: 'FiveM' });
 definePermission('fivem.manage', { label: 'Gérer les serveurs FiveM, leurs messages de statut et le statut du bot', category: 'FiveM' });
@@ -23,7 +23,7 @@ export function normalizePresence(input = {}) {
 }
 
 // FiveM servers: polled every minute, shown in Discord (status messages, bot status, /fivem) and in the panel
-export function createFivem({ db, network, audit, executor, settings, logs, fetchImpl = fetch, logger = console, now = Date.now }) {
+export function createFivem({ db, network, audit, executor, settings, logs, uploads = null, fetchImpl = fetch, logger = console, now = Date.now }) {
 	logs.registerCategory('fivem', 'Serveurs FiveM (réglages)');
 	const cache = new Map();
 	// Players over the last hours, for the curve of the status picture (in memory: it starts again after a restart)
@@ -49,9 +49,11 @@ export function createFivem({ db, network, audit, executor, settings, logs, fetc
 	async function toServer(row) {
 		if (!row) return null;
 		const config = JSON.parse(row.config);
+		// Servers saved before the picture editor only had showImage
+		const image = normalizeStatusImage(config.image ?? { enabled: config.showImage !== false });
 		return {
 			id: row.id, name: row.name, address: row.address, joinCode: row.join_code,
-			config: { showPlayers: config.showPlayers !== false, showImage: config.showImage !== false, color: /^#[0-9a-f]{6}$/i.test(config.color ?? '') ? config.color : '#d6a249' },
+			config: { showPlayers: config.showPlayers !== false, showImage: image.enabled, image, color: /^#[0-9a-f]{6}$/i.test(config.color ?? '') ? config.color : '#d6a249' },
 			status: cache.get(row.id) ?? null,
 			maintenance,
 			messages: (await q.messagesOf.all(row.id)).map(m => ({ id: m.id, guildId: m.guild_id, channelId: m.channel_id, messageId: m.message_id })),
@@ -104,20 +106,56 @@ export function createFivem({ db, network, audit, executor, settings, logs, fetc
 		const points = history.get(id) ?? [];
 		if (points.length && status.checkedAt - points.at(-1).at < 50_000) points.pop();
 		points.push({ at: status.checkedAt, players: status.online ? status.players : null });
-		while (points.length && points[0].at < status.checkedAt - HISTORY_WINDOW) points.shift();
+		while (points.length && points[0].at < status.checkedAt - HISTORY_MAX) points.shift();
 		history.set(id, points);
+	}
+
+	// Pictures chosen in the panel (an upload or an https address), kept 10 minutes: not fetched again every minute
+	const pictureCache = new Map();
+	async function loadSource(src) {
+		const hit = pictureCache.get(src);
+		if (hit && hit.until > now()) return hit.data;
+		const data = src.startsWith('upload:') ? await uploads?.read(src.slice(7)).catch(() => null) ?? null : await fetchImage(src, { fetchImpl }).catch(() => null);
+		if (pictureCache.size > 50) pictureCache.clear();
+		pictureCache.set(src, { data, until: now() + 10 * 60_000 });
+		return data;
+	}
+
+	function render(server, design) {
+		return renderStatusCard({ server, status: cache.get(server.id) ?? server.status ?? null, history: history.get(server.id) ?? [], now: now(), design, loadSource });
 	}
 
 	// PNG of the status message; a failure only drops the picture, the message still goes out
 	async function statusImage(server) {
-		if (!server.config.showImage) return null;
+		if (!server.config.image.enabled) return null;
 		try {
-			return await renderStatusCard({ server, status: cache.get(server.id) ?? server.status ?? null, history: history.get(server.id) ?? [], now: now() });
+			return await render(server, server.config.image);
 		}
 		catch (error) {
 			logger.warn(`FiveM status picture of ${server.name} failed:`, error.message);
 			return null;
 		}
+	}
+
+	// A picture sent from the panel must still exist; a custom choice needs its picture
+	async function checkPictures(design, { complete }) {
+		for (const [kind, src, label] of [[design.background, design.backgroundImage, 'de fond'], [design.logo, design.logoImage, 'du logo']]) {
+			if (kind !== 'custom') continue;
+			if (!src) {
+				if (complete) throw new ValidationError(`Choisis l’image ${label}, ou une autre option.`);
+				continue;
+			}
+			if (src.startsWith('upload:') && !await uploads?.exists(src.slice(7))) throw new ValidationError(`L’image ${label} envoyée n’existe plus : renvoie-la.`);
+		}
+	}
+
+	// Every status message of a server, with one picture drawn for all of them
+	async function publishServer(server) {
+		const rows = (await q.messagesOf.all(server.id));
+		if (!rows.length) return;
+		const current = { ...server, status: cache.get(server.id) ?? server.status ?? null };
+		const image = await statusImage(current);
+		for (const row of rows) await publishOne(current, row, image);
 	}
 
 	async function publishOne(server, row, image = null) {
@@ -141,7 +179,9 @@ export function createFivem({ db, network, audit, executor, settings, logs, fetc
 		const code = String(input.joinCode ?? current?.joinCode ?? '').trim().replace(/^https?:\/\/cfx\.re\/join\//, '');
 		if (code && !JOIN_CODE.test(code)) throw new ValidationError('Code cfx.re invalide (cfx.re/join/xxxxxx).');
 		const config = { ...current?.config, ...input.config };
-		return { name, address, joinCode: code || null, config: JSON.stringify({ showPlayers: config.showPlayers !== false, showImage: config.showImage !== false, color: /^#[0-9a-f]{6}$/i.test(config.color ?? '') ? config.color : '#d6a249' }) };
+		// The picture editor sends the whole design; an older client only switches it on or off
+		const image = normalizeStatusImage(input.config?.image ?? { ...current?.config?.image, ...(input.config?.showImage === undefined ? {} : { enabled: input.config.showImage !== false }) });
+		return { name, address, joinCode: code || null, image, config: JSON.stringify({ showPlayers: config.showPlayers !== false, image, color: /^#[0-9a-f]{6}$/i.test(config.color ?? '') ? config.color : '#d6a249' }) };
 	}
 
 	async function presence() {
@@ -155,14 +195,27 @@ export function createFivem({ db, network, audit, executor, settings, logs, fetc
 		async save(actor, input) {
 			requireManage(actor);
 			const current = input.id ? await getOrThrow(input.id) : null;
-			const c = validate(input, current);
+			const { image, ...c } = validate(input, current);
+			await checkPictures(image, { complete: true });
 			let id = current?.id;
 			if (current) await q.update.run({ ...c, id });
 			else id = Number((await q.insert.run({ ...c, by: actor.id, at: now() })).lastInsertRowid);
 			const server = await getOrThrow(id);
 			await poll(server);
 			await record(actor, current ? 'fivem.update' : 'fivem.create', id, { name: server.name, address: server.address });
+			// The messages show the change right away, not at the next minute
+			if (current) await publishServer(await getOrThrow(id));
 			return getOrThrow(id);
+		},
+
+		// The real picture for the editor of the panel, with the design not saved yet
+		async previewImage(actor, id, input = {}) {
+			requireManage(actor);
+			const server = await getOrThrow(id);
+			const design = normalizeStatusImage({ ...input.image, enabled: true });
+			await checkPictures(design, { complete: false });
+			const color = /^#[0-9a-f]{6}$/i.test(input.color ?? '') ? input.color : server.config.color;
+			return render({ ...server, config: { ...server.config, color } }, design);
 		},
 
 		async remove(actor, id) {

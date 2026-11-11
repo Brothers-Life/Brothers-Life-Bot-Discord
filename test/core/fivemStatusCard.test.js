@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadImage } from '@napi-rs/canvas';
-import { formatDuration, renderStatusCard } from '../../src/core/fivem/statusCard.js';
+import { DEFAULT_STATUS_IMAGE, formatDuration, normalizeStatusImage, renderStatusCard } from '../../src/core/fivem/statusCard.js';
 
 const NOW = Date.UTC(2026, 10, 11, 21, 0);
 const server = { name: 'Brothers Life RP', config: { color: '#ff9628' }, maintenance: null };
@@ -21,6 +21,43 @@ test('status picture: every state gives a 1200 × 600 PNG', async () => {
 		const image = await loadImage(png);
 		assert.deepEqual([image.width, image.height], [1200, 600]);
 	}
+});
+
+test('status picture: the design from the panel is cleaned up', () => {
+	assert.deepEqual(normalizeStatusImage(undefined), DEFAULT_STATUS_IMAGE);
+	const d = normalizeStatusImage({ title: `  ${'x'.repeat(80)} `, background: 'mars', darkness: 3, logo: 'custom', logoImage: 'http://exemple.fr/a.png', chartHours: 5, stats: { ping: false }, gauge: 'oui' });
+	assert.equal(d.title.length, 40);
+	assert.equal(d.background, 'road');
+	assert.equal(d.darkness, 30);
+	assert.equal(d.logoImage, null, 'only https or a picture sent from the panel');
+	assert.equal(d.chartHours, 6);
+	assert.deepEqual(d.stats, { ping: false, peak: true, fill: true });
+	assert.equal(d.gauge, true);
+	assert.equal(normalizeStatusImage({ backgroundImage: `upload:${'b'.repeat(32)}.webp` }).backgroundImage, `upload:${'b'.repeat(32)}.webp`);
+});
+
+test('status picture: its height follows the blocks shown, a custom picture is used or replaced', async () => {
+	const status = { online: true, players: 20, max: 64, list, onlineSince: NOW - 3_600_000 };
+	const size = async design => {
+		const image = await loadImage(await renderStatusCard({ server, status, history, now: NOW, design, loadSource: async () => null }));
+		return [image.width, image.height];
+	};
+	assert.deepEqual(await size({ chart: false }), [1200, 380], 'the gauge keeps its room');
+	assert.deepEqual(await size({ chart: false, gauge: false }), [1200, 340]);
+	assert.deepEqual(await size({ chart: false, gauge: false, stats: { ping: false, peak: false, fill: false } }), [1200, 230]);
+	assert.deepEqual(await size({ stats: { ping: false, peak: false, fill: false } }), [1200, 500]);
+
+	const custom = await renderStatusCard({ server, status, history, now: NOW });
+	let asked = null;
+	const loadSource = async (src) => {
+		asked = src;
+		return custom;
+	};
+	const png = await renderStatusCard({ server, status, history, now: NOW, design: { background: 'custom', backgroundImage: 'https://exemple.fr/fond.png', logo: 'none' }, loadSource });
+	assert.equal(asked, 'https://exemple.fr/fond.png');
+	assert.equal(png.subarray(1, 4).toString(), 'PNG');
+	const broken = await renderStatusCard({ server, status, history, now: NOW, design: { background: 'custom', backgroundImage: 'https://exemple.fr/x.png' }, loadSource: async () => Buffer.from('pas une image') });
+	assert.equal(broken.subarray(1, 4).toString(), 'PNG', 'an unreadable picture falls back to the default one');
 });
 
 test('status picture: durations read like a person would say them', () => {

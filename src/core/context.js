@@ -134,7 +134,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const absences = createAbsences({ db, network, ranks, audit, executor, settings, logger });
 	const streams = createStreams({ db, network, audit, executor, settings, logs, variables, fetchImpl, logger });
 	const feeds = createFeeds({ db, network, audit, executor, logs, variables, fetchImpl, logger });
-	const fivem = createFivem({ db, network, audit, executor, settings, logs, fetchImpl, logger });
+	const fivem = createFivem({ db, network, audit, executor, settings, logs, uploads, fetchImpl, logger });
 	stats.addVariables(async () => core.fivem.variables());
 	const fivemEvents = createFivemEvents({ db, settings, audit, logs, executor, network, variables, fivem, logger });
 	const memberInsights = createMemberInsights({ db, stats, events });

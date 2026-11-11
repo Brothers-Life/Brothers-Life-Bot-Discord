@@ -37,6 +37,14 @@ export function registerFivemRoutes(app, { core }) {
 		await fivem.remove(request.actor, request.params.id);
 		return { ok: true };
 	});
+	// The real status picture, with the design being edited (not saved yet)
+	app.post('/api/fivem/:id/image/preview', {
+		config: { permission: 'fivem.manage' },
+		schema: { params: idParam, body: { type: 'object', properties: { image: { type: 'object' }, color: { type: 'string', maxLength: 7 } } } },
+	}, async (request, reply) => {
+		const png = await fivem.previewImage(request.actor, request.params.id, request.body ?? {});
+		return reply.type('image/png').header('Cache-Control', 'no-store').send(Buffer.from(png));
+	});
 	app.post('/api/fivem/:id/messages', {
 		config: { permission: 'fivem.manage' },
 		schema: { params: idParam, body: { type: 'object', required: ['guildId', 'channelId'], properties: { guildId: snowflake, channelId: snowflake } } },

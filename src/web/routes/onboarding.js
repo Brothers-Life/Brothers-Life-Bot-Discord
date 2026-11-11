@@ -57,7 +57,7 @@ export function registerOnboardingRoutes(app, { core }) {
 		schema: { body: { type: 'object', required: ['data'], properties: { data: { type: 'string' } }, additionalProperties: false } },
 	}, async (request, reply) => {
 		const actor = request.actor;
-		if (!['onboarding.manage', 'announcements.manage', 'tickets.manage', 'messages.manage'].some(p => actor.can(p))) {
+		if (!['onboarding.manage', 'announcements.manage', 'tickets.manage', 'messages.manage', 'fivem.manage'].some(p => actor.can(p))) {
 			throw new ForbiddenError('Il te faut une permission de configuration pour envoyer des images.');
 		}
 		const buffer = Buffer.from(request.body.data.replace(/^data:[^,]*,/, ''), 'base64');
