@@ -2,6 +2,7 @@ import { definePermission } from './permissions.js';
 import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
 import { fillVars } from './cards.js';
 import { blockedHost } from './netGuard.js';
+import { HISTORY_WINDOW, renderStatusCard } from './fivem/statusCard.js';
 
 definePermission('fivem.view', { label: 'Voir l’état des serveurs FiveM', category: 'FiveM' });
 definePermission('fivem.manage', { label: 'Gérer les serveurs FiveM, leurs messages de statut et le statut du bot', category: 'FiveM' });
@@ -25,6 +26,8 @@ export function normalizePresence(input = {}) {
 export function createFivem({ db, network, audit, executor, settings, logs, fetchImpl = fetch, logger = console, now = Date.now }) {
 	logs.registerCategory('fivem', 'Serveurs FiveM (réglages)');
 	const cache = new Map();
+	// Players over the last hours, for the curve of the status picture (in memory: it starts again after a restart)
+	const history = new Map();
 	let rotation = 0;
 	// Maintenance of the FiveM server (set by fivemEvents): shown in the status messages
 	let maintenance = null;
@@ -48,7 +51,7 @@ export function createFivem({ db, network, audit, executor, settings, logs, fetc
 		const config = JSON.parse(row.config);
 		return {
 			id: row.id, name: row.name, address: row.address, joinCode: row.join_code,
-			config: { showPlayers: config.showPlayers !== false, color: /^#[0-9a-f]{6}$/i.test(config.color ?? '') ? config.color : '#d6a249' },
+			config: { showPlayers: config.showPlayers !== false, showImage: config.showImage !== false, color: /^#[0-9a-f]{6}$/i.test(config.color ?? '') ? config.color : '#d6a249' },
 			status: cache.get(row.id) ?? null,
 			maintenance,
 			messages: (await q.messagesOf.all(row.id)).map(m => ({ id: m.id, guildId: m.guild_id, channelId: m.channel_id, messageId: m.message_id })),
@@ -92,12 +95,34 @@ export function createFivem({ db, network, audit, executor, settings, logs, fetc
 		catch (error) {
 			cache.set(server.id, { online: false, players: 0, max: cache.get(server.id)?.max ?? 0, hostname: null, map: null, list: [], checkedAt: now(), error: error.name === 'TimeoutError' ? 'Pas de réponse en 5 s' : error.message, onlineSince: null, peak: cache.get(server.id)?.peak ?? 0 });
 		}
+		remember(server.id, cache.get(server.id));
 		return cache.get(server.id);
 	}
 
-	async function publishOne(server, row) {
+	// One point a minute at most (a /fivem between two ticks replaces the last one); null while the server is down
+	function remember(id, status) {
+		const points = history.get(id) ?? [];
+		if (points.length && status.checkedAt - points.at(-1).at < 50_000) points.pop();
+		points.push({ at: status.checkedAt, players: status.online ? status.players : null });
+		while (points.length && points[0].at < status.checkedAt - HISTORY_WINDOW) points.shift();
+		history.set(id, points);
+	}
+
+	// PNG of the status message; a failure only drops the picture, the message still goes out
+	async function statusImage(server) {
+		if (!server.config.showImage) return null;
 		try {
-			const id = await executor.upsertFivemMessage(row.channel_id, row.message_id, { server, status: cache.get(server.id) ?? null });
+			return await renderStatusCard({ server, status: cache.get(server.id) ?? server.status ?? null, history: history.get(server.id) ?? [], now: now() });
+		}
+		catch (error) {
+			logger.warn(`FiveM status picture of ${server.name} failed:`, error.message);
+			return null;
+		}
+	}
+
+	async function publishOne(server, row, image = null) {
+		try {
+			const id = await executor.upsertFivemMessage(row.channel_id, row.message_id, { server, status: cache.get(server.id) ?? null, image });
 			if (id !== row.message_id) await q.setMessage.run(id, row.id);
 		}
 		catch (error) {
@@ -116,7 +141,7 @@ export function createFivem({ db, network, audit, executor, settings, logs, fetc
 		const code = String(input.joinCode ?? current?.joinCode ?? '').trim().replace(/^https?:\/\/cfx\.re\/join\//, '');
 		if (code && !JOIN_CODE.test(code)) throw new ValidationError('Code cfx.re invalide (cfx.re/join/xxxxxx).');
 		const config = { ...current?.config, ...input.config };
-		return { name, address, joinCode: code || null, config: JSON.stringify({ showPlayers: config.showPlayers !== false, color: /^#[0-9a-f]{6}$/i.test(config.color ?? '') ? config.color : '#d6a249' }) };
+		return { name, address, joinCode: code || null, config: JSON.stringify({ showPlayers: config.showPlayers !== false, showImage: config.showImage !== false, color: /^#[0-9a-f]{6}$/i.test(config.color ?? '') ? config.color : '#d6a249' }) };
 	}
 
 	async function presence() {
@@ -146,6 +171,7 @@ export function createFivem({ db, network, audit, executor, settings, logs, fetc
 			for (const m of server.messages) if (m.messageId) await executor.deleteMessage(m.channelId, m.messageId).catch(() => null);
 			await q.delete.run(id);
 			cache.delete(id);
+			history.delete(id);
 			await record(actor, 'fivem.delete', id, { name: server.name });
 		},
 
@@ -157,7 +183,7 @@ export function createFivem({ db, network, audit, executor, settings, logs, fetc
 			if (!await executor.getTextChannel(guildId, channelId)) throw new ValidationError('Le bot ne peut pas écrire dans ce salon.');
 			await q.addMessage.run(serverId, guildId, channelId);
 			const row = (await q.messagesOf.all(serverId)).find(m => m.channel_id === channelId);
-			await publishOne(server, row);
+			await publishOne(server, row, await statusImage(server));
 			await record(actor, 'fivem.message', serverId, { name: server.name, channel: `<#${channelId}>` });
 			return getOrThrow(serverId);
 		},
@@ -186,11 +212,18 @@ export function createFivem({ db, network, audit, executor, settings, logs, fetc
 		async tick() {
 			const servers = await Promise.all((await q.all.all()).map(toServer));
 			await Promise.all(servers.map(poll));
-			for (const row of await q.messages.all()) {
-				const server = servers.find(s => s.id === row.server_id);
-				if (server) await publishOne({ ...server, status: cache.get(server.id) }, row);
+			const rows = await q.messages.all();
+			for (const server of servers) {
+				const mine = rows.filter(row => row.server_id === server.id);
+				if (!mine.length) continue;
+				const current = { ...server, status: cache.get(server.id) };
+				// Drawn once, sent to every message of this server
+				const image = await statusImage(current);
+				for (const row of mine) await publishOne(current, row, image);
 			}
 		},
+
+		statusImage,
 
 		// Every 30 s: bot status, rotating between the chosen servers
 		async presenceTick() {

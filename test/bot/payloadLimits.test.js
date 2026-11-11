@@ -129,6 +129,15 @@ test('FiveM status: fill bar, average ping and a short list in one column', () =
 	assert.equal(embed.thumbnail.url, 'https://cdn.discordapp.com/icons/1/a.png');
 });
 
+test('FiveM status: with the picture, the state lives in the image and the players stay listed', () => {
+	const payload = fivemPayload({ server: fivemServer, status: fivemStatus(players(3, 'Jo')), image: Buffer.from('png') });
+	const embed = payload.embeds[0].toJSON();
+	assert.equal(embed.image, undefined, 'the picture goes above the embed, shown wider');
+	assert.deepEqual(payload.files.map(f => f.name), ['fivem-statut.png']);
+	assert.deepEqual(embed.fields.map(f => f.name), ['👥 Connectés (3)']);
+	assert.deepEqual(fivemPayload({ server: fivemServer, status: fivemStatus([]) }).files, []);
+});
+
 test('FiveM status: nobody connected and server down still give a valid message', () => {
 	const empty = fivemPayload({ server: fivemServer, status: fivemStatus([]) }).embeds[0].toJSON();
 	assert.match(empty.fields.at(-1).value, /Personne/);

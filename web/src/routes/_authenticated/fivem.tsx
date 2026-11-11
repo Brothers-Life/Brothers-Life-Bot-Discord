@@ -28,7 +28,7 @@ export const Route = createFileRoute('/_authenticated/fivem')({
 
 type Status = { online: boolean; players: number; max: number; hostname: string | null; list: { id: number; name: string; ping: number | null }[]; checkedAt: number; error: string | null; onlineSince: number | null; peak: number }
 type Server = {
-  id: number; name: string; address: string; joinCode: string | null; config: { showPlayers: boolean; color: string }
+  id: number; name: string; address: string; joinCode: string | null; config: { showPlayers: boolean; showImage: boolean; color: string }
   status: Status | null; messages: { id: number; guildId: string; channelId: string; messageId: string | null }[]
 }
 type Presence = { enabled: boolean; serverIds: number[]; text: string; offlineText: string }
@@ -155,10 +155,11 @@ function ServerDialog({ initial, onClose }: { initial: Partial<Server>; onClose:
   const [address, setAddress] = useState(initial.address ?? '')
   const [joinCode, setJoinCode] = useState(initial.joinCode ?? '')
   const [showPlayers, setShowPlayers] = useState(initial.config?.showPlayers ?? true)
+  const [showImage, setShowImage] = useState(initial.config?.showImage ?? true)
   const [color, setColor] = useState(initial.config?.color ?? '#d6a249')
   const save = useMutation({
     mutationFn: () => {
-      const body = { name, address, joinCode: joinCode || null, config: { showPlayers, color } }
+      const body = { name, address, joinCode: joinCode || null, config: { showPlayers, showImage, color } }
       return initial.id ? api(`/fivem/${initial.id}`, { method: 'PUT', body }) : api('/fivem', { method: 'POST', body })
     },
     onSuccess: () => { toast.success('Serveur enregistré'); onClose() },
@@ -181,6 +182,7 @@ function ServerDialog({ initial, onClose }: { initial: Partial<Server>; onClose:
           </div>
           <div className='flex flex-wrap items-center gap-6'>
             <label className='flex items-center gap-2 text-sm'><Switch checked={showPlayers} onCheckedChange={setShowPlayers} /> Liste des joueurs dans les messages</label>
+            <label className='flex items-center gap-2 text-sm'><Switch checked={showImage} onCheckedChange={setShowImage} /> Image de statut (jauge et courbe)</label>
             <label className='flex items-center gap-2 text-sm'>Couleur <ColorPicker className='w-36' value={color} onChange={(hex) => setColor(hex)} /></label>
           </div>
         </div>

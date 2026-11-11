@@ -781,7 +781,8 @@ export function createExecutor(client) {
 		// Status message edited in place (sent again if it was deleted); returns its id
 		async upsertFivemMessage(channelId, messageId, data) {
 			const channel = await client.channels.fetch(channelId);
-			const payload = fivemPayload({ ...data, guild: { icon: channel.guild?.iconURL() ?? null } });
+			// attachments: [] drops the previous picture, files brings the new one
+			const payload = { ...fivemPayload({ ...data, guild: { icon: channel.guild?.iconURL() ?? null } }), attachments: [] };
 			if (messageId) {
 				const existing = await channel.messages.fetch(messageId).catch(() => null);
 				if (existing) {

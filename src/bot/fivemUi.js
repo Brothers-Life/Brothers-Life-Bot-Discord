@@ -1,4 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
+import { STATUS_IMAGE_NAME } from '../core/fivem/statusCard.js';
 
 const NAME_MAX = 18;
 const COLUMNS = 3;
@@ -53,8 +54,9 @@ function averagePing(list) {
 	return pings.length ? Math.round(pings.reduce((sum, ping) => sum + ping, 0) / pings.length) : null;
 }
 
-// Status message of a FiveM server (channel message kept up to date, and /fivem)
-export function fivemPayload({ server, status, guild = null }) {
+// Status message of a FiveM server (channel message kept up to date, and /fivem). `image`: PNG of the status, sent as an
+// attachment (shown wider than an embed image), which then carries the state and the players count instead of the fields
+export function fivemPayload({ server, status, guild = null, image = null }) {
 	const online = Boolean(status?.online);
 	const maintenance = server.maintenance ?? null;
 	const statusText = maintenance ? '🛠️ Maintenance' : status ? (online ? '🟢 En ligne' : '🔴 Hors ligne') : '⏳ Vérification…';
@@ -62,20 +64,22 @@ export function fivemPayload({ server, status, guild = null }) {
 	const embed = new EmbedBuilder()
 		.setColor(maintenance ? 0xf0b232 : online ? Number.parseInt(server.config.color.slice(1), 16) : 0xed4245)
 		.setTitle(`🎮 ${server.name}`)
-		.setThumbnail(guild?.icon ?? null)
-		.addFields(
-			{ name: '📡 Statut', value: statusText, inline: true },
-			{ name: '👥 Joueurs', value: online ? `**${status.players}** / ${status.max}${fillBar(status.players, status.max)}` : '—', inline: true },
-		)
+		.setThumbnail(image ? null : guild?.icon ?? null)
 		.setFooter({ text: ping === null ? 'Mis à jour' : `Ping moyen ${ping} ms · Mis à jour`, iconURL: guild?.icon ?? undefined })
 		.setTimestamp(status?.checkedAt ? new Date(status.checkedAt) : new Date());
 	if (maintenance) embed.setDescription(`🛠️ **Maintenance en cours**${maintenance.since ? ` depuis <t:${Math.round(maintenance.since / 1000)}:R>` : ''}${maintenance.reason ? `\n${maintenance.reason.slice(0, 300)}` : ''}`);
 	else if (online && status.hostname && status.hostname !== server.name) embed.setDescription(status.hostname.slice(0, 300));
 	else if (status && !online) embed.setDescription('Le serveur ne répond pas pour le moment.');
-	if (online && status.onlineSince) embed.addFields({ name: '⏱️ En ligne depuis', value: `<t:${Math.floor(status.onlineSince / 1000)}:R>`, inline: true });
+	if (!image) {
+		embed.addFields(
+			{ name: '📡 Statut', value: statusText, inline: true },
+			{ name: '👥 Joueurs', value: online ? `**${status.players}** / ${status.max}${fillBar(status.players, status.max)}` : '—', inline: true },
+		);
+		if (online && status.onlineSince) embed.addFields({ name: '⏱️ En ligne depuis', value: `<t:${Math.floor(status.onlineSince / 1000)}:R>`, inline: true });
+	}
 	if (online && server.config.showPlayers) embed.addFields(...playerFields(status.list));
 	const components = server.joinCode
 		? [new ActionRowBuilder().addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Se connecter').setEmoji('🎮').setURL(`https://cfx.re/join/${server.joinCode}`))]
 		: [];
-	return { embeds: [embed], components };
+	return { embeds: [embed], components, files: image ? [{ attachment: image, name: STATUS_IMAGE_NAME }] : [] };
 }

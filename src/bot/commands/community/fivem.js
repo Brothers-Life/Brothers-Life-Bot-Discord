@@ -26,5 +26,6 @@ export async function execute(interaction) {
 	}
 	await interaction.deferReply();
 	const fresh = await fivem.fresh(server.id);
-	await interaction.editReply(fivemPayload({ server: fresh, status: fresh.status, guild: { icon: interaction.guild?.iconURL() ?? null } }));
+	const image = await fivem.statusImage(fresh);
+	await interaction.editReply(fivemPayload({ server: fresh, status: fresh.status, image, guild: { icon: interaction.guild?.iconURL() ?? null } }));
 }

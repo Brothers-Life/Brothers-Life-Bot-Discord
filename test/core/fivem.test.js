@@ -61,6 +61,19 @@ test('bot status rotates between servers, offline text when down; embed has a jo
 	await assert.rejects(fivem.save({ id: '1', can: () => false }, { name: 'x', address: '1.2.3.4:1' }), /fivem.manage/);
 });
 
+test('status picture: sent with every refresh, and left out when the server turns it off', async () => {
+	const { fivem, owner, executor } = await setup();
+	const server = await fivem.save(owner, { name: 'BRL RP', address: '51.75.12.34:30120' });
+	assert.equal(server.config.showImage, true, 'on by default');
+	await fivem.addStatusMessage(owner, server.id, MAIN, CHANNEL);
+	await fivem.tick();
+	const { image } = executor.fivemMessages.at(-1).data;
+	assert.equal(Buffer.from(image).subarray(1, 4).toString(), 'PNG');
+	await fivem.save(owner, { id: server.id, config: { showImage: false } });
+	await fivem.tick();
+	assert.equal(executor.fivemMessages.at(-1).data.image, null);
+});
+
 test('addresses: link-local and metadata endpoints refused, local network accepted for FiveM', async () => {
 	const { fivem, owner } = await setup();
 	await assert.rejects(fivem.save(owner, { name: 'x', address: '169.254.169.254:80' }), /refusée/);
