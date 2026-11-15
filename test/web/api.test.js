@@ -414,10 +414,10 @@ test('status page: one card per service, a failing check is a card, not an error
 	assert.equal(res.statusCode, 200);
 	const body = res.json();
 	const state = key => body.services.find(s => s.key === key).state;
-	assert.deepEqual(body.services.map(s => s.key), ['api', 'bot', 'database', 'cache', 'telemetry', 'mirror', 'tebex']);
+	assert.deepEqual(body.services.map(s => s.key), ['api', 'bot', 'database', 'cache', 'telemetry', 'mirror', 'tebex', 'media']);
 	assert.deepEqual([state('api'), state('database')], ['ok', 'ok']);
 	// Nothing configured or received yet: "off", which is not a failure
-	assert.deepEqual([state('cache'), state('telemetry'), state('mirror'), state('tebex')], ['off', 'off', 'off', 'off']);
+	assert.deepEqual([state('cache'), state('telemetry'), state('mirror'), state('tebex'), state('media')], ['off', 'off', 'off', 'off', 'off']);
 	assert.ok(body.services.every(s => s.label && s.detail && s.metrics));
 
 	// The game sent a reading a moment ago, Tebex refused the key

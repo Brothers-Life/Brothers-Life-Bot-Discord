@@ -108,7 +108,7 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	registerAuthRoutes(app, { config, core, fetchImpl });
 	registerPanelRoutes(app, { core, runtime });
 	registerSystemRoutes(app, { core, runtime, consoleLog, versions });
-	registerStatusRoutes(app, { core, runtime });
+	registerStatusRoutes(app, { core, runtime, fetchImpl, logger });
 	registerSanctionRoutes(app, { core });
 	registerEventRoutes(app, { core });
 	registerAutomodRoutes(app, { core });

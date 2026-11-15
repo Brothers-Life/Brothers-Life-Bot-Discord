@@ -24,7 +24,7 @@ const ms = value => (value ? new Date(value).getTime() : null);
 
 // One card per service: state ok / warn / down / off (not configured), a sentence, a few figures.
 // A check that fails never fails the page: it becomes the "down" state of its card.
-export function registerStatusRoutes(app, { core, runtime }) {
+export function registerStatusRoutes(app, { core, runtime, fetchImpl = fetch, logger = console }) {
 	const { db, executor, cache, settings, fivemMirror } = core;
 	const row = async (sql, params = []) => (await db.raw(sql, params)).rows[0] ?? {};
 
@@ -95,9 +95,53 @@ export function registerStatusRoutes(app, { core, runtime }) {
 			if (state.lastError) return { state: 'down', detail: state.lastError, metrics };
 			return { state: 'ok', detail: state.lastPollAt ? 'Les achats sont relevés.' : 'En attente du premier relevé.', metrics };
 		},
+
+		async media() {
+			const { MEDIA_BASE_URL: baseUrl, MEDIA_READ_KEY: readKey } = core.config;
+			if (!baseUrl || !readKey) return { state: 'off', detail: 'Service média non configuré (MEDIA_BASE_URL et MEDIA_READ_KEY).', metrics: {} };
+
+			const target = new URL(baseUrl).origin;
+			const endpoint = new URL(`${baseUrl}/api/v1/files?kind=image&limit=1`);
+			const start = performance.now();
+			let response;
+			try {
+				response = await fetchImpl(endpoint, {
+					headers: { Authorization: readKey },
+					redirect: 'error',
+					signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
+				});
+			}
+			catch (error) {
+				logger.warn('Media service status check failed:', error.message);
+				return { state: 'down', detail: 'Le service média ne répond pas à l’API du panel (adresse ou réseau à vérifier).', metrics: { target } };
+			}
+
+			const latency = Math.round(performance.now() - start);
+			if (!response.ok) {
+				const detail = {
+					401: 'La clé MEDIA_READ_KEY est refusée.',
+					403: 'La clé média doit avoir le droit files:read.',
+					404: 'L’adresse MEDIA_BASE_URL ne pointe pas vers le service média attendu.',
+				}[response.status] ?? `Le service média a répondu avec l’erreur HTTP ${response.status}.`;
+				return { state: 'down', detail, metrics: { target, latency } };
+			}
+
+			try {
+				const payload = await response.json();
+				if (payload?.status === 'error' || !Array.isArray(payload?.data?.items)) {
+					return { state: 'down', detail: 'Le service média a renvoyé un catalogue invalide.', metrics: { target, latency } };
+				}
+			}
+			catch (error) {
+				logger.warn('Media service returned an invalid status response:', error.message);
+				return { state: 'down', detail: 'Le service média a renvoyé une réponse invalide.', metrics: { target, latency } };
+			}
+
+			return { state: latency > 1000 ? 'warn' : 'ok', detail: latency > 1000 ? 'Le catalogue des images répond lentement.' : 'Le catalogue des images est accessible.', metrics: { target, latency } };
+		},
 	};
 
-	const LABELS = { api: 'Panel et API', bot: 'Bot Discord', database: 'Base de données', cache: 'Cache Redis', telemetry: 'Serveur de jeu (télémétrie)', mirror: 'Copie de la base du jeu', tebex: 'Boutique Tebex' };
+	const LABELS = { api: 'Panel et API', bot: 'Bot Discord', database: 'Base de données', cache: 'Cache Redis', telemetry: 'Serveur de jeu (télémétrie)', mirror: 'Copie de la base du jeu', tebex: 'Boutique Tebex', media: 'API des images' };
 
 	app.get('/api/status', { config: { permission: 'status.view' } }, async () => {
 		const services = await Promise.all(Object.entries(checks).map(async ([key, check]) => {

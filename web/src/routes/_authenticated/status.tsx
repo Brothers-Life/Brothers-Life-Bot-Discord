@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { Bot, Database, Gamepad2, HardDrive, RefreshCw, Server, ShoppingCart, Zap, type LucideIcon } from 'lucide-react'
+import { Bot, Database, Gamepad2, HardDrive, Image, RefreshCw, Server, ShoppingCart, Zap, type LucideIcon } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Notice, Page, Pill } from '@/components/app/ui'
@@ -23,7 +23,7 @@ const STATES: Record<State, { label: string; tone: 'success' | 'warning' | 'dang
   down: { label: 'En panne', tone: 'danger', dot: 'bg-destructive', border: 'border-destructive/60' },
   off: { label: 'Non configuré', tone: 'neutral', dot: 'bg-muted-foreground/50', border: 'border-border' },
 }
-const ICONS: Record<string, LucideIcon> = { api: Server, bot: Bot, database: Database, cache: Zap, telemetry: Gamepad2, mirror: HardDrive, tebex: ShoppingCart }
+const ICONS: Record<string, LucideIcon> = { api: Server, bot: Bot, database: Database, cache: Zap, telemetry: Gamepad2, mirror: HardDrive, tebex: ShoppingCart, media: Image }
 
 // "3 j 4 h", "2 h 10 min", "45 s"
 function span(ms: number) {
@@ -99,7 +99,7 @@ function StatusPage() {
   return (
     <Page
       title='État des services'
-      description='Ce qui fait tourner le réseau, vérifié toutes les 15 secondes : le panel, le bot, la base de données, le cache et la liaison avec le serveur de jeu.'
+      description='Ce qui fait tourner le réseau, vérifié toutes les 15 secondes : le panel, le bot, la base, le cache, le serveur de jeu et le service d’images.'
       actions={
         <Button variant='outline' size='sm' onClick={() => q.refetch()} disabled={q.isFetching}>
           <RefreshCw className={cn('size-4', q.isFetching && 'animate-spin')} aria-hidden /> Vérifier maintenant
@@ -109,7 +109,7 @@ function StatusPage() {
       {q.isError && <QueryError error={q.error} />}
       {q.isPending && (
         <div className='grid grid-cols-[minmax(0,1fr)] gap-3 md:grid-cols-2 xl:grid-cols-3'>
-          {Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className='h-44' />)}
+          {Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className='h-44' />)}
         </div>
       )}
       {d && (
