@@ -1,0 +1,26 @@
+meta {
+  name: GET /ranks/copy-roles
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/api/ranks/copy-roles
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~from: 
+  ~to: 
+}
+
+docs {
+  Consulter — `GET /api/ranks/copy-roles`
+
+  Permission requise : `ranks.manage`
+
+  Paramètres de requête :
+  - `from` (string)
+  - `to` (string)
+}

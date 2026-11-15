@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 
 // The modules read the bot configuration at import time unless they run in a test context
 process.env.NODE_TEST_CONTEXT ??= '1';
-const { createTestCore } = await import('../test/helpers.js');
+const { createCore } = await import('../src/core/context.js');
+const { parseConfig } = await import('../src/utils/config.js');
 const { createWebServer } = await import('../src/web/server.js');
 const { toBruno } = await import('../src/web/apiDocs.js');
 
@@ -15,7 +16,9 @@ const out = path.join(root, 'bruno');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
 const noop = () => undefined;
-const { core } = await createTestCore();
+// Listing the routes asks nothing of the database or of Discord: stand-ins that say so if that ever changes
+const untouched = what => new Proxy({}, { get: (target, key) => (key in target ? target[key] : key === 'then' ? undefined : () => { throw new Error(`build-bruno: ${what}.${String(key)}() called while listing the routes`); }) });
+const core = createCore({ db: Object.assign(untouched('db'), { prepare: () => untouched('statement') }), config: parseConfig({ OWNER_ID: '100000000000000000' }), executor: untouched('executor'), logger: { info: noop, warn: noop, error: noop, debug: noop, success: noop } });
 let routes;
 const web = await createWebServer({
 	config: { ...core.config, WEB_PUBLIC_URL: 'https://IP:PORT' },

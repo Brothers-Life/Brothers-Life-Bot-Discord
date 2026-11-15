@@ -1,0 +1,32 @@
+meta {
+  name: POST /fivem/:id/image/preview
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/fivem/:id/image/preview
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "image": {},
+    "color": "color"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/fivem/:id/image/preview`
+
+  Permission requise : `fivem.manage`
+
+  Corps JSON :
+  - `image` (object)
+  - `color` (string)
+}

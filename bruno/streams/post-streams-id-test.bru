@@ -10,6 +10,10 @@ post {
   auth: inherit
 }
 
+params:query {
+  ~kind: 
+}
+
 params:path {
   id: 
 }
@@ -18,4 +22,7 @@ docs {
   Créer / agir — `POST /api/streams/:id/test`
 
   Permission requise : `notifications.manage`
+
+  Paramètres de requête :
+  - `kind` ("live" | "video" | "clip")
 }

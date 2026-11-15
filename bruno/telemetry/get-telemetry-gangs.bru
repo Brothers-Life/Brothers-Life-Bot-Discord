@@ -1,0 +1,17 @@
+meta {
+  name: GET /telemetry/gangs
+  type: http
+  seq: 14
+}
+
+get {
+  url: {{baseUrl}}/api/telemetry/gangs
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/telemetry/gangs`
+
+  Permission requise : `telemetry.view`
+}

@@ -1,0 +1,26 @@
+meta {
+  name: GET /telemetry/business
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/telemetry/business
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~job: 
+  ~days: 
+}
+
+docs {
+  Consulter — `GET /api/telemetry/business`
+
+  Permission requise : `telemetry.view`
+
+  Paramètres de requête :
+  - `job` (string) — obligatoire
+  - `days` (integer)
+}

@@ -1,0 +1,21 @@
+meta {
+  name: POST /takeovers/items/:id/convoke
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/takeovers/items/:id/convoke
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Créer / agir — `POST /api/takeovers/items/:id/convoke`
+
+  Permission requise : `takeovers.manage`
+}

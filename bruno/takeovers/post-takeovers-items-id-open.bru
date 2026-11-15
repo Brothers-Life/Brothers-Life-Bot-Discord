@@ -1,0 +1,30 @@
+meta {
+  name: POST /takeovers/items/:id/open
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/api/takeovers/items/:id/open
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "open": false
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/takeovers/items/:id/open`
+
+  Permission requise : `takeovers.manage`
+
+  Corps JSON :
+  - `open` (boolean) — obligatoire
+}

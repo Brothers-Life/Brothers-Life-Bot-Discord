@@ -1,0 +1,21 @@
+meta {
+  name: DELETE /takeovers/entries/:id
+  type: http
+  seq: 8
+}
+
+delete {
+  url: {{baseUrl}}/api/takeovers/entries/:id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Supprimer — `DELETE /api/takeovers/entries/:id`
+
+  Permission requise : `takeovers.manage`
+}

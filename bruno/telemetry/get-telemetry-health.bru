@@ -1,0 +1,24 @@
+meta {
+  name: GET /telemetry/health
+  type: http
+  seq: 15
+}
+
+get {
+  url: {{baseUrl}}/api/telemetry/health
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~h: 
+}
+
+docs {
+  Consulter — `GET /api/telemetry/health`
+
+  Permission requise : `telemetry.view`
+
+  Paramètres de requête :
+  - `h` (integer)
+}

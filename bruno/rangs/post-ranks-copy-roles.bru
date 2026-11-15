@@ -1,0 +1,32 @@
+meta {
+  name: POST /ranks/copy-roles
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/api/ranks/copy-roles
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "from": "000000000000000000",
+    "to": "000000000000000000",
+    "roleIds": [
+      "000000000000000000"
+    ]
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/ranks/copy-roles`
+
+  Permission requise : `ranks.manage`
+
+  Corps JSON :
+  - `from` (string) — obligatoire
+  - `to` (string) — obligatoire
+  - `roleIds` (array) — obligatoire
+}

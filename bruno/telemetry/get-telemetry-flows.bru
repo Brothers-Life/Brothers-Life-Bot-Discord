@@ -1,0 +1,24 @@
+meta {
+  name: GET /telemetry/flows
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{baseUrl}}/api/telemetry/flows
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~h: 
+}
+
+docs {
+  Consulter — `GET /api/telemetry/flows`
+
+  Permission requise : `telemetry.economy`
+
+  Paramètres de requête :
+  - `h` (integer)
+}

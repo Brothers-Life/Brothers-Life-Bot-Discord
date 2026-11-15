@@ -1,0 +1,30 @@
+meta {
+  name: POST /takeovers/:guildId/panel
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/takeovers/:guildId/panel
+  body: json
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+body:json {
+  {
+    "category": "category"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/takeovers/:guildId/panel`
+
+  Permission requise : `takeovers.manage`
+
+  Corps JSON :
+  - `category` (string) — obligatoire
+}

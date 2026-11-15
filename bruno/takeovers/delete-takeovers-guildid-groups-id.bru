@@ -1,0 +1,30 @@
+meta {
+  name: DELETE /takeovers/:guildId/groups/:id
+  type: http
+  seq: 4
+}
+
+delete {
+  url: {{baseUrl}}/api/takeovers/:guildId/groups/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+  id: 
+}
+
+body:json {
+  {
+    "confirm": true
+  }
+}
+
+docs {
+  Supprimer — `DELETE /api/takeovers/:guildId/groups/:id`
+
+  Permission requise : `takeovers.manage`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+}

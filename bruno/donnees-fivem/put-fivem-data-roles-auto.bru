@@ -1,0 +1,26 @@
+meta {
+  name: PUT /fivem-data/roles/auto
+  type: http
+  seq: 8
+}
+
+put {
+  url: {{baseUrl}}/api/fivem-data/roles/auto
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "enabled": false
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/fivem-data/roles/auto`
+
+  Permission requise : `fivemdata.manage`
+
+  Corps JSON :
+  - `enabled` (boolean) — obligatoire
+}

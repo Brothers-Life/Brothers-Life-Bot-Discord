@@ -1,0 +1,25 @@
+meta {
+  name: PUT /takeovers/:guildId/groups
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{baseUrl}}/api/takeovers/:guildId/groups
+  body: json
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+body:json {
+  {}
+}
+
+docs {
+  Remplacer — `PUT /api/takeovers/:guildId/groups`
+
+  Permission requise : `takeovers.manage`
+}
