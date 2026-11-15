@@ -133,11 +133,12 @@ export function JobsTab({ r, economy }: { r: ServerReport; economy: boolean }) {
         }
       >
         <div className='overflow-x-auto'>
-          <table className='w-full min-w-[46rem] text-sm'>
+          <table className='w-full min-w-[50rem] text-sm'>
             <thead>
               <tr className='border-b text-xs text-muted-foreground'>
                 <th className='px-4 py-2 text-start font-medium'>Nom</th>
                 <th className='px-2 text-end font-medium'>Membres</th>
+                <th className='px-2 text-end font-medium'>Connectés</th>
                 <th className='px-2 text-end font-medium'>En service</th>
                 <th className='px-2 text-end font-medium'>Service total</th>
                 <th className='px-2 text-end font-medium'>Cette semaine</th>
@@ -169,6 +170,7 @@ function JobRow({ j, economy, open, onToggle }: { j: Job; economy: boolean; open
           </div>
         </td>
         <td className='px-2 text-end tabular-nums'>{j.members || '—'}</td>
+        <td className='px-2 text-end tabular-nums'>{j.online ?? '—'}</td>
         <td className='px-2 text-end tabular-nums'>{j.onDuty || '—'}</td>
         <td className='px-2 text-end tabular-nums'>{j.dutySeconds ? hours(j.dutySeconds) : '—'}</td>
         <td className='px-2 text-end tabular-nums'>{j.weekDutySeconds ? `${hours(j.weekDutySeconds)} · ${j.weekPeople} pers.` : '—'}</td>
@@ -177,7 +179,7 @@ function JobRow({ j, economy, open, onToggle }: { j: Job; economy: boolean; open
       </tr>
       {open && (
         <tr className='bg-muted/30'>
-          <td colSpan={economy ? 7 : 6} className='px-4 py-3'>
+          <td colSpan={economy ? 8 : 7} className='px-4 py-3'>
             <div className='flex flex-wrap gap-1.5'>
               {j.grades.length ? j.grades.map((g) => <Pill key={g.grade} tone={g.isBoss ? 'accent' : 'neutral'}>{g.grade} · {g.name}{g.payment !== null && economy ? ` · ${money(g.payment)}` : ''}{g.isBoss ? ' 👑' : ''}</Pill>) : <span className='text-sm text-muted-foreground'>Aucun grade défini.</span>}
             </div>

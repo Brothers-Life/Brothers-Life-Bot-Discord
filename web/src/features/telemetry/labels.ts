@@ -22,6 +22,9 @@ const GAME_LABELS: Record<string, string> = {
   server_start: 'Démarrage serveur', anticheat: 'Anticheat', admin_action: 'Action staff',
   txAdmin: 'txAdmin', panel: 'Panel', banque: 'Banque (staff)', mapeditor_audit: 'Éditeur de map', dj_audit: 'DJ',
   tv_admin_logs: 'TV (staff)', admindash_role_actions: 'Rôles staff', admindash_blip_logs: 'Blips (staff)',
+  duty: 'Prise / fin de service', job_change: 'Changement de métier', gang_change: 'Changement de gang', jail: 'Prison', laststand: 'À terre',
+  money_move: 'Mouvement d’argent', item_move: 'Mouvement d’objet', join_timing: 'Temps de connexion', resource_start: 'Ressource démarrée',
+  resource_stop: 'Ressource arrêtée', business_open: 'Ouverture / fermeture',
   admindash_staff_loans: 'Prêts staff', qbx_vehicle_admin_probe: 'Véhicules (staff)', explosion_flood: 'Rafale d’explosions', game_log: 'Journal du jeu',
 }
 export const sourceLabel = (type?: string | null, subtype?: string | null) => GAME_LABELS[subtype ?? ''] || GAME_LABELS[type ?? ''] || String(subtype || type || '?').replace(/_/g, ' ')

@@ -88,6 +88,7 @@ test('appeals: accepted and refused at the same time: only the first decision co
 	const dms = executor.dms.length;
 	const results = await Promise.allSettled([core.appeals.decide(owner, appeal.id, true), core.appeals.decide(owner, appeal.id, false, 'Non')]);
 	assert.equal(fulfilled(results), 1);
-	assert.equal((await core.appeals.get(appeal.id)).status, 'accepted');
+	// Either decision may reach the database first: the kept status is the one of the call that succeeded
+	assert.equal((await core.appeals.get(appeal.id)).status, results[0].status === 'fulfilled' ? 'accepted' : 'rejected');
 	assert.equal(executor.dms.filter((d, i) => i >= dms && d[0] === TARGET && /appel/.test(d[1])).length, 1);
 });

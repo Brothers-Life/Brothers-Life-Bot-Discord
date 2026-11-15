@@ -68,9 +68,12 @@ import { Route as AuthenticatedAnnouncementsIdRouteImport } from './routes/_auth
 import { Route as AuthenticatedTelemetryIndexRouteImport } from './routes/_authenticated/telemetry/index'
 import { Route as AuthenticatedTelemetryAlertsRouteImport } from './routes/_authenticated/telemetry/alerts'
 import { Route as AuthenticatedTelemetryAnnounceRouteImport } from './routes/_authenticated/telemetry/announce'
+import { Route as AuthenticatedTelemetryBusinessesRouteImport } from './routes/_authenticated/telemetry/businesses'
 import { Route as AuthenticatedTelemetryDbRouteImport } from './routes/_authenticated/telemetry/db'
 import { Route as AuthenticatedTelemetryDeathmapRouteImport } from './routes/_authenticated/telemetry/deathmap'
 import { Route as AuthenticatedTelemetryEconomyRouteImport } from './routes/_authenticated/telemetry/economy'
+import { Route as AuthenticatedTelemetryFlowsRouteImport } from './routes/_authenticated/telemetry/flows'
+import { Route as AuthenticatedTelemetryHealthRouteImport } from './routes/_authenticated/telemetry/health'
 import { Route as AuthenticatedTelemetryLiveRouteImport } from './routes/_authenticated/telemetry/live'
 import { Route as AuthenticatedTelemetryLogsRouteImport } from './routes/_authenticated/telemetry/logs'
 import { Route as AuthenticatedTelemetryPerfRouteImport } from './routes/_authenticated/telemetry/perf'
@@ -392,6 +395,12 @@ const AuthenticatedTelemetryAnnounceRoute =
     path: '/telemetry/announce',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedTelemetryBusinessesRoute =
+  AuthenticatedTelemetryBusinessesRouteImport.update({
+    id: '/telemetry/businesses',
+    path: '/telemetry/businesses',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedTelemetryDbRoute =
   AuthenticatedTelemetryDbRouteImport.update({
     id: '/telemetry/db',
@@ -408,6 +417,18 @@ const AuthenticatedTelemetryEconomyRoute =
   AuthenticatedTelemetryEconomyRouteImport.update({
     id: '/telemetry/economy',
     path: '/telemetry/economy',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedTelemetryFlowsRoute =
+  AuthenticatedTelemetryFlowsRouteImport.update({
+    id: '/telemetry/flows',
+    path: '/telemetry/flows',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedTelemetryHealthRoute =
+  AuthenticatedTelemetryHealthRouteImport.update({
+    id: '/telemetry/health',
+    path: '/telemetry/health',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedTelemetryLiveRoute =
@@ -539,9 +560,12 @@ export interface FileRoutesByFullPath {
   '/announcements/$id': typeof AuthenticatedAnnouncementsIdRoute
   '/telemetry/alerts': typeof AuthenticatedTelemetryAlertsRoute
   '/telemetry/announce': typeof AuthenticatedTelemetryAnnounceRoute
+  '/telemetry/businesses': typeof AuthenticatedTelemetryBusinessesRoute
   '/telemetry/db': typeof AuthenticatedTelemetryDbRoute
   '/telemetry/deathmap': typeof AuthenticatedTelemetryDeathmapRoute
   '/telemetry/economy': typeof AuthenticatedTelemetryEconomyRoute
+  '/telemetry/flows': typeof AuthenticatedTelemetryFlowsRoute
+  '/telemetry/health': typeof AuthenticatedTelemetryHealthRoute
   '/telemetry/live': typeof AuthenticatedTelemetryLiveRoute
   '/telemetry/logs': typeof AuthenticatedTelemetryLogsRoute
   '/telemetry/perf': typeof AuthenticatedTelemetryPerfRoute
@@ -614,9 +638,12 @@ export interface FileRoutesByTo {
   '/announcements/$id': typeof AuthenticatedAnnouncementsIdRoute
   '/telemetry/alerts': typeof AuthenticatedTelemetryAlertsRoute
   '/telemetry/announce': typeof AuthenticatedTelemetryAnnounceRoute
+  '/telemetry/businesses': typeof AuthenticatedTelemetryBusinessesRoute
   '/telemetry/db': typeof AuthenticatedTelemetryDbRoute
   '/telemetry/deathmap': typeof AuthenticatedTelemetryDeathmapRoute
   '/telemetry/economy': typeof AuthenticatedTelemetryEconomyRoute
+  '/telemetry/flows': typeof AuthenticatedTelemetryFlowsRoute
+  '/telemetry/health': typeof AuthenticatedTelemetryHealthRoute
   '/telemetry/live': typeof AuthenticatedTelemetryLiveRoute
   '/telemetry/logs': typeof AuthenticatedTelemetryLogsRoute
   '/telemetry/perf': typeof AuthenticatedTelemetryPerfRoute
@@ -691,9 +718,12 @@ export interface FileRoutesById {
   '/_authenticated/announcements/$id': typeof AuthenticatedAnnouncementsIdRoute
   '/_authenticated/telemetry/alerts': typeof AuthenticatedTelemetryAlertsRoute
   '/_authenticated/telemetry/announce': typeof AuthenticatedTelemetryAnnounceRoute
+  '/_authenticated/telemetry/businesses': typeof AuthenticatedTelemetryBusinessesRoute
   '/_authenticated/telemetry/db': typeof AuthenticatedTelemetryDbRoute
   '/_authenticated/telemetry/deathmap': typeof AuthenticatedTelemetryDeathmapRoute
   '/_authenticated/telemetry/economy': typeof AuthenticatedTelemetryEconomyRoute
+  '/_authenticated/telemetry/flows': typeof AuthenticatedTelemetryFlowsRoute
+  '/_authenticated/telemetry/health': typeof AuthenticatedTelemetryHealthRoute
   '/_authenticated/telemetry/live': typeof AuthenticatedTelemetryLiveRoute
   '/_authenticated/telemetry/logs': typeof AuthenticatedTelemetryLogsRoute
   '/_authenticated/telemetry/perf': typeof AuthenticatedTelemetryPerfRoute
@@ -768,9 +798,12 @@ export interface FileRouteTypes {
     | '/announcements/$id'
     | '/telemetry/alerts'
     | '/telemetry/announce'
+    | '/telemetry/businesses'
     | '/telemetry/db'
     | '/telemetry/deathmap'
     | '/telemetry/economy'
+    | '/telemetry/flows'
+    | '/telemetry/health'
     | '/telemetry/live'
     | '/telemetry/logs'
     | '/telemetry/perf'
@@ -843,9 +876,12 @@ export interface FileRouteTypes {
     | '/announcements/$id'
     | '/telemetry/alerts'
     | '/telemetry/announce'
+    | '/telemetry/businesses'
     | '/telemetry/db'
     | '/telemetry/deathmap'
     | '/telemetry/economy'
+    | '/telemetry/flows'
+    | '/telemetry/health'
     | '/telemetry/live'
     | '/telemetry/logs'
     | '/telemetry/perf'
@@ -919,9 +955,12 @@ export interface FileRouteTypes {
     | '/_authenticated/announcements/$id'
     | '/_authenticated/telemetry/alerts'
     | '/_authenticated/telemetry/announce'
+    | '/_authenticated/telemetry/businesses'
     | '/_authenticated/telemetry/db'
     | '/_authenticated/telemetry/deathmap'
     | '/_authenticated/telemetry/economy'
+    | '/_authenticated/telemetry/flows'
+    | '/_authenticated/telemetry/health'
     | '/_authenticated/telemetry/live'
     | '/_authenticated/telemetry/logs'
     | '/_authenticated/telemetry/perf'
@@ -1359,6 +1398,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTelemetryAnnounceRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/telemetry/businesses': {
+      id: '/_authenticated/telemetry/businesses'
+      path: '/telemetry/businesses'
+      fullPath: '/telemetry/businesses'
+      preLoaderRoute: typeof AuthenticatedTelemetryBusinessesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/telemetry/db': {
       id: '/_authenticated/telemetry/db'
       path: '/telemetry/db'
@@ -1378,6 +1424,20 @@ declare module '@tanstack/react-router' {
       path: '/telemetry/economy'
       fullPath: '/telemetry/economy'
       preLoaderRoute: typeof AuthenticatedTelemetryEconomyRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/telemetry/flows': {
+      id: '/_authenticated/telemetry/flows'
+      path: '/telemetry/flows'
+      fullPath: '/telemetry/flows'
+      preLoaderRoute: typeof AuthenticatedTelemetryFlowsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/telemetry/health': {
+      id: '/_authenticated/telemetry/health'
+      path: '/telemetry/health'
+      fullPath: '/telemetry/health'
+      preLoaderRoute: typeof AuthenticatedTelemetryHealthRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/telemetry/live': {
@@ -1522,9 +1582,12 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAnnouncementsIdRoute: typeof AuthenticatedAnnouncementsIdRoute
   AuthenticatedTelemetryAlertsRoute: typeof AuthenticatedTelemetryAlertsRoute
   AuthenticatedTelemetryAnnounceRoute: typeof AuthenticatedTelemetryAnnounceRoute
+  AuthenticatedTelemetryBusinessesRoute: typeof AuthenticatedTelemetryBusinessesRoute
   AuthenticatedTelemetryDbRoute: typeof AuthenticatedTelemetryDbRoute
   AuthenticatedTelemetryDeathmapRoute: typeof AuthenticatedTelemetryDeathmapRoute
   AuthenticatedTelemetryEconomyRoute: typeof AuthenticatedTelemetryEconomyRoute
+  AuthenticatedTelemetryFlowsRoute: typeof AuthenticatedTelemetryFlowsRoute
+  AuthenticatedTelemetryHealthRoute: typeof AuthenticatedTelemetryHealthRoute
   AuthenticatedTelemetryLiveRoute: typeof AuthenticatedTelemetryLiveRoute
   AuthenticatedTelemetryLogsRoute: typeof AuthenticatedTelemetryLogsRoute
   AuthenticatedTelemetryPerfRoute: typeof AuthenticatedTelemetryPerfRoute
@@ -1596,9 +1659,12 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAnnouncementsIdRoute: AuthenticatedAnnouncementsIdRoute,
   AuthenticatedTelemetryAlertsRoute: AuthenticatedTelemetryAlertsRoute,
   AuthenticatedTelemetryAnnounceRoute: AuthenticatedTelemetryAnnounceRoute,
+  AuthenticatedTelemetryBusinessesRoute: AuthenticatedTelemetryBusinessesRoute,
   AuthenticatedTelemetryDbRoute: AuthenticatedTelemetryDbRoute,
   AuthenticatedTelemetryDeathmapRoute: AuthenticatedTelemetryDeathmapRoute,
   AuthenticatedTelemetryEconomyRoute: AuthenticatedTelemetryEconomyRoute,
+  AuthenticatedTelemetryFlowsRoute: AuthenticatedTelemetryFlowsRoute,
+  AuthenticatedTelemetryHealthRoute: AuthenticatedTelemetryHealthRoute,
   AuthenticatedTelemetryLiveRoute: AuthenticatedTelemetryLiveRoute,
   AuthenticatedTelemetryLogsRoute: AuthenticatedTelemetryLogsRoute,
   AuthenticatedTelemetryPerfRoute: AuthenticatedTelemetryPerfRoute,
