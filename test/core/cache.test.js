@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createCache } from '../../src/core/cache.js';
+import { createCache, redisTarget } from '../../src/core/cache.js';
 
 const quiet = { warn: () => null, info: () => null };
 const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -88,11 +88,11 @@ test('cache: with Redis, two processes share one computation', async () => {
 	assert.deepEqual(await two.wrap('report', { ttl: 100, stale: 400 }, build), { n: 1 });
 	assert.equal(runs, 1);
 	assert.deepEqual(redis.state.sets, [{ key: 'brl:report', options: { expiration: { type: 'PX', value: 500 } } }]);
-	assert.deepEqual({ ...await one.status(), latency: 0 }, { configured: true, ready: true, latency: 0 });
+	assert.deepEqual({ ...await one.status(), latency: 0 }, { configured: true, ready: true, latency: 0, target: 'x:6379', error: null });
 	redis.state.isReady = false;
-	assert.deepEqual(await one.status(), { configured: true, ready: false, latency: null });
+	assert.deepEqual(await one.status(), { configured: true, ready: false, latency: null, target: 'x:6379', error: null });
 	redis.state.isReady = true;
-	assert.deepEqual(await createCache({ logger: quiet }).status(), { configured: false, ready: false, latency: null });
+	assert.deepEqual(await createCache({ logger: quiet }).status(), { configured: false, ready: false, latency: null, target: null, error: null });
 	await one.close();
 	assert.equal(redis.state.closed, true);
 });
@@ -118,4 +118,26 @@ test('cache: Redis down, failing or holding garbage never breaks a page', async 
 	} });
 	assert.equal(await unreachable.wrap('k', { ttl: 100 }, async () => 'value'), 'value');
 	await unreachable.close();
+});
+
+test('cache: REDIS_URL is checked, the reason Redis is away is kept for the status page, never the password', async () => {
+	assert.deepEqual(redisTarget('redis://:s3cret@brl-redis.internal:6380'), { target: 'brl-redis.internal:6380', problem: null });
+	assert.deepEqual(redisTarget('rediss://user:s3cret@host'), { target: 'host:6379', problem: null });
+	for (const bad of ['brl-redis.internal:6379', 'http://host:6379', 's3cret', '']) assert.match(redisTarget(bad).problem, /redis:\/\//);
+
+	// Not an address: no connection is attempted (the client would go to 127.0.0.1), memory answers
+	let dialed = 0;
+	const wrong = createCache({ url: 'brl-redis.internal:6379', logger: quiet, connect: async () => { dialed++; } });
+	assert.equal(await wrong.wrap('k', { ttl: 100 }, async () => 'value'), 'value');
+	assert.equal(dialed, 0);
+	assert.match((await wrong.status()).error, /REDIS_URL/);
+
+	// A connection that fails: its error code is reported, with the address but not the password
+	const refused = createCache({ url: 'redis://:s3cret@10.0.0.1:6379', logger: quiet, connect: async (url, logger, onError) => {
+		onError('ECONNREFUSED');
+		return { isReady: false };
+	} });
+	const status = await refused.status();
+	assert.deepEqual(status, { configured: true, ready: false, latency: null, target: '10.0.0.1:6379', error: 'ECONNREFUSED' });
+	assert.equal(JSON.stringify(status).includes('s3cret'), false);
 });

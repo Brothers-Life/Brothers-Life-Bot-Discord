@@ -6,6 +6,15 @@ definePermission('status.view', { label: 'Voir l’état des services (bot, base
 const GAME_QUIET_MS = 15 * 60_000;
 const CHECK_TIMEOUT_MS = 4000;
 
+// What a Redis failure means, in plain words (the address shown never includes the password)
+const REDIS_ERRORS = [
+	[/REDIS_URL/, 'la variable REDIS_URL n’est pas une adresse redis://:motdepasse@hôte:6379'],
+	[/ECONNREFUSED/, 'rien n’écoute à cette adresse (hôte ou port de REDIS_URL à vérifier, ou service Redis arrêté)'],
+	[/ENOTFOUND|EAI_AGAIN/, 'l’hôte de REDIS_URL est introuvable'],
+	[/WRONGPASS|NOAUTH|invalid (username-)?password/i, 'le mot de passe de REDIS_URL est refusé'],
+	[/ETIMEDOUT|timeout/i, 'pas de réponse dans le délai (réseau ou pare-feu)'],
+];
+
 const timed = async (fn) => {
 	const start = performance.now();
 	const value = await Promise.race([fn(), new Promise((_, reject) => setTimeout(() => reject(new Error('pas de réponse en 4 s')), CHECK_TIMEOUT_MS))]);
@@ -49,8 +58,11 @@ export function registerStatusRoutes(app, { core, runtime }) {
 		async cache() {
 			const status = await cache.status();
 			if (!status.configured) return { state: 'off', detail: 'Pas de Redis configuré (REDIS_URL) : chaque processus garde son cache en mémoire.', metrics: {} };
-			if (!status.ready) return { state: 'down', detail: 'Redis ne répond pas : le cache est retombé en mémoire, le panel continue de fonctionner.', metrics: {} };
-			return { state: 'ok', detail: 'Cache partagé entre les processus.', metrics: { latency: status.latency } };
+			if (!status.ready) {
+				const why = REDIS_ERRORS.find(([pattern]) => pattern.test(status.error ?? ''))?.[1] ?? (status.error ? `erreur « ${String(status.error).slice(0, 120)} »` : 'pas de réponse');
+				return { state: 'down', detail: `Redis ne répond pas : ${why}. Le cache est retombé en mémoire, le panel continue de fonctionner.`, metrics: { target: status.target } };
+			}
+			return { state: 'ok', detail: 'Cache partagé entre les processus.', metrics: { latency: status.latency, target: status.target } };
 		},
 
 		// bl_telemetry: events and readings (POST /v1/batch)

@@ -4,7 +4,20 @@
 
 const COMMAND_TIMEOUT = 1500;
 
-async function redisClient(url, logger) {
+// Where REDIS_URL points (host:port, never the password), or what is wrong with it. Anything that is not a
+// redis:// address would silently make the client try 127.0.0.1:6379.
+export function redisTarget(url) {
+	try {
+		const parsed = new URL(url);
+		if (!/^rediss?:$/.test(parsed.protocol) || !parsed.hostname) throw new Error('not redis');
+		return { target: `${parsed.hostname}:${parsed.port || 6379}`, problem: null };
+	}
+	catch {
+		return { target: null, problem: 'REDIS_URL doit ressembler à redis://:motdepasse@hôte:6379' };
+	}
+}
+
+async function redisClient(url, logger, onError = () => null) {
 	const { createClient } = await import('redis');
 	const client = createClient({
 		url,
@@ -18,9 +31,11 @@ async function redisClient(url, logger) {
 		const text = error?.code ?? error?.message ?? String(error);
 		if (text !== lastError) logger.warn('Redis:', text);
 		lastError = text;
+		onError(text);
 	});
 	client.on('ready', () => {
 		lastError = '';
+		onError(null);
 		logger.info?.('Redis connected: shared cache on.');
 	});
 	client.connect().catch(() => null);
@@ -36,8 +51,13 @@ const within = (promise, ms) => new Promise((resolve, reject) => {
 export function createCache({ url = '', logger = console, now = Date.now, connect = redisClient, prefix = 'brl:' } = {}) {
 	const memory = new Map();
 	const inflight = new Map();
-	const opening = url ? Promise.resolve().then(() => connect(url, logger)).catch((error) => {
+	const { target, problem } = url ? redisTarget(url) : { target: null, problem: null };
+	// Why Redis does not answer, for the status page (ECONNREFUSED, WRONGPASS…)
+	let lastError = problem;
+	if (problem) logger.warn(`Redis: ${problem} — cache kept in memory.`);
+	const opening = url && !problem ? Promise.resolve().then(() => connect(url, logger, (error) => { lastError = error; })).catch((error) => {
 		logger.warn('Redis unavailable, cache kept in memory:', error?.message);
+		lastError = error?.message ?? 'client Redis indisponible';
 		return null;
 	}) : null;
 
@@ -110,16 +130,16 @@ export function createCache({ url = '', logger = console, now = Date.now, connec
 
 		// For the status page: is Redis configured, does it answer, how fast
 		async status() {
-			if (!url) return { configured: false, ready: false, latency: null };
+			if (!url) return { configured: false, ready: false, latency: null, target: null, error: null };
 			const client = await live();
-			if (!client) return { configured: true, ready: false, latency: null };
+			if (!client) return { configured: true, ready: false, latency: null, target, error: lastError };
 			const start = performance.now();
 			try {
 				await within(Promise.resolve(client.ping?.()), COMMAND_TIMEOUT);
-				return { configured: true, ready: true, latency: Math.round(performance.now() - start) };
+				return { configured: true, ready: true, latency: Math.round(performance.now() - start), target, error: null };
 			}
-			catch {
-				return { configured: true, ready: false, latency: null };
+			catch (error) {
+				return { configured: true, ready: false, latency: null, target, error: error?.message ?? null };
 			}
 		},
 

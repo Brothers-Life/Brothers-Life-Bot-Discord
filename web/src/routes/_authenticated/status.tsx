@@ -14,7 +14,7 @@ export const Route = createFileRoute('/_authenticated/status')({
 })
 
 type State = 'ok' | 'warn' | 'down' | 'off'
-type Service = { key: string; label: string; state: State; detail: string; metrics: Record<string, number | string | boolean | null> }
+type Service = { key: string; label: string; state: State; detail: string; metrics: Record<string, number | string | boolean | null | undefined> }
 type Status = { at: number; state: State; services: Service[] }
 
 const STATES: Record<State, { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral'; dot: string; border: string }> = {
@@ -42,6 +42,7 @@ function facts(s: Service, now: number): [string, string][] {
   const n = (key: string) => (typeof m[key] === 'number' ? (m[key] as number) : null)
   const out: [string, string | null][] = [
     ['Version', typeof m.version === 'string' && m.version ? m.version : null],
+    ['Adresse', typeof m.target === 'string' && m.target ? m.target : null],
     ['Démarré depuis', n('startedAt') ? span(now - n('startedAt')!) : null],
     ['Temps de réponse', n('latency') !== null ? `${fmt(n('latency'))} ms` : null],
     ['Latence Discord', n('ping') !== null && n('ping')! >= 0 ? `${fmt(n('ping'))} ms` : null],
@@ -80,7 +81,7 @@ function Card({ s, now }: { s: Service; now: number }) {
           {list.map(([label, value]) => (
             <div key={label} className='contents'>
               <dt className='truncate text-muted-foreground'>{label}</dt>
-              <dd className='text-end tabular-nums'>{value}</dd>
+              <dd className='truncate text-end tabular-nums' title={value}>{value}</dd>
             </div>
           ))}
         </dl>
