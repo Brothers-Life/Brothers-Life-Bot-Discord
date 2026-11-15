@@ -166,7 +166,13 @@ export function createTebex({ db, network, audit, executor, settings, logs, vari
 		catch (error) {
 			throw new ValidationError(`Tebex injoignable : ${error.message}`);
 		}
-		if (response.status === 401 || response.status === 403) throw new ValidationError('Clé secrète refusée par Tebex : vérifie la clé du serveur de jeu (Tebex → Game Servers).');
+		if (response.status === 401 || response.status === 403) {
+			// Tebex says why in JSON ("No server could be found with the specified secret key."); anything else is
+			// its protection (Cloudflare) blocking the request, which no change of key would fix
+			const reason = await response.json().then(body => String(body?.error_message ?? '').slice(0, 200), () => null);
+			if (reason === null) throw new ValidationError(`Tebex a bloqué la requête (${response.status}) avant de lire la clé : ce n’est pas la clé qui est en cause, réessaie plus tard.`);
+			throw new ValidationError(`Clé secrète refusée par Tebex${reason ? ` (« ${reason} »)` : ''}. Il faut la clé secrète d’un serveur de jeu : Tebex → Integrations → Game Servers → ton serveur → Secret Key. Les clés de l’API Headless ou Checkout (public token, private key) ne conviennent pas.`);
+		}
 		if (!response.ok) throw new ValidationError(`Tebex a répondu ${response.status}.`);
 		try {
 			return await response.json();

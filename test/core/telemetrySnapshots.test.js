@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { openTestDb } from '../db.js';
 import { createSnapshots } from '../../src/core/telemetry/snapshots.js';
 import { createIngest } from '../../src/core/telemetry/ingest.js';
+import { createFivemMirror } from '../../src/core/fivem/mirror.js';
 
 const MIN = 60_000;
 const T0 = Date.now();
@@ -113,4 +114,28 @@ test('gangs, money by reason, big movements and server health', async () => {
 	assert.deepEqual(health.slowQueries, [{ resource: 'ox_inventory', n: 12, max_ms: 640 }]);
 	assert.deepEqual(health.drops, { quit: 10, crash: 2 });
 	assert.equal(health.connects.loaded, 11);
+});
+
+test('a company: payroll runs and sales per day come from the mirror, only when money is asked', async () => {
+	const { db, ingest, views } = await setup();
+	const mirror = createFivemMirror({ db, logger: { warn: () => undefined } });
+	const id = { name: 'id', type: 'int' };
+	const out = await mirror.apply({ tables: [
+		{ name: 'job_payroll_runs', mode: 'append', schemaHash: 'p', from: null, cursor: '2', fields: ['id', 'job_name', 'total_amount', 'employee_count', 'run_by_name', 'created_at'],
+			schema: { pk: ['id'], columns: [id, { name: 'job_name', type: 'varchar' }, { name: 'total_amount', type: 'int' }, { name: 'employee_count', type: 'int' }, { name: 'run_by_name', type: 'varchar' }, { name: 'created_at', type: 'timestamp' }] },
+			rows: [[1, 'police', 5000, 2, 'Max', T0 - 60 * MIN], [2, 'ems', 900, 1, 'Léa', T0 - 60 * MIN]] },
+		{ name: 'store_sales', mode: 'append', schemaHash: 's', from: null, cursor: '3', fields: ['id', 'job_name', 'total', 'created_at'],
+			schema: { pk: ['id'], columns: [id, { name: 'job_name', type: 'varchar' }, { name: 'total', type: 'int' }, { name: 'created_at', type: 'timestamp' }] },
+			rows: [[1, 'police', 100, T0 - 30 * MIN], [2, 'police', 250, T0 - 20 * MIN], [3, 'ems', 40, T0 - 20 * MIN]] },
+	] });
+	assert.deepEqual([out.tables.job_payroll_runs.ok, out.tables.store_sales.ok], [true, true]);
+	await ingest.batch({ events: [business(T0 - MIN, [{ job: 'police', online: 1, on_duty: 1, employees: 2 }])] });
+
+	const plain = await views.business({ job: 'police', days: 7 });
+	assert.deepEqual([plain.payroll, plain.sales], [null, null]);
+	const full = await views.business({ job: 'police', days: 7, money: true });
+	assert.deepEqual(full.payroll.map(p => [Number(p.total), Number(p.employees), p.by]), [[5000, 2, 'Max']]);
+	assert.deepEqual([full.sales.reduce((n, s) => n + s.n, 0), full.sales.reduce((n, s) => n + Number(s.total), 0)], [2, 350]);
+	// A company without these tables' rows, or a server without the tables: empty lists, no error
+	assert.deepEqual((await views.business({ job: 'taxi', days: 7, money: true })).sales, []);
 });

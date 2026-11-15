@@ -13,6 +13,9 @@ export type BusinessDetail = {
   history: { t: number; online: number | null; on_duty: number | null; employees: number | null; balance: number | null; open: boolean | null }[]
   openings: { ts: string; open: boolean | null; on_duty: number | null }[]
   duty: { citizenid: string; name: string | null; shifts: number; seconds: number; last: string | null; dropped: number }[]
+  // null = viewer lacks the economy permission, [] = no data
+  payroll: { ts: string; total: number; employees: number; by: string | null }[] | null
+  sales: { day: string; n: number; total: number }[] | null
 }
 export type GangRow = { gang: string; label: string | null; online: number; members: number | null; xp: number | null; category: string | null; max_members: number | null; territories: number | null }
 export type Gangs = { ts: string | null; live: boolean; rows: GangRow[] }

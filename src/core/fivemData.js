@@ -3,7 +3,7 @@ import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
 import { LOG_SOURCES, sourceSelect } from './fivem/logSources.js';
 import { serverReport } from './fivem/serverReport.js';
 import { insightsReport } from './fivem/insights.js';
-import { mirrorQuery, seconds, unix, jfield } from './fivem/sql.js';
+import { mirrorQuery, seconds, unix, jfield, onlineSession } from './fivem/sql.js';
 import { createCache } from './cache.js';
 
 definePermission('fivemdata.view', { label: 'Voir les fiches joueurs FiveM (personnages, métier, temps de jeu, sanctions en jeu)', category: 'FiveM' });
@@ -323,7 +323,7 @@ export function createFivemData({ db, mirror, audit, logger = console, now = Dat
 				query(`SELECT "userId", citizenid, charinfo, job, gang, last_updated${nameColumn} FROM fivem.players WHERE "userId" = ANY(?)`, [userIds]),
 				when('bl_mc_sessions', () => query(`
 					SELECT user_id, COUNT(*) AS count, MAX(joined_at) AS "lastJoin", SUM(${played('joined_at', 'left_at')}) AS seconds,
-						COUNT(*) FILTER (WHERE left_at IS NULL AND joined_at > NOW() - INTERVAL '1 day') AS online
+						COUNT(*) FILTER (WHERE ${onlineSession()}) AS online
 					FROM fivem.bl_mc_sessions WHERE user_id = ANY(?) GROUP BY user_id`, [userIds])),
 				groupsMap(),
 			]);
@@ -435,7 +435,7 @@ export function createFivemData({ db, mirror, audit, logger = console, now = Dat
 				when('bl_mc_sessions', () => query('SELECT id, joined_at, left_at, drop_reason, name FROM fivem.bl_mc_sessions WHERE user_id = ? ORDER BY joined_at DESC LIMIT 50', [userId])),
 				when('bl_mc_sessions', () => query(`SELECT COUNT(*) AS count, MIN(joined_at) AS first, SUM(${played('joined_at', 'left_at')}) AS seconds,
 					SUM(CASE WHEN joined_at > NOW() - INTERVAL '7 days' THEN ${played('joined_at', 'left_at')} ELSE 0 END) AS week,
-					COUNT(*) FILTER (WHERE left_at IS NULL AND joined_at > NOW() - INTERVAL '1 day') AS online FROM fivem.bl_mc_sessions WHERE user_id = ?`, [userId]), [{}]),
+					COUNT(*) FILTER (WHERE ${onlineSession()}) AS online FROM fivem.bl_mc_sessions WHERE user_id = ?`, [userId]), [{}]),
 				when('bl_mc_session_chars', () => query('SELECT sc.session_id, sc.citizenid FROM fivem.bl_mc_session_chars sc JOIN fivem.bl_mc_sessions s ON s.id = sc.session_id WHERE s.user_id = ? ORDER BY s.joined_at DESC LIMIT 100', [userId])),
 				when('player_vehicles', () => query(`SELECT citizenid, vehicle, plate, fakeplate, garage, fuel, engine, body, state, depotprice, drivingdistance, nickname, favorite, last_out_at, owner_job, owner_gang${inventoryColumns.map(c => `, ${c}`).join('')} FROM fivem.player_vehicles WHERE citizenid = ANY(?) OR license = ANY(?)`, [anyCid, anyLicense])),
 				when('player_groups', () => query('SELECT citizenid, "group" AS name, type, grade, hired_at FROM fivem.player_groups WHERE citizenid = ANY(?)', [anyCid])),
@@ -662,7 +662,7 @@ export function createFivemData({ db, mirror, audit, logger = console, now = Dat
 			await ready();
 			const [[counts], online, week, staff, jobs, topPlay] = await Promise.all([
 				query(`SELECT (SELECT COUNT(*) FROM fivem.users) AS accounts, ${(await has('players')) ? '(SELECT COUNT(*) FROM fivem.players)' : '0'} AS characters`),
-				when('bl_mc_sessions', () => query('SELECT COUNT(DISTINCT user_id) AS n FROM fivem.bl_mc_sessions WHERE left_at IS NULL AND joined_at > NOW() - INTERVAL \'1 day\''), [{ n: 0 }]),
+				when('bl_mc_sessions', () => query(`SELECT COUNT(DISTINCT user_id) AS n FROM fivem.bl_mc_sessions WHERE ${onlineSession()}`), [{ n: 0 }]),
 				when('bl_mc_sessions', () => query(`SELECT COUNT(DISTINCT user_id) AS players, SUM(${played('joined_at', 'left_at')}) AS seconds FROM fivem.bl_mc_sessions WHERE joined_at > NOW() - INTERVAL '7 days'`), [{}]),
 				when('admindash_staff_sessions', () => query(`SELECT staff_name, role_name, SUM(${seconds('started_at', 'COALESCE(ended_at, last_seen_at)')}) AS seconds,
 					BOOL_OR(ended_at IS NULL AND last_seen_at > NOW() - INTERVAL '10 minutes') AS active

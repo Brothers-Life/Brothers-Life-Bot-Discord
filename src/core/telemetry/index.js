@@ -332,8 +332,9 @@ export function createTelemetry({ db, settings, logs, notifications, audit, conf
 			return { ...out, totals: out.totals && { ...out.totals, safes: null }, rows: out.rows.map(r => ({ ...r, balance: null })) };
 		}),
 		business: view('telemetry.view', async (p, actor) => {
-			const out = await snapshots.views.business(p);
-			if (actor.can('telemetry.economy')) return out;
+			const money = actor.can('telemetry.economy');
+			const out = await snapshots.views.business({ ...p, money });
+			if (money) return out;
 			return { ...out, latest: out.latest && { ...out.latest, balance: null }, history: out.history.map(r => ({ ...r, balance: null })) };
 		}),
 		gangs: view('telemetry.view', () => snapshots.views.gangs()),

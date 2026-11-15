@@ -1,4 +1,4 @@
-import { unix, seconds } from './sql.js';
+import { unix, seconds, onlineSession } from './sql.js';
 
 const ms = value => (value ? new Date(value).getTime() : null);
 const num = value => Number(value ?? 0);
@@ -67,7 +67,7 @@ export async function serverReport({ query, when, groupsMap, canMoney, now = Dat
 		when('bl_mc_sessions', () => query(`SELECT EXTRACT(ISODOW FROM ${paris('joined_at')}) - 1 AS dow, EXTRACT(HOUR FROM ${paris('joined_at')}) AS h, COUNT(DISTINCT user_id) AS n
 			FROM fivem.bl_mc_sessions WHERE joined_at > NOW() - INTERVAL '60 days' GROUP BY 1, 2`)),
 		when('bl_mc_sessions', () => query(`SELECT LEFT(drop_reason, 80) AS reason, COUNT(*) AS n FROM fivem.bl_mc_sessions WHERE drop_reason IS NOT NULL AND drop_reason <> '' AND joined_at > NOW() - ${days30} GROUP BY 1 ORDER BY n DESC LIMIT 10`)),
-		when('bl_mc_sessions', () => query('SELECT s.user_id, u.username, s.joined_at FROM fivem.bl_mc_sessions s JOIN fivem.users u ON u.userid = s.user_id WHERE s.left_at IS NULL AND s.joined_at > NOW() - INTERVAL \'1 day\' ORDER BY s.joined_at')),
+		when('bl_mc_sessions', () => query(`SELECT s.user_id, u.username, s.joined_at FROM fivem.bl_mc_sessions s JOIN fivem.users u ON u.userid = s.user_id WHERE ${onlineSession('s')} ORDER BY s.joined_at`)),
 		when('bl_mc_sessions', () => query(`SELECT COUNT(*) AS sessions, COUNT(DISTINCT user_id) AS players, AVG(${seconds('joined_at', 'left_at')}) AS "avgSeconds",
 			SUM(${seconds('joined_at', 'COALESCE(left_at, NOW())')}) AS seconds FROM fivem.bl_mc_sessions WHERE joined_at > NOW() - ${days30}`), [{}]),
 
@@ -75,7 +75,7 @@ export async function serverReport({ query, when, groupsMap, canMoney, now = Dat
 		// The duty flag stays set in the character sheet after a disconnection: only connected accounts count.
 		// Without the sessions table nobody is known to be connected: the declared flag is all there is.
 		when('bl_mc_sessions', () => query(`SELECT fivem.j(p.job) ->> 'name' AS name, COUNT(*) FILTER (WHERE fivem.j(p.job) ->> 'onduty' = 'true' AND EXISTS (
-			SELECT 1 FROM fivem.bl_mc_sessions s WHERE s.user_id = p."userId" AND s.left_at IS NULL AND s.joined_at > NOW() - INTERVAL '1 day')) AS "onDuty"
+			SELECT 1 FROM fivem.bl_mc_sessions s WHERE s.user_id = p."userId" AND ${onlineSession('s')})) AS "onDuty"
 			FROM fivem.players p GROUP BY 1`), null)
 			.then(rows => rows ?? query('SELECT fivem.j(job) ->> \'name\' AS name, COUNT(*) FILTER (WHERE fivem.j(job) ->> \'onduty\' = \'true\') AS "onDuty" FROM fivem.players GROUP BY 1')),
 		// The game's own reading of each company (bl_telemetry 1.6, every 5 minutes): who is really on duty right now

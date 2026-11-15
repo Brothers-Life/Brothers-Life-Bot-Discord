@@ -18,7 +18,7 @@ const payment = (id, { status = 'Complete', uuid = '123', name = 'Pedro', packag
 function fakeTebex(store) {
 	return async (url, options) => {
 		store.calls.push({ url, secret: options?.headers?.['X-Tebex-Secret'] });
-		if (store.status) return new Response('{}', { status: store.status });
+		if (store.status) return new Response(store.body ?? '{}', { status: store.status });
 		const path = url.replace(TEBEX_API, '');
 		if (path.startsWith('/payments')) return Response.json(store.payments);
 		if (path === '/information') return Response.json({ account: { id: 1, name: 'Brothers Life', domain: 'https://brl.tebex.io', currency: { iso_4217: 'EUR' }, game_type: 'FiveM' }, server: { id: 2, name: 'BRL' } });
@@ -248,6 +248,13 @@ test('a refused key is reported and kept as the last error', async () => {
 	store.status = 403;
 	await assert.rejects(tebex.poll(), /Clé secrète refusée/);
 	assert.match((await tebex.view(owner)).state.lastError, /Clé secrète refusée/);
+	// Tebex's own reason is quoted, with where to find the right key
+	store.body = JSON.stringify({ error_code: 403, error_message: 'No server could be found with the specified secret key.' });
+	await assert.rejects(tebex.poll(), /Clé secrète refusée par Tebex \(« No server could be found with the specified secret key\. »\).*Game Servers/);
+	// A 403 that is not the API's (its protection page): the key is not blamed
+	store.body = '<html>Just a moment...</html>';
+	await assert.rejects(tebex.poll(), /bloqué la requête \(403\)/);
+	store.body = null;
 	store.status = null;
 	await tebex.poll();
 	assert.equal((await tebex.view(owner)).state.lastError, null);

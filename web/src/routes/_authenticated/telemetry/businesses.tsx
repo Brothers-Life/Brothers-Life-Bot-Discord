@@ -74,6 +74,26 @@ function BusinessDialog({ row, onClose }: { row: BusinessRow | null; onClose: ()
                   ]}
                 />
               </div>
+              {d.sales && (
+                <ChartCard
+                  title='Ventes'
+                  actions={d.sales.length > 0 && <span className='text-xs text-muted-foreground'>{money(d.sales.reduce((s, r) => s + n0(r.total), 0))} · {fmt(d.sales.reduce((s, r) => s + n0(r.n), 0))} vente{d.sales.reduce((s, r) => s + n0(r.n), 0) > 1 ? 's' : ''}</span>}
+                  empty={d.sales.length === 0 && 'Aucune vente sur la période'}
+                >
+                  <TimeChart series={[{ key: 'total', label: 'Ventes', color: 'var(--success)', data: d.sales.map((r) => ({ x: Date.parse(`${r.day}T12:00:00`), y: n0(r.total) })) }]} kind='bar' unit='money' />
+                </ChartCard>
+              )}
+              {d.payroll && (
+                <TableSection
+                  title='Salaires versés' exportName={`salaires-${d.job}`} rows={d.payroll} minWidth='28rem' maxHeight='20rem' empty='Aucun salaire versé sur la période'
+                  columns={[
+                    { key: 'ts', label: 'Date', render: (p) => <span className='whitespace-nowrap text-muted-foreground'>{dt(p.ts)}</span>, csv: (p) => dt(p.ts) },
+                    { key: 'total', label: 'Montant', align: 'end', render: (p) => money(p.total), csv: (p) => p.total },
+                    { key: 'employees', label: 'Employés payés', align: 'end', render: (p) => fmt(p.employees), csv: (p) => p.employees },
+                    { key: 'by', label: 'Lancé par', render: (p) => p.by ?? '–', csv: (p) => p.by },
+                  ]}
+                />
+              )}
             </>
           )}
         </div>

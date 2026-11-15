@@ -66,6 +66,7 @@ import { Route as AuthenticatedVoiceRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedAnnouncementsIndexRouteImport } from './routes/_authenticated/announcements/index'
 import { Route as AuthenticatedAnnouncementsIdRouteImport } from './routes/_authenticated/announcements/$id'
 import { Route as AuthenticatedTelemetryIndexRouteImport } from './routes/_authenticated/telemetry/index'
+import { Route as AuthenticatedTelemetryActivitiesRouteImport } from './routes/_authenticated/telemetry/activities'
 import { Route as AuthenticatedTelemetryAlertsRouteImport } from './routes/_authenticated/telemetry/alerts'
 import { Route as AuthenticatedTelemetryAnnounceRouteImport } from './routes/_authenticated/telemetry/announce'
 import { Route as AuthenticatedTelemetryBusinessesRouteImport } from './routes/_authenticated/telemetry/businesses'
@@ -383,6 +384,12 @@ const AuthenticatedTelemetryIndexRoute =
     path: '/telemetry/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedTelemetryActivitiesRoute =
+  AuthenticatedTelemetryActivitiesRouteImport.update({
+    id: '/telemetry/activities',
+    path: '/telemetry/activities',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedTelemetryAlertsRoute =
   AuthenticatedTelemetryAlertsRouteImport.update({
     id: '/telemetry/alerts',
@@ -558,6 +565,7 @@ export interface FileRoutesByFullPath {
   '/versions': typeof AuthenticatedVersionsRoute
   '/voice': typeof AuthenticatedVoiceRoute
   '/announcements/$id': typeof AuthenticatedAnnouncementsIdRoute
+  '/telemetry/activities': typeof AuthenticatedTelemetryActivitiesRoute
   '/telemetry/alerts': typeof AuthenticatedTelemetryAlertsRoute
   '/telemetry/announce': typeof AuthenticatedTelemetryAnnounceRoute
   '/telemetry/businesses': typeof AuthenticatedTelemetryBusinessesRoute
@@ -636,6 +644,7 @@ export interface FileRoutesByTo {
   '/voice': typeof AuthenticatedVoiceRoute
   '/': typeof AuthenticatedIndexRoute
   '/announcements/$id': typeof AuthenticatedAnnouncementsIdRoute
+  '/telemetry/activities': typeof AuthenticatedTelemetryActivitiesRoute
   '/telemetry/alerts': typeof AuthenticatedTelemetryAlertsRoute
   '/telemetry/announce': typeof AuthenticatedTelemetryAnnounceRoute
   '/telemetry/businesses': typeof AuthenticatedTelemetryBusinessesRoute
@@ -716,6 +725,7 @@ export interface FileRoutesById {
   '/_authenticated/voice': typeof AuthenticatedVoiceRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/announcements/$id': typeof AuthenticatedAnnouncementsIdRoute
+  '/_authenticated/telemetry/activities': typeof AuthenticatedTelemetryActivitiesRoute
   '/_authenticated/telemetry/alerts': typeof AuthenticatedTelemetryAlertsRoute
   '/_authenticated/telemetry/announce': typeof AuthenticatedTelemetryAnnounceRoute
   '/_authenticated/telemetry/businesses': typeof AuthenticatedTelemetryBusinessesRoute
@@ -796,6 +806,7 @@ export interface FileRouteTypes {
     | '/versions'
     | '/voice'
     | '/announcements/$id'
+    | '/telemetry/activities'
     | '/telemetry/alerts'
     | '/telemetry/announce'
     | '/telemetry/businesses'
@@ -874,6 +885,7 @@ export interface FileRouteTypes {
     | '/voice'
     | '/'
     | '/announcements/$id'
+    | '/telemetry/activities'
     | '/telemetry/alerts'
     | '/telemetry/announce'
     | '/telemetry/businesses'
@@ -953,6 +965,7 @@ export interface FileRouteTypes {
     | '/_authenticated/voice'
     | '/_authenticated/'
     | '/_authenticated/announcements/$id'
+    | '/_authenticated/telemetry/activities'
     | '/_authenticated/telemetry/alerts'
     | '/_authenticated/telemetry/announce'
     | '/_authenticated/telemetry/businesses'
@@ -1384,6 +1397,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTelemetryIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/telemetry/activities': {
+      id: '/_authenticated/telemetry/activities'
+      path: '/telemetry/activities'
+      fullPath: '/telemetry/activities'
+      preLoaderRoute: typeof AuthenticatedTelemetryActivitiesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/telemetry/alerts': {
       id: '/_authenticated/telemetry/alerts'
       path: '/telemetry/alerts'
@@ -1580,6 +1600,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedVoiceRoute: typeof AuthenticatedVoiceRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedAnnouncementsIdRoute: typeof AuthenticatedAnnouncementsIdRoute
+  AuthenticatedTelemetryActivitiesRoute: typeof AuthenticatedTelemetryActivitiesRoute
   AuthenticatedTelemetryAlertsRoute: typeof AuthenticatedTelemetryAlertsRoute
   AuthenticatedTelemetryAnnounceRoute: typeof AuthenticatedTelemetryAnnounceRoute
   AuthenticatedTelemetryBusinessesRoute: typeof AuthenticatedTelemetryBusinessesRoute
@@ -1657,6 +1678,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedVoiceRoute: AuthenticatedVoiceRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedAnnouncementsIdRoute: AuthenticatedAnnouncementsIdRoute,
+  AuthenticatedTelemetryActivitiesRoute: AuthenticatedTelemetryActivitiesRoute,
   AuthenticatedTelemetryAlertsRoute: AuthenticatedTelemetryAlertsRoute,
   AuthenticatedTelemetryAnnounceRoute: AuthenticatedTelemetryAnnounceRoute,
   AuthenticatedTelemetryBusinessesRoute: AuthenticatedTelemetryBusinessesRoute,

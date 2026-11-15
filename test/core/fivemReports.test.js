@@ -298,4 +298,15 @@ test('fivem reports: only the core tables mirrored, no money: empty parts', asyn
 	const police = read.jobs.find(j => j.name === 'police');
 	assert.deepEqual([police.onDuty, police.online, police.open.isOpen], [3, 4, false]);
 	assert.equal(read.jobs.find(j => j.name === 'ballas').onDuty, 0, 'not in the reading: nobody on duty');
+
+	// The server restarted 5 minutes ago (health reading of the game): Bob's session, opened 20 minutes ago and never
+	// closed, is a leftover of the previous run, not someone in game
+	assert.deepEqual(live.activity.online.map(o => o.username), ['bob']);
+	await db.raw('INSERT INTO tel_health (ts, data) VALUES (now(), $1)', [json({ server_uptime_s: 300 })]);
+	const restarted = await serverReport({ ...harness(db), canMoney: false });
+	assert.deepEqual(restarted.activity.online, []);
+	assert.equal(restarted.jobs.find(j => j.name === 'police').onDuty, 0);
+	// Up for an hour: the session belongs to this run
+	await db.raw('UPDATE tel_health SET data = $1', [json({ server_uptime_s: 3600 })]);
+	assert.deepEqual((await serverReport({ ...harness(db), canMoney: false })).activity.online.map(o => o.username), ['bob']);
 });

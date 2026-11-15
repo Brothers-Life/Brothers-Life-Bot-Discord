@@ -85,6 +85,36 @@ export function createSnapshots({ q, now }) {
 		[ts, int(d.window_s), int(d.players), int(d.max_players), int(d.staff_on_duty), int(d.ping_avg), int(d.ping_max), int(hitches.n), int(hitches.max_ms), int(d.queue), JSON.stringify(data)]);
 	}
 
+	// Columns of game tables copied by the mirror (schema "fivem"), by table: what a query may name.
+	// The sales journal of the shops has no documented columns: they are looked up, never guessed.
+	async function mirrored(names) {
+		const r = await q('SELECT name, columns FROM fivem_mirror_tables WHERE name = ANY($1) AND mode <> \'count\'', [names]);
+		return new Map(r.rows.map(t => [t.name, Array.isArray(t.columns) ? t.columns : []]));
+	}
+	const NUMERIC = new Set(['bigint', 'numeric', 'integer', 'double precision']);
+	const column = (columns, candidates, types) => candidates.find(name => columns.some(c => c.name === name && (!types || types.has(c.type))));
+
+	// Money of one company from the game's own tables: payroll runs, sales per day
+	async function businessMoney(job, d) {
+		const tables = await mirrored(['job_payroll_runs', 'store_sales']);
+		const out = { payroll: [], sales: [] };
+		if (tables.has('job_payroll_runs')) {
+			out.payroll = (await q(`SELECT created_at AS ts, total_amount AS total, employee_count AS employees, run_by_name AS by FROM fivem.job_payroll_runs
+				WHERE job_name = $1 AND created_at > now() - make_interval(days => $2) ORDER BY created_at DESC LIMIT 50`, [job, d])).rows;
+		}
+		const sales = tables.get('store_sales');
+		if (sales) {
+			const jobCol = column(sales, ['job_name', 'job']);
+			const dateCol = column(sales, ['created_at', 'sold_at', 'at'], new Set(['timestamptz']));
+			const amountCol = column(sales, ['total', 'amount', 'total_price', 'price'], NUMERIC);
+			if (jobCol && dateCol && amountCol) {
+				out.sales = (await q(`SELECT to_char("${dateCol}" AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD') AS day, COUNT(*)::int AS n, COALESCE(SUM("${amountCol}"), 0)::bigint AS total
+					FROM fivem.store_sales WHERE "${jobCol}" = $1 AND "${dateCol}" > now() - make_interval(days => $2) GROUP BY 1 ORDER BY 1`, [job, d])).rows;
+			}
+		}
+		return out;
+	}
+
 	const period = hours => clampInt(hours, 24, 1, 24 * 90);
 	const bucket = hours => Math.max(300, Math.round(hours * 3600 / 300));
 	const fresh = ts => (ts ? now() - new Date(ts).getTime() < LIVE_MS : false);
@@ -101,12 +131,13 @@ export function createSnapshots({ q, now }) {
 		},
 
 		// One company: its curves, opening hours, time on duty per employee
-		async business({ job: name, days } = {}) {
+		// money: payroll runs and sales per day are added (economy permission, checked by the caller)
+		async business({ job: name, days, money = false } = {}) {
 			const job = jobOf(name);
 			const d = clampInt(days, 7, 1, 90);
-			if (!job) return { job: null, latest: null, history: [], openings: [], duty: [] };
+			if (!job) return { job: null, latest: null, history: [], openings: [], duty: [], payroll: null, sales: null };
 			const b = bucket(d * 24);
-			const [latest, history, openings, duty] = await Promise.all([
+			const [latest, history, openings, duty, cash] = await Promise.all([
 				q('SELECT job, ts, label, type, open, online, on_duty, employees, balance, level, xp, week_duty_s FROM tel_business_latest WHERE job = $1', [job]),
 				q(`SELECT floor(extract(epoch FROM ts) / ${b}) * ${b} * 1000 AS t, MAX(online) AS online, MAX(on_duty) AS on_duty, MAX(employees) AS employees,
 						(array_agg(balance ORDER BY ts DESC))[1] AS balance, bool_or(open) AS open
@@ -119,8 +150,9 @@ export function createSnapshots({ q, now }) {
 					FROM tel_events WHERE subtype = 'duty' AND data->>'job' = $1 AND data->>'on' = 'false' AND (data->>'duration_s') ~ '^[0-9]+([.][0-9]+)?$'
 						AND ts > now() - make_interval(days => $2) AND citizenid IS NOT NULL
 					GROUP BY citizenid ORDER BY seconds DESC LIMIT 200`, [job, d]),
+				money ? businessMoney(job, d) : { payroll: null, sales: null },
 			]);
-			return { job, days: d, latest: latest.rows[0] ?? null, live: fresh(latest.rows[0]?.ts), history: history.rows, openings: openings.rows, duty: duty.rows };
+			return { job, days: d, latest: latest.rows[0] ?? null, live: fresh(latest.rows[0]?.ts), history: history.rows, openings: openings.rows, duty: duty.rows, payroll: cash.payroll, sales: cash.sales };
 		},
 
 		async gangs() {
