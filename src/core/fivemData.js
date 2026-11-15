@@ -148,11 +148,22 @@ export function createFivemData({ db, mirror, audit, logger = console, now = Dat
 	// unix seconds or milliseconds on a few: read either way so that every source unions with the others
 	async function visibleSources(actor, only) {
 		const list = [];
-		for (const src of LOG_SOURCES) {
-			if (only && src.key !== only) continue;
-			if (src.permission && !actor.can(src.permission)) continue;
-			const columns = await mirror.columns(src.table);
-			if (!columns) continue;
+		for (const listed of LOG_SOURCES) {
+			if (only && listed.key !== only) continue;
+			if (listed.permission && !actor.can(listed.permission)) continue;
+			let src = listed;
+			let columns = await mirror.columns(src.table);
+			if (columns && src.discover) {
+				// Table with undocumented columns: the SELECT is built from the ones it has
+				const found = src.discover(columns);
+				src = found ? { ...src, ...found } : null;
+			}
+			else if (!columns && src.legacy) {
+				// Older game copy: the former table
+				src = { ...src, ...src.legacy };
+				columns = await mirror.columns(src.table);
+			}
+			if (!columns || !src) continue;
 			if (!src.at) {
 				const type = columns.find(c => c.name === 'created_at')?.type;
 				if (!type) continue;
@@ -163,6 +174,19 @@ export function createFivemData({ db, mirror, audit, logger = console, now = Dat
 			}
 		}
 		return list;
+	}
+
+	// Phone bank movements of some characters, in the shape of the former sky_phone_bank_transactions rows:
+	// bl_phone_transfers when the mirror has it (a row is outgoing when the character is the sender), else the former table
+	async function readPhoneBank(cids) {
+		const transfers = await when('bl_phone_transfers', () => query('SELECT from_cid, to_cid, amount, reason, created_at FROM fivem.bl_phone_transfers WHERE from_cid = ANY(?) OR to_cid = ANY(?) ORDER BY created_at DESC LIMIT 30', [cids, cids]), null);
+		if (transfers) {
+			return transfers.map((t) => {
+				const outgoing = cids.includes(t.from_cid);
+				return { owner_identifier: outgoing ? t.from_cid : t.to_cid, kind: outgoing ? 'transfer_out' : 'transfer_in', amount: t.amount, label: t.reason, created_at: t.created_at };
+			});
+		}
+		return when('sky_phone_bank_transactions', () => query('SELECT owner_identifier, kind, amount, label, created_at FROM fivem.sky_phone_bank_transactions WHERE owner_identifier = ANY(?) ORDER BY created_at DESC LIMIT 30', [cids]));
 	}
 
 	// Everything else known about a player, beyond the base sheet
@@ -191,7 +215,7 @@ export function createFivemData({ db, mirror, audit, logger = console, now = Dat
 			when('carplay_logs', () => query('SELECT verdict, label, vehicle, created_at FROM fivem.carplay_logs WHERE identifier = ANY(?) ORDER BY created_at DESC LIMIT 20', [lic])),
 			money('selfmenu_invoices', () => query('SELECT job_name, amount, settled, created_at FROM fivem.selfmenu_invoices WHERE issuer_cid = ANY(?) ORDER BY created_at DESC LIMIT 30', [cids])),
 			money('sky_phone_billing_invoices', () => query('SELECT recipient_identifier, issuer_label, title, amount, status, issued_at, paid_at FROM fivem.sky_phone_billing_invoices WHERE recipient_identifier = ANY(?) ORDER BY issued_at DESC LIMIT 30', [cids])),
-			money('sky_phone_bank_transactions', () => query('SELECT owner_identifier, kind, amount, label, created_at FROM fivem.sky_phone_bank_transactions WHERE owner_identifier = ANY(?) ORDER BY created_at DESC LIMIT 30', [cids])),
+			canMoney ? readPhoneBank(cids) : [],
 			money('job_payroll_lines', () => query('SELECT l.citizenid, r.job_name, l.grade, l.amount, l.duty_seconds, l.failed, r.created_at FROM fivem.job_payroll_lines l JOIN fivem.job_payroll_runs r ON r.id = l.run_id WHERE l.citizenid = ANY(?) ORDER BY r.created_at DESC LIMIT 20', [cids])),
 			money('premium_crate_openings', () => query('SELECT kind, label, rarity, refund_points, created_at FROM fivem.premium_crate_openings WHERE license = ANY(?) OR citizenid = ANY(?) ORDER BY created_at DESC LIMIT 30', [lic, cids])),
 			money('premium_shop_item_purchases', () => query('SELECT i.label, i.price, p.created_at FROM fivem.premium_shop_item_purchases p LEFT JOIN fivem.premium_shop_items i ON i.id = p.item_id WHERE p.license = ANY(?) OR p.citizenid = ANY(?) ORDER BY p.created_at DESC LIMIT 30', [lic, cids])),

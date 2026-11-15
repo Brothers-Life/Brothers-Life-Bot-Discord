@@ -33,8 +33,31 @@ export const LOG_SOURCES = [
 	{ key: 'carplay', label: 'CarPlay (musique)', table: 'carplay_logs', actor: 'player_name', action: 'verdict', target: 'COALESCE(label, vehicle)', details: 'url' },
 	{ key: 'billboards', label: 'Panneaux', table: 'billboard_history', actor: 'actor', action: 'action', target: 'billboard_id', details: 'details' },
 	{ key: 'tv', label: 'Écrans TV', table: 'tv_admin_logs', actor: 'admin_name', action: 'action', target: 'screen_uid', details: 'details' },
-	{ key: 'phone', label: 'Téléphone (admin)', table: 'sky_phone_admin_audit', actor: 'actor_name', action: 'action', target: 'NULL', details: 'details' },
+	// bl_phone_staff_log has no documented columns: its SELECT is built from the columns the mirror really has (`discover`);
+	// older game copies only have the former table (`legacy`)
+	{
+		key: 'phone', label: 'Téléphone (admin)', table: 'bl_phone_staff_log', discover: phoneStaffColumns,
+		legacy: { table: 'sky_phone_admin_audit', actor: 'actor_name', action: 'action', target: 'NULL', details: 'details' },
+	},
 ];
+
+// Maps the columns of bl_phone_staff_log (as `mirror.columns` lists them) to a log source; only existing columns are
+// ever named. Null when there is no date column to sort on.
+export function phoneStaffColumns(columns) {
+	const names = new Set(columns.map(c => c.name));
+	const first = list => list.find(n => names.has(n));
+	if (!names.has('created_at')) return null;
+	const pick = (list, fallback = 'NULL') => {
+		const name = first(list);
+		return name ? `"${name}"` : fallback;
+	};
+	return {
+		actor: pick(['actor_name', 'staff_name', 'admin_name', 'actor', 'staff', 'admin', 'identifier', 'citizenid']),
+		action: pick(['action', 'type', 'event'], '\'action\''),
+		target: pick(['target_name', 'target', 'target_cid', 'target_citizenid']),
+		details: pick(['details', 'detail', 'reason', 'message', 'data']),
+	};
+}
 
 // One SELECT per source, all with the same columns, to UNION
 export function sourceSelect(source) {

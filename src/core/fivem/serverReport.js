@@ -46,6 +46,11 @@ export async function serverReport({ query, when, groupsMap, canMoney, now = Dat
 	const groups = await groupsMap();
 	const label = name => groups.get(name)?.label ?? name;
 	const days30 = 'INTERVAL \'30 days\'';
+	// Companies = phone mailboxes with a job (replaces sky_phone_company_profiles); null when the mirror has no such table
+	const companyMailboxes = async () => {
+		const rows = await when('bl_phone_mailboxes', () => query('SELECT COUNT(*) AS n FROM fivem.bl_phone_mailboxes WHERE job IS NOT NULL AND job <> \'\''), null);
+		return rows ? num(rows[0]?.n) : null;
+	};
 
 	const [
 		sessions30, firsts, hourly, drops, onlineNow, totals,
@@ -104,8 +109,8 @@ export async function serverReport({ query, when, groupsMap, canMoney, now = Dat
 		Promise.all([
 			['blips', 'admindash_blips'], ['doors', 'ox_doorlock'], ['shops', 'shops'], ['markets', 'market_markets'], ['mapObjects', 'mapeditor_objects'],
 			['craftingTables', 'bl_crafting_tables'], ['recipes', 'bl_crafting_recipes'], ['tvScreens', 'tv_screens'], ['billboards', 'billboards'], ['djVenues', 'dj_venues'],
-			['teleports', 'qbx_teleport_overrides'], ['hotels', 'bl_hotels'], ['companies', 'sky_phone_company_profiles'], ['stashes', 'ox_inventory'], ['outfits', 'playerskins'],
-		].map(async ([key, table]) => [key, num((await rowCount(table)) ?? (await when(table, () => query(`SELECT COUNT(*) AS n FROM fivem."${table}"`), [{ n: 0 }]))[0]?.n)])),
+			['teleports', 'qbx_teleport_overrides'], ['hotels', 'bl_hotels'], ['companies', 'sky_phone_company_profiles', companyMailboxes], ['stashes', 'ox_inventory'], ['outfits', 'playerskins'],
+		].map(async ([key, table, custom]) => [key, (await custom?.()) ?? num((await rowCount(table)) ?? (await when(table, () => query(`SELECT COUNT(*) AS n FROM fivem."${table}"`), [{ n: 0 }]))[0]?.n)])),
 
 		when('admindash_roles', () => query('SELECT r.id, r.name, r.label, r.protected, COUNT(a.action_key) AS actions FROM fivem.admindash_roles r LEFT JOIN fivem.admindash_role_actions a ON a.role_id = r.id GROUP BY r.id, r.name, r.label, r.protected ORDER BY actions DESC')),
 		when('admindash_staff_sessions', () => query(`SELECT staff_name, role_name, COUNT(*) AS sessions, SUM(${seconds('started_at', 'COALESCE(ended_at, last_seen_at)')}) AS seconds,
@@ -224,6 +229,14 @@ export async function serverReport({ query, when, groupsMap, canMoney, now = Dat
 	return report;
 }
 
+// Phone bank movements as kind/count/total rows: bl_phone_transfers is one kind of row ('transfer'), the former
+// sky_phone_bank_transactions was grouped by kind
+async function phoneTransactions({ query, when }) {
+	const rows = await when('bl_phone_transfers', () => query('SELECT COUNT(*) AS n, SUM(amount) AS total FROM fivem.bl_phone_transfers'), null);
+	if (!rows) return when('sky_phone_bank_transactions', () => query('SELECT kind, COUNT(*) AS n, SUM(amount) AS total FROM fivem.sky_phone_bank_transactions GROUP BY kind'));
+	return num(rows[0]?.n) ? [{ kind: 'transfer', n: rows[0].n, total: rows[0].total }] : [];
+}
+
 async function economy({ query, when }) {
 	const [[money = {}], fortunes, accounts, flows, premium, crates, topItems, gifts, promos, crypto, phoneTx] = await Promise.all([
 		query(`SELECT SUM(${jnum('money', 'cash')}) AS cash, SUM(${jnum('money', 'bank')}) AS bank, SUM(${jnum('money', 'crypto')}) AS crypto FROM fivem.players`),
@@ -242,7 +255,7 @@ async function economy({ query, when }) {
 		when('premium_gifts', () => query('SELECT COUNT(*) AS n, SUM(CASE WHEN status = \'opened\' THEN 1 ELSE 0 END) AS opened FROM fivem.premium_gifts'), [{}]),
 		when('premium_promo_redemptions', () => query('SELECT COUNT(*) AS n FROM fivem.premium_promo_redemptions'), [{ n: 0 }]),
 		when('sky_phone_crypto_markets', () => query('SELECT id, price, price_scale, issued_supply, status FROM fivem.sky_phone_crypto_markets ORDER BY id')),
-		when('sky_phone_bank_transactions', () => query('SELECT kind, COUNT(*) AS n, SUM(amount) AS total FROM fivem.sky_phone_bank_transactions GROUP BY kind')),
+		phoneTransactions({ query, when }),
 	]);
 	const one = rows => num(rows[0]?.n);
 	return {

@@ -16,7 +16,7 @@ const json = value => JSON.stringify(value);
 
 // Mirror tables as mirror.js creates them (MariaDB types mapped to PostgreSQL), with a few rows each
 const COUNT_TABLES = ['admindash_blips', 'ox_doorlock', 'shops', 'market_markets', 'mapeditor_objects', 'bl_crafting_tables', 'bl_crafting_recipes', 'tv_screens',
-	'billboards', 'dj_venues', 'qbx_teleport_overrides', 'bl_hotels', 'sky_phone_company_profiles', 'ox_inventory', 'playerskins'];
+	'billboards', 'dj_venues', 'qbx_teleport_overrides', 'bl_hotels', 'ox_inventory', 'playerskins'];
 const FIXTURES = {
 	users: ['userid bigint, username text, discord text, license text', [
 		[1, 'alice', 'discord:111', 'license:a'], [2, 'bob', 'discord:222', 'license:b'], [3, 'carl', null, 'license:c'],
@@ -55,7 +55,11 @@ const FIXTURES = {
 		['AAA', 'police2', 60, 400, 1000, 0, 'police', null, ''],
 		['BBB', 'sultan', 40, 900, 300, 2, null, null, 'FAKE1'],
 	]],
-	sky_phone_calls: ['status text, started_at timestamptz, answered_at timestamptz, duration_seconds bigint', [['ended', ago(H), ago(H - 5000), 60], ['missed', ago(2 * H), null, 0]]],
+	// The phone resource of the game: bl_phone_* tables (the former sky_phone_* ones are in OLD_PHONE)
+	bl_phone_calls: ['caller text, callee text, video bigint, business bigint, status text, duration bigint, created_at timestamptz', [
+		['AAA', 'BBB', 0, 0, 'ended', 60, ago(H)], ['BBB', 'AAA', 0, 0, 'missed', 0, ago(2 * H)],
+	]],
+	bl_phone_mailboxes: ['id bigint, job text', [[1, 'police'], [2, ''], [3, null], [4, 'taxi']]],
 	sky_phone_health_daily: ['owner_identifier text, activity_date date, steps bigint, distance_meters double precision', [
 		['AAA', isoDay(T0 - 2 * DAY), 1000, 800], ['BBB', isoDay(T0 - 2 * DAY), 3000, 2200],
 	]],
@@ -95,12 +99,19 @@ const FIXTURES = {
 	premium_crate_openings: ['rarity text', [['rare'], ['common'], ['common']]],
 	premium_gifts: ['status text', [['opened'], ['pending']]],
 	premium_promo_redemptions: ['id bigint', [[1]]],
-	sky_phone_bank_transactions: ['kind text, amount numeric', [['transfer', 200], ['transfer', 300]]],
+	bl_phone_transfers: ['from_cid text, to_cid text, amount numeric, reason text, created_at timestamptz', [['AAA', 'BBB', 200, 'loyer', ago(H)], ['BBB', 'AAA', 300, null, ago(2 * H)]]],
 	...Object.fromEntries(COUNT_TABLES.map(t => [t, ['id bigint', t === 'shops' ? [[1], [2]] : []]])),
 };
 
-async function load(db, only) {
-	for (const [table, [columns, rows]] of Object.entries(FIXTURES)) {
+// Game copies from before the phone resource changed
+const OLD_PHONE = {
+	sky_phone_calls: ['status text, started_at timestamptz, answered_at timestamptz, duration_seconds bigint', [['ended', ago(H), ago(H - 5000), 60], ['missed', ago(2 * H), null, 0], ['missed', ago(3 * H), null, 0]]],
+	sky_phone_bank_transactions: ['kind text, amount numeric', [['transfer', 200], ['deposit', 300], ['deposit', 100]]],
+	sky_phone_company_profiles: ['id bigint', [[1], [2], [3]]],
+};
+
+async function load(db, only, fixtures = FIXTURES) {
+	for (const [table, [columns, rows]] of Object.entries(fixtures)) {
 		if (only && !only.includes(table)) continue;
 		await db.exec(`CREATE TABLE fivem."${table}" (${columns})`);
 		for (const row of rows) await db.raw(`INSERT INTO fivem."${table}" VALUES (${row.map((_, i) => `$${i + 1}`).join(', ')})`, row);
@@ -219,6 +230,7 @@ test('fivem reports: server report runs on the PostgreSQL mirror', async () => {
 
 	assert.equal(world.counts.shops, 2);
 	assert.equal(world.counts.doors, 0);
+	assert.equal(world.counts.companies, 2, 'mailboxes with a job');
 	assert.deepEqual(world.safezones, [{ name: 'Hôpital', active: true, visits: 2, seconds: 180 }, { name: 'Mairie', active: false, visits: 0, seconds: 0 }]);
 	assert.equal(world.harvest[0].access, 'job : Police');
 	assert.deepEqual(world.harvesters[0], { name: 'Alice', total: 40 });
@@ -245,6 +257,20 @@ test('fivem reports: server report runs on the PostgreSQL mirror', async () => {
 	assert.deepEqual(economy.premium.crates[0], { rarity: 'common', count: 2 });
 	assert.deepEqual(economy.premium.topItems, [{ label: 'Casquette', count: 2, price: 300 }, { label: '?', count: 1, price: 0 }]);
 	assert.deepEqual(economy.cryptoMarkets, [{ id: 'BTC', price: 51_000, supply: 21, status: 'open' }]);
+});
+
+test('fivem reports: former sky_phone_* tables are still read when the game has no bl_phone_* ones', async () => {
+	const db = await openTestDb();
+	await load(db, ['users', 'players']);
+	await load(db, null, OLD_PHONE);
+	const h = harness(db);
+	const insights = await insightsReport({ ...h, canMoney: true });
+	assert.equal(insights.phone.calls, 3);
+	assert.equal(insights.phone.answered, 33);
+	assert.ok(h.skipped.has('bl_phone_calls') && !h.skipped.has('sky_phone_calls'));
+	const server = await serverReport({ ...h, canMoney: true });
+	assert.equal(server.world.counts.companies, 3);
+	assert.deepEqual([...server.economy.phone].sort((a, b) => a.kind.localeCompare(b.kind)), [{ kind: 'deposit', count: 2, total: 400 }, { kind: 'transfer', count: 1, total: 200 }]);
 });
 
 test('fivem reports: only the core tables mirrored, no money: empty parts', async () => {

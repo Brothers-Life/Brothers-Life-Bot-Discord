@@ -67,9 +67,28 @@ const TABLES = {
 	admindash_roles: { pk: ['name'], cols: [['name', 'varchar'], ['label', 'varchar']], rows: [{ name: 'admin', label: 'Administrateur' }] },
 };
 
-async function seed(mirror, names = Object.keys(TABLES)) {
+// The phone resource of the game (bl_phone_*) and the former one (sky_phone_*), seeded on their own
+const PHONE_TABLES = {
+	bl_phone_transfers: { pk: ['id'], cols: [['id', 'int'], ['from_cid', 'varchar'], ['to_cid', 'varchar'], ['amount', 'int'], ['reason', 'varchar'], ['created_at', 'datetime']], rows: [
+		{ id: 1, from_cid: 'ABC123', to_cid: 'GHI789', amount: 50, reason: 'loyer', created_at: recent },
+		{ id: 2, from_cid: 'GHI789', to_cid: 'DEF456', amount: 20, reason: null, created_at: recent - HOUR },
+		{ id: 3, from_cid: 'GHI789', to_cid: 'ZZZ000', amount: 99, reason: 'autre', created_at: recent - 2 * HOUR },
+	] },
+	// Columns not documented: only the ones that exist are read
+	bl_phone_staff_log: { pk: ['id'], cols: [['id', 'int'], ['staff_name', 'varchar'], ['action', 'varchar'], ['note', 'varchar'], ['created_at', 'datetime']], rows: [
+		{ id: 1, staff_name: 'Kenzo', action: 'reset_pin', note: 'x', created_at: recent },
+	] },
+	sky_phone_bank_transactions: { pk: ['id'], cols: [['id', 'int'], ['owner_identifier', 'varchar'], ['kind', 'varchar'], ['amount', 'int'], ['label', 'varchar'], ['created_at', 'datetime']], rows: [
+		{ id: 1, owner_identifier: 'ABC123', kind: 'deposit', amount: 70, label: 'depot', created_at: recent },
+	] },
+	sky_phone_admin_audit: { pk: ['id'], cols: [['id', 'int'], ['actor_name', 'varchar'], ['action', 'varchar'], ['details', 'varchar'], ['created_at', 'datetime']], rows: [
+		{ id: 1, actor_name: 'Old', action: 'ban', details: 'd', created_at: recent },
+	] },
+};
+
+async function seed(mirror, names = Object.keys(TABLES), source = TABLES) {
 	const out = await mirror.apply({ tables: names.map((name) => {
-		const t = TABLES[name];
+		const t = source[name];
 		const fields = t.cols.map(c => c[0]);
 		return {
 			name, mode: 'hash', schemaHash: name, from: null,
@@ -186,6 +205,24 @@ test('fivem data: game logs merge datetime and unix sources, newest first, money
 	assert.equal(sources.find(s => s.key === 'carplay').recent, 1);
 	assert.equal(sources.some(s => s.key === 'bank'), false);
 	assert.deepEqual(warnings, []);
+});
+
+test('fivem data: phone bank and staff log read bl_phone_* tables, or the former ones on older game copies', async () => {
+	const full = ['fivemdata.view', 'fivemdata.economy', 'fivemdata.logs'];
+	const fresh = await setup({ tables: ['users', 'players'] });
+	await seed(fresh.mirror, ['bl_phone_transfers', 'bl_phone_staff_log'], PHONE_TABLES);
+	const bank = (await fresh.data.player(fresh.actor(full), 1)).phone.bank;
+	assert.deepEqual(bank.map(t => [t.character, t.kind, t.amount, t.label]), [['Tony Moretti', 'transfer_out', 50, 'loyer'], ['Lia', 'transfer_in', 20, null]]);
+	const logs = await fresh.data.gameLogs(fresh.actor(full), { source: 'phone' });
+	assert.deepEqual(logs.map(l => [l.actor, l.action, l.details]), [['Kenzo', 'reset_pin', null]]);
+	assert.equal((await fresh.data.logSources(fresh.actor(full))).find(s => s.key === 'phone').total, 1);
+
+	const old = await setup({ tables: ['users', 'players'] });
+	await seed(old.mirror, ['sky_phone_bank_transactions', 'sky_phone_admin_audit'], PHONE_TABLES);
+	const oldBank = (await old.data.player(old.actor(full), 1)).phone.bank;
+	assert.deepEqual(oldBank.map(t => [t.character, t.kind, t.amount, t.label]), [['Tony Moretti', 'deposit', 70, 'depot']]);
+	assert.deepEqual((await old.data.gameLogs(old.actor(full), { source: 'phone' })).map(l => [l.actor, l.action]), [['Old', 'ban']]);
+	assert.deepEqual(fresh.warnings.concat(old.warnings), []);
 });
 
 test('fivem data: memberships, catalog, overview and Discord variables', async () => {

@@ -94,6 +94,17 @@ export function cohorts(sessions, nowMs, weeks = 8) {
 	return rows;
 }
 
+// Phone calls of the last 60 days, in the shape of the former sky_phone_calls rows. bl_phone_calls has no answered_at:
+// a call counts as answered when it lasted (duration in seconds) or its status says so. Falls back to the former table.
+async function phoneCalls({ query, when }) {
+	const rows = await when('bl_phone_calls', () => query('SELECT status, created_at, duration FROM fivem.bl_phone_calls WHERE created_at > NOW() - INTERVAL \'60 days\''), null);
+	if (!rows) return when('sky_phone_calls', () => query('SELECT status, started_at, answered_at, duration_seconds FROM fivem.sky_phone_calls WHERE started_at > NOW() - INTERVAL \'60 days\''));
+	return rows.map((c) => {
+		const answered = num(c.duration) > 0 || /^(answered|accepted|connected)$/i.test(String(c.status ?? ''));
+		return { status: c.status, started_at: c.created_at, answered_at: answered ? c.created_at : null, duration_seconds: c.duration };
+	});
+}
+
 // Everything crossed: game sessions, staff service, money, jobs, justice, phone, and Discord activity of the same people
 export async function insightsReport({ query, when, groupsMap, canMoney, discordActivity, discordMembers, now = Date.now }) {
 	const nowMs = now();
@@ -109,7 +120,7 @@ export async function insightsReport({ query, when, groupsMap, canMoney, discord
 		when('admindash_reports', () => query('SELECT created_at, claimed_at, resolved_at, claimed_by_name, resolved_by_name, category FROM fivem.admindash_reports WHERE created_at > NOW() - INTERVAL \'90 days\'')),
 		when('admindash_sanctions', () => query('SELECT target_dbid, target_name, type, issued_by_name, created_at FROM fivem.admindash_sanctions')),
 		when('player_vehicles', () => query('SELECT citizenid, vehicle, fuel, engine, body, state, owner_job FROM fivem.player_vehicles')),
-		when('sky_phone_calls', () => query('SELECT status, started_at, answered_at, duration_seconds FROM fivem.sky_phone_calls WHERE started_at > NOW() - INTERVAL \'60 days\'')),
+		phoneCalls({ query, when }),
 		// The day as text: a DATE would come back as a local midnight and could shift by one day
 		when('sky_phone_health_daily', () => query(`SELECT to_char(activity_date, 'YYYY-MM-DD') AS activity_date, SUM(steps) AS steps, SUM(distance_meters) AS meters, COUNT(DISTINCT owner_identifier) AS people
 			FROM fivem.sky_phone_health_daily WHERE activity_date > NOW() - INTERVAL '30 days' GROUP BY activity_date ORDER BY activity_date`)),
