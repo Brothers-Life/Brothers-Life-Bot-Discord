@@ -108,6 +108,21 @@ export function createCache({ url = '', logger = console, now = Date.now, connec
 			return refresh(key, ttl + stale, build);
 		},
 
+		// For the status page: is Redis configured, does it answer, how fast
+		async status() {
+			if (!url) return { configured: false, ready: false, latency: null };
+			const client = await live();
+			if (!client) return { configured: true, ready: false, latency: null };
+			const start = performance.now();
+			try {
+				await within(Promise.resolve(client.ping?.()), COMMAND_TIMEOUT);
+				return { configured: true, ready: true, latency: Math.round(performance.now() - start) };
+			}
+			catch {
+				return { configured: true, ready: false, latency: null };
+			}
+		},
+
 		async close() {
 			const client = await opening;
 			if (!client) return;

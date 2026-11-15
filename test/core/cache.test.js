@@ -88,6 +88,11 @@ test('cache: with Redis, two processes share one computation', async () => {
 	assert.deepEqual(await two.wrap('report', { ttl: 100, stale: 400 }, build), { n: 1 });
 	assert.equal(runs, 1);
 	assert.deepEqual(redis.state.sets, [{ key: 'brl:report', options: { expiration: { type: 'PX', value: 500 } } }]);
+	assert.deepEqual({ ...await one.status(), latency: 0 }, { configured: true, ready: true, latency: 0 });
+	redis.state.isReady = false;
+	assert.deepEqual(await one.status(), { configured: true, ready: false, latency: null });
+	redis.state.isReady = true;
+	assert.deepEqual(await createCache({ logger: quiet }).status(), { configured: false, ready: false, latency: null });
 	await one.close();
 	assert.equal(redis.state.closed, true);
 });

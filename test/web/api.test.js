@@ -406,3 +406,28 @@ test('the panel files are sent precompressed and cached for good, API answers co
 	assert.equal(zipped.headers['content-encoding'], 'gzip');
 	assert.deepEqual(JSON.parse(zlib.gunzipSync(zipped.rawPayload).toString()), plain.json());
 });
+
+test('status page: one card per service, a failing check is a card, not an error', async () => {
+	const { app, core } = await setup();
+	const call = api(app, await sessionFor(app, OWNER));
+	const res = await call('GET', '/api/status');
+	assert.equal(res.statusCode, 200);
+	const body = res.json();
+	const state = key => body.services.find(s => s.key === key).state;
+	assert.deepEqual(body.services.map(s => s.key), ['api', 'bot', 'database', 'cache', 'telemetry', 'mirror', 'tebex']);
+	assert.deepEqual([state('api'), state('database')], ['ok', 'ok']);
+	// Nothing configured or received yet: "off", which is not a failure
+	assert.deepEqual([state('cache'), state('telemetry'), state('mirror'), state('tebex')], ['off', 'off', 'off', 'off']);
+	assert.ok(body.services.every(s => s.label && s.detail && s.metrics));
+
+	// The game sent a reading a moment ago, Tebex refused the key
+	await core.db.raw('INSERT INTO tel_health (ts, players, max_players, data) VALUES (now(), 12, 64, $1)', [JSON.stringify({ server_uptime_s: 600 })]);
+	await core.settings.set('tebex.secret', 'x'.repeat(40));
+	await core.settings.set('tebex.state', { lastPollAt: Date.now(), lastError: 'Clé secrète refusée par Tebex.' });
+	const after = (await call('GET', '/api/status')).json();
+	const card = key => after.services.find(s => s.key === key);
+	assert.deepEqual([card('telemetry').state, card('telemetry').metrics.players, card('telemetry').metrics.serverUptime], ['ok', 12, 600]);
+	assert.deepEqual([card('tebex').state, card('tebex').detail], ['down', 'Clé secrète refusée par Tebex.']);
+	assert.equal(after.state, 'down');
+	assert.equal(JSON.stringify(after).includes('x'.repeat(40)), false, 'the key never leaves');
+});

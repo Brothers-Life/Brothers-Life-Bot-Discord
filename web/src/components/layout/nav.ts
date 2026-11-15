@@ -244,6 +244,7 @@ export const navSections: NavSection[] = [
     title: 'Système',
     icon: Cog,
     items: [
+      { title: 'État des services', url: '/status', icon: HeartPulse, permission: 'status.view', keywords: 'statut santé panne bot redis base de données cache uptime' },
       { title: 'Console', url: '/console', icon: SquareTerminal, permission: 'console.view' },
       { title: 'Versions', url: '/versions', icon: PackageCheck, permission: 'versions.view', keywords: 'mise à jour' },
       { title: 'API', url: '/developer', icon: Plug, permission: 'api.use', keywords: 'clé token bruno développeur intégration openapi' },

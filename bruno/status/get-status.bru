@@ -1,0 +1,17 @@
+meta {
+  name: GET /status
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/status
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/status`
+
+  Permission requise : `status.view`
+}

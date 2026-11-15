@@ -82,7 +82,7 @@ function TelemetryHealth() {
         <Section title='Santé'><EmptyState title='Pas encore de relevé'>Les données arrivent avec bl_telemetry 1.6, un relevé toutes les 5 minutes.</EmptyState></Section>
       ) : (
         <div className='grid grid-cols-[minmax(0,1fr)] gap-6'>
-          {!d.live && <Notice tone='warning' title='Le jeu n’envoie plus de relevés'>Les chiffres affichés sont les derniers connus{l ? ` (relevé du ${new Date(l.ts).toLocaleString('fr-FR')})` : ''}.</Notice>}
+          {!d.current && <Notice tone='warning' title='Le jeu n’envoie plus de relevés'>Les chiffres affichés sont les derniers connus{l ? ` (relevé du ${new Date(l.ts).toLocaleString('fr-FR')})` : ''}.</Notice>}
           {n0(l?.queue) > 500 && <Notice tone='warning' title='Le jeu a des envois en attente'>L’API répond lentement : {fmt(l?.queue)} envois attendent d’être transmis.</Notice>}
           <StatCards items={[
             { label: 'Joueurs', value: l?.players == null ? '–' : `${fmt(l.players)}${l.max_players ? ` / ${fmt(l.max_players)}` : ''}`, icon: Users, tone: 'accent' },

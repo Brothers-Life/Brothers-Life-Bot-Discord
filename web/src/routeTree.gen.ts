@@ -55,6 +55,7 @@ import { Route as AuthenticatedSessionsRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedStaffActivityRouteImport } from './routes/_authenticated/staff-activity'
 import { Route as AuthenticatedStaffRolesRouteImport } from './routes/_authenticated/staff-roles'
 import { Route as AuthenticatedStatsRouteImport } from './routes/_authenticated/stats'
+import { Route as AuthenticatedStatusRouteImport } from './routes/_authenticated/status'
 import { Route as AuthenticatedStreamsRouteImport } from './routes/_authenticated/streams'
 import { Route as AuthenticatedTakeoversRouteImport } from './routes/_authenticated/takeovers'
 import { Route as AuthenticatedTebexRouteImport } from './routes/_authenticated/tebex'
@@ -325,6 +326,11 @@ const AuthenticatedStatsRoute = AuthenticatedStatsRouteImport.update({
   path: '/stats',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedStatusRoute = AuthenticatedStatusRouteImport.update({
+  id: '/status',
+  path: '/status',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedStreamsRoute = AuthenticatedStreamsRouteImport.update({
   id: '/streams',
   path: '/streams',
@@ -556,6 +562,7 @@ export interface FileRoutesByFullPath {
   '/staff-activity': typeof AuthenticatedStaffActivityRoute
   '/staff-roles': typeof AuthenticatedStaffRolesRoute
   '/stats': typeof AuthenticatedStatsRoute
+  '/status': typeof AuthenticatedStatusRoute
   '/streams': typeof AuthenticatedStreamsRoute
   '/takeovers': typeof AuthenticatedTakeoversRoute
   '/tebex': typeof AuthenticatedTebexRoute
@@ -634,6 +641,7 @@ export interface FileRoutesByTo {
   '/staff-activity': typeof AuthenticatedStaffActivityRoute
   '/staff-roles': typeof AuthenticatedStaffRolesRoute
   '/stats': typeof AuthenticatedStatsRoute
+  '/status': typeof AuthenticatedStatusRoute
   '/streams': typeof AuthenticatedStreamsRoute
   '/takeovers': typeof AuthenticatedTakeoversRoute
   '/tebex': typeof AuthenticatedTebexRoute
@@ -715,6 +723,7 @@ export interface FileRoutesById {
   '/_authenticated/staff-activity': typeof AuthenticatedStaffActivityRoute
   '/_authenticated/staff-roles': typeof AuthenticatedStaffRolesRoute
   '/_authenticated/stats': typeof AuthenticatedStatsRoute
+  '/_authenticated/status': typeof AuthenticatedStatusRoute
   '/_authenticated/streams': typeof AuthenticatedStreamsRoute
   '/_authenticated/takeovers': typeof AuthenticatedTakeoversRoute
   '/_authenticated/tebex': typeof AuthenticatedTebexRoute
@@ -797,6 +806,7 @@ export interface FileRouteTypes {
     | '/staff-activity'
     | '/staff-roles'
     | '/stats'
+    | '/status'
     | '/streams'
     | '/takeovers'
     | '/tebex'
@@ -875,6 +885,7 @@ export interface FileRouteTypes {
     | '/staff-activity'
     | '/staff-roles'
     | '/stats'
+    | '/status'
     | '/streams'
     | '/takeovers'
     | '/tebex'
@@ -955,6 +966,7 @@ export interface FileRouteTypes {
     | '/_authenticated/staff-activity'
     | '/_authenticated/staff-roles'
     | '/_authenticated/stats'
+    | '/_authenticated/status'
     | '/_authenticated/streams'
     | '/_authenticated/takeovers'
     | '/_authenticated/tebex'
@@ -1320,6 +1332,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStatsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/status': {
+      id: '/_authenticated/status'
+      path: '/status'
+      fullPath: '/status'
+      preLoaderRoute: typeof AuthenticatedStatusRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/streams': {
       id: '/_authenticated/streams'
       path: '/streams'
@@ -1590,6 +1609,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedStaffActivityRoute: typeof AuthenticatedStaffActivityRoute
   AuthenticatedStaffRolesRoute: typeof AuthenticatedStaffRolesRoute
   AuthenticatedStatsRoute: typeof AuthenticatedStatsRoute
+  AuthenticatedStatusRoute: typeof AuthenticatedStatusRoute
   AuthenticatedStreamsRoute: typeof AuthenticatedStreamsRoute
   AuthenticatedTakeoversRoute: typeof AuthenticatedTakeoversRoute
   AuthenticatedTebexRoute: typeof AuthenticatedTebexRoute
@@ -1668,6 +1688,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedStaffActivityRoute: AuthenticatedStaffActivityRoute,
   AuthenticatedStaffRolesRoute: AuthenticatedStaffRolesRoute,
   AuthenticatedStatsRoute: AuthenticatedStatsRoute,
+  AuthenticatedStatusRoute: AuthenticatedStatusRoute,
   AuthenticatedStreamsRoute: AuthenticatedStreamsRoute,
   AuthenticatedTakeoversRoute: AuthenticatedTakeoversRoute,
   AuthenticatedTebexRoute: AuthenticatedTebexRoute,

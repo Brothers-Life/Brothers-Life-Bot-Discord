@@ -120,14 +120,14 @@ export function createSnapshots({ q, now }) {
 	const fresh = ts => (ts ? now() - new Date(ts).getTime() < LIVE_MS : false);
 
 	const views = {
-		// Every company as of the last reading; `live` false when the game stopped sending (figures are then the last known)
+		// Every company as of the last reading; `current` false when the game stopped sending (figures are then the last known)
 		async businesses() {
 			const [rows, totals] = await Promise.all([
 				q('SELECT job, ts, label, type, open, online, on_duty, employees, balance, level, xp, week_duty_s FROM tel_business_latest ORDER BY on_duty DESC, online DESC, employees DESC, job'),
 				q('SELECT ts, jobs, open, on_duty, online, safes, duty_by_type FROM tel_business_totals ORDER BY ts DESC LIMIT 1'),
 			]);
 			const ts = rows.rows[0]?.ts ?? totals.rows[0]?.ts ?? null;
-			return { ts, live: fresh(ts), totals: totals.rows[0] ?? null, rows: rows.rows };
+			return { ts, current: fresh(ts), totals: totals.rows[0] ?? null, rows: rows.rows };
 		},
 
 		// One company: its curves, opening hours, time on duty per employee
@@ -152,13 +152,13 @@ export function createSnapshots({ q, now }) {
 					GROUP BY citizenid ORDER BY seconds DESC LIMIT 200`, [job, d]),
 				money ? businessMoney(job, d) : { payroll: null, sales: null },
 			]);
-			return { job, days: d, latest: latest.rows[0] ?? null, live: fresh(latest.rows[0]?.ts), history: history.rows, openings: openings.rows, duty: duty.rows, payroll: cash.payroll, sales: cash.sales };
+			return { job, days: d, latest: latest.rows[0] ?? null, current: fresh(latest.rows[0]?.ts), history: history.rows, openings: openings.rows, duty: duty.rows, payroll: cash.payroll, sales: cash.sales };
 		},
 
 		async gangs() {
 			const rows = await q('SELECT gang, ts, label, online, members, xp, category, max_members, territories FROM tel_gang_latest ORDER BY online DESC, members DESC, gang');
 			const ts = rows.rows[0]?.ts ?? null;
-			return { ts, live: fresh(ts), rows: rows.rows };
+			return { ts, current: fresh(ts), rows: rows.rows };
 		},
 
 		// Where money comes from and where it goes: by reason over the period, and the net creation over time.
@@ -217,7 +217,7 @@ export function createSnapshots({ q, now }) {
 				for (const [k, n] of Object.entries(data?.connects ?? {})) connects[k] = (connects[k] ?? 0) + n;
 			}
 			const top = map => [...map.values()].sort((a, b2) => b2.n - a.n).slice(0, 25);
-			return { hours: h, latest: latest.rows[0] ?? null, live: fresh(latest.rows[0]?.ts), curve: curve.rows, errors: top(errors), slowQueries: top(slow), drops, connects };
+			return { hours: h, latest: latest.rows[0] ?? null, current: fresh(latest.rows[0]?.ts), curve: curve.rows, errors: top(errors), slowQueries: top(slow), drops, connects };
 		},
 	};
 

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { openTestDb } from '../db.js';
 import { createSnapshots } from '../../src/core/telemetry/snapshots.js';
 import { createIngest } from '../../src/core/telemetry/ingest.js';
+import { scrub } from '../../src/core/telemetry/privacy.js';
 import { createFivemMirror } from '../../src/core/fivem/mirror.js';
 
 const MIN = 60_000;
@@ -33,7 +34,9 @@ test('business readings: the last one is the live list, the history keeps them a
 	assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM tel_events'))[0].n, 0, 'readings are not copied into the events');
 
 	const list = await views.businesses();
-	assert.equal(list.live, true);
+	assert.equal(list.current, true);
+	// The views go through the privacy filter of the telemetry: no key of theirs may look like an identifier ("live" did)
+	assert.deepEqual(Object.keys(scrub(list)).sort(), ['current', 'rows', 'totals', 'ts']);
 	assert.deepEqual(list.rows.map(r => [r.job, r.open, r.online, r.on_duty]), [['police', false, 2, 0]], 'the taxi left the reading');
 	assert.equal(Number(list.rows[0].balance), 1_300_000);
 	assert.equal(list.totals.on_duty, 0);
@@ -53,7 +56,7 @@ test('a reading that is too old is no longer live', async () => {
 	const { ingest, views } = await setup();
 	await ingest.batch({ events: [business(T0 - 60 * MIN, [{ job: 'police', online: 3, on_duty: 3, employees: 5 }])] });
 	const list = await views.businesses();
-	assert.equal(list.live, false);
+	assert.equal(list.current, false);
 	assert.equal(list.rows.length, 1);
 });
 
@@ -108,7 +111,7 @@ test('gangs, money by reason, big movements and server health', async () => {
 	assert.deepEqual((await views.moves({ hours: 1, kind: 'item' })).rows.map(r => r.data.item), ['weapon_pistol']);
 
 	const health = await views.health({ hours: 1 });
-	assert.equal(health.live, true);
+	assert.equal(health.current, true);
 	assert.deepEqual([health.latest.players, health.latest.hitches, health.latest.hitch_max_ms, health.latest.queue], [64, 4, 380, 18]);
 	assert.deepEqual(health.errors, [{ resource: 'bl_store', n: 5, sample: 'SCRIPT ERROR' }]);
 	assert.deepEqual(health.slowQueries, [{ resource: 'ox_inventory', n: 12, max_ms: 640 }]);

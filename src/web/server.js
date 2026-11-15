@@ -15,6 +15,7 @@ import { registerGuard, isApiRoute } from './guard.js';
 import { registerAuthRoutes } from './auth.js';
 import { registerPanelRoutes } from './routes/panel.js';
 import { registerSystemRoutes } from './routes/system.js';
+import { registerStatusRoutes } from './routes/status.js';
 import { registerSanctionRoutes } from './routes/sanctions.js';
 import { registerEventRoutes } from './routes/events.js';
 import { registerAutomodRoutes } from './routes/automod.js';
@@ -106,6 +107,7 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	registerAuthRoutes(app, { config, core, fetchImpl });
 	registerPanelRoutes(app, { core, runtime });
 	registerSystemRoutes(app, { core, runtime, consoleLog, versions });
+	registerStatusRoutes(app, { core, runtime });
 	registerSanctionRoutes(app, { core });
 	registerEventRoutes(app, { core });
 	registerAutomodRoutes(app, { core });

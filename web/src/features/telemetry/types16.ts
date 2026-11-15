@@ -4,12 +4,12 @@ export type BusinessRow = {
   online: number; on_duty: number; employees: number; balance: number | null; level: number | null; xp: number | null; week_duty_s: number | null
 }
 export type Businesses = {
-  ts: string | null; live: boolean
+  ts: string | null; current: boolean
   totals: { ts: string; jobs: number; open: number; on_duty: number; online: number; safes: number | null; duty_by_type: Record<string, number> } | null
   rows: BusinessRow[]
 }
 export type BusinessDetail = {
-  job: string; days: number; live: boolean; latest: BusinessRow | null
+  job: string; days: number; current: boolean; latest: BusinessRow | null
   history: { t: number; online: number | null; on_duty: number | null; employees: number | null; balance: number | null; open: boolean | null }[]
   openings: { ts: string; open: boolean | null; on_duty: number | null }[]
   duty: { citizenid: string; name: string | null; shifts: number; seconds: number; last: string | null; dropped: number }[]
@@ -18,7 +18,7 @@ export type BusinessDetail = {
   sales: { day: string; n: number; total: number }[] | null
 }
 export type GangRow = { gang: string; label: string | null; online: number; members: number | null; xp: number | null; category: string | null; max_members: number | null; territories: number | null }
-export type Gangs = { ts: string | null; live: boolean; rows: GangRow[] }
+export type Gangs = { ts: string | null; current: boolean; rows: GangRow[] }
 
 export type MoneyFlows = {
   hours: number; in: number; out: number
@@ -32,7 +32,7 @@ export type MoveData = {
 export type Moves = { hours: number; rows: { ts: string; subtype: 'money_move' | 'item_move'; citizenid: string | null; player_name: string | null; data: MoveData | null }[] }
 
 export type Health = {
-  hours: number; live: boolean
+  hours: number; current: boolean
   latest: {
     ts: string; window_s: number | null; players: number | null; max_players: number | null; staff_on_duty: number | null
     ping_avg: number | null; ping_max: number | null; hitches: number | null; hitch_max_ms: number | null; queue: number | null

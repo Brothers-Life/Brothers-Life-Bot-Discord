@@ -52,7 +52,7 @@ function BusinessDialog({ row, onClose }: { row: BusinessRow | null; onClose: ()
           <div><Segmented label='Période' value={days} options={DAYS} onChange={setDays} /></div>
           {q.error ? <QueryError error={q.error} /> : !d ? <Skeleton className='h-60 w-full' /> : (
             <>
-              {!d.live && <Stale ts={d.latest?.ts} />}
+              {!d.current && <Stale ts={d.latest?.ts} />}
               <ChartCard title='Employés en service et connectés' empty={isEmpty(duty) && 'Aucun relevé sur la période'}><TimeChart series={duty} kind='line' /></ChartCard>
               <div className='grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2'>
                 <TableSection
@@ -122,7 +122,7 @@ function CompaniesTab() {
   const byType = Object.entries(t?.duty_by_type ?? {}).map(([name, v]) => ({ name, n: n0(v) })).sort((a, b) => b.n - a.n)
   return (
     <div className='grid grid-cols-[minmax(0,1fr)] gap-6'>
-      {!d.live && <Stale ts={d.ts} />}
+      {!d.current && <Stale ts={d.ts} />}
       <StatCards items={[
         { label: 'Entreprises ouvertes', value: t ? fmt(t.open) : '–', icon: DoorOpen, tone: 'success', hint: t ? `sur ${fmt(t.jobs)}` : undefined },
         { label: 'En service', value: t ? fmt(t.on_duty) : '–', icon: Briefcase, tone: 'accent' },
@@ -161,7 +161,7 @@ function GangsTab() {
   const rows = [...d.rows].sort((a, b) => n0(b.online) - n0(a.online) || n0(b.members) - n0(a.members))
   return (
     <div className='grid grid-cols-[minmax(0,1fr)] gap-6'>
-      {!d.live && <Stale ts={d.ts} />}
+      {!d.current && <Stale ts={d.ts} />}
       <TableSection
         title='Gangs' exportName='gangs' rows={rows} minWidth='40rem' empty='Aucun gang.' rowKey={(r) => r.gang}
         columns={[
