@@ -136,6 +136,7 @@ export const navSections: NavSection[] = [
       { title: 'Télémétrie · Suivi staff', url: '/telemetry/staff', icon: UserCog, permission: 'telemetry.view', keywords: 'ban kick tp téléportation qui fait quoi txadmin' },
       { title: 'Télémétrie · Sécurité', url: '/telemetry/security', icon: ShieldEllipsis, permission: 'telemetry.view', keywords: 'actions staff connexions explosions morts' },
       { title: 'Télémétrie · Recherche', url: '/telemetry/search', icon: Search, permission: 'telemetry.view', keywords: 'chercher joueurs logs chat journaux' },
+      { title: 'Télémétrie · Réception des données', url: '/telemetry/ingest', icon: Database, permission: 'telemetry.view', keywords: 'ingestion bl_telemetry reçu manquant miroir tables événements perdu' },
       { title: 'Télémétrie · Base de données', url: '/telemetry/db', icon: Database, permission: 'telemetry.view', keywords: 'tables lignes taille fortunes bans' },
       { title: 'Télémétrie · Annonces en jeu', url: '/telemetry/announce', icon: MessageSquareShare, permission: 'telemetry.announce', keywords: 'message joueurs notification chat' },
       { title: 'Télémétrie · Réglages', url: '/telemetry/settings', icon: SlidersHorizontal, permission: 'telemetry.manage', keywords: 'jeton token ingestion seuils conservation fuseau' },

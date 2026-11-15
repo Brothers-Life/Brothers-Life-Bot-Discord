@@ -32,6 +32,7 @@ const VIEWS = [
 	['health', 'serverHealth', 'telemetry.view', query({ h: hours }), q => ({ hours: q.h })],
 	['flows', 'flows', 'telemetry.economy', query({ h: hours }), q => ({ hours: q.h })],
 	['moves', 'moves', 'telemetry.economy', query({ h: hours, kind: { type: 'string', enum: ['money', 'item'] } }), q => ({ hours: q.h, kind: q.kind })],
+	['ingest', 'ingestReport', 'telemetry.view', query({}), () => ({})],
 	['logs', 'logs', 'telemetry.logs', query({ q: { type: 'string', maxLength: 100 }, level: { type: 'string', maxLength: 10 } }), q => ({ q: q.q, level: q.level })],
 ];
 
@@ -152,7 +153,7 @@ export function registerTelemetryIngestRoutes(app, { core, logger = console }) {
 			return reply.code(500).send({ error: 'internal' });
 		};
 
-		scope.post('/v1/batch', { onRequest: authorized, bodyLimit: 5 * 1024 * 1024 }, async (request, reply) => {
+		scope.post('/v1/batch', { onRequest: authorized, bodyLimit: 16 * 1024 * 1024 }, async (request, reply) => {
 			if (!request.body || typeof request.body !== 'object' || Array.isArray(request.body)) return reply.code(400).send({ error: 'bad request' });
 			try {
 				// bl_telemetry 1.3+: results of the announcements in the batch, new announcements in the answer (?commands=1)
@@ -182,7 +183,8 @@ export function registerTelemetryIngestRoutes(app, { core, logger = console }) {
 			}
 		});
 
-		scope.post('/v1/mirror', { onRequest: authorized, bodyLimit: 5 * 1024 * 1024 }, async (request, reply) => {
+		// Pages of 1,000 rows of the widest tables (first pass of the whole history) go beyond 5 MB
+		scope.post('/v1/mirror', { onRequest: authorized, bodyLimit: 32 * 1024 * 1024 }, async (request, reply) => {
 			if (!request.body || typeof request.body !== 'object' || !Array.isArray(request.body.tables)) return reply.code(400).send({ error: 'bad request' });
 			try {
 				return await core.fivemMirror.apply(request.body);

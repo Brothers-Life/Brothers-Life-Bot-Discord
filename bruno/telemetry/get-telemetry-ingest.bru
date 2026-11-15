@@ -1,0 +1,17 @@
+meta {
+  name: GET /telemetry/ingest
+  type: http
+  seq: 17
+}
+
+get {
+  url: {{baseUrl}}/api/telemetry/ingest
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/telemetry/ingest`
+
+  Permission requise : `telemetry.view`
+}

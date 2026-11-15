@@ -468,6 +468,39 @@ test('ingest routes answer as bl-panel-api: 401, batch with commands, acks', asy
 	}
 });
 
+test('reception report: what arrived, what bl_telemetry 1.6 documents and never arrived, what could not be stored', async () => {
+	const { db, telemetry } = await setup();
+	await telemetry.ingestBatch({ events: [
+		{ type: 'event', subtype: 'duty', ts: Date.now(), citizenid: 'AAA', data: { job: 'police', on: true } },
+		{ type: 'event', subtype: 'made_up', ts: Date.now(), data: {} },
+		{ type: 'game_log', subtype: 'store_sales', ts: Date.now(), data: { total: 5 } },
+		{ type: 'brand_new_type', ts: Date.now(), data: {} },
+		{ type: 'health_snapshot', ts: Date.now(), data: { players: 3 } },
+		{ type: 'db_snapshot', data: { name: 'wealth_top', label: 'Fortunes', kind: 'table', columns: ['nom', 'total'], rows: [['A', 1], ['B', 2]] } },
+		// The end of a session keeps its family; a purchase keeps where it comes from
+		{ type: 'session_start', ts: Date.now() - 60_000, citizenid: 'AAA', data: {} },
+		{ type: 'session_end', ts: Date.now(), citizenid: 'AAA', data: { reason: 'Game crashed: GTA5.exe', reason_kind: 'crash' } },
+		{ type: 'purchase', ts: Date.now(), citizenid: 'AAA', data: { shop: '24/7', item: 'water', qty: 1, total: 5, source: 'ox_inventory' } },
+	] });
+	assert.equal((await db.raw('SELECT drop_kind FROM tel_sessions')).rows[0].drop_kind, 'crash');
+	assert.equal((await db.raw('SELECT data FROM tel_purchases')).rows[0].data.source, 'ox_inventory');
+	await db.raw('INSERT INTO ingest_problems (source, name, error) VALUES (\'mirror\', \'store_orders\', \'clé primaire inconnue\'), (\'batch\', \'INSERT INTO tel_x\', \'boom\')');
+
+	const report = await telemetry.ingestReport(admin);
+	const find = (list, key) => list.find(l => l.key === key);
+	assert.deepEqual([find(report.subtypes, 'duty').n, find(report.subtypes, 'duty').expected], [1, true]);
+	assert.deepEqual([find(report.subtypes, 'money_move').n, find(report.subtypes, 'money_move').last], [0, null], 'documented, never received');
+	assert.deepEqual([find(report.subtypes, 'made_up').n, find(report.subtypes, 'made_up').expected], [1, false], 'received though undocumented: kept and shown');
+	assert.equal(find(report.gameLogs, 'store_sales').n, 1);
+	assert.deepEqual([find(report.types, 'brand_new_type').n, find(report.types, 'event').n, find(report.types, 'game_log').n], [1, 2, 1]);
+	assert.equal(find(report.readings, 'health_snapshot').n, 1);
+	assert.equal(find(report.readings, 'money_flow').last, null);
+	assert.deepEqual([find(report.cards, 'wealth_top').n, find(report.cards, 'biz_levels').last], [2, null]);
+	assert.deepEqual([find(report.mirror, 'store_sales').mode, find(report.mirror, 'store_sales').last], [null, null]);
+	assert.deepEqual(report.problems.map(p => [p.source, p.name, p.error]).sort(), [['batch', 'INSERT INTO tel_x', 'boom'], ['mirror', 'store_orders', 'clé primaire inconnue']]);
+	await assert.rejects(telemetry.ingestReport({ id: '2', can: () => false }), ForbiddenError);
+});
+
 test('perf text of FiveM is parsed into tick metrics', () => {
 	const metrics = parsePerf('tickTime_count{name="svNetwork"} 50\ntickTime_sum{name="svNetwork"} 0.2\ntickTime_bucket{name="svNetwork",le="0.01"} 45\ntickTime_bucket{name="svNetwork",le="+Inf"} 50\n# comment\n');
 	assert.deepEqual(metrics, [

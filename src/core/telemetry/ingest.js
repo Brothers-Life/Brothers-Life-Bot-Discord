@@ -85,7 +85,7 @@ export function createIngest({ q, perf, snapshots, raiseAlert, now }) {
 			break;
 		case 'purchase':
 			await q('INSERT INTO tel_purchases (ts, citizenid, player_name, shop, item, label, qty, unit_price, total, currency, data) VALUES (to_timestamp($1/1000.0), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
-				[ts, cid, name, text(d.shop, 120), text(d.item, 120), text(d.label, 120), int(d.qty) || 1, num(d.unit_price), num(d.total), text(d.currency, 30) || 'cash', json(d.extra)]);
+				[ts, cid, name, text(d.shop, 120), text(d.item, 120), text(d.label, 120), int(d.qty) || 1, num(d.unit_price), num(d.total), text(d.currency, 30) || 'cash', json({ ...(d.extra && typeof d.extra === 'object' ? d.extra : {}), ...(text(d.source, 60) ? { source: text(d.source, 60) } : {}) })]);
 			break;
 		case 'death':
 			await q('INSERT INTO tel_deaths (ts, citizenid, player_name, cause, killer_cid, killer_name, weapon, x, y, z, screenshot_url, data) VALUES (to_timestamp($1/1000.0), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
@@ -96,10 +96,10 @@ export function createIngest({ q, perf, snapshots, raiseAlert, now }) {
 				[cid, name, license, src, ts]);
 			break;
 		case 'session_end':
-			await q(`UPDATE tel_sessions SET end_ts = to_timestamp($1/1000.0), drop_reason = $2,
+			await q(`UPDATE tel_sessions SET end_ts = to_timestamp($1/1000.0), drop_reason = $2, drop_kind = $5,
 						duration_min = EXTRACT(EPOCH FROM (to_timestamp($1/1000.0) - start_ts)) / 60.0
 					WHERE id = (SELECT id FROM tel_sessions WHERE (citizenid = $3 OR license = $4) AND end_ts IS NULL ORDER BY start_ts DESC LIMIT 1)`,
-			[ts, text(d.reason, 300), cid, license]);
+			[ts, text(d.reason, 300), cid, license, text(d.reason_kind, 20)]);
 			break;
 		case 'vehicle_snapshot':
 			await q('INSERT INTO tel_vehicles_owned (ts, citizenid, owner_name, plate, model, garage, state, data) VALUES (to_timestamp($1/1000.0), $2, $3, $4, $5, $6, $7, $8)',

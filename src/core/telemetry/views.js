@@ -11,7 +11,9 @@ const NOISE = '(\'player_snapshot\',\'vehicle_snapshot\',\'economy_snapshot\',\'
 // Tables of the game that log staff actions (followed by bl_telemetry/live.lua)
 const STAFF_TABLES = ['admindash_audit_log', 'admindash_sanctions', 'admindash_role_actions', 'admindash_staff_sessions',
 	'admindash_blip_logs', 'admindash_staff_loans', 'teleport_admin_logs', 'garage_admin_logs', 'job_admin_logs', 'shop_admin_logs',
-	'shop_admin', 'mapeditor_audit', 'dj_audit', 'tv_admin_logs', 'qbx_vehicle_admin_probe', 'bl_safezones_audit', 'mdt_audit'];
+	'shop_admin', 'mapeditor_audit', 'dj_audit', 'tv_admin_logs', 'qbx_vehicle_admin_probe', 'bl_safezones_audit', 'mdt_audit',
+	// bl_telemetry 1.6
+	'blf_audit', 'blh_audit', 'bl_phone_staff_log'];
 const ACTOR_KEYS = ['admin_name', 'admin', 'staff', 'staff_name', 'author', 'by', 'executor', 'moderator', 'bannedby', 'banned_by',
 	'created_by', 'actor', 'admin_label', 'officer', 'officer_name', 'user', 'username'];
 const ACTION_KEYS = ['action', 'type', 'event', 'command', 'category', 'kind', 'log_type', 'what'];

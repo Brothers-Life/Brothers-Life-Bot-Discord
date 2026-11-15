@@ -144,3 +144,33 @@ test('mirror: a table that was only counted restarts from zero when it becomes a
 	assert.equal(await mirror.counted('shops'), null);
 	assert.equal((await mirror.tables()).has('shops'), true);
 });
+
+test('mirror: what could not be taken is recorded with its reason, and settled once the table syncs', async () => {
+	const { mirror } = await setup();
+	const id = { name: 'id', type: 'int' };
+	const out = await mirror.apply({ tables: [
+		{ name: 'bl_gouv_records', mode: 'hash', schemaHash: 'g', from: null, fields: ['id', 'postal_code', 'country_code'], rows: [[1, '75001', 'FR']],
+			schema: { pk: ['id'], columns: [id, { name: 'postal_code', type: 'varchar' }, { name: 'country_code', type: 'varchar' }, { name: 'pin_code', type: 'varchar' }] } },
+		{ name: 'store_orders', mode: 'hash', schemaHash: 'o', schema: { pk: ['nope'], columns: [id] }, fields: [], rows: [] },
+		{ name: 'weird', mode: 'teleport', fields: [], rows: [] },
+		{ name: 'bl_phone_messages', mode: 'append', schemaHash: 'm', schema: { pk: ['id'], columns: [id] }, fields: ['id'], rows: [[1]] },
+	] });
+	// postal_code and country_code are ordinary data; pin_code opens something
+	assert.deepEqual((await mirror.columns('bl_gouv_records')).map(c => c.name), ['id', 'postal_code', 'country_code']);
+	assert.equal(out.tables.bl_gouv_records.ok, true);
+	assert.deepEqual((await mirror.problems()).map(p => [p.name, p.error]).sort(), [['store_orders', 'clé primaire inconnue'], ['weird', 'Mode d’envoi inconnu : teleport']],
+		'a private table refused on purpose is not a problem');
+
+	// The game sends store_orders correctly: the problem is settled
+	await new Promise(resolve => setTimeout(resolve, 20));
+	await mirror.apply({ tables: [{ name: 'store_orders', mode: 'hash', schemaHash: 'o2', schema: { pk: ['id'], columns: [id] }, from: null, fields: ['id'], rows: [[1]] }] });
+	assert.deepEqual((await mirror.problems()).map(p => p.name), ['weird']);
+});
+
+test('mirror: a send of many tables is taken whole', async () => {
+	const { mirror } = await setup();
+	const tables = Array.from({ length: 120 }, (_, i) => ({ name: `counted_${i}`, mode: 'count', count: i }));
+	const out = await mirror.apply({ tables });
+	assert.equal(Object.values(out.tables).filter(t => t.ok).length, 120);
+	assert.equal(await mirror.counted('counted_119'), 119);
+});

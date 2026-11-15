@@ -6,6 +6,7 @@ import { createIngest } from './ingest.js';
 import { createPerf } from './perf.js';
 import { createViews } from './views.js';
 import { createSnapshots } from './snapshots.js';
+import { READINGS, EVENT_TYPES, EVENT_SUBTYPES, GAME_LOG_SUBTYPES, DB_CARDS, MIRROR_TABLES, COUNTED_TABLES } from './expected.js';
 import { createCommands } from './commands.js';
 import { createAlerts, ALERT_KINDS } from './alerts.js';
 import { scrub } from './privacy.js';
@@ -98,8 +99,20 @@ export { parsePerf };
 
 export function createTelemetry({ db, settings, logs, notifications, audit, config = {}, logger = console, fetchImpl = fetch, now = Date.now }) {
 	// Errors are logged and give no rows, as in bl-panel-api: one broken event never loses the batch
+	// A failed write is data of the game that was lost: remembered (at most once a minute per kind of query) for
+	// the "Réception des données" page
+	const noted = new Map();
+	function note(text, error) {
+		const name = String(text).trim().replace(/\s+/g, ' ').slice(0, 80);
+		if (!/^(INSERT|UPDATE|DELETE)/i.test(name) || now() - (noted.get(name) ?? 0) < 60_000) return;
+		if (noted.size > 500) noted.clear();
+		noted.set(name, now());
+		db.raw(`INSERT INTO ingest_problems (source, name, error) VALUES ('batch', $1, $2)
+			ON CONFLICT (source, name) DO UPDATE SET error = EXCLUDED.error, last_at = now(), count = ingest_problems.count + 1`, [name, String(error.message).slice(0, 300)]).catch(() => null);
+	}
 	const q = (text, values) => db.raw(text, values).catch((error) => {
 		logger.warn?.(`Telemetry query failed: ${error.message} (${String(text).trim().slice(0, 60)})`);
+		note(text, error);
 		return { rows: [], rowCount: 0 };
 	});
 	const raw = (text, values) => db.raw(text, values);
@@ -170,6 +183,43 @@ export function createTelemetry({ db, settings, logs, notifications, audit, conf
 	const commands = createCommands({ q, raw });
 
 	// A read view: permission checked, identifiers scrubbed from the answer
+	// Everything received from the game, by kind, with the last time; "expected" kinds never seen have last = null
+	async function ingestReport() {
+		const [events, readings, cards, tables, problems] = await Promise.all([
+			// Only "event" and "game_log" are told apart by their subtype
+			q(`SELECT type, CASE WHEN type IN ('event', 'game_log') THEN subtype END AS subtype, COUNT(*)::int AS n, MAX(ts) AS last FROM tel_events
+				WHERE ts > now() - interval '24 hours' GROUP BY 1, 2 ORDER BY 3 DESC LIMIT 500`),
+			Promise.all(READINGS.map(async r => ({ type: r.type, label: r.label, ...(await q(`SELECT COUNT(*) FILTER (WHERE ts > now() - interval '24 hours')::int AS n, MAX(ts) AS last FROM ${r.table}`)).rows[0] }))),
+			q('SELECT name, label, kind, ts, jsonb_array_length(rows) AS n FROM tel_db_snapshots ORDER BY name'),
+			q('SELECT name, mode, row_count, synced_at, full_at FROM fivem_mirror_tables ORDER BY name'),
+			q(`SELECT p.source, p.name, p.error, p.first_at, p.last_at, p.count FROM ingest_problems p LEFT JOIN fivem_mirror_tables t ON t.name = p.name AND p.source = 'mirror'
+				WHERE p.last_at > now() - interval '7 days' AND (t.synced_at IS NULL OR t.synced_at < EXTRACT(EPOCH FROM p.last_at) * 1000) ORDER BY p.last_at DESC LIMIT 200`),
+		]);
+		const seen = (type, subtype) => events.rows.find(e => e.type === type && (e.subtype ?? null) === subtype);
+		const line = (key, row, expected) => ({ key, n: row?.n ?? 0, last: row?.last ?? null, expected });
+		const mergeKeys = (expected, received) => [...new Set([...expected, ...received])];
+		const of = type => events.rows.filter(e => e.type === type && e.subtype).map(e => e.subtype);
+		const mirrored = new Map(tables.rows.map(t => [t.name, t]));
+		const table = (name, expected) => {
+			const t = mirrored.get(name);
+			return { key: name, mode: t?.mode ?? null, rows: t ? Number(t.row_count) : 0, last: t ? Number(t.synced_at) : null, expected };
+		};
+		const known = new Set([...MIRROR_TABLES, ...COUNTED_TABLES]);
+		const card = new Map(cards.rows.map(c => [c.name, c]));
+		return {
+			at: now(),
+			readings: readings.map(r => ({ key: r.type, label: r.label, n: r.n ?? 0, last: r.last ?? null, expected: true })),
+			types: mergeKeys(EVENT_TYPES, events.rows.filter(e => !e.subtype).map(e => e.type)).map(type => line(type, type === 'event' || type === 'game_log'
+				? { n: events.rows.filter(e => e.type === type).reduce((n, e) => n + e.n, 0), last: events.rows.filter(e => e.type === type).reduce((m, e) => (!m || new Date(e.last) > new Date(m) ? e.last : m), null) }
+				: seen(type, null), EVENT_TYPES.includes(type))),
+			subtypes: mergeKeys(EVENT_SUBTYPES, of('event')).map(s => line(s, seen('event', s), EVENT_SUBTYPES.includes(s))),
+			gameLogs: mergeKeys(GAME_LOG_SUBTYPES, of('game_log')).map(s => line(s, seen('game_log', s), GAME_LOG_SUBTYPES.includes(s))),
+			cards: mergeKeys(DB_CARDS, cards.rows.filter(c => !c.name.startsWith('_')).map(c => c.name)).map(name => ({ key: name, label: card.get(name)?.label ?? null, n: card.get(name)?.n ?? 0, last: card.get(name)?.ts ?? null, expected: DB_CARDS.includes(name) })),
+			mirror: [...MIRROR_TABLES.map(name => table(name, true)), ...COUNTED_TABLES.map(name => table(name, true)), ...tables.rows.filter(t => !known.has(t.name)).map(t => table(t.name, false))],
+			problems: problems.rows.map(p => ({ source: p.source, name: p.name, error: p.error, firstAt: p.first_at, lastAt: p.last_at, count: Number(p.count) })),
+		};
+	}
+
 	const view = (permission, fn) => async (actor, params = {}) => {
 		need(actor, permission);
 		return scrub(await fn(params, actor));
@@ -339,6 +389,8 @@ export function createTelemetry({ db, settings, logs, notifications, audit, conf
 		}),
 		gangs: view('telemetry.view', () => snapshots.views.gangs()),
 		serverHealth: view('telemetry.view', p => snapshots.views.health(p)),
+		// What the game sends and what never arrived, compared with what bl_telemetry 1.6 documents
+		ingestReport: view('telemetry.view', () => ingestReport()),
 		flows: view('telemetry.economy', p => snapshots.views.flows(p)),
 		moves: view('telemetry.economy', p => snapshots.views.moves(p)),
 		listCommands: view('telemetry.view', () => commands.list()),

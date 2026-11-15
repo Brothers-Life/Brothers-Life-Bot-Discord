@@ -76,6 +76,7 @@ import { Route as AuthenticatedTelemetryDeathmapRouteImport } from './routes/_au
 import { Route as AuthenticatedTelemetryEconomyRouteImport } from './routes/_authenticated/telemetry/economy'
 import { Route as AuthenticatedTelemetryFlowsRouteImport } from './routes/_authenticated/telemetry/flows'
 import { Route as AuthenticatedTelemetryHealthRouteImport } from './routes/_authenticated/telemetry/health'
+import { Route as AuthenticatedTelemetryIngestRouteImport } from './routes/_authenticated/telemetry/ingest'
 import { Route as AuthenticatedTelemetryLiveRouteImport } from './routes/_authenticated/telemetry/live'
 import { Route as AuthenticatedTelemetryLogsRouteImport } from './routes/_authenticated/telemetry/logs'
 import { Route as AuthenticatedTelemetryPerfRouteImport } from './routes/_authenticated/telemetry/perf'
@@ -444,6 +445,12 @@ const AuthenticatedTelemetryHealthRoute =
     path: '/telemetry/health',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedTelemetryIngestRoute =
+  AuthenticatedTelemetryIngestRouteImport.update({
+    id: '/telemetry/ingest',
+    path: '/telemetry/ingest',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedTelemetryLiveRoute =
   AuthenticatedTelemetryLiveRouteImport.update({
     id: '/telemetry/live',
@@ -581,6 +588,7 @@ export interface FileRoutesByFullPath {
   '/telemetry/economy': typeof AuthenticatedTelemetryEconomyRoute
   '/telemetry/flows': typeof AuthenticatedTelemetryFlowsRoute
   '/telemetry/health': typeof AuthenticatedTelemetryHealthRoute
+  '/telemetry/ingest': typeof AuthenticatedTelemetryIngestRoute
   '/telemetry/live': typeof AuthenticatedTelemetryLiveRoute
   '/telemetry/logs': typeof AuthenticatedTelemetryLogsRoute
   '/telemetry/perf': typeof AuthenticatedTelemetryPerfRoute
@@ -661,6 +669,7 @@ export interface FileRoutesByTo {
   '/telemetry/economy': typeof AuthenticatedTelemetryEconomyRoute
   '/telemetry/flows': typeof AuthenticatedTelemetryFlowsRoute
   '/telemetry/health': typeof AuthenticatedTelemetryHealthRoute
+  '/telemetry/ingest': typeof AuthenticatedTelemetryIngestRoute
   '/telemetry/live': typeof AuthenticatedTelemetryLiveRoute
   '/telemetry/logs': typeof AuthenticatedTelemetryLogsRoute
   '/telemetry/perf': typeof AuthenticatedTelemetryPerfRoute
@@ -743,6 +752,7 @@ export interface FileRoutesById {
   '/_authenticated/telemetry/economy': typeof AuthenticatedTelemetryEconomyRoute
   '/_authenticated/telemetry/flows': typeof AuthenticatedTelemetryFlowsRoute
   '/_authenticated/telemetry/health': typeof AuthenticatedTelemetryHealthRoute
+  '/_authenticated/telemetry/ingest': typeof AuthenticatedTelemetryIngestRoute
   '/_authenticated/telemetry/live': typeof AuthenticatedTelemetryLiveRoute
   '/_authenticated/telemetry/logs': typeof AuthenticatedTelemetryLogsRoute
   '/_authenticated/telemetry/perf': typeof AuthenticatedTelemetryPerfRoute
@@ -825,6 +835,7 @@ export interface FileRouteTypes {
     | '/telemetry/economy'
     | '/telemetry/flows'
     | '/telemetry/health'
+    | '/telemetry/ingest'
     | '/telemetry/live'
     | '/telemetry/logs'
     | '/telemetry/perf'
@@ -905,6 +916,7 @@ export interface FileRouteTypes {
     | '/telemetry/economy'
     | '/telemetry/flows'
     | '/telemetry/health'
+    | '/telemetry/ingest'
     | '/telemetry/live'
     | '/telemetry/logs'
     | '/telemetry/perf'
@@ -986,6 +998,7 @@ export interface FileRouteTypes {
     | '/_authenticated/telemetry/economy'
     | '/_authenticated/telemetry/flows'
     | '/_authenticated/telemetry/health'
+    | '/_authenticated/telemetry/ingest'
     | '/_authenticated/telemetry/live'
     | '/_authenticated/telemetry/logs'
     | '/_authenticated/telemetry/perf'
@@ -1479,6 +1492,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTelemetryHealthRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/telemetry/ingest': {
+      id: '/_authenticated/telemetry/ingest'
+      path: '/telemetry/ingest'
+      fullPath: '/telemetry/ingest'
+      preLoaderRoute: typeof AuthenticatedTelemetryIngestRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/telemetry/live': {
       id: '/_authenticated/telemetry/live'
       path: '/telemetry/live'
@@ -1629,6 +1649,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedTelemetryEconomyRoute: typeof AuthenticatedTelemetryEconomyRoute
   AuthenticatedTelemetryFlowsRoute: typeof AuthenticatedTelemetryFlowsRoute
   AuthenticatedTelemetryHealthRoute: typeof AuthenticatedTelemetryHealthRoute
+  AuthenticatedTelemetryIngestRoute: typeof AuthenticatedTelemetryIngestRoute
   AuthenticatedTelemetryLiveRoute: typeof AuthenticatedTelemetryLiveRoute
   AuthenticatedTelemetryLogsRoute: typeof AuthenticatedTelemetryLogsRoute
   AuthenticatedTelemetryPerfRoute: typeof AuthenticatedTelemetryPerfRoute
@@ -1708,6 +1729,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedTelemetryEconomyRoute: AuthenticatedTelemetryEconomyRoute,
   AuthenticatedTelemetryFlowsRoute: AuthenticatedTelemetryFlowsRoute,
   AuthenticatedTelemetryHealthRoute: AuthenticatedTelemetryHealthRoute,
+  AuthenticatedTelemetryIngestRoute: AuthenticatedTelemetryIngestRoute,
   AuthenticatedTelemetryLiveRoute: AuthenticatedTelemetryLiveRoute,
   AuthenticatedTelemetryLogsRoute: AuthenticatedTelemetryLogsRoute,
   AuthenticatedTelemetryPerfRoute: AuthenticatedTelemetryPerfRoute,

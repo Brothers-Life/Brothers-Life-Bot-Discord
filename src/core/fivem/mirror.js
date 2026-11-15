@@ -20,7 +20,11 @@ const COUNT_ONLY_TABLES = new Set([
 	'bl_phone_social_dm_messages', 'bl_phone_ombre_msgs', 'bl_phone_media', 'bl_phone_eclair_snaps', 'bl_phone_contacts',
 	'bl_doors_codes', 'bl_gouv_photos',
 ]);
-const FORBIDDEN_COLUMN = /(^|_)(ip|ips|tokens?|password|passwd|pass_hash|lock_hash|hwids?|email|mail|secret|code)$/i;
+const FORBIDDEN_COLUMN = /(^|_)(ip|ips|tokens?|password|passwd|pass_hash|lock_hash|hwids?|email|mail|secret)$/i;
+// Codes that open something. By their exact name: postal_code, error_code, country_code… are ordinary data
+const SECRET_CODE = /^(code|gift_code|pin|pin_code|passcode|access_code|door_code|lock_code|unlock_code)$/i;
+// Tables of one POST. The game sends them by small groups; beyond this the rest is refused out loud, not ignored.
+const MAX_TABLES = 500;
 // "code" columns that are no secret: the radio code of a police call (10-31…)
 const ALLOWED_COLUMNS = { mdt_calls: new Set(['code']) };
 // Columns used to find a player or to sort by date: indexed on creation
@@ -78,7 +82,7 @@ function checkSchema(schema, table = '') {
 	const columns = [];
 	for (const c of schema.columns) {
 		if (!NAME.test(String(c?.name ?? ''))) throw new ValidationError(`colonne invalide : ${c?.name}`);
-		if (FORBIDDEN_COLUMN.test(c.name) && !ALLOWED_COLUMNS[table]?.has(c.name)) continue;
+		if ((FORBIDDEN_COLUMN.test(c.name) || SECRET_CODE.test(c.name)) && !ALLOWED_COLUMNS[table]?.has(c.name)) continue;
 		const type = pgType(c);
 		if (type) columns.push({ name: c.name, type });
 	}
@@ -90,6 +94,17 @@ function checkSchema(schema, table = '') {
 export function createFivemMirror({ db, logger = console, now = Date.now }) {
 	// name -> { columns, pk, schemaHash, mode } of the tables already known
 	let known = null;
+
+	// Kept for the "Réception des données" page; never fails a sync
+	async function problem(name, error) {
+		try {
+			await db.raw(`INSERT INTO ingest_problems (source, name, error) VALUES ('mirror', $1, $2)
+				ON CONFLICT (source, name) DO UPDATE SET error = EXCLUDED.error, last_at = now(), count = ingest_problems.count + 1`, [name, String(error).slice(0, 300)]);
+		}
+		catch (failure) {
+			logger.warn?.('FiveM mirror: problem not recorded:', failure.message);
+		}
+	}
 
 	async function load() {
 		if (known) return known;
@@ -213,10 +228,18 @@ export function createFivemMirror({ db, logger = console, now = Date.now }) {
 		async apply(payload) {
 			const tables = Array.isArray(payload?.tables) ? payload.tables : [];
 			const out = {};
-			for (const t of tables.slice(0, 50)) {
+			for (const t of tables.slice(MAX_TABLES)) {
+				const name = String(t?.name ?? '').slice(0, 64) || '?';
+				out[name] = { error: 'trop de tables dans un seul envoi' };
+				await problem(name, `Envoi de ${tables.length} tables : au-delà de ${MAX_TABLES}, elles ne sont pas traitées.`);
+			}
+			for (const t of tables.slice(0, MAX_TABLES)) {
 				const name = String(t?.name ?? '');
 				if (!NAME.test(name) || FORBIDDEN_TABLES.has(name) || !MODES.has(t.mode) || (COUNT_ONLY_TABLES.has(name) && t.mode !== 'count')) {
 					out[name || '?'] = { error: 'refusée' };
+					// A private table sent with its rows is refused on purpose: that is not a problem to report
+					if (NAME.test(name) && !FORBIDDEN_TABLES.has(name) && !COUNT_ONLY_TABLES.has(name)) await problem(name, `Mode d’envoi inconnu : ${String(t?.mode).slice(0, 40)}`);
+					else if (!NAME.test(name)) await problem(name.slice(0, 64) || '?', 'Nom de table invalide.');
 					continue;
 				}
 				try {
@@ -255,6 +278,7 @@ export function createFivemMirror({ db, logger = console, now = Date.now }) {
 				}
 				catch (error) {
 					known = null;
+					await problem(name, error.message);
 					if (error instanceof ValidationError) {
 						out[name] = { error: error.message };
 						continue;
@@ -264,6 +288,14 @@ export function createFivemMirror({ db, logger = console, now = Date.now }) {
 				}
 			}
 			return { tables: out };
+		},
+
+		// Tables the panel could not take, with the last reason; one that synced since is settled and left out
+		async problems() {
+			const rows = await db.raw(`SELECT p.name, p.error, p.first_at, p.last_at, p.count FROM ingest_problems p
+				LEFT JOIN fivem_mirror_tables t ON t.name = p.name
+				WHERE p.source = 'mirror' AND (t.synced_at IS NULL OR t.synced_at < EXTRACT(EPOCH FROM p.last_at) * 1000) ORDER BY p.last_at DESC LIMIT 200`);
+			return rows.rows.map(r => ({ name: r.name, error: r.error, firstAt: new Date(r.first_at).getTime(), lastAt: new Date(r.last_at).getTime(), count: Number(r.count) }));
 		},
 
 		// Tables copied in the mirror (features without their table are skipped); counted-only ones are not there
