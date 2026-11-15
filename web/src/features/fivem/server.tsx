@@ -116,7 +116,7 @@ export function JobsTab({ r, economy }: { r: ServerReport; economy: boolean }) {
       <StatCards items={[
         { label: 'Métiers', value: r.jobs.filter((j) => j.type === 'job').length, icon: Wrench, tone: 'info', hint: `${staffed.length} avec des employés` },
         { label: 'Gangs', value: r.jobs.filter((j) => j.type === 'gang').length, icon: ShieldCheck, tone: 'danger' },
-        { label: 'En service (déclaré)', value: r.jobs.reduce((n, j) => n + j.onDuty, 0), icon: Users, tone: 'success' },
+        { label: 'En service en ce moment', value: r.jobs.reduce((n, j) => n + j.onDuty, 0), icon: Users, tone: 'success' },
         { label: 'Heures de service cumulées', value: count(Math.round(r.jobs.reduce((n, j) => n + j.dutySeconds, 0) / 3600)), icon: Clock, tone: 'warning' },
       ]} />
       <Section

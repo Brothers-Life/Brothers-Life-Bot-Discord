@@ -53,6 +53,8 @@ export function parseConfig(vars, { role: processRole = 'all' } = {}) {
 		DB_USER: str('DB_USER'),
 		DB_PASSWORD: vars.DB_PASSWORD ?? '',
 		DB_NAME: str('DB_NAME'),
+		// Optional shared cache (redis://:password@host:6379); without it the cache stays in each process's memory
+		REDIS_URL: str('REDIS_URL'),
 		// Split deployment (bot, API and front in separate processes, see docs/architecture.md)
 		// Shared secret of the internal link between the API and the bot (32 characters or more)
 		INTERNAL_TOKEN: str('INTERNAL_TOKEN'),

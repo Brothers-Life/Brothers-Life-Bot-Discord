@@ -4,6 +4,7 @@ import { LOG_SOURCES, sourceSelect } from './fivem/logSources.js';
 import { serverReport } from './fivem/serverReport.js';
 import { insightsReport } from './fivem/insights.js';
 import { mirrorQuery, seconds, unix, jfield } from './fivem/sql.js';
+import { createCache } from './cache.js';
 
 definePermission('fivemdata.view', { label: 'Voir les fiches joueurs FiveM (personnages, métier, temps de jeu, sanctions en jeu)', category: 'FiveM' });
 definePermission('fivemdata.economy', { label: 'Voir l’argent, la banque et la boutique premium des joueurs FiveM', category: 'FiveM' });
@@ -50,7 +51,7 @@ const played = (from, to) => seconds(from, `COALESCE(${to}, NOW())`);
 // resource, see fivem/mirror.js): the game's MariaDB never has to be reachable. Tables this server does not have
 // are simply skipped.
 // discord: { activity(sinceDay) -> rows of the bot's Discord stats, members() -> ids on the main server } for the crossed stats
-export function createFivemData({ db, mirror, audit, logger = console, now = Date.now, discord = null }) {
+export function createFivemData({ db, mirror, audit, logger = console, now = Date.now, discord = null, cache = createCache({ logger, now }) }) {
 	const run = mirrorQuery(db);
 
 	async function query(sql, params = []) {
@@ -63,18 +64,12 @@ export function createFivemData({ db, mirror, audit, logger = console, now = Dat
 		}
 	}
 
-	// The whole-server reports read entire tables: computed at most once every 2 minutes per process, and two
-	// pages asking at the same time share the same computation
+	// The whole-server reports read entire tables: computed at most once every 2 minutes (for every process when
+	// the cache is shared), and two pages asking at the same time share the same computation. Up to 10 minutes
+	// later the last report is shown at once while the next one is computed: its `at` tells its age.
 	const REPORT_TTL = 2 * 60_000;
-	const cachedReports = new Map();
-	function cachedReport(key, build) {
-		const hit = cachedReports.get(key);
-		if (hit && hit.until > now()) return hit.value;
-		const value = build();
-		cachedReports.set(key, { value, until: now() + REPORT_TTL });
-		value.catch(() => cachedReports.delete(key));
-		return value;
-	}
+	const REPORT_STALE = 10 * 60_000;
+	const cachedReport = (key, build) => cache.wrap(`fivem:report:${key}`, { ttl: REPORT_TTL, stale: REPORT_STALE }, build);
 
 	// Which tables the mirror has (features without their table are skipped)
 	const has = async name => (await mirror.tables()).has(name);
@@ -93,6 +88,9 @@ export function createFivemData({ db, mirror, audit, logger = console, now = Dat
 			return fallback;
 		}
 	}
+
+	// The duty flag stays set in the character sheet after a disconnection: nobody is on duty while out of the game
+	const offDuty = (c, playing) => (c.job?.onDuty && !playing ? { ...c, job: { ...c.job, onDuty: false } } : c);
 
 	function character(row, groups) {
 		const info = json(row.charinfo, {});
@@ -306,7 +304,7 @@ export function createFivemData({ db, mirror, audit, logger = console, now = Dat
 				const u = users.find(x => x.userid === id);
 				if (!u) return null;
 				const s = sessions.find(x => x.user_id === id);
-				const own = chars.filter(c => c.userId === id).map(c => character(c, groups));
+				const own = chars.filter(c => c.userId === id).map(c => offDuty(character(c, groups), Number(s?.online ?? 0) > 0));
 				return {
 					userId: id,
 					username: u.username,
@@ -432,6 +430,10 @@ export function createFivemData({ db, mirror, audit, logger = console, now = Dat
 			const totals = sessionTotals[0] ?? {};
 			const charOf = cid => characters.find(c => c.citizenId === cid)?.name ?? cid;
 			const groupLabel = name => groups.get(name)?.label ?? name;
+			// Who is being played right now: the characters of the open session when the game recorded them, else any of the account
+			const openIds = new Set(sessions.filter(s => !s.left_at).map(s => s.id));
+			const playedNow = new Set(sessionChars.filter(c => openIds.has(c.session_id)).map(c => c.citizenid));
+			const playing = cid => Number(totals.online ?? 0) > 0 && (!playedNow.size || playedNow.has(cid));
 
 			const result = {
 				account: {
@@ -450,7 +452,7 @@ export function createFivemData({ db, mirror, audit, logger = console, now = Dat
 					})),
 				},
 				characters: characters.map(c => ({
-					...c,
+					...offDuty(c, playing(c.citizenId)),
 					money: canMoney ? c.money : undefined,
 					coins: canMoney ? c.coins : undefined,
 					inventory: canInventory ? c.inventory.filter(Boolean).map(i => ({ name: i.name, count: i.count, slot: i.slot })) : undefined,

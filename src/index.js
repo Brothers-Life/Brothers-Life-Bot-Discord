@@ -64,6 +64,7 @@ run(async () => {
 	onShutdown(() => core.stats.flush());
 	onShutdown(() => core.apiKeys.flushAll());
 	onShutdown(() => core.fivemData.close());
+	onShutdown(() => core.cache.close());
 
 	await bot.login(config.TOKEN);
 	await core.audit.record({ actorId: 'system', source: 'system', action: 'system.start', details: { version: `v${pkg.version}`, supervised: ipc.supervised } });

@@ -49,6 +49,8 @@ Chaque reprise ne se fait qu'une fois et n'écrase jamais ce qui a été changé
 - `TELEMETRY_FIVEM_BASE` : `http://<ip>:30120` du serveur FiveM (statut et console).
 - `TELEMETRY_IMPORT_FROM` (une seule fois) : l'URL interne de l'ancienne base `panel-db`. Au premier démarrage, l'API recopie l'historique dans les tables `tel_*` (identifiants des joueurs retirés), puis ne le refait plus jamais. La variable peut être retirée ensuite.
 
+**Cache Redis (facultatif)** : service `brl-redis` (« Déployer Redis », accès interne seulement). Sur `brl-panel` uniquement : `REDIS_URL=redis://:<mot de passe>@brl-redis.<namespace>.svc.cluster.local:6379` (chaîne de connexion de l'onglet Database). Les deux réplicas du panel partagent alors les rapports FiveM (calculés une fois toutes les 2 min, servis tout de suite pendant le recalcul). Sans cette variable, ou Redis en panne, chaque processus garde son cache en mémoire : rien ne casse. Pas sur `brl-bot` (l'adresse interne n'y est pas joignable).
+
 **brl-bot** : `APP_ROLE=bot`, `TOKEN` (token du bot), `API_URL=https://<domaine du panel>`. Le bot se connecte à l'API par websocket : il n'a besoin d'aucun port. L'adresse interne du cluster (`…svc.cluster.local:3000`) n'est pas joignable depuis un service Bot Discord (le websocket n'aboutit jamais) : le bot passe par l'adresse publique, en TLS, protégée par `INTERNAL_TOKEN`.
 
 Dans Discord > OAuth2 > Redirects : `https://<domaine du panel>/api/auth/callback`.

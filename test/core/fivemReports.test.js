@@ -23,7 +23,7 @@ const FIXTURES = {
 	]],
 	players: ['citizenid text, "userId" bigint, name text, charinfo text, job text, gang text, money text', [
 		['AAA', 1, 'Alice', json({ firstname: 'Alice', lastname: 'Martin' }), json({ name: 'police', onduty: true }), json({ name: 'none' }), json({ cash: 1000, bank: 9000 })],
-		['BBB', 2, 'Bob', json({ firstname: 'Bob', lastname: 'Durand' }), json({ name: 'unemployed', onduty: false }), json({ name: 'ballas' }), json({ cash: 500, bank: '250' })],
+		['BBB', 2, 'Bob', json({ firstname: 'Bob', lastname: 'Durand' }), json({ name: 'police', onduty: true }), json({ name: 'ballas' }), json({ cash: 500, bank: '250' })],
 		['CCC', 3, 'Carl', 'pas du json', json({ name: 'police', onduty: false }), json({ name: 'none' }), json({ cash: 50_000, bank: 150_000 })],
 	]],
 	bl_mc_sessions: ['user_id bigint, joined_at timestamptz, left_at timestamptz, drop_reason text', [
@@ -194,7 +194,7 @@ test('fivem reports: server report runs on the PostgreSQL mirror', async () => {
 
 	const police = report.jobs.find(j => j.name === 'police');
 	assert.equal(police.members, 2);
-	assert.equal(police.onDuty, 1);
+	assert.equal(police.onDuty, 1, 'Bob is connected; Alice left the game with her duty flag still set');
 	assert.equal(police.dutySeconds, 5400);
 	assert.deepEqual([police.weekDutySeconds, police.weekPeople], [500, 2]);
 	assert.deepEqual(police.level, { level: 3, xp: 1200, title: 'Brigade' });
@@ -258,6 +258,6 @@ test('fivem reports: only the core tables mirrored, no money: empty parts', asyn
 	const server = await serverReport({ ...h, canMoney: false });
 	assert.equal(server.economy, null);
 	assert.equal(server.activity.totals.sessions, 0);
-	assert.equal(server.jobs.find(j => j.name === 'police').onDuty, 1);
+	assert.equal(server.jobs.find(j => j.name === 'police').onDuty, 2, 'no sessions: the declared flags');
 	assert.equal(server.world.counts.shops, 0);
 });

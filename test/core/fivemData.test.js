@@ -23,7 +23,7 @@ const TABLES = {
 	players: { pk: ['citizenid'], cols: [['citizenid', 'varchar'], ['cid', 'int'], ['userId', 'int'], ['name', 'varchar'], ['phone_number', 'varchar'], ['charinfo', 'longtext'], ['money', 'longtext'], ['job', 'longtext'], ['gang', 'longtext'], ['metadata', 'longtext'], ['inventory', 'longtext'], ['last_updated', 'timestamp'], ['last_logged_out', 'timestamp']], rows: [
 		{ citizenid: 'ABC123', cid: 1, userId: 1, name: 'Tony', phone_number: '5551234', charinfo: '{"firstname":"Tony","lastname":"Moretti","gender":0}', money: '{"cash":100,"bank":900}', job: '{"name":"police","grade":{"level":2},"onduty":true}', gang: '{"name":"none"}', metadata: '{"isdead":false}', inventory: '[{"name":"phone","count":1,"slot":1}]', last_updated: recent, last_logged_out: null },
 		{ citizenid: 'DEF456', cid: 2, userId: 1, name: 'Lia', phone_number: null, charinfo: '{"firstname":"Lia"', money: '{"cash":5}', job: '{"name":"unemployed"}', gang: '{"name":"ballas","grade":1}', metadata: '{}', inventory: '[]', last_updated: T, last_logged_out: T },
-		{ citizenid: 'GHI789', cid: 1, userId: 2, name: 'Solo', phone_number: null, charinfo: '{"firstname":"Han","lastname":"Solo"}', money: '{}', job: '{"name":"ems","grade":0}', gang: '{}', metadata: '{}', inventory: '[]', last_updated: T - HOUR, last_logged_out: null },
+		{ citizenid: 'GHI789', cid: 1, userId: 2, name: 'Solo', phone_number: null, charinfo: '{"firstname":"Han","lastname":"Solo"}', money: '{}', job: '{"name":"ems","grade":0,"onduty":true}', gang: '{}', metadata: '{}', inventory: '[]', last_updated: T - HOUR, last_logged_out: null },
 	] },
 	management_groups: { pk: ['name'], cols: [['name', 'varchar'], ['type', 'varchar'], ['label', 'varchar'], ['grades', 'longtext']], rows: [
 		{ name: 'police', type: 'job', label: 'LSPD', grades: '{"2":{"name":"Sergent"}}' },
@@ -118,6 +118,13 @@ test('fivem data: search by name, character, plate, Discord, license; summaries 
 	assert.deepEqual(latest.characters.map(c => c.name).sort(), ['Lia', 'Tony Moretti']);
 	assert.equal(latest.characters.find(c => c.citizenId === 'ABC123').job.label, 'LSPD');
 	assert.equal(latest.discordId, ALICE);
+	// On duty only while in game: the flag of someone who left stays set in the character sheet
+	assert.equal(latest.characters.find(c => c.citizenId === 'ABC123').job.onDuty, true);
+	const [solo] = await data.search(actor(), 'ghi789');
+	assert.equal(solo.online, false);
+	assert.equal(solo.characters[0].job.onDuty, false);
+	assert.equal((await data.player(actor(), 2)).characters[0].job.onDuty, false);
+	assert.equal((await data.player(actor(), 1)).characters.find(c => c.citizenId === 'ABC123').job.onDuty, true);
 	await assert.rejects(data.search({ id: 'x', can: () => false }, ''), ForbiddenError);
 	assert.deepEqual(warnings, []);
 });

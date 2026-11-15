@@ -71,6 +71,7 @@ run(async () => {
 	onShutdown(() => core.logs.flush());
 	onShutdown(() => core.apiKeys.flushAll());
 	onShutdown(() => core.fivemData.close());
+	onShutdown(() => core.cache.close());
 
 	ipc.send({ type: 'ready', version: `v${pkg.version}`, schemaVersion: await schemaVersion(db) });
 	logger.success(`API ready on port ${config.WEB_PORT}.`);

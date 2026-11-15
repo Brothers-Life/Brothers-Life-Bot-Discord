@@ -48,6 +48,7 @@ run(async () => {
 	onShutdown(() => core.logs.flush());
 	onShutdown(() => core.stats.flush());
 	onShutdown(() => core.fivemData.close());
+	onShutdown(() => core.cache.close());
 
 	// Linked before the Discord login: the panel shows "bot starting" instead of an error meanwhile
 	const link = createBotLink({ config, core, executor: bot.executor, runtime, consoleLog, logger });

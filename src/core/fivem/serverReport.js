@@ -67,7 +67,12 @@ export async function serverReport({ query, when, groupsMap, canMoney, now = Dat
 			SUM(${seconds('joined_at', 'COALESCE(left_at, NOW())')}) AS seconds FROM fivem.bl_mc_sessions WHERE joined_at > NOW() - ${days30}`), [{}]),
 
 		when('player_groups', () => query('SELECT "group" AS name, type, COUNT(*) AS members FROM fivem.player_groups GROUP BY "group", type')),
-		query('SELECT fivem.j(job) ->> \'name\' AS name, SUM(CASE WHEN fivem.j(job) ->> \'onduty\' = \'true\' THEN 1 ELSE 0 END) AS "onDuty" FROM fivem.players GROUP BY 1'),
+		// The duty flag stays set in the character sheet after a disconnection: only connected accounts count.
+		// Without the sessions table nobody is known to be connected: the declared flag is all there is.
+		when('bl_mc_sessions', () => query(`SELECT fivem.j(p.job) ->> 'name' AS name, COUNT(*) FILTER (WHERE fivem.j(p.job) ->> 'onduty' = 'true' AND EXISTS (
+			SELECT 1 FROM fivem.bl_mc_sessions s WHERE s.user_id = p."userId" AND s.left_at IS NULL AND s.joined_at > NOW() - INTERVAL '1 day')) AS "onDuty"
+			FROM fivem.players p GROUP BY 1`), null)
+			.then(rows => rows ?? query('SELECT fivem.j(job) ->> \'name\' AS name, COUNT(*) FILTER (WHERE fivem.j(job) ->> \'onduty\' = \'true\') AS "onDuty" FROM fivem.players GROUP BY 1')),
 		when('job_duty_time', () => query('SELECT job_name, SUM(seconds) AS seconds FROM fivem.job_duty_time GROUP BY job_name')),
 		when('job_week_duty', () => query('SELECT job_name, SUM(seconds) AS seconds, COUNT(DISTINCT citizenid) AS people FROM fivem.job_week_duty WHERE week_start = (SELECT MAX(week_start) FROM fivem.job_week_duty) GROUP BY job_name')),
 		when('job_level_state', () => query('SELECT job_name, level, xp, title FROM fivem.job_level_state')),
