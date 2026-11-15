@@ -35,6 +35,82 @@ const DEFAULT_TIMEZONE = 'Europe/Paris';
 const CONFIG_TTL_MS = 15_000;
 const PURGE_BATCH = 50_000;
 
+function updateFamilies(body) {
+	const events = Array.isArray(body?.events) ? body.events : [];
+	const logs = Array.isArray(body?.logs) ? body.logs : [];
+	if (!events.length && !logs.length) return [];
+
+	const updates = new Set(['ingest']);
+	if (logs.length) for (const family of ['logs', 'scripts', 'perf']) updates.add(family);
+
+	for (const event of events) {
+		switch (event?.type) {
+		case 'db_snapshot':
+			updates.add('db');
+			break;
+		case 'perf_snapshot':
+		case 'profiler_snapshot':
+			updates.add('perf');
+			break;
+		case 'business_snapshot':
+			updates.add('businesses');
+			updates.add('business');
+			break;
+		case 'gang_snapshot':
+			updates.add('gangs');
+			break;
+		case 'money_flow':
+			for (const family of ['flows', 'moves', 'economy', 'inflation']) updates.add(family);
+			break;
+		case 'health_snapshot':
+			updates.add('health');
+			break;
+		case 'session_start':
+		case 'session_end':
+		case 'player_snapshot':
+			for (const family of ['players', 'player', 'timeline', 'overview', 'insights', 'staff']) updates.add(family);
+			break;
+		case 'vehicle_snapshot':
+			for (const family of ['player', 'timeline']) updates.add(family);
+			break;
+		case 'death':
+			for (const family of ['deathmap', 'player', 'timeline', 'overview', 'insights']) updates.add(family);
+			break;
+		case 'purchase':
+		case 'economy_snapshot':
+			for (const family of ['economy', 'anomalies', 'inflation', 'trace', 'flows', 'moves', 'insights']) updates.add(family);
+			if (event.type === 'purchase') {
+				updates.add('player');
+				updates.add('timeline');
+			}
+			break;
+		case 'admin_action':
+		case 'anticheat':
+		case 'game_log':
+			for (const family of ['admin', 'alerts', 'scripts', 'logs', 'search', 'staff', 'player', 'timeline']) updates.add(family);
+			break;
+		case 'event':
+			for (const family of ['overview', 'insights', 'search', 'player', 'timeline']) updates.add(family);
+			if (['chat', 'command'].includes(event.subtype)) updates.add('logs');
+			if (['money_move', 'item_move', 'bank_flow'].includes(event.subtype)) {
+				for (const family of ['moves', 'flows', 'economy', 'player', 'timeline']) updates.add(family);
+			}
+			if (['duty', 'job_change', 'gang_change'].includes(event.subtype)) {
+				for (const family of ['staff', 'players', 'player', 'timeline']) updates.add(family);
+			}
+			if (event.subtype === 'business_open') {
+				updates.add('businesses');
+				updates.add('business');
+			}
+			break;
+		default:
+			for (const family of ['overview', 'insights', 'search']) updates.add(family);
+		}
+	}
+
+	return [...updates];
+}
+
 export function defaultConfig() {
 	return { ingestToken: null, fivemBase: null, alerts: { ...ALERT_DEFAULTS }, retention: { ...RETENTION_DEFAULTS }, timezone: DEFAULT_TIMEZONE };
 }
@@ -279,6 +355,18 @@ export function createTelemetry({ db, settings, logs, notifications, audit, conf
 	/* ------------------------------- live feed ------------------------------- */
 
 	const subscribers = new Set();
+	function notifyUpdates(updates) {
+		if (!updates.length) return;
+		const payload = { status: {}, logs: [], chat: [], sessions: [], deaths: [], alerts: [], updates };
+		for (const subscriber of subscribers) {
+			try {
+				subscriber.listener(payload);
+			}
+			catch (error) {
+				logger.warn?.('Telemetry update listener failed:', error?.message ?? error);
+			}
+		}
+	}
 	const cursor = { log: null, chat: null, session: null, death: null, alert: null };
 	let streamTimer = null;
 	let streaming = false;
@@ -349,6 +437,7 @@ export function createTelemetry({ db, settings, logs, notifications, audit, conf
 		async ingestBatch(body, { withCommands = false } = {}) {
 			if (!body || typeof body !== 'object' || Array.isArray(body)) throw new ValidationError('Lot invalide.');
 			const out = await ingest.batch(body);
+			notifyUpdates(updateFamilies(body));
 			if (Array.isArray(body.acks)) for (const a of body.acks.slice(0, 50)) await commands.ack(a?.id, a?.ok, a?.result);
 			if (withCommands) out.commands = await commands.pull();
 			return out;

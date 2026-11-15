@@ -8,6 +8,7 @@ export type Tick = {
   sessions: { id: number; ts: string; player_name: string | null; citizenid: string | null }[]
   deaths: { id: number; ts: string; player_name: string | null; citizenid: string | null; cause: string | null; killer_name: string | null; weapon: string | null }[]
   alerts: { id: number; ts: string; kind: string; severity: string; title: string; detail: string | null }[]
+  updates?: string[]
 }
 export type StreamState = 'connecting' | 'on' | 'off'
 

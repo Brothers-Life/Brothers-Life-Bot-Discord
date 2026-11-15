@@ -409,6 +409,8 @@ test('live feed: new lines reach the subscribers, console and chat only with tel
 	full.length = 0;
 	limited.length = 0;
 	await telemetry.ingestBatch(realisticBatch());
+	full.length = 0;
+	limited.length = 0;
 	await telemetry.streamTick();
 	assert.equal(full.length, 1);
 	assert.equal(full[0].logs.length, 3);
@@ -425,6 +427,29 @@ test('live feed: new lines reach the subscribers, console and chat only with tel
 	assert.equal(full[1].logs.length, 0);
 	stopFull();
 	stopLimited();
+});
+
+test('live updates: successful ingestion immediately notifies subscribers of affected views', async () => {
+	const { telemetry } = await setup();
+	const updates = [];
+	const stop = telemetry.subscribe(viewer, payload => updates.push(payload));
+	try {
+		for (let i = 0; i < 50 && !updates.length; i++) await new Promise(resolve => setTimeout(resolve, 20));
+		updates.length = 0;
+
+		await telemetry.ingestBatch({ events: [{ type: 'death', citizenid: CID, data: { cause: 'accident' } }] });
+		assert.equal(updates.length, 1);
+		assert.deepEqual(updates[0].deaths, []);
+		assert.ok(updates[0].updates.includes('deathmap'));
+		assert.ok(updates[0].updates.includes('timeline'));
+		assert.ok(updates[0].updates.includes('ingest'));
+
+		await telemetry.ingestBatch({ events: [], logs: [] });
+		assert.equal(updates.length, 1, 'empty batches do not trigger view refreshes');
+	}
+	finally {
+		stop();
+	}
 });
 
 test('ingest routes answer as bl-panel-api: 401, batch with commands, acks', async () => {
