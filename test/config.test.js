@@ -10,6 +10,16 @@ test('applies defaults', () => {
 	assert.equal(config.WEB_MODE, 'http');
 	assert.equal(config.WEB_PUBLIC_URL, 'http://localhost:3000');
 	assert.equal(config.USE_TRANSLATION_CACHE, true);
+	assert.equal(config.MEDIA_BASE_URL, '');
+	assert.equal(config.MEDIA_READ_KEY, '');
+});
+
+test('requires the media URL and read key together and validates the URL', () => {
+	assert.throws(() => parseConfig({ OWNER_ID: OWNER, MEDIA_BASE_URL: 'https://media.example' }), /MEDIA_BASE_URL and MEDIA_READ_KEY/);
+	assert.throws(() => parseConfig({ OWNER_ID: OWNER, MEDIA_BASE_URL: 'file:///tmp/media', MEDIA_READ_KEY: 'read-key' }), /MEDIA_BASE_URL/);
+	const config = parseConfig({ OWNER_ID: OWNER, MEDIA_BASE_URL: 'https://media.example/', MEDIA_READ_KEY: 'read-key' });
+	assert.equal(config.MEDIA_BASE_URL, 'https://media.example');
+	assert.equal(config.MEDIA_READ_KEY, 'read-key');
 });
 
 test('rejects a missing or malformed OWNER_ID', () => {

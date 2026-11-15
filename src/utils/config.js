@@ -69,6 +69,9 @@ export function parseConfig(vars, { role: processRole = 'all' } = {}) {
 		// Old panel database (bl-panel-api) copied once into the telemetry tables, then ignored
 		TELEMETRY_IMPORT_FROM: str('TELEMETRY_IMPORT_FROM'),
 		TELEMETRY_FIVEM_BASE: str('TELEMETRY_FIVEM_BASE').replace(/\/+$/, ''),
+		// Optional Brothers Life media service; its read key is only used by the API process
+		MEDIA_BASE_URL: str('MEDIA_BASE_URL').replace(/\/+$/, ''),
+		MEDIA_READ_KEY: str('MEDIA_READ_KEY'),
 		// Variables of the old FiveM panel (bl-panel-api, bl-panel-front) copied as they were: taken over once
 		// (telemetry settings, panel access as ranks), see src/core/telemetry/legacy.js
 		// (a value pasted from a .env may have kept its comment: "123   # à remplir")
@@ -119,6 +122,21 @@ export function parseConfig(vars, { role: processRole = 'all' } = {}) {
 	if (config.INTERNAL_TOKEN && config.INTERNAL_TOKEN.length < 32) problems.push('INTERNAL_TOKEN must be 32 characters or more');
 	for (const key of ['API_URL']) {
 		if (config[key] && !/^https?:\/\/[^/]+$/.test(config[key])) problems.push(`${key} must look like http://host:port, without path`);
+	}
+	if (Boolean(config.MEDIA_BASE_URL) !== Boolean(config.MEDIA_READ_KEY)) {
+		problems.push('MEDIA_BASE_URL and MEDIA_READ_KEY must both be set to enable FiveM media');
+	}
+	if (config.MEDIA_BASE_URL) {
+		let mediaUrl = null;
+		try {
+			mediaUrl = new URL(config.MEDIA_BASE_URL);
+		}
+		catch {
+			// reported below
+		}
+		if (!mediaUrl || !['https:', 'http:'].includes(mediaUrl.protocol) || !mediaUrl.hostname || mediaUrl.username || mediaUrl.password || mediaUrl.search || mediaUrl.hash) {
+			problems.push('MEDIA_BASE_URL must be an http(s) URL without credentials, query or fragment');
+		}
 	}
 	if (config.GITHUB_REPO && !/^[\w.-]+\/[\w.-]+$/.test(config.GITHUB_REPO)) {
 		problems.push('GITHUB_REPO must look like owner/repo');

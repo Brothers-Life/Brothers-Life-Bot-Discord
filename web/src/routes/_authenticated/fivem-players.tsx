@@ -22,6 +22,8 @@ import { RolesTab } from '@/features/fivem/roles'
 import { InsightsTab } from '@/features/fivem/insights'
 import { PlayerActivityChart, PlayerPhone, PlayerPolice, PlayerShop, PlayerStaff, PlayerWork } from '@/features/fivem/player-extras'
 import { hasPoliceTab, hasStaffTab, hasWorkTab } from '@/features/fivem/sheet'
+import { useMediaConfig } from '@/features/fivem/media'
+import { GameAssetImage } from '@/features/fivem/media-image'
 
 const TABS = ['players', 'stats', 'activity', 'jobs', 'vehicles', 'justice', 'world', 'staff', 'economy', 'roles', 'logs'] as const
 type Tab = (typeof TABS)[number]
@@ -170,12 +172,14 @@ function Players({ onOpen, top }: { onOpen: (userId: number) => void; top: Overv
 
 function PlayerSheet({ userId }: { userId: number }) {
   const { data: p, isLoading, error } = useQuery({ queryKey: ['fivem-player', userId], queryFn: () => api<Sheet>(`/fivem-data/players/${userId}`), retry: false, refetchInterval: 30_000 })
+  const media = useMediaConfig()
   if (isLoading) return <Skeleton className='h-96 w-full' />
   if (error) return <Notice tone='warning' title='Fiche indisponible'>{errorMessage(error)}</Notice>
   if (!p) return null
   const a = p.account
   return (
     <div className='grid grid-cols-[minmax(0,1fr)] gap-6'>
+      {media.error && <Notice tone='warning' title='Images FiveM indisponibles'>{errorMessage(media.error)}</Notice>}
       <section className='brackets flex flex-wrap items-center gap-4 rounded-xl border bg-card p-5'>
         <div className='relative'>
           <UserAvatar src={p.discord?.avatar} name={p.discord?.name ?? a.username} className='size-16' />
@@ -233,7 +237,7 @@ function PlayerSheet({ userId }: { userId: number }) {
                     {p.vehicles.map((v) => (
                       <tr key={v.plate}>
                         <td className='px-4 py-2 font-mono'>{v.plate}{v.fakePlate && <span className='ms-1 text-xs text-warning'>(fausse : {v.fakePlate})</span>}</td>
-                        <td className='px-2'>{v.model}{v.nickname && <span className='text-xs text-muted-foreground'> « {v.nickname} »</span>}{(v.ownerJob || v.ownerGang) && <Pill tone='info' className='ms-1'>{v.ownerJob ?? v.ownerGang}</Pill>}</td>
+                        <td className='px-2'><span className='flex items-center gap-2'><GameAssetImage config={media.data} type='vehicle' name={v.model} className='size-9' /><span>{v.model}{v.nickname && <span className='text-xs text-muted-foreground'> « {v.nickname} »</span>}{(v.ownerJob || v.ownerGang) && <Pill tone='info' className='ms-1'>{v.ownerJob ?? v.ownerGang}</Pill>}</span></span></td>
                         <td className='px-2'>{v.owner}</td>
                         <td className='px-2'><Pill tone={v.state === 'fourrière' ? 'danger' : v.state === 'dehors' ? 'warning' : 'neutral'}>{v.state}</Pill>{v.garage && <span className='ms-1 text-xs text-muted-foreground'>{v.garage}</span>}</td>
                         <td className='px-2 text-end tabular-nums'>{v.fuel ?? '—'} %</td>
@@ -253,17 +257,17 @@ function PlayerSheet({ userId }: { userId: number }) {
           <TabsContent value='inventory' className='mt-4 grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2'>
             {p.characters.map((c) => (
               <Section key={c.citizenId} title={`Inventaire de ${c.name}`} description={`${c.inventory?.length ?? 0} objet${(c.inventory?.length ?? 0) > 1 ? 's' : ''}`}>
-                <Items items={c.inventory ?? []} />
+                <Items items={c.inventory ?? []} media={media.data} />
               </Section>
             ))}
             {p.vehicles.filter((v) => v.trunk?.length || v.glovebox?.length).map((v) => (
               <Section key={`v-${v.plate}`} title={`Coffre ${v.plate} (${v.model})`}>
-                <Items items={[...(v.trunk ?? []), ...(v.glovebox ?? [])]} />
+                <Items items={[...(v.trunk ?? []), ...(v.glovebox ?? [])]} media={media.data} />
               </Section>
             ))}
             {p.stashes.map((s) => (
               <Section key={`s-${s.name}`} title={`Coffre ${s.name}`} description={`${s.owner} · ${dateTime(s.at)}`}>
-                <Items items={s.items} />
+                <Items items={s.items} media={media.data} />
               </Section>
             ))}
           </TabsContent>
@@ -400,11 +404,11 @@ function CharacterCard({ c }: { c: Character }) {
   )
 }
 
-function Items({ items }: { items: Item[] }) {
+function Items({ items, media }: { items: Item[]; media: ReturnType<typeof useMediaConfig>['data'] }) {
   if (!items.length) return <EmptyState title='Vide' icon={Backpack} />
   return (
     <ul className='grid grid-cols-2 gap-1.5 p-3 sm:grid-cols-3'>
-      {items.map((i, k) => <li key={`${i.name}-${k}`} className='flex items-center justify-between gap-2 rounded-md border bg-muted/30 px-2 py-1 text-xs'><span className='truncate'>{i.name}</span><span className='font-medium tabular-nums'>×{i.count}</span></li>)}
+      {items.map((i, k) => <li key={`${i.name}-${k}`} className='flex min-w-0 items-center justify-between gap-2 rounded-md border bg-muted/30 px-2 py-1 text-xs'><span className='flex min-w-0 items-center gap-2'><GameAssetImage config={media} type='item' name={i.name} className='size-9' /><span className='truncate'>{i.name}</span></span><span className='font-medium tabular-nums'>×{i.count}</span></li>)}
     </ul>
   )
 }

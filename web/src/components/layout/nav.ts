@@ -77,6 +77,7 @@ import {
   MessageSquareShare,
   SlidersHorizontal,
   UserCog,
+  Image,
 } from 'lucide-react'
 
 export type NavEntry = {
@@ -112,6 +113,7 @@ export const navSections: NavSection[] = [
       { title: 'FiveM · Statut', url: '/fivem', icon: Gamepad2, permission: 'fivem.view', keywords: 'jeu serveur statut joueurs' },
       { title: 'FiveM · txAdmin et maintenance', url: '/fivem-events', icon: Wrench, permission: 'fivemevents.view', keywords: 'txadmin maintenance redémarrage restart reboot annonce pont bridge' },
       { title: 'FiveM · Base de données', url: '/fivem-players', icon: Contact, permission: 'fivemdata.view', keywords: 'joueur personnage citizen véhicule plaque inventaire argent bdd base métier gang logs staff prison mdt économie activité données' },
+      { title: 'FiveM · Images', url: '/media', icon: Image, permission: 'fivemdata.view', keywords: 'médias images icônes objets véhicules inventaire voitures' },
       { title: 'Boutique', url: '/tebex', icon: ShoppingCart, permission: 'tebex.view', keywords: 'tebex achat paiement vip remboursement' },
     ],
   },

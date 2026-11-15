@@ -11,6 +11,8 @@ import { count, hours, money, plural } from './format'
 import type { Job, ServerReport } from './types'
 import { Bars, Chart } from './charts'
 import { WEEK, axis, shortDay, tooltip } from './chart-style'
+import { useMediaConfig } from './media'
+import { GameAssetImage } from './media-image'
 
 export function useServerReport() {
   return useQuery({ queryKey: ['fivem-server'], queryFn: () => api<ServerReport>('/fivem-data/server'), retry: false, staleTime: 60_000, refetchInterval: 120_000 })
@@ -198,6 +200,7 @@ function JobRow({ j, economy, open, onToggle }: { j: Job; economy: boolean; open
 
 export function VehiclesTab({ r }: { r: ServerReport }) {
   const v = r.vehicles
+  const media = useMediaConfig()
   return (
     <>
       <StatCards items={[
@@ -207,7 +210,7 @@ export function VehiclesTab({ r }: { r: ServerReport }) {
         { label: 'En fourrière', value: v.impound, icon: Siren, tone: 'danger', hint: `${v.damaged} abîmés · ${v.fakePlates} fausses plaques` },
       ]} />
       <div className='grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2'>
-        <Section title='Modèles les plus possédés'><Bars rows={v.models.map((m) => ({ key: m.model, label: m.model, value: m.count }))} /></Section>
+        <Section title='Modèles les plus possédés'><Bars rows={v.models.map((m) => ({ key: m.model, label: <span className='flex items-center gap-2'><GameAssetImage config={media.data} type='vehicle' name={m.model} className='size-8' />{m.model}</span>, value: m.count }))} /></Section>
         <Section title='Garages les plus remplis' description={`${v.customGarages} garages configurés sur le serveur.`}><Bars rows={v.garages.map((g) => ({ key: g.garage, label: g.garage, value: g.count }))} tone='bg-info/20' /></Section>
       </div>
     </>
@@ -419,4 +422,3 @@ export function EconomyTab({ r }: { r: ServerReport }) {
     </>
   )
 }
-

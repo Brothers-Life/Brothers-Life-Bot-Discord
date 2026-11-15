@@ -13,6 +13,8 @@ import { JournalList, MapLink, type JournalEntry } from '@/features/telemetry/jo
 import { summarize } from '@/features/telemetry/labels'
 import type { Player } from '@/features/telemetry/types'
 import { Mono, PlayerLink, QueryError, Screenshot, TableSection } from '@/features/telemetry/ui'
+import { useMediaConfig } from '@/features/fivem/media'
+import { GameAssetImage } from '@/features/fivem/media-image'
 
 export const Route = createFileRoute('/_authenticated/telemetry/players/$cid')({
   component: TelemetryPlayer,
@@ -57,6 +59,7 @@ function Linked({ cid }: { cid: string }) {
 function TelemetryPlayer() {
   const { cid } = Route.useParams()
   const q = useQuery({ queryKey: ['telemetry', 'player', cid], queryFn: () => api<Player>(`/telemetry/player?cid=${encodeURIComponent(cid)}`), refetchInterval: 60_000 })
+  const media = useMediaConfig()
   const d = q.data
   const id = d?.ident
   const name = id?.name || cid
@@ -71,6 +74,7 @@ function TelemetryPlayer() {
     >
       {q.error ? <QueryError error={q.error} /> : !d ? <Skeleton className='h-96 w-full' /> : (
         <div className='grid grid-cols-[minmax(0,1fr)] gap-6'>
+          {media.error && <QueryError error={media.error} />}
           <section className='brackets flex flex-wrap items-center gap-4 rounded-xl border bg-card p-5'>
             <div className='relative'>
               <UserAvatar name={name} className='size-16 text-lg' />
@@ -116,7 +120,7 @@ function TelemetryPlayer() {
                   <ul className='grid grid-cols-2 gap-2 p-4 sm:grid-cols-3 lg:grid-cols-5'>
                     {d.inventory.map((it, i) => (
                       <li key={`${it.name}-${i}`} className='flex min-w-0 items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm' title={it.name}>
-                        <span className='truncate'>{it.name.replace(/_/g, ' ')}</span>
+                        <span className='flex min-w-0 items-center gap-2'><GameAssetImage config={media.data} type='item' name={it.name} className='size-9' /><span className='truncate'>{it.name.replace(/_/g, ' ')}</span></span>
                         <span className='shrink-0 font-medium tabular-nums'>×{fmt(it.count)}</span>
                       </li>
                     ))}
@@ -132,7 +136,7 @@ function TelemetryPlayer() {
                           <span className='rounded border-2 border-foreground/70 px-1.5 font-mono text-xs font-bold tracking-wider'>{v.plate}</span>
                           {n0(v.state) === 1 ? <Pill tone='success'>au garage</Pill> : num(v.state) === 0 ? <Pill tone='warning'>sorti</Pill> : <Pill>{String(v.state ?? '?')}</Pill>}
                         </div>
-                        <span className='font-medium'>{v.model}</span>
+                        <span className='flex items-center gap-2'><GameAssetImage config={media.data} type='vehicle' name={v.model} className='size-9' /><span className='font-medium'>{v.model}</span></span>
                         <span className='flex items-center gap-1 text-xs text-muted-foreground'><Car className='size-3' /> {v.garage || 'garage inconnu'}</span>
                       </li>
                     ))}
