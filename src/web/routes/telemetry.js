@@ -26,6 +26,12 @@ const VIEWS = [
 	['anomalies', 'anomalies', 'telemetry.economy', query({ h: hours, min: { type: 'integer', minimum: 0 } }), q => ({ hours: q.h, min: q.min })],
 	['inflation', 'inflation', 'telemetry.economy', query({ d: { type: 'integer', minimum: 7, maximum: 365 } }), q => ({ days: q.d })],
 	['trace', 'trace', 'telemetry.economy', withCid({ ts: { type: 'string', maxLength: 40 }, min: { type: 'integer', minimum: 5, maximum: 720 } }), q => ({ cid: q.cid, ts: q.ts, min: q.min })],
+	['businesses', 'businesses', 'telemetry.view', query({}), () => ({})],
+	['business', 'business', 'telemetry.view', { ...query({ job: { type: 'string', minLength: 1, maxLength: 60 }, days: { type: 'integer', minimum: 1, maximum: 90 } }), required: ['job'] }, q => ({ job: q.job, days: q.days })],
+	['gangs', 'gangs', 'telemetry.view', query({}), () => ({})],
+	['health', 'serverHealth', 'telemetry.view', query({ h: hours }), q => ({ hours: q.h })],
+	['flows', 'flows', 'telemetry.economy', query({ h: hours }), q => ({ hours: q.h })],
+	['moves', 'moves', 'telemetry.economy', query({ h: hours, kind: { type: 'string', enum: ['money', 'item'] } }), q => ({ hours: q.h, kind: q.kind })],
 	['logs', 'logs', 'telemetry.logs', query({ q: { type: 'string', maxLength: 100 }, level: { type: 'string', maxLength: 10 } }), q => ({ q: q.q, level: q.level })],
 ];
 

@@ -5,6 +5,7 @@ import { blockedUrl } from '../netGuard.js';
 import { createIngest } from './ingest.js';
 import { createPerf } from './perf.js';
 import { createViews } from './views.js';
+import { createSnapshots } from './snapshots.js';
 import { createCommands } from './commands.js';
 import { createAlerts, ALERT_KINDS } from './alerts.js';
 import { scrub } from './privacy.js';
@@ -26,6 +27,7 @@ export const STREAM_INTERVAL_MS = 3000;
 export const RETENTION_DEFAULTS = {
 	events: 365, server_logs: 30, perf_metrics: 90, player_snapshots: 180, economy_snapshots: 365, vehicles_owned: 365,
 	alerts: 365, db_table_stats: 365, commands: 365, perf_windows: 90, perf_buckets: 90, profiler_runs: 90,
+	business_history: 180, business_totals: 365, money_flows: 365, health: 90,
 };
 const ALERT_DEFAULTS = { errors5min: 25, moneyJump: 1_000_000, anticheatChannel: 'anticheat' };
 const DEFAULT_TIMEZONE = 'Europe/Paris';
@@ -162,7 +164,8 @@ export function createTelemetry({ db, settings, logs, notifications, audit, conf
 
 	const alerts = createAlerts({ q, getConfig, logs, notify, now, logger });
 	const perf = createPerf({ q });
-	const ingest = createIngest({ q, perf, raiseAlert: alerts.raiseAlert, now });
+	const snapshots = createSnapshots({ q, now });
+	const ingest = createIngest({ q, perf, snapshots, raiseAlert: alerts.raiseAlert, now });
 	const views = createViews({ q, getConfig, timezone, now });
 	const commands = createCommands({ q, raw });
 
@@ -322,6 +325,21 @@ export function createTelemetry({ db, settings, logs, notifications, audit, conf
 		trace: view('telemetry.economy', p => views.trace(p)),
 		logs: view('telemetry.logs', p => views.logs(p)),
 		alerts: view('telemetry.view', () => views.alerts()),
+		// bl_telemetry 1.6 readings; the safes of the companies are money: only with the economy permission
+		businesses: view('telemetry.view', async (p, actor) => {
+			const out = await snapshots.views.businesses();
+			if (actor.can('telemetry.economy')) return out;
+			return { ...out, totals: out.totals && { ...out.totals, safes: null }, rows: out.rows.map(r => ({ ...r, balance: null })) };
+		}),
+		business: view('telemetry.view', async (p, actor) => {
+			const out = await snapshots.views.business(p);
+			if (actor.can('telemetry.economy')) return out;
+			return { ...out, latest: out.latest && { ...out.latest, balance: null }, history: out.history.map(r => ({ ...r, balance: null })) };
+		}),
+		gangs: view('telemetry.view', () => snapshots.views.gangs()),
+		serverHealth: view('telemetry.view', p => snapshots.views.health(p)),
+		flows: view('telemetry.economy', p => snapshots.views.flows(p)),
+		moves: view('telemetry.economy', p => snapshots.views.moves(p)),
 		listCommands: view('telemetry.view', () => commands.list()),
 
 		/* ----- announcements in game ----- */

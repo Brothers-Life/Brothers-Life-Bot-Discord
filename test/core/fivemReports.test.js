@@ -266,4 +266,10 @@ test('fivem reports: only the core tables mirrored, no money: empty parts', asyn
 	await db.raw('UPDATE fivem.players SET job = $1 WHERE citizenid = $2', [json({ name: 'police', onduty: true }), 'BBB']);
 	const live = await serverReport({ ...harness(db), canMoney: false });
 	assert.equal(live.jobs.find(j => j.name === 'police').onDuty, 1);
+
+	// With a recent reading of the game (bl_telemetry 1.6): its figures, not the flags of the character sheets
+	const read = await serverReport({ ...harness(db), canMoney: false, liveBusinesses: async () => [{ job: 'police', online: 4, on_duty: 3, open: false }] });
+	const police = read.jobs.find(j => j.name === 'police');
+	assert.deepEqual([police.onDuty, police.online, police.open.isOpen], [3, 4, false]);
+	assert.equal(read.jobs.find(j => j.name === 'ballas').onDuty, 0, 'not in the reading: nobody on duty');
 });

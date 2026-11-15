@@ -13,7 +13,16 @@ const NAME = /^[A-Za-z0-9_]{1,64}$/;
 const MODES = new Set(['append', 'updated', 'hash', 'replace', 'count']);
 // Never stored, whatever the resource sends (it already leaves them out)
 const FORBIDDEN_TABLES = new Set(['sky_phone_accounts']);
-const FORBIDDEN_COLUMN = /(^|_)(ip|ips|tokens?|password|passwd|pass_hash|hwids?|email|mail|secret)$/i;
+// Private content (messages, mails, notes, photos, door codes…): their rows are refused, their number of rows
+// (mode count) is all the panel may know
+const COUNT_ONLY_TABLES = new Set([
+	'bl_phone_messages', 'bl_phone_mails', 'bl_phone_notes', 'bl_phone_events', 'bl_phone_recording_tracks', 'bl_phone_snapshots',
+	'bl_phone_social_dm_messages', 'bl_phone_ombre_msgs', 'bl_phone_media', 'bl_phone_eclair_snaps', 'bl_phone_contacts',
+	'bl_doors_codes', 'bl_gouv_photos',
+]);
+const FORBIDDEN_COLUMN = /(^|_)(ip|ips|tokens?|password|passwd|pass_hash|lock_hash|hwids?|email|mail|secret|code)$/i;
+// "code" columns that are no secret: the radio code of a police call (10-31…)
+const ALLOWED_COLUMNS = { mdt_calls: new Set(['code']) };
 // Columns used to find a player or to sort by date: indexed on creation
 const INDEXED_COLUMN = /^(cid|citizenid|userid|user_id|license|license2|discord|identifier|owner|owner_identifier|recipient_identifier|target_dbid|target_cid|caller_cid|issuer_cid|sender_citizenid|sender_license|target_license|issued_by_license|from_cid|to_cid|from_license|to_license|session_id|item_id|run_id|created_at|joined_at|started_at|issued_at|at)$/i;
 // Rows of one INSERT: PostgreSQL takes at most 65535 parameters
@@ -64,12 +73,12 @@ export function toColumn(value, type) {
 	return text.includes('\u0000') ? text.replaceAll('\u0000', '') : text;
 }
 
-function checkSchema(schema) {
+function checkSchema(schema, table = '') {
 	if (!schema || !Array.isArray(schema.columns) || !schema.columns.length) throw new ValidationError('schéma manquant');
 	const columns = [];
 	for (const c of schema.columns) {
 		if (!NAME.test(String(c?.name ?? ''))) throw new ValidationError(`colonne invalide : ${c?.name}`);
-		if (FORBIDDEN_COLUMN.test(c.name)) continue;
+		if (FORBIDDEN_COLUMN.test(c.name) && !ALLOWED_COLUMNS[table]?.has(c.name)) continue;
 		const type = pgType(c);
 		if (type) columns.push({ name: c.name, type });
 	}
@@ -91,7 +100,7 @@ export function createFivemMirror({ db, logger = console, now = Date.now }) {
 
 	// The table of the game in the schema "fivem", created or changed to match what the resource sent
 	async function ensureTable(name, schema, schemaHash, mode) {
-		const { columns, pk } = checkSchema(schema);
+		const { columns, pk } = checkSchema(schema, name);
 		const current = (await load()).get(name);
 		const sameColumns = current && current.pk.join() === pk.join()
 			&& columns.every(c => current.columns.some(k => k.name === c.name && k.type === c.type));
@@ -206,7 +215,7 @@ export function createFivemMirror({ db, logger = console, now = Date.now }) {
 			const out = {};
 			for (const t of tables.slice(0, 50)) {
 				const name = String(t?.name ?? '');
-				if (!NAME.test(name) || FORBIDDEN_TABLES.has(name) || !MODES.has(t.mode)) {
+				if (!NAME.test(name) || FORBIDDEN_TABLES.has(name) || !MODES.has(t.mode) || (COUNT_ONLY_TABLES.has(name) && t.mode !== 'count')) {
 					out[name || '?'] = { error: 'refusée' };
 					continue;
 				}

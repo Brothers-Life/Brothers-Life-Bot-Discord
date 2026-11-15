@@ -42,14 +42,14 @@ export function peaks(sessions, nowMs) {
 
 // Everything about the server as a whole; money only with the economy permission.
 // rowCount(table): rows of a table only counted by the mirror (its rows are not copied), null when unknown
-export async function serverReport({ query, when, groupsMap, canMoney, now = Date.now, rowCount = async () => null }) {
+export async function serverReport({ query, when, groupsMap, canMoney, now = Date.now, rowCount = async () => null, liveBusinesses = async () => [] }) {
 	const groups = await groupsMap();
 	const label = name => groups.get(name)?.label ?? name;
 	const days30 = 'INTERVAL \'30 days\'';
 
 	const [
 		sessions30, firsts, hourly, drops, onlineNow, totals,
-		groupMembers, dutyFlags, dutyTotals, weekDuty, levels, openState, payroll, invoices, safeCounts, gangMeta,
+		groupMembers, dutyFlags, liveJobs, dutyTotals, weekDuty, levels, openState, payroll, invoices, safeCounts, gangMeta,
 		vehicleStates, topModels, byGarage, customGarages,
 		jailed, sanctionTypes, sanctionsRecent, bans, reports, calls,
 		safezones, safezoneVisits, harvestZones, harvestTop, counts,
@@ -73,6 +73,8 @@ export async function serverReport({ query, when, groupsMap, canMoney, now = Dat
 			SELECT 1 FROM fivem.bl_mc_sessions s WHERE s.user_id = p."userId" AND s.left_at IS NULL AND s.joined_at > NOW() - INTERVAL '1 day')) AS "onDuty"
 			FROM fivem.players p GROUP BY 1`), null)
 			.then(rows => rows ?? query('SELECT fivem.j(job) ->> \'name\' AS name, COUNT(*) FILTER (WHERE fivem.j(job) ->> \'onduty\' = \'true\') AS "onDuty" FROM fivem.players GROUP BY 1')),
+		// The game's own reading of each company (bl_telemetry 1.6, every 5 minutes): who is really on duty right now
+		liveBusinesses(),
 		when('job_duty_time', () => query('SELECT job_name, SUM(seconds) AS seconds FROM fivem.job_duty_time GROUP BY job_name')),
 		when('job_week_duty', () => query('SELECT job_name, SUM(seconds) AS seconds, COUNT(DISTINCT citizenid) AS people FROM fivem.job_week_duty WHERE week_start = (SELECT MAX(week_start) FROM fivem.job_week_duty) GROUP BY job_name')),
 		when('job_level_state', () => query('SELECT job_name, level, xp, title FROM fivem.job_level_state')),
@@ -144,15 +146,18 @@ export async function serverReport({ query, when, groupsMap, canMoney, now = Dat
 		const level = find(levels, 'job_name', name);
 		const open = find(openState, 'job_name', name);
 		const week = find(weekDuty, 'job_name', name);
+		const live = find(liveJobs, 'job', name);
 		return {
 			name, label: g.label, type: g.type,
 			grades: Object.entries(g.grades ?? {}).map(([grade, v]) => ({ grade: Number(grade), name: v?.name ?? grade, payment: v?.payment ?? null, isBoss: Boolean(v?.isboss) })),
 			members: num(groupMembers.filter(m => m.name === name).reduce((n, m) => n + num(m.members), 0)),
-			onDuty: num(find(dutyFlags, 'name', name)?.onDuty),
+			// Without a recent reading of the game: the duty flags of the connected characters
+			onDuty: live ? num(live.on_duty) : liveJobs.length ? 0 : num(find(dutyFlags, 'name', name)?.onDuty),
+			online: live ? num(live.online) : null,
 			dutySeconds: num(find(dutyTotals, 'job_name', name)?.seconds),
 			weekDutySeconds: num(week?.seconds), weekPeople: num(week?.people),
 			level: level ? { level: num(level.level), xp: num(level.xp), title: level.title } : null,
-			open: open ? { isOpen: Boolean(open.is_open), by: open.changed_by } : null,
+			open: live && live.open !== null ? { isOpen: live.open, by: open?.changed_by ?? null } : open ? { isOpen: Boolean(open.is_open), by: open.changed_by } : null,
 			payroll: lastPayroll ? { total: num(lastPayroll.total_amount), employees: num(lastPayroll.employee_count), by: lastPayroll.run_by_name, at: ms(lastPayroll.created_at) } : null,
 			invoices: inv ? { count: num(inv.count), total: num(inv.total), unpaid: num(inv.unpaid) } : null,
 			safeMoves: num(find(safeCounts, 'job_name', name)?.n),

@@ -6,7 +6,7 @@ import { num, real, int, text } from './util.js';
 
 const json = v => JSON.stringify(v ?? {});
 
-export function createIngest({ q, perf, raiseAlert, now }) {
+export function createIngest({ q, perf, snapshots, raiseAlert, now }) {
 	const anticheatCooldown = new Map();
 	// Timestamps of the game are milliseconds; anything else is "now"
 	const tsOf = v => {
@@ -52,6 +52,8 @@ export function createIngest({ q, perf, raiseAlert, now }) {
 		if (ev.type === 'db_snapshot') return dbSnapshot(raw);
 		// Performance: tables of their own
 		if (await perf.ingest(ev.type, raw)) return;
+		// Periodic readings (companies, gangs, money by reason, server health): tables of their own too
+		if (await snapshots?.ingest(ev.type, tsOf(ev.ts), raw)) return;
 		// The license is only used to join sessions (kept in tel_sessions); event data never keeps it
 		const license = text(raw.license, 120);
 		const d = withoutSensitiveKeys(raw);

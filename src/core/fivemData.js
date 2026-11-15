@@ -71,6 +71,9 @@ export function createFivemData({ db, mirror, audit, logger = console, now = Dat
 	const REPORT_STALE = 10 * 60_000;
 	const cachedReport = (key, build) => cache.wrap(`fivem:report:${key}`, { ttl: REPORT_TTL, stale: REPORT_STALE }, build);
 
+	// The last reading of the companies sent by the game (bl_telemetry 1.6), when it is recent enough to be "now"
+	const liveBusinesses = () => run('SELECT job, online, on_duty, open FROM tel_business_latest WHERE ts > NOW() - INTERVAL \'15 minutes\'').catch(() => []);
+
 	// Which tables the mirror has (features without their table are skipped)
 	const has = async name => (await mirror.tables()).has(name);
 	const enabled = () => has('users');
@@ -626,7 +629,7 @@ export function createFivemData({ db, mirror, audit, logger = console, now = Dat
 			need(actor, 'fivemdata.view');
 			await ready();
 			const canMoney = actor.can('fivemdata.economy');
-			return cachedReport(`server:${canMoney}`, () => serverReport({ query, when, groupsMap, canMoney, now, rowCount: name => mirror.counted(name) }));
+			return cachedReport(`server:${canMoney}`, () => serverReport({ query, when, groupsMap, canMoney, now, rowCount: name => mirror.counted(name), liveBusinesses }));
 		},
 
 		// Server overview: players, online now, playtime, staff in service, jobs headcount

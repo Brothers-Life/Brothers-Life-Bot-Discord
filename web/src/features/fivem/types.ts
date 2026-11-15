@@ -72,7 +72,7 @@ export type MirrorState = {
 export type Job = {
   name: string; label: string; type: string
   grades: { grade: number; name: string; payment: number | null; isBoss: boolean }[]
-  members: number; onDuty: number; dutySeconds: number; weekDutySeconds: number; weekPeople: number
+  members: number; onDuty: number; online: number | null; dutySeconds: number; weekDutySeconds: number; weekPeople: number
   level: { level: number; xp: number; title: string | null } | null
   open: { isOpen: boolean; by: string | null } | null
   payroll: { total: number; employees: number; by: string | null; at: number | null } | null

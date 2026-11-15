@@ -115,3 +115,32 @@ test('mirror: forbidden tables and bad names are refused, a bad table does not s
 	assert.equal(out.tables.players.error, 'clé primaire inconnue');
 	assert.equal(out.tables.bans.ok, true);
 });
+
+test('mirror: private content is only counted, secret columns are dropped (bl_telemetry 1.6)', async () => {
+	const { mirror, db } = await setup();
+	const id = { name: 'id', type: 'int' };
+	const out = await mirror.apply({ tables: [
+		{ name: 'bl_phone_messages', mode: 'append', schemaHash: 'm', schema: { pk: ['id'], columns: [id, { name: 'body', type: 'text' }] }, from: null, cursor: '1', fields: ['id', 'body'], rows: [[1, 'secret']] },
+		{ name: 'bl_gouv_photos', mode: 'count', count: 12 },
+		{ name: 'bl_phone_devices', mode: 'hash', schemaHash: 'd', schema: { pk: ['id'], columns: [id, { name: 'owner', type: 'varchar' }, { name: 'lock_hash', type: 'varchar' }, { name: 'gift_code', type: 'varchar' }, { name: 'code', type: 'varchar' }] }, from: null, fields: ['id', 'owner'], rows: [[1, 'ABC']] },
+		{ name: 'mdt_calls', mode: 'hash', schemaHash: 'c', schema: { pk: ['id'], columns: [id, { name: 'code', type: 'varchar' }] }, from: null, fields: ['id', 'code'], rows: [[1, '10-31']] },
+	] });
+	assert.deepEqual(out.tables.bl_phone_messages, { error: 'refusée' });
+	assert.equal(await mirror.counted('bl_gouv_photos'), 12);
+	assert.equal(out.tables.bl_phone_devices.ok, true);
+	assert.deepEqual((await mirror.columns('bl_phone_devices')).map(c => c.name), ['id', 'owner']);
+	assert.deepEqual(await db.query('SELECT code FROM fivem.mdt_calls'), [{ code: '10-31' }], 'a radio code is no secret');
+});
+
+test('mirror: a table that was only counted restarts from zero when it becomes a copy (shops, bl_hotels)', async () => {
+	const { mirror, db } = await setup();
+	await mirror.apply({ tables: [{ name: 'shops', mode: 'count', count: 9 }] });
+	const schema = { pk: ['id'], columns: [{ name: 'id', type: 'int' }, { name: 'owner_job', type: 'varchar' }] };
+	const resumed = await mirror.apply({ tables: [{ name: 'shops', mode: 'hash', schemaHash: 's', schema, from: '5', fields: ['id', 'owner_job'], rows: [[6, 'police']] }] });
+	assert.deepEqual(resumed.tables.shops, { reset: true }, 'the game is told to send everything again');
+	const full = await mirror.apply({ tables: [{ name: 'shops', mode: 'hash', schemaHash: 's', schema, from: null, fields: ['id', 'owner_job'], rows: [[1, 'police'], [2, 'ems']] }] });
+	assert.equal(full.tables.shops.ok, true);
+	assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM fivem.shops'))[0].n, 2);
+	assert.equal(await mirror.counted('shops'), null);
+	assert.equal((await mirror.tables()).has('shops'), true);
+});
