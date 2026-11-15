@@ -79,7 +79,7 @@ test('duty and opening events build the hours of a company', async () => {
 });
 
 test('gangs, money by reason, big movements and server health', async () => {
-	const { ingest, views } = await setup();
+	const { db, ingest, views } = await setup();
 	await ingest.batch({ events: [
 		{ type: 'gang_snapshot', ts: T0 - 5 * MIN, data: { rows: [{ gang: 'ballas', label: 'Ballas', online: 5, members: 18, xp: 4200, category: 'street', max_members: 25, territories: 3 }] } },
 		{ type: 'money_flow', ts: T0 - 10 * MIN, data: { window_s: 300, in_total: 320_000, out_total: 88_000, flows: [
@@ -97,6 +97,11 @@ test('gangs, money by reason, big movements and server health', async () => {
 		{ type: 'event', subtype: 'money_move', ts: T0 - MIN, citizenid: 'AAA', player_name: 'Alice', data: { money: 'bank', action: 'add', amount: 500_000, reason: 'Vente' } },
 		{ type: 'event', subtype: 'item_move', ts: T0 - 2 * MIN, citizenid: 'AAA', data: { item: 'weapon_pistol', count: 1, from: '12', from_type: 'player', to: 'trunk1', to_type: 'trunk', weapon: true } },
 	] });
+
+	// Each reading leaves a receipt, even one with nothing to store
+	await ingest.batch({ events: [{ type: 'money_flow', ts: T0, data: { window_s: 60, in_total: 0, out_total: 0, flows: [] } }] });
+	const receipts = Object.fromEntries((await db.raw('SELECT type, count FROM tel_reading_receipts')).rows.map(r => [r.type, Number(r.count)]));
+	assert.deepEqual(receipts, { gang_snapshot: 1, money_flow: 3, health_snapshot: 2 });
 
 	const gangs = await views.gangs();
 	assert.deepEqual(gangs.rows.map(g => [g.gang, g.online, g.territories]), [['ballas', 5, 3]]);

@@ -230,6 +230,9 @@ export function createSnapshots({ q, now }) {
 			else if (type === 'gang_snapshot') await gangs(ts, d);
 			else if (type === 'money_flow') await moneyFlow(ts, d);
 			else await health(ts, d);
+			// Even an empty reading (no money moved in the window) is a sign that the game sends it
+			await q(`INSERT INTO tel_reading_receipts (type, last_at) VALUES ($2, ${at}) ON CONFLICT (type) DO UPDATE
+				SET last_at = GREATEST(tel_reading_receipts.last_at, EXCLUDED.last_at), count = tel_reading_receipts.count + 1`, [ts, type]);
 			return true;
 		},
 		views,

@@ -185,11 +185,12 @@ export function createTelemetry({ db, settings, logs, notifications, audit, conf
 	// A read view: permission checked, identifiers scrubbed from the answer
 	// Everything received from the game, by kind, with the last time; "expected" kinds never seen have last = null
 	async function ingestReport() {
-		const [events, readings, cards, tables, problems] = await Promise.all([
+		const [events, readings, receipts, cards, tables, problems] = await Promise.all([
 			// Only "event" and "game_log" are told apart by their subtype
 			q(`SELECT type, CASE WHEN type IN ('event', 'game_log') THEN subtype END AS subtype, COUNT(*)::int AS n, MAX(ts) AS last FROM tel_events
 				WHERE ts > now() - interval '24 hours' GROUP BY 1, 2 ORDER BY 3 DESC LIMIT 500`),
 			Promise.all(READINGS.map(async r => ({ type: r.type, label: r.label, ...(await q(`SELECT COUNT(*) FILTER (WHERE ts > now() - interval '24 hours')::int AS n, MAX(ts) AS last FROM ${r.table}`)).rows[0] }))),
+			q('SELECT type, last_at FROM tel_reading_receipts'),
 			q('SELECT name, label, kind, ts, jsonb_array_length(rows) AS n FROM tel_db_snapshots ORDER BY name'),
 			q('SELECT name, mode, row_count, synced_at, full_at FROM fivem_mirror_tables ORDER BY name'),
 			q(`SELECT p.source, p.name, p.error, p.first_at, p.last_at, p.count FROM ingest_problems p LEFT JOIN fivem_mirror_tables t ON t.name = p.name AND p.source = 'mirror'
@@ -208,7 +209,8 @@ export function createTelemetry({ db, settings, logs, notifications, audit, conf
 		const card = new Map(cards.rows.map(c => [c.name, c]));
 		return {
 			at: now(),
-			readings: readings.map(r => ({ key: r.type, label: r.label, n: r.n ?? 0, last: r.last ?? null, expected: true })),
+			// The receipt tells that the reading arrives even when it held nothing to store (n = 0)
+			readings: readings.map(r => ({ key: r.type, label: r.label, n: r.n ?? 0, last: receipts.rows.find(x => x.type === r.type)?.last_at ?? r.last ?? null, expected: true })),
 			types: mergeKeys(EVENT_TYPES, events.rows.filter(e => !e.subtype).map(e => e.type)).map(type => line(type, type === 'event' || type === 'game_log'
 				? { n: events.rows.filter(e => e.type === type).reduce((n, e) => n + e.n, 0), last: events.rows.filter(e => e.type === type).reduce((m, e) => (!m || new Date(e.last) > new Date(m) ? e.last : m), null) }
 				: seen(type, null), EVENT_TYPES.includes(type))),

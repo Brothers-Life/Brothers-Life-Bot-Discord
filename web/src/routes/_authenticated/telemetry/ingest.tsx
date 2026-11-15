@@ -63,6 +63,8 @@ function TelemetryIngest() {
   const tables = d?.mirror ?? []
   const missingTables = tables.filter((t) => !t.last)
   const shownTables = missingOnly ? missingTables : tables
+  // A journal sending tens of thousands of lines a day is usually a table replayed whole at each pass
+  const noisy = (d?.gameLogs ?? []).filter((l) => l.n >= 10_000)
 
   return (
     <Page
@@ -112,7 +114,13 @@ function TelemetryIngest() {
             « Jamais reçu » ne veut pas forcément dire panne : une table absente du serveur de jeu n’est jamais envoyée, et un événement rare (braquage, mise en prison) peut ne pas s’être produit depuis 24 h.
           </Notice>
 
-          <Lines title='Relevés périodiques' description='Photos envoyées toutes les 5 minutes.' unit='Reçus en 24 h' lines={d.readings} missingOnly={missingOnly} />
+          {noisy.length > 0 && (
+            <Notice tone='warning' title='Journaux très bavards'>
+              {noisy.map((l) => `${l.key} (${fmt(l.n)} lignes en 24 h)`).join(', ')}. À ce rythme ils remplissent la base : à vérifier dans la ressource bl_telemetry (table suivie en entier à chaque passage ?).
+            </Notice>
+          )}
+
+          <Lines title='Relevés périodiques' description='Photos envoyées à intervalle régulier (de 1 à 5 minutes selon le réglage du jeu). « Reçu » sans chiffre : le relevé arrive mais n’avait rien à enregistrer.' unit='Enregistrés en 24 h' lines={d.readings} missingOnly={missingOnly} />
           <Lines title='Types d’événements' description='Champ « type » des envois.' unit='Reçus en 24 h' lines={d.types} missingOnly={missingOnly} />
           <Lines title='Événements de jeu' description='Sous-types de « event » ajoutés par la 1.6 (service, métier, argent, objets, prison…).' unit='Reçus en 24 h' lines={d.subtypes} missingOnly={missingOnly} />
           <Lines title='Journaux du jeu' description='Tables suivies ligne à ligne (« game_log »).' unit='Reçus en 24 h' lines={d.gameLogs} missingOnly={missingOnly} />
