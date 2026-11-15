@@ -9,7 +9,7 @@ export function registerMediaRoutes(app, { config, fetchImpl = fetch, logger = c
 	app.get('/api/media/config', { config: { permission: null } }, async () => ({
 		enabled: Boolean(baseUrl && readKey),
 		baseUrl: baseUrl || null,
-		itemsFolder: 'fichiers/ox_inventory/items',
+		itemsFolder: 'ox_inventory/items',
 		vehiclesFolder: 'rup_vehiclespawner/vehicules',
 	}));
 

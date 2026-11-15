@@ -24,8 +24,8 @@ function setup({ media = true, status = 200 } = {}) {
 			status: 'ok',
 			data: {
 				items: [
-					{ id: 'abc', name: 'water.png', folder: 'fichiers/ox_inventory/items', kind: 'image', mime: 'image/png', size: 1200, url: 'https://media.example/n/fichiers/ox_inventory/items/water.png', createdAt: '2026-11-15T12:00:00.000Z', named: true },
-					{ id: 'bad', name: 'bad.png', folder: 'fichiers/ox_inventory/items', kind: 'image', mime: 'image/png', size: 100, url: 'https://attacker.example/image.png', named: false },
+					{ id: 'abc', name: 'water.png', folder: 'ox_inventory/items', kind: 'image', mime: 'image/png', size: 1200, url: 'https://media.example/n/ox_inventory/items/water.png', createdAt: '2026-11-15T12:00:00.000Z', named: true },
+					{ id: 'bad', name: 'bad.png', folder: 'ox_inventory/items', kind: 'image', mime: 'image/png', size: 100, url: 'https://attacker.example/image.png', named: false },
 				],
 				nextCursor: 'water.png',
 			},
@@ -51,7 +51,7 @@ test('media config is available to the panel without exposing the read key', asy
 	assert.deepEqual(await route.handler(), {
 		enabled: true,
 		baseUrl: 'https://media.example',
-		itemsFolder: 'fichiers/ox_inventory/items',
+		itemsFolder: 'ox_inventory/items',
 		vehiclesFolder: 'rup_vehiclespawner/vehicules',
 	});
 });
@@ -65,10 +65,10 @@ test('image catalogue proxies paginated image results and rejects URLs on anothe
 		items: [{
 			id: 'abc',
 			name: 'water.png',
-			folder: 'fichiers/ox_inventory/items',
+			folder: 'ox_inventory/items',
 			mime: 'image/png',
 			size: 1200,
-			url: 'https://media.example/n/fichiers/ox_inventory/items/water.png',
+			url: 'https://media.example/n/ox_inventory/items/water.png',
 			createdAt: '2026-11-15T12:00:00.000Z',
 			named: true,
 		}],
