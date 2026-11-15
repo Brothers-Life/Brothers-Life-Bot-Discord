@@ -1,6 +1,6 @@
 {
   "name": "bot-discord-brl",
-  "version": "1.11.0",
+  "version": "2.0.0",
   "description": "Bot Discord Brothers Life : bot, API, front (panel) et base PostgreSQL séparés",
   "main": "src/index.js",
   "type": "module",
