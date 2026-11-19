@@ -157,6 +157,18 @@ export function createFakeExecutor() {
 		async resolveInvite(code) {
 			return this.invites.get(code) ?? null;
 		},
+		// guildId -> error message, to make the creation of an invitation fail
+		inviteFailures: new Map(),
+		createdInvites: [],
+		async createInvite(guildId, channelId = null, { unique = false } = {}) {
+			if (this.inviteFailures.has(guildId)) throw new Error(this.inviteFailures.get(guildId));
+			const known = unique ? null : this.createdInvites.find(i => i.guildId === guildId && i.channelId === channelId && this.invites.get(i.code) === guildId);
+			if (known) return { code: known.code, channelId: known.channelId ?? '600000000000000001' };
+			const code = `auto${this.createdInvites.length + 1}`;
+			this.createdInvites.push({ guildId, channelId, code });
+			this.invites.set(code, guildId);
+			return { code, channelId: channelId ?? '600000000000000001' };
+		},
 		// Tickets
 		ticketChannels: new Map(),
 		async createTicketChannel(options) {
@@ -341,12 +353,12 @@ export function createFakeExecutor() {
 		},
 		// Messages edited in place: channelId -> Map(messageId -> payload)
 		posted: new Map(),
-		async upsertMessage(channelId, messageId, payload) {
+		async upsertMessage(channelId, messageId, payload, options = {}) {
 			if (this.failOn.has(channelId)) throw new Error('Missing Access');
 			const messages = this.posted.get(channelId) ?? new Map();
 			this.posted.set(channelId, messages);
 			const id = messageId && messages.has(messageId) ? messageId : String(730000000000000000n + BigInt(this.calls.length + messages.size + 1));
-			messages.set(id, payload);
+			messages.set(id, options.buttons ? { ...payload, buttons: options.buttons } : payload);
 			this.calls.push(['upsert', channelId, id]);
 			return id;
 		},

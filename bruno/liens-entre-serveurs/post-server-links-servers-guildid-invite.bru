@@ -1,0 +1,21 @@
+meta {
+  name: POST /server-links/servers/:guildId/invite
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/server-links/servers/:guildId/invite
+  body: none
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+docs {
+  Créer / agir — `POST /api/server-links/servers/:guildId/invite`
+
+  Permission requise : `serverlinks.manage`
+}

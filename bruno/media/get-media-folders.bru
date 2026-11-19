@@ -1,0 +1,24 @@
+meta {
+  name: GET /media/folders
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/media/folders
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~parent: 
+}
+
+docs {
+  Consulter — `GET /api/media/folders`
+
+  Permission requise : `fivemdata.view`
+
+  Paramètres de requête :
+  - `parent` (string)
+}

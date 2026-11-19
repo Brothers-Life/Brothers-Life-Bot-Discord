@@ -1,0 +1,28 @@
+meta {
+  name: GET /media/images
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/media/images
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~q: 
+  ~cursor: 
+  ~folder: 
+}
+
+docs {
+  Consulter — `GET /api/media/images`
+
+  Permission requise : `fivemdata.view`
+
+  Paramètres de requête :
+  - `q` (string)
+  - `cursor` (string)
+  - `folder` (string)
+}

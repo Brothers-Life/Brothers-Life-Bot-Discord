@@ -872,9 +872,19 @@ export function createExecutor(client) {
 		},
 
 		// Edits the message if it still exists, otherwise posts it again (repost) — returns its id
-		async upsertMessage(channelId, messageId, payload, { repost = true } = {}) {
+		// buttons: link buttons [{ label, url, emoji }] under the message (5 per row, 25 at most)
+		async upsertMessage(channelId, messageId, payload, { repost = true, buttons = null } = {}) {
 			const channel = await client.channels.fetch(channelId);
 			const body = { content: payload.content || null, embeds: buildEmbeds(payload), allowedMentions: { parse: [] } };
+			if (buttons) {
+				const built = buttons.slice(0, 25).map((b) => {
+					const button = new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(b.label).setURL(b.url);
+					if (emojiOf(b.emoji)) button.setEmoji(emojiOf(b.emoji));
+					return button;
+				});
+				body.components = [];
+				for (let i = 0; i < built.length; i += 5) body.components.push(new ActionRowBuilder().addComponents(built.slice(i, i + 5)));
+			}
 			if (messageId) {
 				const existing = await channel.messages.fetch(messageId).catch(() => null);
 				if (existing) {
@@ -1043,6 +1053,23 @@ export function createExecutor(client) {
 				}
 			}
 			return (await channel.send(message)).id;
+		},
+
+		// Permanent invitation to a server, in the given channel or the first one where the bot may create one.
+		// Without `unique`, Discord gives back the bot's existing permanent invitation of that channel.
+		async createInvite(guildId, channelId = null, { unique = false } = {}) {
+			const guild = await client.guilds.fetch(guildId);
+			const me = guild.members.me ?? await guild.members.fetchMe();
+			const usable = c => Boolean(c) && [ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(c.type) && c.permissionsFor(me)?.has(PermissionFlagsBits.CreateInstantInvite);
+			let channel = channelId ? await guild.channels.fetch(channelId).catch(() => null) : null;
+			if (channelId && !usable(channel)) throw new Error('le bot n’a pas la permission « Créer une invitation » dans ce salon.');
+			if (!channel) {
+				const all = [...(await guild.channels.fetch()).values()].filter(Boolean).sort((a, b) => a.rawPosition - b.rawPosition);
+				channel = [guild.rulesChannel, guild.systemChannel, ...all].find(usable);
+			}
+			if (!channel) throw new Error('le bot n’a la permission « Créer une invitation » dans aucun salon de ce serveur.');
+			const invite = await channel.createInvite({ maxAge: 0, maxUses: 0, unique, reason: 'Liens entre serveurs du réseau' });
+			return { code: invite.code, channelId: channel.id };
 		},
 
 		// Server an invite leads to (null if invalid or expired)

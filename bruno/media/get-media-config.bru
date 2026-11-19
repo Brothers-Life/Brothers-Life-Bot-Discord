@@ -1,0 +1,17 @@
+meta {
+  name: GET /media/config
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/media/config
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/media/config`
+
+  Permission requise : aucune (clé valide)
+}

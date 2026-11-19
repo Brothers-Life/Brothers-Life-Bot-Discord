@@ -1,0 +1,39 @@
+meta {
+  name: POST /server-links/boards
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/server-links/boards
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "name",
+    "guildId": "000000000000000000",
+    "channelId": "000000000000000000"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/server-links/boards`
+
+  Permission requise : `serverlinks.manage`
+
+  Corps JSON :
+  - `name` (string) — obligatoire
+  - `guildId` (string) — obligatoire
+  - `channelId` (string) — obligatoire
+  - `enabled` (boolean)
+  - `payload` (object)
+  - `line` (string)
+  - `compact` (boolean)
+  - `scope` ("all" | "selected")
+  - `guildIds` (array)
+  - `includeSelf` (boolean)
+  - `buttons` (boolean)
+  - `repost` (boolean)
+}

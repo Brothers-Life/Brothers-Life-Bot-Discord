@@ -1,0 +1,21 @@
+meta {
+  name: POST /server-links/boards/:id/publish
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/server-links/boards/:id/publish
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+docs {
+  Créer / agir — `POST /api/server-links/boards/:id/publish`
+
+  Permission requise : `serverlinks.manage`
+}

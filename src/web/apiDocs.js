@@ -8,7 +8,7 @@ const GROUPS = {
 	logs: 'Logs', audit: 'Journal', sessions: 'Sessions', system: 'Système', versions: 'Système',
 	sanctions: 'Sanctions', 'sanction-templates': 'Sanctions', restrictions: 'Sanctions', 'temp-roles': 'Sanctions', appeals: 'Appels de sanction',
 	automod: 'Automod', antiraid: 'Anti-raid', events: 'Événements Discord', people: 'Membres du réseau',
-	tickets: 'Tickets', announcements: 'Annonces', embeds: 'Embeds', messages: 'Messages', dms: 'Messages privés',
+	tickets: 'Tickets', announcements: 'Annonces', embeds: 'Embeds', messages: 'Messages', 'server-links': 'Liens entre serveurs', dms: 'Messages privés',
 	onboarding: 'Accueil', verification: 'Vérification', 'channel-features': 'Salons automatiques', 'channel-schedules': 'Horaires de salons', archives: 'Archives',
 	polls: 'Sondages', giveaways: 'Giveaways', feedback: 'Suggestions et bugs', recruitment: 'Candidatures', absences: 'Absences',
 	'rp-events': 'Événements RP', meetings: 'Réunions staff', 'meeting-actions': 'Réunions staff', voice: 'Salons vocaux perso', stats: 'Statistiques',

@@ -1,0 +1,17 @@
+meta {
+  name: GET /server-links
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/server-links
+  body: none
+  auth: inherit
+}
+
+docs {
+  Consulter — `GET /api/server-links`
+
+  Permission requise : `serverlinks.view`
+}

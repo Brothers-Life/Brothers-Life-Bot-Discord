@@ -29,6 +29,7 @@ import { registerAntinukeRoutes } from './routes/antinuke.js';
 import { registerStatsRoutes } from './routes/stats.js';
 import { registerVoiceRoutes } from './routes/voice.js';
 import { registerMessageRoutes } from './routes/messages.js';
+import { registerServerLinkRoutes } from './routes/serverLinks.js';
 import { registerPollRoutes } from './routes/polls.js';
 import { registerGiveawayRoutes } from './routes/giveaways.js';
 import { registerFeedbackRoutes } from './routes/feedback.js';
@@ -122,6 +123,7 @@ export async function createWebServer({ config, core, runtime, consoleLog, versi
 	registerStatsRoutes(app, { core });
 	registerVoiceRoutes(app, { core });
 	registerMessageRoutes(app, { core });
+	registerServerLinkRoutes(app, { core });
 	registerPollRoutes(app, { core });
 	registerGiveawayRoutes(app, { core });
 	registerFeedbackRoutes(app, { core });

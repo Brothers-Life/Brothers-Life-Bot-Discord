@@ -14,6 +14,8 @@ export function startTasks({ core, every }) {
 		every(24 * HOUR, () => core.stats.purge(), 'Stats purge failed'),
 		// Dynamic messages whose variables need a refresh
 		every(60_000, () => core.liveMessages.tick(), 'Live messages failed'),
+		// Links between servers: invitations still valid, servers that joined or left, deleted messages
+		every(10 * 60_000, () => core.serverLinks.tick(), 'Server links failed'),
 		// Scheduled polls to open, open polls reaching their end
 		every(30_000, () => core.polls.tick(), 'Polls failed'),
 		// Giveaways to open, to draw, unclaimed prizes to reroll

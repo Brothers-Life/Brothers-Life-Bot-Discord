@@ -1,0 +1,28 @@
+meta {
+  name: PUT /server-links/order
+  type: http
+  seq: 6
+}
+
+put {
+  url: {{baseUrl}}/api/server-links/order
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "guildIds": [
+      "000000000000000000"
+    ]
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/server-links/order`
+
+  Permission requise : `serverlinks.manage`
+
+  Corps JSON :
+  - `guildIds` (array) — obligatoire
+}

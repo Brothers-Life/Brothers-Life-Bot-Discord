@@ -52,6 +52,7 @@ import { Route as AuthenticatedRanksRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedRecruitmentRouteImport } from './routes/_authenticated/recruitment'
 import { Route as AuthenticatedRpEventsRouteImport } from './routes/_authenticated/rp-events'
 import { Route as AuthenticatedSanctionsRouteImport } from './routes/_authenticated/sanctions'
+import { Route as AuthenticatedServerLinksRouteImport } from './routes/_authenticated/server-links'
 import { Route as AuthenticatedSessionsRouteImport } from './routes/_authenticated/sessions'
 import { Route as AuthenticatedStaffActivityRouteImport } from './routes/_authenticated/staff-activity'
 import { Route as AuthenticatedStaffRolesRouteImport } from './routes/_authenticated/staff-roles'
@@ -312,6 +313,12 @@ const AuthenticatedSanctionsRoute = AuthenticatedSanctionsRouteImport.update({
   path: '/sanctions',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedServerLinksRoute =
+  AuthenticatedServerLinksRouteImport.update({
+    id: '/server-links',
+    path: '/server-links',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSessionsRoute = AuthenticatedSessionsRouteImport.update({
   id: '/sessions',
   path: '/sessions',
@@ -572,6 +579,7 @@ export interface FileRoutesByFullPath {
   '/recruitment': typeof AuthenticatedRecruitmentRoute
   '/rp-events': typeof AuthenticatedRpEventsRoute
   '/sanctions': typeof AuthenticatedSanctionsRoute
+  '/server-links': typeof AuthenticatedServerLinksRoute
   '/sessions': typeof AuthenticatedSessionsRoute
   '/staff-activity': typeof AuthenticatedStaffActivityRoute
   '/staff-roles': typeof AuthenticatedStaffRolesRoute
@@ -653,6 +661,7 @@ export interface FileRoutesByTo {
   '/recruitment': typeof AuthenticatedRecruitmentRoute
   '/rp-events': typeof AuthenticatedRpEventsRoute
   '/sanctions': typeof AuthenticatedSanctionsRoute
+  '/server-links': typeof AuthenticatedServerLinksRoute
   '/sessions': typeof AuthenticatedSessionsRoute
   '/staff-activity': typeof AuthenticatedStaffActivityRoute
   '/staff-roles': typeof AuthenticatedStaffRolesRoute
@@ -737,6 +746,7 @@ export interface FileRoutesById {
   '/_authenticated/recruitment': typeof AuthenticatedRecruitmentRoute
   '/_authenticated/rp-events': typeof AuthenticatedRpEventsRoute
   '/_authenticated/sanctions': typeof AuthenticatedSanctionsRoute
+  '/_authenticated/server-links': typeof AuthenticatedServerLinksRoute
   '/_authenticated/sessions': typeof AuthenticatedSessionsRoute
   '/_authenticated/staff-activity': typeof AuthenticatedStaffActivityRoute
   '/_authenticated/staff-roles': typeof AuthenticatedStaffRolesRoute
@@ -822,6 +832,7 @@ export interface FileRouteTypes {
     | '/recruitment'
     | '/rp-events'
     | '/sanctions'
+    | '/server-links'
     | '/sessions'
     | '/staff-activity'
     | '/staff-roles'
@@ -903,6 +914,7 @@ export interface FileRouteTypes {
     | '/recruitment'
     | '/rp-events'
     | '/sanctions'
+    | '/server-links'
     | '/sessions'
     | '/staff-activity'
     | '/staff-roles'
@@ -986,6 +998,7 @@ export interface FileRouteTypes {
     | '/_authenticated/recruitment'
     | '/_authenticated/rp-events'
     | '/_authenticated/sanctions'
+    | '/_authenticated/server-links'
     | '/_authenticated/sessions'
     | '/_authenticated/staff-activity'
     | '/_authenticated/staff-roles'
@@ -1336,6 +1349,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSanctionsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/server-links': {
+      id: '/_authenticated/server-links'
+      path: '/server-links'
+      fullPath: '/server-links'
+      preLoaderRoute: typeof AuthenticatedServerLinksRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/sessions': {
       id: '/_authenticated/sessions'
       path: '/sessions'
@@ -1645,6 +1665,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedRecruitmentRoute: typeof AuthenticatedRecruitmentRoute
   AuthenticatedRpEventsRoute: typeof AuthenticatedRpEventsRoute
   AuthenticatedSanctionsRoute: typeof AuthenticatedSanctionsRoute
+  AuthenticatedServerLinksRoute: typeof AuthenticatedServerLinksRoute
   AuthenticatedSessionsRoute: typeof AuthenticatedSessionsRoute
   AuthenticatedStaffActivityRoute: typeof AuthenticatedStaffActivityRoute
   AuthenticatedStaffRolesRoute: typeof AuthenticatedStaffRolesRoute
@@ -1726,6 +1747,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedRecruitmentRoute: AuthenticatedRecruitmentRoute,
   AuthenticatedRpEventsRoute: AuthenticatedRpEventsRoute,
   AuthenticatedSanctionsRoute: AuthenticatedSanctionsRoute,
+  AuthenticatedServerLinksRoute: AuthenticatedServerLinksRoute,
   AuthenticatedSessionsRoute: AuthenticatedSessionsRoute,
   AuthenticatedStaffActivityRoute: AuthenticatedStaffActivityRoute,
   AuthenticatedStaffRolesRoute: AuthenticatedStaffRolesRoute,

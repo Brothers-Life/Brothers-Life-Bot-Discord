@@ -1,0 +1,37 @@
+meta {
+  name: POST /server-links/preview
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/server-links/preview
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "guildId": "000000000000000000"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/server-links/preview`
+
+  Permission requise : `serverlinks.manage`
+
+  Corps JSON :
+  - `name` (string)
+  - `guildId` (string) — obligatoire
+  - `channelId` (string)
+  - `enabled` (boolean)
+  - `payload` (object)
+  - `line` (string)
+  - `compact` (boolean)
+  - `scope` ("all" | "selected")
+  - `guildIds` (array)
+  - `includeSelf` (boolean)
+  - `buttons` (boolean)
+  - `repost` (boolean)
+}

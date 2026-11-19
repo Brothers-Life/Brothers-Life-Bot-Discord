@@ -1,0 +1,42 @@
+meta {
+  name: PUT /server-links/servers/:guildId
+  type: http
+  seq: 8
+}
+
+put {
+  url: {{baseUrl}}/api/server-links/servers/:guildId
+  body: json
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+body:json {
+  {
+    "listed": false,
+    "label": "label",
+    "description": "description",
+    "emoji": "emoji",
+    "inviteMode": "auto",
+    "inviteChannelId": null,
+    "inviteUrl": "inviteUrl"
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/server-links/servers/:guildId`
+
+  Permission requise : `serverlinks.manage`
+
+  Corps JSON :
+  - `listed` (boolean)
+  - `label` (string)
+  - `description` (string)
+  - `emoji` (string)
+  - `inviteMode` ("auto" | "manual")
+  - `inviteChannelId` (null | string)
+  - `inviteUrl` (string)
+}

@@ -101,6 +101,7 @@ export const navSections: NavSection[] = [
     icon: Server,
     items: [
       { title: 'Serveurs', url: '/network', icon: Network, permission: 'network.view' },
+      { title: 'Liens entre serveurs', url: '/server-links', icon: Link2, permission: 'serverlinks.view', keywords: 'invitation invitations discord annuaire partenaires liens' },
       { title: 'Modèles de serveur', url: '/templates', icon: LayoutTemplate, permission: 'templates.view' },
       { title: 'Sauvegardes', url: '/backups', icon: DatabaseBackup, permission: 'backups.view', keywords: 'backup restaurer' },
       { title: 'Archives de salons', url: '/archives', icon: Archive, permission: 'archives.view', keywords: 'export sauvegarde html transcript' },
