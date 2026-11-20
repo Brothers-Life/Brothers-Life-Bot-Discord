@@ -123,7 +123,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const stats = createStats({ db, network, audit, executor, logger });
 	const voiceRooms = createVoiceRooms({ db, network, audit, executor, logger });
 	const liveMessages = createLiveMessages({ db, network, audit, executor, stats, variables, logger });
-	const serverLinks = createServerLinks({ db, network, audit, executor, logs, variables, logger, mosaic: tiles => renderMosaic(tiles, { fetchImpl }) });
+	const serverLinks = createServerLinks({ db, network, audit, executor, logs, variables, logger, mosaic: (tiles, options) => renderMosaic(tiles, { ...options, fetchImpl }) });
 	const changelog = createChangelog({ db, network, audit, executor, logger });
 	logs.registerCategory('changelog', 'Changelog publié');
 	const polls = createPolls({ db, network, audit, executor, logger });

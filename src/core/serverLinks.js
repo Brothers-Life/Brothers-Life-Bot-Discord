@@ -27,7 +27,7 @@ const MAX_CATEGORIES = 25;
 const EMPTY_TEXT = '*Aucun autre serveur pour le moment.*';
 const OTHERS = 'Autres serveurs';
 
-export const DEFAULT_LINE = '{emoji} **[{name}]({invite})**\n{description}';
+export const DEFAULT_LINE = '{emoji} **[{name}]({invite})** — {description}';
 export const DEFAULT_CATEGORY_HEADER = '__**{emoji} {category}**__';
 export const DEFAULT_BOARD_PAYLOAD = {
 	content: '',
@@ -38,7 +38,8 @@ const hash = value => createHash('sha1').update(JSON.stringify(value)).digest('h
 const inviteUrl = code => (code ? `https://discord.gg/${code}` : null);
 const text = (value, max) => String(value ?? '').trim().slice(0, max);
 // Lines of a template without the holes left by an empty variable
-const tidy = value => value.split('\n').map(l => l.trim()).filter(Boolean).join('\n');
+// (and without the separator left alone at the end of a line: "**Nom** — " when there is no description)
+const tidy = value => value.split('\n').map(l => l.trim().replace(/\s+[—–·|:-]$/, '')).filter(Boolean).join('\n');
 // A template filled without the holes of its empty variables ("{emoji} **Nom**" without emoji: "**Nom**")
 const fill = (template, vars) => tidy(fillVars(template.replace(/\{([a-z.]+)\}[ \t]*/gi, (match, key) => (vars[key] === '' ? '' : match)), vars));
 // The network keeps a small icon (64 px): cards show a sharper one
@@ -292,16 +293,18 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 				};
 				// The logos of the category drawn in one image (rendered only when the message is really sent)
 				if (config.logos && group.entries.some(entry => entry.icon)) {
-					card.mosaic = { file: `logos-${index}.png`, tiles: group.entries.slice(0, MAX_TILES).map(entry => ({ name: entry.label || entry.name, icon: logoOf(entry.icon) })) };
+					card.mosaic = { file: `logos-${index}.png`, accent: card.color, tiles: group.entries.slice(0, MAX_TILES).map(entry => ({ name: entry.label || entry.name, icon: logoOf(entry.icon) })) };
 					card.imageUrl = `attachment://${card.mosaic.file}`;
 				}
 				return card;
 			}) : groups.flatMap((group) => {
-				const title = group.category && config.categoryHeader.trim() ? [{ enabled: true, description: header(group.category), color: group.category.color ?? color, fields: [] }] : [];
-				return [...title, ...group.entries.map((entry) => {
+				// The category is the small line above the name (plain text there: no custom emoji)
+				const label = group.category ? [/^</.test(group.category.emoji) ? '' : group.category.emoji, group.category.name].filter(Boolean).join(' ') : '';
+				return [...group.entries.map((entry) => {
 					const v = varsOf(entry, group.category);
 					return {
 						enabled: true,
+						authorName: label,
 						title: [v.emoji, v.name].filter(Boolean).join(' ').slice(0, 256),
 						url: v.invite,
 						description: [v.description, v.members && `👥 ${v.members} membres`].filter(Boolean).join('\n') || `[Rejoindre le serveur](${v.invite})`,
@@ -370,7 +373,7 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 		for (const { mosaic: wanted, ...card } of message.cards) {
 			if (wanted) {
 				try {
-					files.push({ name: wanted.file, buffer: await mosaic(wanted.tiles) });
+					files.push({ name: wanted.file, buffer: await mosaic(wanted.tiles, { accent: wanted.accent }) });
 				}
 				catch (error) {
 					logger.warn('Server links: mosaic of logos:', error.message);

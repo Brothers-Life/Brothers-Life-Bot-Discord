@@ -49,7 +49,7 @@ type LinkServer = {
 }
 type Category = { id: number; name: string; emoji: string; color: string | null; imageUrl: string | null }
 type Layout = 'list' | 'cards' | 'categories'
-type Card = { title?: string; url?: string; description?: string; thumbnailUrl?: string | null; imageUrl?: string | null; color: string; mosaic?: { tiles: { name: string; icon: string | null }[] } }
+type Card = { authorName?: string; title?: string; url?: string; description?: string; thumbnailUrl?: string | null; imageUrl?: string | null; color: string; mosaic?: { tiles: { name: string; icon: string | null }[] } }
 type SyncResult = { ok: boolean; error?: string }
 type Board = {
   id: number
@@ -451,7 +451,7 @@ function toDraft(b: Board | null, data: Payload): Draft {
     content: payload.content ?? '',
     embed: { ...EMPTY_EMBED, ...payload.embed },
     line: b?.line ?? data.defaults.line,
-    compact: b?.compact ?? false,
+    compact: b?.compact ?? true,
     scope: b?.scope ?? 'all',
     guildIds: b?.guildIds ?? [],
     layout: b?.layout ?? 'categories',
@@ -682,6 +682,7 @@ function BoardEditor({ board, data, manage, onSaved, onDeleted, onDirty }: { boa
                     {m.cards.map((c, j) => (
                       <div key={j} className='flex items-start gap-3 rounded border-l-4 bg-[#2b2d31] p-3 text-sm text-[#dbdee1]' style={{ borderLeftColor: c.color }}>
                         <div className='min-w-0 flex-1'>
+                          {c.authorName && <div className='text-xs font-medium'>{c.authorName}</div>}
                           {c.title && <div className='font-semibold text-[#00a8fc]'>{c.title}</div>}
                           {c.description && <div className='whitespace-pre-wrap break-words text-xs'>{c.description.replace(/[_*]{2}/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')}</div>}
                           {c.mosaic ? (

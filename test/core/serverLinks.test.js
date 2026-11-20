@@ -51,7 +51,7 @@ test('a board lists the other listed servers, with a button each', async () => {
 
 	const messages = only(executor, C_MAIN);
 	assert.equal(messages.length, 1, 'edited in place');
-	assert.equal(messages[0].embed.description, '🛡️ **[Brothers Life Staff](https://discord.gg/auto1)**\nLe serveur de l’équipe');
+	assert.equal(messages[0].embed.description, '🛡️ **[Brothers Life Staff](https://discord.gg/auto1)** — Le serveur de l’équipe');
 	assert.deepEqual(messages[0].buttons, [{ label: 'Brothers Life Staff', url: 'https://discord.gg/auto1', emoji: '🛡️' }]);
 
 	// Same content: nothing is sent to Discord
@@ -216,8 +216,8 @@ test('cards: one embed with the logo per server, continued in more messages', as
 	const created = await links.create(owner, board({ layout: 'cards', payload: { content: '', embed: { enabled: true, title: 'Nos serveurs', description: '{count} serveur' } } }));
 	const [message] = only(executor, C_MAIN);
 	assert.equal(message.embed.description, '1 serveur');
-	assert.deepEqual(message.cards.map(c => c.title ?? c.description), ['__**Gangs**__', 'Gang']);
-	const card = message.cards[1];
+	assert.deepEqual(message.cards.map(c => [c.authorName, c.title]), [['Gangs', 'Gang']]);
+	const card = message.cards[0];
 	assert.equal(card.url, 'https://discord.gg/auto1');
 	assert.equal(card.thumbnailUrl, 'https://cdn.discordapp.com/icons/1/a.png?size=256');
 	assert.equal(card.color, '#aa0000');
@@ -242,7 +242,7 @@ test('the panel board: servers dragged between categories, categories reordered'
 
 	// By default a board shows cards (the logos), and the default text keeps no empty list
 	const cards = await links.preview(owner, { guildId: MAIN, includeSelf: true });
-	assert.deepEqual(cards.messages[0].cards.map(c => c.title ?? c.description), ['__**Légal**__', 'Mairie']);
+	assert.deepEqual(cards.messages[0].cards.map(c => [c.authorName, c.title]), [['Légal', 'Mairie']]);
 	assert.doesNotMatch(cards.messages[0].embed.description, /\{links\}|discord\.gg/);
 });
 
@@ -261,7 +261,7 @@ test('one embed per category: its servers, and their logos drawn in one image', 
 	const [card] = read().cards;
 	assert.equal(card.title, '🏢 Légal');
 	assert.equal(card.color, '#00aa00');
-	assert.equal(card.description, '**[Mairie](https://discord.gg/auto1)**\n**[Garage](https://discord.gg/auto2)**\nRéparations');
+	assert.equal(card.description, '**[Mairie](https://discord.gg/auto1)**\n**[Garage](https://discord.gg/auto2)** — Réparations');
 	assert.equal(card.imageUrl, 'attachment://logos-0.png');
 	assert.equal(card.mosaic, undefined, 'only what Discord needs is sent');
 	assert.deepEqual(read().files.map(f => f.name), ['logos-0.png']);
