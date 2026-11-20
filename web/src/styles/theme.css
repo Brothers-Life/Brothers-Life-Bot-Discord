@@ -4,7 +4,7 @@
  * Warning is yellow and info is blue so neither is ever mistaken for the brand accent.
  */
 :root {
-  --radius: 0.625rem;
+  --radius: 0.5rem;
   --background: #faf5ee;
   --foreground: #1f1409;
   --card: #fffdfa;
@@ -48,9 +48,9 @@
 }
 
 .dark {
-  --background: #0e0b09;
+  --background: #0a0806;
   --foreground: #fff3e6;
-  --card: #16110d;
+  --card: #17110c;
   --card-foreground: #fff3e6;
   --popover: #1b1510;
   --popover-foreground: #fff3e6;
@@ -72,11 +72,11 @@
   --warning-foreground: #1c1500;
   --info: #5b9cf5;
   --info-foreground: #06101f;
-  --border: #2e2218;
-  --input: #3a2b1e;
+  --border: #34261a;
+  --input: #3f2e1f;
   --ring: #ff9628;
 
-  --sidebar: #0a0806;
+  --sidebar: #070504;
   --sidebar-foreground: #e8dccd;
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);

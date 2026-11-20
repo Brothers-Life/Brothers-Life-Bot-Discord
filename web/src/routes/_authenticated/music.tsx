@@ -77,20 +77,39 @@ function MusicPage() {
       {data && guild && (
         <div className='grid grid-cols-[minmax(0,1fr)] gap-6'>
           {data.guilds.length > 1 && (
-            <nav aria-label='Serveurs' className='flex gap-2 overflow-x-auto pb-1'>
-              {data.guilds.map((g) => (
+            <nav aria-label='Serveurs' className='flex flex-wrap items-center gap-2'>
+              <Select value={guild.id} onValueChange={setSelected}>
+                <SelectTrigger className='h-10 w-full sm:w-80' aria-label='Serveur'>
+                  <span className='flex min-w-0 items-center gap-2'>
+                    <GuildIcon src={guild.icon} name={guild.name} className='size-6' />
+                    <span className='truncate'>{guild.name}</span>
+                  </span>
+                </SelectTrigger>
+                <SelectContent className='max-h-80'>
+                  {data.guilds.map((g) => (
+                    <SelectItem key={g.id} value={g.id}>
+                      <span className='flex items-center gap-2'>
+                        <GuildIcon src={g.icon} name={g.name} className='size-5' />
+                        {g.name}
+                        {g.state.connected && <span className={cn('size-2 rounded-full', g.state.paused ? 'bg-muted-foreground' : 'bg-success')} aria-label='musique en cours' />}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {data.guilds.filter((g) => g.state.connected && g.id !== guild.id).map((g) => (
                 <button
                   key={g.id}
                   type='button'
                   onClick={() => setSelected(g.id)}
-                  aria-current={g.id === guild.id ? 'page' : undefined}
-                  className='flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors hover:bg-accent aria-[current=page]:border-primary aria-[current=page]:bg-primary/10'
+                  className='flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors hover:bg-accent'
                 >
+                  <span className={cn('live-dot size-2 rounded-full', g.state.paused ? 'bg-muted-foreground' : 'bg-success')} aria-hidden />
                   <GuildIcon src={g.icon} name={g.name} className='size-5' />
                   {g.name}
-                  {g.state.connected && <span className={cn('live-dot size-2 rounded-full', g.state.paused ? 'bg-muted-foreground' : 'bg-success')} aria-label='musique en cours' />}
                 </button>
               ))}
+              {!data.guilds.some((g) => g.state.connected) && <span className='text-sm text-muted-foreground'>Aucune musique en cours sur le réseau.</span>}
             </nav>
           )}
           <Player key={guild.id} guild={guild} data={data} />
@@ -146,7 +165,7 @@ function Player({ guild, data }: { guild: GuildInfo; data: Payload }) {
                 <div>
                   <p className='kicker'>À l’arrêt</p>
                   <h2 className='font-display text-2xl font-semibold'>Rien ne joue sur {guild.name}</h2>
-                  <p className='text-sm text-muted-foreground'>Ajoute un titre à droite : le bot rejoindra le salon vocal choisi.</p>
+                  <p className='text-sm text-muted-foreground'>Ajoute un titre juste en dessous : le bot rejoindra le salon vocal choisi.</p>
                 </div>
               ) : !track ? (
                 <div>
@@ -222,10 +241,10 @@ function Player({ guild, data }: { guild: GuildInfo; data: Payload }) {
         </section>
 
         {watching && videoId && track && <Clip videoId={videoId} position={position} trackId={track.id} />}
+        <AddMusic guild={guild} connected={state.connected} channelId={channelId} setChannelId={setChannelId} onAdded={refreshState} platforms={data.platforms} defaultPlatform={data.config.searchPlatform} />
       </div>
 
       <div className='grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-6'>
-        <AddMusic guild={guild} connected={state.connected} channelId={channelId} setChannelId={setChannelId} onAdded={refreshState} platforms={data.platforms} defaultPlatform={data.config.searchPlatform} />
         {state.connected && <Queue state={state} act={act} busy={control.isPending} />}
         <Playlists guildId={guild.id} connected={state.connected} channelId={channelId} onPlayed={refreshState} />
       </div>

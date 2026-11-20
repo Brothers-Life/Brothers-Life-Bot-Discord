@@ -22,8 +22,8 @@ export function Page({
   return (
     <>
       <Header fixed>
-        <span aria-hidden className='h-5 w-[3px] shrink-0 rounded-full bg-brand shadow-[0_0_10px_var(--brand)]' />
-        <h1 className='truncate font-display text-lg font-semibold tracking-[0.06em] uppercase'>{title}</h1>
+        <span aria-hidden className='slash text-2xl' />
+        <h1 className='truncate font-display text-xl font-semibold tracking-[0.07em] uppercase'>{title}</h1>
       </Header>
       <Main fixed={fixed} className='page-enter flex flex-col gap-6'>
         {(description || actions) && (
@@ -46,11 +46,11 @@ export function Section({ title, description, actions, children, className }: {
   className?: string
 }) {
   return (
-    <section className={cn('rounded-lg border bg-card', className)}>
-      <div className='flex flex-wrap items-start justify-between gap-3 border-b px-4 py-3'>
-        <div>
-          <h2 className='text-sm font-semibold'>{title}</h2>
-          {description && <p className='mt-0.5 text-sm text-muted-foreground'>{description}</p>}
+    <section className={cn('panel rounded-lg border bg-card', className)}>
+      <div className='panel-head flex flex-wrap items-start justify-between gap-3 border-b px-4 py-3'>
+        <div className='min-w-0'>
+          <h2 className='flex items-center gap-2.5 text-base font-semibold tracking-[0.02em]'><span aria-hidden className='slash' />{title}</h2>
+          {description && <p className='mt-1 max-w-3xl text-sm text-muted-foreground'>{description}</p>}
         </div>
         {actions}
       </div>
@@ -109,10 +109,10 @@ export function StatCards({ items, className }: { items: Stat[]; className?: str
   return (
     <div className={cn('stagger grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-4', className)}>
       {items.map(({ label, value, tone = 'neutral', icon: Icon, hint }) => (
-        <div key={label} className={cn('flex items-center gap-3 rounded-lg border bg-card px-4 py-3 transition-colors hover:border-brand/40', statTones[tone])}>
+        <div key={label} className={cn('stat-tile flex items-center gap-3 rounded-lg border bg-card py-3 pr-4 pl-5 transition-colors hover:border-brand/40', statTones[tone])}>
           {Icon && <span className='stat-icon grid size-10 shrink-0 place-items-center rounded-lg' aria-hidden><Icon className='size-5' /></span>}
           <div className='min-w-0'>
-            <div className='font-display text-2xl leading-tight font-semibold tabular-nums'>{typeof value === 'number' ? <CountUp value={value} /> : value}</div>
+            <div className='font-display text-3xl leading-tight font-semibold tabular-nums'>{typeof value === 'number' ? <CountUp value={value} /> : value}</div>
             <div className='truncate text-xs text-muted-foreground'>{label}{hint ? <> · {hint}</> : null}</div>
           </div>
         </div>
