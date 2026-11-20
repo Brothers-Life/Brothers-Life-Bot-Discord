@@ -107,7 +107,20 @@ export function createFakeExecutor() {
 			this.calls.push(['removeRole', guildId, userId, roleId]);
 		},
 		async getMemberRoleIds(guildId, userId) {
+			this.roleReads.push([guildId, userId]);
 			return memberRoles.get(`${guildId}:${userId}`) ?? null;
+		},
+		// Single reads of a member's roles (what a sync of a whole server must not do)
+		roleReads: [],
+		async memberRoleSnapshot(guildId, { roleIds = [], userIds = [] } = {}) {
+			const wanted = new Set(roleIds);
+			const asked = new Set(userIds);
+			const out = {};
+			for (const [key, roles] of memberRoles) {
+				const [guild, id] = key.split(':');
+				if (guild === guildId && (asked.has(id) || roles.some(r => wanted.has(r)))) out[id] = [...roles];
+			}
+			return out;
 		},
 		async listMembersWithAnyRole(guildId, roleIds) {
 			const wanted = new Set(roleIds);

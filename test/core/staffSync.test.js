@@ -215,3 +215,86 @@ test('same name: never a role above the bot, nor one with admin rights when the 
 	await core.staffSync.syncUser(ALICE);
 	assert.deepEqual(executor.memberRoles.get(`${OTHER}:${ALICE}`), []);
 });
+
+test('a sync of the whole network reads each server once, without fetching members one by one', async () => {
+	const { core, executor } = await setup();
+	executor.memberRoles.set(`${MAIN}:${ALICE}`, [MODO_MAIN]);
+	executor.memberRoles.set(`${OTHER}:${ALICE}`, [MODO_OTHER]);
+	// BOB holds the rank on the main server but is not on the other one
+	executor.memberRoles.set(`${MAIN}:${BOB}`, [MODO_MAIN]);
+	const snapshots = [];
+	const snapshot = executor.memberRoleSnapshot.bind(executor);
+	executor.memberRoleSnapshot = async (guildId, options) => {
+		snapshots.push(guildId);
+		return await snapshot(guildId, options);
+	};
+	executor.roleReads.length = 0;
+
+	const { changed } = await core.staffSync.syncAll();
+	assert.equal(changed, 0, 'already in sync');
+	assert.deepEqual(snapshots, [MAIN, OTHER]);
+	assert.deepEqual(executor.roleReads.filter(([guildId]) => guildId === OTHER), [], 'nobody is looked up one by one on a server');
+	assert.deepEqual(executor.calls.filter(([kind]) => kind === 'addRole' || kind === 'removeRole'), []);
+});
+
+test('only what a change concerns is redone', async () => {
+	const { core, executor, owner, modo } = await setup();
+	// What the setup itself asked for (new rank, new links) is done first
+	await core.staffSync.flush();
+	executor.memberRoles.set(`${MAIN}:${ALICE}`, [MODO_MAIN]);
+	executor.memberRoles.set(`${OTHER}:${ALICE}`, []);
+	executor.memberRoles.set(`${OTHER}:${BOB}`, []);
+	const reads = [];
+	const snapshot = executor.memberRoleSnapshot.bind(executor);
+	executor.memberRoleSnapshot = async (guildId, options) => {
+		reads.push(guildId);
+		return await snapshot(guildId, options);
+	};
+
+	// A rank given to one person: that person, no server read as a whole
+	await core.ranks.assignDirect(owner, BOB, modo.id);
+	await core.staffSync.flush();
+	assert.deepEqual(executor.memberRoles.get(`${OTHER}:${BOB}`), [MODO_OTHER]);
+	assert.deepEqual(executor.memberRoles.get(`${OTHER}:${ALICE}`), [], 'the others wait for their own change');
+	assert.deepEqual(reads, []);
+
+	// The links of one server: that server
+	await core.staffSync.setLinks(owner, modo.id, OTHER, [MODO_OTHER]);
+	await core.staffSync.flush();
+	assert.deepEqual(executor.memberRoles.get(`${OTHER}:${ALICE}`), [MODO_OTHER]);
+	assert.ok(reads.includes(OTHER));
+
+	// Nothing waiting: nothing done
+	reads.length = 0;
+	await core.staffSync.flush();
+	assert.deepEqual(reads, []);
+});
+
+test('role events: a moved role only checks the order, a renamed one redoes its server', async () => {
+	const { core, executor } = await setup();
+	await core.staffSync.flush();
+	executor.memberRoles.set(`${MAIN}:${ALICE}`, [MODO_MAIN]);
+	executor.memberRoles.set(`${OTHER}:${ALICE}`, []);
+	const reads = [];
+	const snapshot = executor.memberRoleSnapshot.bind(executor);
+	executor.memberRoleSnapshot = async (guildId, options) => {
+		reads.push(guildId);
+		return await snapshot(guildId, options);
+	};
+
+	// A role moved by hand on a satellite: only the order of that server is checked, members are left alone
+	await core.staffSync.roleChanged(OTHER, { moved: true });
+	await core.staffSync.flush();
+	assert.deepEqual(reads, []);
+	assert.deepEqual(executor.memberRoles.get(`${OTHER}:${ALICE}`), []);
+
+	await core.staffSync.roleChanged(OTHER, { renamed: true });
+	await core.staffSync.flush();
+	assert.deepEqual(executor.memberRoles.get(`${OTHER}:${ALICE}`), [MODO_OTHER]);
+
+	// A server outside the network is ignored
+	reads.length = 0;
+	await core.staffSync.roleChanged('399999999999999999', { renamed: true });
+	await core.staffSync.flush();
+	assert.deepEqual(reads, []);
+});

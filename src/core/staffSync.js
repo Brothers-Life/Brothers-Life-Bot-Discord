@@ -18,7 +18,10 @@ export function roleArrangement(all, block) {
 
 const COPIED_KEY = 'staffSync.copiedRoles';
 
-export function createStaffSync({ db, network, ranks, audit, executor, settings, logs, logger = console }) {
+// How long role moves on a server are taken for the bot's own (it just put the network roles in order there)
+const OWN_MOVE_MS = 20_000;
+
+export function createStaffSync({ db, network, ranks, audit, executor, settings, logs, logger = console, now = Date.now, delayMs = 1500 }) {
 	logs.registerCategory('staff_sync', 'Synchronisation des rôles du staff');
 
 	const q = {
@@ -98,6 +101,7 @@ export function createStaffSync({ db, network, ranks, audit, executor, settings,
 			const all = await executor.listRolePositions(guildId);
 			const positions = roleArrangement(all, block);
 			if (positions.length) {
+				ownMoves.set(guildId, now() + OWN_MOVE_MS);
 				await executor.moveRoles(guildId, positions);
 				await audit.record({ actorId: 'system', source: 'system', action: 'staff_sync.order', guildId, target: name, details: { rôles: block.length } });
 			}
@@ -109,16 +113,32 @@ export function createStaffSync({ db, network, ranks, audit, executor, settings,
 		}
 	}
 
-	async function syncMember(guildId, userId, { reason = 'Synchronisation du staff', mirror = null } = {}) {
-		const links = await linksOf(guildId, { syncedOnly: true });
+	// Roles of the members of a server who hold one of `roleIds` or are in `userIds`: { userId: [roleId] }.
+	// One call per server, answered from the member list the bot keeps: nobody is fetched one by one.
+	async function snapshot(guildId, roleIds, userIds) {
+		if (typeof executor.memberRoleSnapshot === 'function') return await executor.memberRoleSnapshot(guildId, { roleIds, userIds });
+		const out = {};
+		const ids = new Set(userIds);
+		for (const member of await executor.listMembersWithAnyRole(guildId, roleIds)) ids.add(member.id);
+		for (const id of ids) {
+			const roles = await executor.getMemberRoleIds(guildId, id);
+			if (roles) out[id] = roles;
+		}
+		return out;
+	}
+
+	// `known`: what a sync of the whole server already read (links, current roles, roles on the main server)
+	async function syncMember(guildId, userId, { reason = 'Synchronisation du staff', mirror = null, links = null, current = null, mainRoles = null } = {}) {
+		links ??= await linksOf(guildId, { syncedOnly: true });
 		mirror ??= await mirrorOf(guildId);
 		if (!links.size && !mirror.size) return null;
-		const current = await executor.getMemberRoleIds(guildId, userId);
+		current ??= await executor.getMemberRoleIds(guildId, userId);
 		if (!current) return null;
 
 		const principal = await ranks.resolve(userId);
 		const heldRankIds = new Set(principal.isOwner ? [] : principal.ranks.map(r => r.id));
-		const mainRoles = mirror.size ? (await executor.getMemberRoleIds(await network.getMainId(), userId)) ?? [] : [];
+		if (mirror.size) mainRoles ??= (await executor.getMemberRoleIds(await network.getMainId(), userId)) ?? [];
+		mainRoles ??= [];
 		const mirroredIds = new Set([...mirror.values()].map(m => m.roleId));
 		const managed = new Set([...links.values()].flat().concat([...mirroredIds]));
 		const desired = new Set([...links].filter(([rankId]) => heldRankIds.has(rankId)).flatMap(([, roles]) => roles)
@@ -149,9 +169,120 @@ export function createStaffSync({ db, network, ranks, audit, executor, settings,
 		return { added: toAdd, removed: toRemove, errors };
 	}
 
+	// Who can be concerned on any server: rank holders and holders of the roles that give a rank on the main
+	// server, with their roles there. Read once for a sync of several servers.
+	async function holdersOfMain() {
+		const mainId = await network.getMainId();
+		const holders = new Set((await q.direct.all()).map(r => r.discord_id));
+		const mainRolesOf = new Map();
+		if (mainId) {
+			const sourceRoles = new Set([...(await linksOf(mainId)).values()].flat());
+			for (const [userId, roles] of Object.entries(await snapshot(mainId, [...sourceRoles], [...holders]))) {
+				mainRolesOf.set(userId, roles);
+				if (roles.some(r => sourceRoles.has(r))) holders.add(userId);
+			}
+		}
+		return { holders, mainRolesOf };
+	}
+
+	// One server: order of its network roles, then the members whose roles differ from what they should hold.
+	// A server already in sync costs one read of its member list and no change.
+	async function syncGuild(guildId, shared = null) {
+		const aligned = await alignRoles(guildId);
+		const links = await linksOf(guildId, { syncedOnly: true });
+		const mirror = await mirrorOf(guildId);
+		if (!links.size && !mirror.size) return { aligned, changed: 0 };
+		shared ??= await holdersOfMain();
+		const roleIds = [...links.values()].flat().concat([...mirror.values()].map(m => m.roleId));
+		let changed = 0;
+		for (const [userId, current] of Object.entries(await snapshot(guildId, roleIds, [...shared.holders]))) {
+			const result = await syncMember(guildId, userId, { mirror, links, current, mainRoles: shared.mainRolesOf.get(userId) ?? [] }).catch(() => null);
+			if (result && (result.added.length || result.removed.length)) changed++;
+		}
+		return { aligned, changed };
+	}
+
+	async function syncUser(userId) {
+		const results = {};
+		for (const guildId of await satelliteIds()) results[guildId] = await syncMember(guildId, userId).catch(e => ({ error: e.message }));
+		return results;
+	}
+
+	async function syncEverything() {
+		const shared = await holdersOfMain();
+		let changed = 0;
+		const order = [];
+		for (const guildId of await satelliteIds()) {
+			const result = await syncGuild(guildId, shared);
+			if (result.aligned) order.push(result.aligned);
+			changed += result.changed;
+		}
+		return { changed, order };
+	}
+
+	// One sync at a time: two running together would give and take the same roles twice
+	let chain = Promise.resolve();
+	const exclusive = (work) => {
+		const result = chain.then(work, work);
+		chain = result.catch(() => undefined);
+		return result;
+	};
+
+	// --- what has to be redone, gathered for a moment then done once ------------------------------------------------
+	const ownMoves = new Map();
+	const pending = { all: false, guilds: new Set(), users: new Set(), order: new Set() };
+	let timer = null;
+
+	async function flush() {
+		clearTimeout(timer);
+		timer = null;
+		const todo = { all: pending.all, guilds: [...pending.guilds], users: [...pending.users], order: [...pending.order] };
+		pending.all = false;
+		for (const set of [pending.guilds, pending.users, pending.order]) set.clear();
+		if (!todo.all && !todo.guilds.length && !todo.users.length && !todo.order.length) return;
+		await exclusive(async () => {
+			if (todo.all) return void await syncEverything();
+			const satellites = new Set(await satelliteIds());
+			const guilds = todo.guilds.filter(id => satellites.has(id));
+			const shared = guilds.length ? await holdersOfMain() : null;
+			for (const guildId of guilds) await syncGuild(guildId, shared);
+			// Members: only on the servers that were not just redone as a whole
+			for (const userId of todo.users) {
+				for (const guildId of satellites) if (!guilds.includes(guildId)) await syncMember(guildId, userId).catch(() => null);
+			}
+			for (const guildId of todo.order) if (satellites.has(guildId) && !guilds.includes(guildId)) await alignRoles(guildId);
+		}).catch(error => logger.error('Staff sync failed:', error));
+	}
+
+	// { all: true } | { guilds: [id] } | { users: [id] } | { order: [guildId] }: done together a moment later,
+	// and only that (a change on one server never redoes the others)
+	function schedule(what = {}) {
+		if (what.all) pending.all = true;
+		for (const key of ['guilds', 'users', 'order']) for (const id of what[key] ?? []) pending[key].add(String(id));
+		// Not pushed back by each new change: a burst of changes waits `delayMs` at most
+		if (timer) return;
+		timer = setTimeout(() => void flush(), delayMs);
+		timer.unref?.();
+	}
+
 	return {
 		linksOf,
 		syncMember,
+		syncGuild: guildId => exclusive(() => syncGuild(guildId)),
+		schedule,
+		flush,
+
+		// A role was created, renamed or moved on Discord. Roles are mirrored by name from the main server, and the
+		// order of the network roles follows it: a change there concerns every server, a change elsewhere only that one.
+		async roleChanged(guildId, { renamed = false, moved = false } = {}) {
+			const mainId = await network.getMainId();
+			if (!mainId || (await network.find(guildId))?.status !== 'active') return;
+			if (renamed) return schedule(guildId === mainId ? { all: true } : { guilds: [guildId] });
+			if (!moved) return;
+			// The bot's own reordering comes back as "role moved" events: they ask for nothing
+			if ((ownMoves.get(guildId) ?? 0) > now()) return;
+			schedule({ order: guildId === mainId ? await satelliteIds() : [guildId] });
+		},
 
 		// Links of every rank on every server (main server links = roles that grant the rank)
 		async overview() {
@@ -327,38 +458,9 @@ export function createStaffSync({ db, network, ranks, audit, executor, settings,
 		},
 
 		// One member, every server (e.g. their roles changed on the main server)
-		async syncUser(userId) {
-			const results = {};
-			for (const guildId of await satelliteIds()) results[guildId] = await syncMember(guildId, userId).catch(e => ({ error: e.message }));
-			return results;
-		},
+		syncUser,
 
-		// Everybody concerned: rank holders and current holders of linked roles
-		async syncAll() {
-			const mainId = await network.getMainId();
-			const holders = new Set((await q.direct.all()).map(r => r.discord_id));
-			if (mainId) {
-				const sourceRoles = [...(await linksOf(mainId)).values()].flat();
-				for (const m of await executor.listMembersWithAnyRole(mainId, sourceRoles)) holders.add(m.id);
-			}
-
-			let changed = 0;
-			const order = [];
-			for (const guildId of await satelliteIds()) {
-				const aligned = await alignRoles(guildId);
-				if (aligned) order.push(aligned);
-				const links = await linksOf(guildId, { syncedOnly: true });
-				const mirror = await mirrorOf(guildId);
-				if (!links.size && !mirror.size) continue;
-				const people = new Set(holders);
-				const roleIds = [...links.values()].flat().concat([...mirror.values()].map(m => m.roleId));
-				for (const m of await executor.listMembersWithAnyRole(guildId, roleIds)) people.add(m.id);
-				for (const userId of people) {
-					const result = await syncMember(guildId, userId, { mirror }).catch(() => null);
-					if (result && (result.added.length || result.removed.length)) changed++;
-				}
-			}
-			return { changed, order };
-		},
+		// Everybody concerned, on every server: rank holders and current holders of linked roles
+		syncAll: () => exclusive(syncEverything),
 	};
 }

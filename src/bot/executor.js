@@ -136,6 +136,21 @@ export function createExecutor(client) {
 		return guild;
 	}
 
+	// Servers whose whole member list was loaded: the gateway then keeps it up to date (joins, leaves, role changes)
+	const fullMemberLists = new Set();
+	const memberLoads = new Map();
+	async function allMembers(guild) {
+		if (fullMemberLists.has(guild.id)) return;
+		if (!memberLoads.has(guild.id)) {
+			memberLoads.set(guild.id, guild.members.fetch()
+				.then(() => fullMemberLists.add(guild.id))
+				// Not loaded (timeout on a huge server...): the cache is used as it is, and the load is tried again next time
+				.catch(() => null)
+				.finally(() => memberLoads.delete(guild.id)));
+		}
+		await memberLoads.get(guild.id);
+	}
+
 	async function memberOf(guild, userId) {
 		try {
 			return guild.members.cache.get(userId) ?? await guild.members.fetch(userId);
@@ -1408,9 +1423,26 @@ export function createExecutor(client) {
 		},
 
 		// null when the user is not a member of that server
+		// Roles of the members holding one of `roleIds` or listed in `userIds`: { userId: [roleId] }, from the full
+		// member list (people who are not on the server are simply absent)
+		async memberRoleSnapshot(guildId, { roleIds = [], userIds = [] } = {}) {
+			const guild = client.guilds.cache.get(guildId);
+			if (!guild) return {};
+			await allMembers(guild);
+			const wanted = new Set(roleIds);
+			const users = new Set(userIds);
+			const out = {};
+			for (const member of guild.members.cache.values()) {
+				if (users.has(member.id) || member.roles.cache.some(r => wanted.has(r.id))) out[member.id] = [...member.roles.cache.keys()];
+			}
+			return out;
+		},
+
 		async getMemberRoleIds(guildId, userId) {
 			const guild = client.guilds.cache.get(guildId);
 			if (!guild) return null;
+			// The whole member list is known: someone missing from it is not on the server (no request to Discord)
+			if (fullMemberLists.has(guildId) && !guild.members.cache.has(userId)) return null;
 			try {
 				const member = guild.members.cache.get(userId) ?? await guild.members.fetch(userId);
 				return [...member.roles.cache.keys()];

@@ -107,7 +107,8 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	logs.registerCategory('sanctions', 'Sanctions (ban, kick, timeout, warn)');
 	const events = createEvents({ db, network, logs, settings });
 	const automod = createAutomod({ db, network, sanctions, ranks, audit, executor, logs, logger });
-	const staffSync = createStaffSync({ db, network, ranks, audit, executor, settings, logs, logger });
+	// Under the test runner the delayed resync keeps its old 5 s: tests count the calls made to Discord
+	const staffSync = createStaffSync({ db, network, ranks, audit, executor, settings, logs, logger, delayMs: process.env.NODE_TEST_CONTEXT ? 5000 : 1500 });
 	const members = createMembers({ db, network, ranks, sanctions, audit, executor });
 	const moderation = createModeration({ db, network, ranks, audit, executor, settings, members, logs, logger });
 	const roleImport = createRoleImport({ db, network, ranks, staffSync, executor, audit });
@@ -198,27 +199,22 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	// Rank links point to roles of the main server: changing it invalidates every cached permission
 	network.on('mainChanged', () => ranks.invalidate());
 
-	// Any rank change can move staff roles: resync everybody a few seconds later (changes often come in bursts)
-	let resync = null;
-	const scheduleResync = () => {
-		clearTimeout(resync);
-		resync = setTimeout(() => staffSync.syncAll().catch(error => logger.error('Staff sync failed:', error)), 5000);
-		resync.unref?.();
-	};
+	// A rank change can move staff roles: only what it concerns is redone, a moment later (changes come in bursts).
+	// One person's rank: that person. The links of one server: that server. A rank itself, or the main server: everybody.
 	const reactToAudit = (entry) => {
-		if (entry.action.startsWith('ranks.') || entry.action === 'staff_sync.links' || entry.action === 'network.main') scheduleResync();
+		if (entry.action === 'ranks.assign' || entry.action === 'ranks.unassign') staffSync.schedule({ users: [entry.target] });
+		else if (entry.action === 'staff_sync.links' && entry.guildId) staffSync.schedule({ guilds: [entry.guildId] });
+		else if (entry.action.startsWith('ranks.') || entry.action === 'staff_sync.links' || entry.action === 'network.main') staffSync.schedule({ all: true });
 	};
-	// A server joining the network gets the network bans and hands over its own ban list
+	// A server joining the network gets its staff roles, the network bans, and hands over its own ban list
 	const onActivated = (guild) => {
-		scheduleResync();
+		staffSync.schedule({ guilds: [guild.id] });
 		sanctions.syncGuild(guild.id).catch(error => logger.error(`Ban sync failed on ${guild.name}:`, error));
 	};
 	// In the API process these reactions are left to the bot, which hears of the API's changes (remoteAudit)
 	if (!remote) {
 		audit.onRecord(reactToAudit);
 		network.on('activated', onActivated);
-		// Roles created or renamed on Discord can change the staff roles mirrored by name (bot events)
-		staffSync.scheduleSyncAll = scheduleResync;
 	}
 
 	// An audit entry recorded by the other process (bot or API): cached servers and ranks are refreshed,
