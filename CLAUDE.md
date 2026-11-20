@@ -67,6 +67,10 @@ Réseau de serveurs, rangs et permissions synchronisés, staff sync, sanctions (
 - Image Docker : l'étape panel fait `npx vite build` (les types sont vérifiés par la CI), cache npm en `RUN --mount=type=cache` (BuildKit).
 - Tâche toutes les 10 min (`tick`) : invitations revérifiées une fois par heure (auto : recréée, manuelle : erreur affichée), serveurs entrés/sortis du réseau. Permissions `serverlinks.view` / `.manage`.
 
+### Synchro du staff (`src/core/staffSync.js`)
+- Ciblée : `staffSync.schedule({ all | guilds | users | order })` regroupe les demandes 1,5 s puis ne refait que ça (`flush()` dans les tests, une seule synchro à la fois). `ranks.assign/unassign` → la personne ; `staff_sync.links`, rôle créé/renommé, serveur activé → ce serveur ; rôle seulement déplacé → ordre des rôles du serveur (`roleChanged`, ignoré 20 s après un `moveRoles` du bot) ; autre `ranks.*`, serveur principal → tout.
+- Jamais de lecture membre par membre dans une synchro de serveur : `executor.memberRoleSnapshot(guildId, { roleIds, userIds })` répond depuis la liste complète des membres (chargée une fois par serveur, `fullMemberLists`), et `getMemberRoleIds` ne demande plus rien à Discord pour un absent d'un serveur chargé.
+
 ### Commandes et panel après l'audit de logique (v1.11.0)
 - Commandes staff masquées aux membres (`setDefaultMemberPermissions(ModerateMembers)`). `/ticket` (membre) = `fermer` seulement ; gestion dans `/ticket-staff`. `/maintenance` (sorti de `/fivem`), `/fiche` (ex-`/userinfo`), `/sanction lever|modele` (ex-`/lever`, `/sanctionner`), `/aide`, `/info membre|giveaways`, `/bug` (boîtes de type bug) vs `/proposer` (type suggestion, `config.type` des boîtes).
 - Erreurs montrées aux membres : `src/bot/userError.js` (« Ton rang ne te permet pas de : <label> » via `permissionLabel`), messages toujours en français tutoyé, pas de cooldown global.
