@@ -109,3 +109,30 @@ test('invites: network servers allowed by default, extra codes allowed, others r
 	const strict = await core.automod.handleMessage(facts({ userId: '300000000000000003', content: 'discord.gg/brotherslife' }));
 	assert.equal(strict.rule, 'invite', 'network invites blocked when the option is off');
 });
+
+test('pings: protected ranks, their roles and listed people; replies and plain members pass', async () => {
+	const { core, owner, executor } = await setup();
+	const STAFF_ROLE = '800000000000000001';
+	const VIP = '300000000000000009';
+	const modo = await core.ranks.create(owner, { name: 'Modo', level: 40, permissions: [] });
+	await core.ranks.setRoleLinks(owner, modo.id, [STAFF_ROLE]);
+	executor.memberRoles.set(`${MAIN}:${ALICE}`, [STAFF_ROLE]);
+	await core.automod.setConfig(owner, NETWORK, { pings: { enabled: true, protectedRanks: [String(modo.id), 'pas un rang'], protectedUsers: [VIP] } });
+	assert.deepEqual((await core.automod.getConfig(MAIN)).pings.protectedRanks, [String(modo.id)]);
+	const ping = (userId, over) => core.automod.handleMessage(facts({ userId, content: 'coucou', ...over }));
+
+	const blocked = await ping('300000000000000002', { mentionedUserIds: [ALICE] });
+	assert.equal(blocked.rule, 'ping');
+	assert.match(blocked.reason, new RegExp(`<@${ALICE}>`));
+	assert.equal((await ping('300000000000000003', { mentionedRoleIds: [STAFF_ROLE] })).rule, 'ping');
+	assert.equal((await ping('300000000000000004', { mentionedUserIds: [VIP] })).rule, 'ping');
+
+	// A reply to the staff, someone who is not protected, one's own mention, an edited message: nothing
+	assert.equal(await ping('300000000000000005', { mentionedUserIds: [ALICE], repliedUserId: ALICE }), null);
+	assert.equal(await ping('300000000000000005', { mentionedUserIds: ['300000000000000006'], mentionedRoleIds: ['810000000000000777'] }), null);
+	assert.equal(await ping(VIP, { mentionedUserIds: [VIP] }), null);
+	assert.equal(await core.automod.handleMessage(facts({ userId: '300000000000000005', mentionedUserIds: [ALICE] }), { edited: true }), null);
+
+	await core.automod.setConfig(owner, NETWORK, { pings: { enabled: true, protectedRanks: [String(modo.id)], allowReplies: false } });
+	assert.equal((await ping('300000000000000007', { mentionedUserIds: [ALICE], repliedUserId: ALICE })).rule, 'ping');
+});

@@ -11,6 +11,9 @@ export const DEFAULT_CONFIG = {
 	scam: { enabled: true, action: 'network_ban', customDomains: [], customPatterns: [], blockEveryoneLinks: true },
 	// allowNetwork: invites to the servers of the network are always fine
 	invites: { enabled: false, action: 'delete', allowNetwork: true, allowedCodes: [] },
+	// Mentions of the staff: members holding one of these ranks (ids, as strings), the roles linked to those ranks,
+	// and these people. allowReplies: the mention that comes with a reply is not counted.
+	pings: { enabled: false, action: 'delete', timeoutMinutes: 10, protectedRanks: [], protectedUsers: [], allowReplies: true },
 };
 
 // Merges a partial config over the defaults, keeping only known keys
@@ -20,7 +23,7 @@ export function normalizeConfig(input = {}) {
 	for (const key of ['exemptRoles', 'exemptChannels']) {
 		if (Array.isArray(input[key])) out[key] = input[key].filter(v => typeof v === 'string').slice(0, 100);
 	}
-	for (const section of ['spam', 'uploads', 'scam', 'invites']) {
+	for (const section of ['spam', 'uploads', 'scam', 'invites', 'pings']) {
 		for (const [key, fallback] of Object.entries(DEFAULT_CONFIG[section])) {
 			const value = input[section]?.[key];
 			if (value === undefined) continue;
@@ -32,6 +35,9 @@ export function normalizeConfig(input = {}) {
 	}
 	// "https://discord.gg/abc" or "abc": keep the code only
 	out.invites.allowedCodes = out.invites.allowedCodes.map(code => code.split('/').filter(Boolean).pop());
+	out.pings.protectedRanks = out.pings.protectedRanks.filter(id => /^\d{1,9}$/.test(id));
+	out.pings.protectedUsers = out.pings.protectedUsers.filter(id => /^\d{17,20}$/.test(id));
+	out.pings.timeoutMinutes = Math.min(out.pings.timeoutMinutes, 40_320);
 	out.spam.timeoutMinutes = Math.min(out.spam.timeoutMinutes, 40_320);
 	out.uploads.timeoutMinutes = Math.min(out.uploads.timeoutMinutes, 40_320);
 	return out;
@@ -81,7 +87,11 @@ export function createAutomodEngine({ now = Date.now, historySeconds = 120 } = {
 				if (codes.length) return verdict(config.invites, 'invite', `invitation Discord (${codes[0]})`);
 			}
 
+			// A mention added by editing a message notifies nobody
 			if (edited) return null;
+
+			// protectedPing: who of the staff the message mentions (worked out by the service, which knows the ranks)
+			if (config.pings.enabled && message.protectedPing) return verdict(config.pings, 'ping', `mention du staff (${message.protectedPing})`);
 
 			const key = `${message.guildId}:${message.userId}`;
 			const entries = recent(key);

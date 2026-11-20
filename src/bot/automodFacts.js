@@ -10,6 +10,10 @@ export function automodFacts(message) {
 		mentionCount: (message.mentions?.users.size ?? 0) + (message.mentions?.roles.size ?? 0),
 		attachmentCount: message.attachments?.size ?? 0,
 		hasEveryone: Boolean(message.mentions?.everyone),
+		// For the protection of the staff against mentions (bots are never "pinged staff")
+		mentionedUserIds: [...(message.mentions?.users.values() ?? [])].filter(user => !user.bot).map(user => user.id),
+		mentionedRoleIds: [...(message.mentions?.roles.keys() ?? [])],
+		repliedUserId: message.mentions?.repliedUser?.id ?? null,
 		roleIds: message.member ? [...message.member.roles.cache.keys()] : [],
 		isBot: Boolean(message.author.bot || message.webhookId || message.system),
 	};

@@ -51,6 +51,28 @@ export function createAutomod({ db, network, sanctions, ranks, audit, executor, 
 		return guildId;
 	}
 
+	// The first protected member of the staff (or staff role) a message mentions, as a text for the log; null if none.
+	// The author's own mention never counts, nor the one of a reply when replies are allowed.
+	const linkedRoles = db.prepare('SELECT rank_id, role_id FROM rank_roles');
+	async function protectedPing(rule, facts) {
+		const ranksWanted = new Set(rule.protectedRanks.map(Number));
+		const skipped = new Set([facts.userId, ...(rule.allowReplies && facts.repliedUserId ? [facts.repliedUserId] : [])]);
+		const users = (facts.mentionedUserIds ?? []).filter(id => !skipped.has(id)).slice(0, 20);
+		for (const userId of users) {
+			if (rule.protectedUsers.includes(userId)) return `<@${userId}>`;
+			if (!ranksWanted.size) continue;
+			const principal = await ranks.resolve(userId).catch(() => null);
+			if (principal?.ranks.some(r => ranksWanted.has(r.id))) return `<@${userId}>`;
+		}
+		const roles = facts.mentionedRoleIds ?? [];
+		if (roles.length && ranksWanted.size) {
+			const staffRoles = new Set((await linkedRoles.all()).filter(r => ranksWanted.has(r.rank_id)).map(r => r.role_id));
+			const hit = roles.find(id => staffRoles.has(id));
+			if (hit) return `<@&${hit}>`;
+		}
+		return null;
+	}
+
 	// Invite codes of the message that lead to a server of the network
 	async function networkInvites(content) {
 		const codes = extractInvites(content);
@@ -123,6 +145,9 @@ export function createAutomod({ db, network, sanctions, ranks, audit, executor, 
 
 			if (config.invites.enabled && config.invites.allowNetwork && extractInvites(facts.content ?? '').length) {
 				facts = { ...facts, allowedInvites: await networkInvites(facts.content) };
+			}
+			if (config.pings.enabled && !edited && (facts.mentionedUserIds?.length || facts.mentionedRoleIds?.length)) {
+				facts = { ...facts, protectedPing: await protectedPing(config.pings, facts) };
 			}
 			const verdict = engine.evaluate(config, facts, { edited });
 			if (!verdict) return null;

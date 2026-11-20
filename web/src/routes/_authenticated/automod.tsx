@@ -150,7 +150,8 @@ function AutomodForm({ target, initial, inherited, editable, onDirty }: { target
   useEffect(() => { onDirty(dirty) }, [dirty, onDirty])
 
   const update = <K extends keyof AutomodConfig>(key: K, value: AutomodConfig[K]) => setConfig((c) => ({ ...c, [key]: value }))
-  const patch = <K extends 'spam' | 'uploads' | 'scam' | 'invites'>(key: K, value: Partial<AutomodConfig[K]>) =>
+  const staffRanks = useQuery({ queryKey: ['automod'], queryFn: () => api<AutomodPayload & { ranks?: { id: number; name: string; color: string | null; level: number }[] }>('/automod') }).data?.ranks ?? []
+  const patch = <K extends 'spam' | 'uploads' | 'scam' | 'invites' | 'pings'>(key: K, value: Partial<AutomodConfig[K]>) =>
     setConfig((c) => ({ ...c, [key]: { ...c[key], ...value } }))
   const toggleIn = (key: 'exemptRoles' | 'exemptChannels', id: string) =>
     update(key, config[key].includes(id) ? config[key].filter((v) => v !== id) : [...config[key], id])
@@ -240,6 +241,35 @@ function AutomodForm({ target, initial, inherited, editable, onDirty }: { target
           <Label htmlFor='invite-codes'>Autres invitations autorisées (code ou lien, une par ligne)</Label>
           <Textarea id='invite-codes' rows={3} value={lines(config.invites.allowedCodes)} onChange={(e) => patch('invites', { allowedCodes: toList(e.target.value) })} disabled={disabled} placeholder='https://discord.gg/partenaire' />
         </div>
+      </Block>
+
+      <Block title='Mentions du staff' description='Empêche les membres de mentionner le staff. Le staff lui-même et les rôles exemptés ne sont pas concernés.' enabled={config.pings.enabled} onToggle={(v) => patch('pings', { enabled: v })} disabled={disabled}>
+        <ActionField id='pings-action' section={config.pings} onChange={(p) => patch('pings', p)} disabled={disabled} />
+        <fieldset>
+          <legend className='mb-2 text-sm font-medium'>Rangs protégés</legend>
+          {!staffRanks.length ? <p className='text-sm text-muted-foreground'>Aucun rang créé.</p> : (
+            <div className='grid gap-1 sm:grid-cols-2'>
+              {staffRanks.map((r) => (
+                <label key={r.id} className='flex items-center gap-2 text-sm'>
+                  <Checkbox
+                    checked={config.pings.protectedRanks.includes(String(r.id))} disabled={disabled}
+                    onCheckedChange={(v) => patch('pings', { protectedRanks: v === true ? [...config.pings.protectedRanks, String(r.id)] : config.pings.protectedRanks.filter((id) => id !== String(r.id)) })}
+                  />
+                  <span style={r.color ? { color: r.color } : undefined}>{r.name}</span>
+                </label>
+              ))}
+            </div>
+          )}
+          <p className='mt-2 text-xs text-muted-foreground'>Sont protégés : les membres qui ont un de ces rangs, et les rôles Discord liés à ces rangs.</p>
+        </fieldset>
+        <div className='grid gap-1.5'>
+          <Label htmlFor='ping-users'>Personnes protégées en plus (un identifiant Discord par ligne)</Label>
+          <Textarea id='ping-users' rows={2} value={lines(config.pings.protectedUsers)} onChange={(e) => patch('pings', { protectedUsers: toList(e.target.value) })} disabled={disabled} placeholder='123456789012345678' />
+        </div>
+        <label className='flex items-center gap-2 text-sm'>
+          <Checkbox checked={config.pings.allowReplies} onCheckedChange={(v) => patch('pings', { allowReplies: v === true })} disabled={disabled} />
+          Autoriser la mention automatique quand on répond à un message du staff
+        </label>
       </Block>
 
       {target !== NETWORK && options.data && (

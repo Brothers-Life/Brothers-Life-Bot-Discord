@@ -9,6 +9,8 @@ export function registerAutomodRoutes(app, { core }) {
 	app.get('/api/automod', { config: { permission: 'automod.view' } }, async () => ({
 		...await automod.describe(),
 		defaults: await automod.defaults(),
+		// To choose the ranks protected against mentions
+		ranks: (await core.ranks.list()).map(({ id, name, color, level }) => ({ id, name, color, level })),
 	}));
 
 	// Channels and roles of a server, for the exemptions
