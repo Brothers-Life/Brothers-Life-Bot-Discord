@@ -23,7 +23,7 @@ function statsOf(tile) {
 }
 
 // A text on at most `maxLines` lines of `maxWidth`: the font shrinks before anything is cut
-function fitText(ctx, text, { family, size, minSize, maxWidth, maxLines }) {
+export function fitText(ctx, text, { family, size, minSize, maxWidth, maxLines }) {
 	const words = text.split(/\s+/).filter(Boolean);
 	for (let current = size; current >= minSize; current -= 1) {
 		ctx.font = `${current}px "${family}"`;
@@ -56,7 +56,7 @@ function fitText(ctx, text, { family, size, minSize, maxWidth, maxLines }) {
 	return { lines, size: minSize };
 }
 
-function drawLines(ctx, fitted, x, y, { family, lineHeight = 1.2, color = INK }) {
+export function drawLines(ctx, fitted, x, y, { family, lineHeight = 1.2, color = INK }) {
 	ctx.font = `${fitted.size}px "${family}"`;
 	ctx.fillStyle = color;
 	ctx.textBaseline = 'top';
@@ -65,7 +65,7 @@ function drawLines(ctx, fitted, x, y, { family, lineHeight = 1.2, color = INK })
 }
 
 // "Brackets" of the Brothers Life look: an L in each corner
-function brackets(ctx, width, height, color) {
+export function brackets(ctx, width, height, color) {
 	const inset = 12;
 	const length = 26;
 	ctx.strokeStyle = color;
@@ -80,7 +80,7 @@ function brackets(ctx, width, height, color) {
 	}
 }
 
-function panel(width, height) {
+export function panel(width, height) {
 	const canvas = createCanvas(width, height);
 	const ctx = canvas.getContext('2d');
 	const background = ctx.createLinearGradient(0, 0, width, height);
@@ -95,7 +95,7 @@ function panel(width, height) {
 }
 
 // Logo in a circle with a ring, or the initials when the server has none
-function drawLogo(ctx, image, tile, centerX, centerY, size, tint) {
+export function drawLogo(ctx, image, tile, centerX, centerY, size, tint) {
 	ctx.save();
 	ctx.beginPath();
 	ctx.arc(centerX, centerY, size / 2, 0, Math.PI * 2);
@@ -121,7 +121,7 @@ function drawLogo(ctx, image, tile, centerX, centerY, size, tint) {
 }
 
 // An image covering a box (cropped, never stretched)
-function cover(ctx, image, x, y, width, height) {
+export function cover(ctx, image, x, y, width, height) {
 	const scale = Math.max(width / image.width, height / image.height);
 	const w = image.width * scale;
 	const h = image.height * scale;
