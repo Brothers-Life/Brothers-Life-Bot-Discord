@@ -534,3 +534,49 @@ test('perf text of FiveM is parsed into tick metrics', () => {
 		{ metric: 'tick_bucket', thread: 'svNetwork', le: 0.01, value: 45 },
 	]);
 });
+
+test('characters deleted in the game leave the lists and the statistics, their history stays', async () => {
+	const { db, telemetry } = await setup();
+	const snapshot = (citizenid, name, bank, extra = {}) => ({ type: 'player_snapshot', citizenid, player_name: name, src: 1, ts: ago(5), data: { job: 'police', job_grade: 1, gang: 'ballas', cash: 0, bank, crypto: 0, online: false, ...extra } });
+	await telemetry.ingestBatch({ events: [snapshot('AAA11111', 'Alice Vivante', 5000), snapshot('BBB22222', 'Bob Efface', 900_000, { online: true }), snapshot('CCC33333', 'Carl Aterre', 100)] });
+	const ids = list => list.players.map(p => p.citizenid);
+
+	// Without the copy of the game's characters nobody can be told deleted: everybody is listed, and it is said
+	await db.raw('DROP TABLE IF EXISTS fivem.players');
+	const unchecked = await telemetry.players(admin, {});
+	assert.equal(unchecked.checked, false);
+	assert.deepEqual(ids(unchecked), ['BBB22222', 'AAA11111', 'CCC33333'], 'the richest first');
+	assert.equal(unchecked.players[0].deleted, null);
+
+	// An empty copy (first sync not finished) deletes nobody either
+	await db.raw('CREATE TABLE fivem.players (citizenid TEXT PRIMARY KEY, metadata TEXT)');
+	try {
+		assert.equal((await telemetry.players(admin, {})).checked, false);
+		// The answer about the copy is remembered for a minute: a new service reads it again
+		const fresh = (await setup()).telemetry;
+		await db.raw('INSERT INTO fivem.players (citizenid, metadata) VALUES ($1, $2), ($3, $4)', ['AAA11111', '{"isdead":false}', 'CCC33333', '{"isdead":true}']);
+		await fresh.ingestBatch({ events: [snapshot('AAA11111', 'Alice Vivante', 5000), snapshot('BBB22222', 'Bob Efface', 900_000, { online: true }), snapshot('CCC33333', 'Carl Aterre', 100)] });
+
+		const active = await fresh.players(admin, {});
+		assert.equal(active.checked, true);
+		assert.deepEqual(ids(active), ['AAA11111', 'CCC33333'], 'the deleted character is hidden by default');
+		assert.deepEqual(active.counts, { total: 3, active: 2, deleted: 1 });
+		assert.deepEqual(active.players.map(p => [p.deleted, p.dead]), [[false, false], [false, true]]);
+
+		const deleted = await fresh.players(admin, { state: 'deleted' });
+		assert.deepEqual(ids(deleted), ['BBB22222']);
+		assert.deepEqual([deleted.players[0].deleted, deleted.players[0].online], [true, false], 'a deleted character is never online');
+		assert.deepEqual(ids(await fresh.players(admin, { state: 'all' })), ['BBB22222', 'AAA11111', 'CCC33333']);
+		assert.deepEqual(ids(await fresh.players(admin, { state: 'all', q: 'bob' })), ['BBB22222']);
+
+		// Its file still opens, and says so; the fortunes and the jobs no longer count it
+		const file = await fresh.player(admin, { cid: 'BBB22222' });
+		assert.deepEqual([file.ident.deleted, file.ident.online], [true, false]);
+		assert.equal((await fresh.player(admin, { cid: 'CCC33333' })).ident.dead, true);
+		assert.deepEqual((await fresh.economy(admin, {})).top.map(p => p.citizenid), ['AAA11111', 'CCC33333']);
+		assert.deepEqual((await fresh.insights(admin, { days: 7 })).jobs.map(j => [j.name, j.n]), [['police', 2]]);
+	}
+	finally {
+		await db.raw('DROP TABLE IF EXISTS fivem.players');
+	}
+});

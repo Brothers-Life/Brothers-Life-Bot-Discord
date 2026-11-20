@@ -92,10 +92,11 @@ export function createViews({ q, getConfig, timezone, now }) {
 	}
 	async function economy({ hours } = {}) {
 		const h = hoursOf(hours, 24 * 7);
+		const r = await roster();
 		const [mass, top, shops, purchases, flows, flowsByHour, latest, extra] = await Promise.all([
 			q(`SELECT floor(extract(epoch FROM ts) / ${bucketSec(h, 60)}) * ${bucketSec(h, 60)} * 1000 AS t, AVG(total_cash) AS total_cash, AVG(total_bank) AS total_bank
 				 FROM tel_economy_snapshots WHERE ts > now() - interval '${h} hours' GROUP BY 1 ORDER BY 1`),
-			q('SELECT name, citizenid, cash, bank, cash+bank AS total FROM (SELECT DISTINCT ON (citizenid) citizenid, name, cash, bank FROM tel_player_snapshots ORDER BY citizenid, ts DESC) t ORDER BY total DESC NULLS LAST LIMIT 20'),
+			q(`SELECT name, citizenid, cash, bank, cash+bank AS total FROM (SELECT DISTINCT ON (citizenid) citizenid, name, cash, bank FROM tel_player_snapshots ORDER BY citizenid, ts DESC) t${onlyExisting(r.known, 't', 'WHERE')} ORDER BY total DESC NULLS LAST LIMIT 20`),
 			q(`SELECT COALESCE(shop,'?') AS shop, SUM(total) AS ca, COUNT(*) AS n FROM tel_purchases WHERE ts > now() - interval '${h} hours' GROUP BY 1 ORDER BY 2 DESC NULLS LAST LIMIT 15`),
 			q('SELECT ts, player_name, citizenid, shop, COALESCE(label,item) AS article, qty, total, currency FROM tel_purchases ORDER BY ts DESC LIMIT 100'),
 			q('SELECT ts, data->>\'kind\' AS kind, data->>\'from_cid\' AS from_cid, data->>\'to_cid\' AS to_cid, (data->>\'amount\')::numeric AS amount, data->>\'note\' AS note FROM tel_events WHERE subtype=\'bank_flow\' ORDER BY ts DESC LIMIT 100'),
@@ -105,15 +106,56 @@ export function createViews({ q, getConfig, timezone, now }) {
 		]);
 		return { mass: mass.rows, top: top.rows, shops: shops.rows, purchases: purchases.rows, flows: flows.rows, flowsByHour: flowsByHour.rows, latest: latest.rows[0] || {}, extra: extra.rows };
 	}
-	async function players({ q: term } = {}) {
+	// --- Characters that still exist ---------------------------------------------------------------------------
+	// The telemetry keeps every snapshot it ever received: a character deleted in the game would stay in the lists
+	// and in the statistics for ever. The copy of the game's own table of characters (fivem.players, kept in step
+	// by the mirror, deletions included) says who is still there. Without that copy, nobody is filtered out.
+	let rosterCache = null;
+	async function roster() {
+		if (rosterCache && now() - rosterCache.at < 60_000) return rosterCache.value;
+		let value = { known: false, metadata: false };
+		const columns = (await q('SELECT column_name FROM information_schema.columns WHERE table_schema = \'fivem\' AND table_name = \'players\'')).rows.map(r => r.column_name);
+		if (columns.includes('citizenid')) {
+			// An empty copy (first sync not done) must never make every character look deleted
+			const filled = (await q('SELECT EXISTS (SELECT 1 FROM fivem.players) AS ok')).rows[0]?.ok;
+			value = { known: Boolean(filled), metadata: columns.includes('metadata') };
+		}
+		rosterCache = { at: now(), value };
+		return value;
+	}
+	const stillThere = alias => `EXISTS (SELECT 1 FROM fivem.players fp WHERE fp.citizenid = ${alias}.citizenid)`;
+	// " AND <exists>" (or " WHERE <exists>") when the roster is known, nothing otherwise
+	const onlyExisting = (known, alias, word = 'AND') => (known ? ` ${word} ${stillThere(alias)}` : '');
+	// "Dead" in the game's own data: the character is down, waiting to be revived or to respawn
+	const deadOf = (r, alias) => (r.known && r.metadata ? `(SELECT fivem.j(fp.metadata) ->> 'isdead' = 'true' FROM fivem.players fp WHERE fp.citizenid = ${alias}.citizenid LIMIT 1)` : 'NULL::boolean');
+
+	// state: 'active' (still in the game, the default), 'deleted' (gone from the game) or 'all'
+	async function players({ q: term, state } = {}) {
 		const s = String(term ?? '').trim().slice(0, 60);
-		const r = await q(`SELECT DISTINCT ON (citizenid) citizenid, name, job, gang, cash, bank, online, ts
-											 FROM tel_player_snapshots ${s ? 'WHERE name ILIKE $1 OR citizenid ILIKE $1' : ''}
-											 ORDER BY citizenid, ts DESC LIMIT 300`, s ? [like(s)] : []);
-		return { players: r.rows.sort((a, b) => ((b.cash || 0) + (b.bank || 0)) - ((a.cash || 0) + (a.bank || 0))) };
+		const r = await roster();
+		const wanted = ['active', 'deleted', 'all'].includes(state) ? state : 'active';
+		const latest = `SELECT DISTINCT ON (citizenid) citizenid, name, job, gang, cash, bank, online, ts
+			FROM tel_player_snapshots ${s ? 'WHERE name ILIKE $1 OR citizenid ILIKE $1' : ''} ORDER BY citizenid, ts DESC`;
+		const filter = !r.known || wanted === 'all' ? '' : ` WHERE ${wanted === 'deleted' ? 'NOT ' : ''}${stillThere('t')}`;
+		const params = s ? [like(s)] : [];
+		const [list, counts] = await Promise.all([
+			// The richest first, cut after the sort (the 300 kept are the richest, not the first 300 ids)
+			q(`SELECT t.citizenid, t.name, t.job, t.gang, t.cash, t.bank, t.ts,
+						${r.known ? `(t.online AND ${stillThere('t')})` : 't.online'} AS online,
+						${r.known ? `NOT ${stillThere('t')}` : 'NULL::boolean'} AS deleted, ${deadOf(r, 't')} AS dead
+					FROM (${latest}) t${filter} ORDER BY COALESCE(t.cash, 0) + COALESCE(t.bank, 0) DESC, t.citizenid LIMIT 300`, params),
+			q(`SELECT COUNT(*)::int AS total${r.known ? `, (COUNT(*) FILTER (WHERE ${stillThere('t')}))::int AS active` : ''} FROM (${latest}) t`, params),
+		]);
+		const total = counts.rows[0]?.total ?? 0;
+		const active = r.known ? counts.rows[0]?.active ?? 0 : total;
+		// checked: false when the copy of the game's characters is not there (nothing can be told deleted)
+		return { players: list.rows, counts: { total, active, deleted: total - active }, checked: r.known, state: r.known ? wanted : 'all' };
 	}
 	async function player({ cid: id } = {}) {
 		const cid = cidOf(id);
+		const r = await roster();
+		// Still in the game? One row when it is (with its "dead" flag), none when it was deleted
+		const inGame = r.known ? (await q(`SELECT ${r.metadata ? 'fivem.j(metadata) ->> \'isdead\' = \'true\'' : 'NULL::boolean'} AS dead FROM fivem.players WHERE citizenid = $1 LIMIT 1`, [cid])).rows : null;
 		const [ident, money, deaths, purchases, sessions, vehicles, inventory, events, flows, stats] = await Promise.all([
 			q('SELECT name, citizenid, job, job_grade, gang, cash, bank, crypto, online, ts FROM tel_player_snapshots WHERE citizenid=$1 ORDER BY ts DESC LIMIT 1', [cid]),
 			q('SELECT extract(epoch FROM ts)*1000 AS t, cash, bank FROM tel_player_snapshots WHERE citizenid=$1 AND ts > now() - interval \'30 days\' ORDER BY ts', [cid]),
@@ -128,7 +170,10 @@ export function createViews({ q, getConfig, timezone, now }) {
 								(SELECT COUNT(*) FROM tel_deaths WHERE citizenid=$1) AS deaths,
 								(SELECT COUNT(*) FROM tel_purchases WHERE citizenid=$1) AS purchases`, [cid]),
 		]);
-		return { ident: ident.rows[0] || null, money: money.rows, deaths: deaths.rows, purchases: purchases.rows, sessions: sessions.rows, vehicles: vehicles.rows, inventory: inventory.rows, events: events.rows, flows: flows.rows, stats: stats.rows[0] || {} };
+		const who = ident.rows[0] ? { ...ident.rows[0], deleted: inGame ? inGame.length === 0 : null, dead: inGame?.[0]?.dead ?? null } : null;
+		// A deleted character cannot be online: its last snapshot may still say so
+		if (who?.deleted) who.online = false;
+		return { ident: who, money: money.rows, deaths: deaths.rows, purchases: purchases.rows, sessions: sessions.rows, vehicles: vehicles.rows, inventory: inventory.rows, events: events.rows, flows: flows.rows, stats: stats.rows[0] || {} };
 	}
 	async function logs({ q: term, level: lvl } = {}) {
 		const s = String(term ?? '').slice(0, 100);
@@ -216,15 +261,16 @@ export function createViews({ q, getConfig, timezone, now }) {
 	async function insights({ days } = {}) {
 		const d = clampInt(days, 7, 1, 90);
 		const tz = await timezone();
+		const r = await roster();
 		const [heat, jobs, gangs, killers, weapons, causes, peak, uptime] = await Promise.all([
 			q(`SELECT extract(isodow FROM ts AT TIME ZONE '${tz}')::int AS dow, extract(hour FROM ts AT TIME ZONE '${tz}')::int AS hour,
 								ROUND(AVG(value)::numeric, 1) AS avg, MAX(value) AS max
 				 FROM tel_perf_metrics WHERE metric='players_online' AND ts > now() - interval '${d} days' GROUP BY 1,2`),
 			q(`SELECT COALESCE(NULLIF(job,''),'aucun') AS name, COUNT(*)::int AS n, (COUNT(*) FILTER (WHERE online))::int AS online
-				 FROM (SELECT DISTINCT ON (citizenid) job, online FROM tel_player_snapshots ORDER BY citizenid, ts DESC) t GROUP BY 1 ORDER BY 2 DESC LIMIT 12`),
+				 FROM (SELECT DISTINCT ON (citizenid) citizenid, job, online FROM tel_player_snapshots ORDER BY citizenid, ts DESC) t${onlyExisting(r.known, 't', 'WHERE')} GROUP BY 1 ORDER BY 2 DESC LIMIT 12`),
 			q(`SELECT gang AS name, COUNT(*)::int AS n, (COUNT(*) FILTER (WHERE online))::int AS online
-				 FROM (SELECT DISTINCT ON (citizenid) gang, online FROM tel_player_snapshots ORDER BY citizenid, ts DESC) t
-				 WHERE gang IS NOT NULL AND gang NOT IN ('', 'none') GROUP BY 1 ORDER BY 2 DESC LIMIT 12`),
+				 FROM (SELECT DISTINCT ON (citizenid) citizenid, gang, online FROM tel_player_snapshots ORDER BY citizenid, ts DESC) t
+				 WHERE gang IS NOT NULL AND gang NOT IN ('', 'none')${onlyExisting(r.known, 't')} GROUP BY 1 ORDER BY 2 DESC LIMIT 12`),
 			q(`SELECT killer_name AS name, MAX(killer_cid) AS citizenid, COUNT(*)::int AS n FROM tel_deaths
 				 WHERE killer_name IS NOT NULL AND killer_name <> '' AND ts > now() - interval '${d} days' GROUP BY 1 ORDER BY 3 DESC LIMIT 10`),
 			q(`SELECT weapon AS name, COUNT(*)::int AS n FROM tel_deaths WHERE weapon IS NOT NULL AND weapon <> '' AND ts > now() - interval '${d} days' GROUP BY 1 ORDER BY 2 DESC LIMIT 10`),
@@ -280,8 +326,9 @@ export function createViews({ q, getConfig, timezone, now }) {
 		const pattern = like(term);
 		const none = { rows: [] };
 		const [found, logLines, chatLines, events] = await Promise.all([
-			q(`SELECT DISTINCT ON (citizenid) citizenid, name, job, gang, online, ts FROM tel_player_snapshots
-				 WHERE name ILIKE $1 OR citizenid ILIKE $1 ORDER BY citizenid, ts DESC LIMIT 30`, [pattern]),
+			q(`SELECT t.*, ${(await roster()).known ? `NOT ${stillThere('t')}` : 'NULL::boolean'} AS deleted FROM (
+					SELECT DISTINCT ON (citizenid) citizenid, name, job, gang, online, ts FROM tel_player_snapshots
+					WHERE name ILIKE $1 OR citizenid ILIKE $1 ORDER BY citizenid, ts DESC LIMIT 30) t`, [pattern]),
 			withLogs ? q('SELECT ts, channel, level, line FROM tel_server_logs WHERE ts > now() - make_interval(days => $2) AND line ILIKE $1 ORDER BY ts DESC LIMIT 150', [pattern, days]) : none,
 			withLogs ? q(`SELECT ts, citizenid, player_name, subtype, data->>'message' AS message FROM tel_events
 				 WHERE subtype IN ('chat', 'command') AND ts > now() - make_interval(days => $2) AND (data->>'message' ILIKE $1 OR player_name ILIKE $1)
@@ -325,7 +372,7 @@ export function createViews({ q, getConfig, timezone, now }) {
 								SUM((data->>'amount')::numeric) AS total, COUNT(*)::int AS n
 				 FROM tel_events WHERE subtype = 'bank_flow' AND ts > now() - make_interval(days => $1) GROUP BY 1, 2 ORDER BY 1`, [d]),
 			q(`SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY w) AS median, AVG(w) AS mean, COUNT(*)::int AS n FROM (
-					 SELECT DISTINCT ON (citizenid) COALESCE(cash, 0) + COALESCE(bank, 0) AS w FROM tel_player_snapshots ORDER BY citizenid, ts DESC) t`),
+					 SELECT DISTINCT ON (citizenid) citizenid, COALESCE(cash, 0) + COALESCE(bank, 0) AS w FROM tel_player_snapshots ORDER BY citizenid, ts DESC) t${onlyExisting((await roster()).known, 't', 'WHERE')}`),
 		]);
 		return { days: d, daily: days.rows, flows: flows.rows, wealth: median.rows[0] || {} };
 	}

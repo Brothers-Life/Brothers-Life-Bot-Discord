@@ -9,7 +9,7 @@ const withCid = (properties = {}) => ({ ...query({ cid, ...properties }), requir
 // Plain GET views: path, service method, permission, query schema, how the query maps to the method's parameters
 const VIEWS = [
 	['overview', 'overview', 'telemetry.view', query({ h: hours }), q => ({ hours: q.h })],
-	['players', 'players', 'telemetry.view', query({ q: { type: 'string', maxLength: 60 } }), q => ({ q: q.q })],
+	['players', 'players', 'telemetry.view', query({ q: { type: 'string', maxLength: 60 }, state: { type: 'string', enum: ['active', 'deleted', 'all'] } }), q => ({ q: q.q, state: q.state })],
 	['player', 'player', 'telemetry.view', withCid(), q => ({ cid: q.cid })],
 	['timeline', 'timeline', 'telemetry.view', withCid({ before: { type: 'string', maxLength: 40 }, limit: { type: 'integer', minimum: 20, maximum: 500 } }), q => ({ cid: q.cid, before: q.before, limit: q.limit })],
 	['linked', 'linked', 'telemetry.view', withCid(), q => ({ cid: q.cid })],

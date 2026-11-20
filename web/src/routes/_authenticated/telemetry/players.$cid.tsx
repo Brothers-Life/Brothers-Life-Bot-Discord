@@ -2,7 +2,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Backpack, Car, Clock, Link2, MapPin, ScrollText, ShoppingCart, Wallet, Activity } from 'lucide-react'
 import { api } from '@/lib/api'
-import { EmptyState, Page, Pill, Section, UserAvatar } from '@/components/app/ui'
+import { EmptyState, Notice, Page, Pill, Section, UserAvatar } from '@/components/app/ui'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -75,6 +75,11 @@ function TelemetryPlayer() {
       {q.error ? <QueryError error={q.error} /> : !d ? <Skeleton className='h-96 w-full' /> : (
         <div className='grid grid-cols-[minmax(0,1fr)] gap-6'>
           {media.error && <QueryError error={media.error} />}
+          {id?.deleted && (
+            <Notice tone='danger' title='Personnage supprimé du jeu'>
+              Ce personnage n’existe plus dans la base du jeu. Son historique reste consultable ici, mais il ne compte plus dans les listes ni dans les statistiques.
+            </Notice>
+          )}
           <section className='brackets flex flex-wrap items-center gap-4 rounded-xl border bg-card p-5'>
             <div className='relative'>
               <UserAvatar name={name} className='size-16 text-lg' />
@@ -83,7 +88,8 @@ function TelemetryPlayer() {
             <div className='grid min-w-0 flex-1 basis-60 gap-1.5'>
               <div className='flex flex-wrap items-center gap-2'>
                 <h2 className='font-display text-2xl font-semibold'>{name}</h2>
-                {id?.online ? <Pill tone='success'>En ligne</Pill> : <Pill>Hors ligne</Pill>}
+                {id?.deleted ? <Pill tone='danger'>Supprimé</Pill> : id?.online ? <Pill tone='success'>En ligne</Pill> : <Pill>Hors ligne</Pill>}
+                {id?.dead && !id.deleted && <Pill tone='warning'>À terre</Pill>}
               </div>
               <div className='flex flex-wrap items-center gap-1.5 text-sm'>
                 <Mono>{cid}</Mono>

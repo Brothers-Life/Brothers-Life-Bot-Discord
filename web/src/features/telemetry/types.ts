@@ -27,10 +27,12 @@ export type Inflation = {
   wealth: { median?: N; mean?: N; n?: number }
 }
 
-export type PlayerRow = { citizenid: string; name: string | null; job: string | null; gang: string | null; cash: N; bank: N; online: boolean | null; ts: string }
+// deleted: gone from the game (null when the copy of the game's characters is not there to tell); dead: down in the game right now
+export type PlayerRow = { citizenid: string; name: string | null; job: string | null; gang: string | null; cash: N; bank: N; online: boolean | null; ts: string; deleted?: boolean | null; dead?: boolean | null }
+export type PlayerList = { players: PlayerRow[]; counts: { total: number; active: number; deleted: number }; checked: boolean; state: 'active' | 'deleted' | 'all' }
 
 export type Player = {
-  ident: { name: string | null; citizenid: string; job: string | null; job_grade: N; gang: string | null; cash: N; bank: N; crypto: N; online: boolean | null; ts: string } | null
+  ident: { name: string | null; citizenid: string; job: string | null; job_grade: N; gang: string | null; cash: N; bank: N; crypto: N; online: boolean | null; ts: string; deleted?: boolean | null; dead?: boolean | null } | null
   money: { t: N; cash: N; bank: N }[]
   deaths: { ts: string; cause: string | null; killer_name: string | null; killer_cid: string | null; weapon: string | null; x: N; y: N; z: N; screenshot_url: string | null }[]
   purchases: { ts: string; shop: string | null; article: string | null; qty: N; total: N }[]
