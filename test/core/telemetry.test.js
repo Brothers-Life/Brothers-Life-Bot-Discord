@@ -552,8 +552,11 @@ test('characters deleted in the game leave the lists and the statistics, their h
 	await db.raw('CREATE TABLE fivem.players (citizenid TEXT PRIMARY KEY, metadata TEXT)');
 	try {
 		assert.equal((await telemetry.players(admin, {})).checked, false);
-		// The answer about the copy is remembered for a minute: a new service reads it again
+		// The answer about the copy is remembered for a minute: a new service reads it again.
+		// (Opening the test database again empties it, the copy of the game included: the table is put back.)
 		const fresh = (await setup()).telemetry;
+		await db.raw('CREATE TABLE IF NOT EXISTS fivem.players (citizenid TEXT PRIMARY KEY, metadata TEXT)');
+		await db.raw('DELETE FROM fivem.players');
 		await db.raw('INSERT INTO fivem.players (citizenid, metadata) VALUES ($1, $2), ($3, $4)', ['AAA11111', '{"isdead":false}', 'CCC33333', '{"isdead":true}']);
 		await fresh.ingestBatch({ events: [snapshot('AAA11111', 'Alice Vivante', 5000), snapshot('BBB22222', 'Bob Efface', 900_000, { online: true }), snapshot('CCC33333', 'Carl Aterre', 100)] });
 
