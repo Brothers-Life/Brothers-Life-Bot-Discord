@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { listPermissions } from '../../core/permissions.js';
 import { NotFoundError, ForbiddenError } from '../../core/errors.js';
 import { MIRROR } from '../../core/logRouting.js';
+import { auditTitle } from '../../core/describe.js';
 import { listStaff } from '../../core/staffActivity.js';
 import { fetchUsers } from './helpers.js';
 
@@ -20,7 +21,7 @@ export function registerPanelRoutes(app, { core, runtime }) {
 	async function withActorNames(entries) {
 		const ids = [...new Set(entries.map(e => e.actorId).filter(id => /^\d{17,20}$/.test(id)))];
 		const users = await fetchUsers(executor, ids);
-		return entries.map(e => ({ ...e, actorName: users.get(e.actorId)?.globalName ?? users.get(e.actorId)?.username ?? null }));
+		return entries.map(e => ({ ...e, title: auditTitle(e.action), actorName: users.get(e.actorId)?.globalName ?? users.get(e.actorId)?.username ?? null }));
 	}
 
 	// --- Identity & overview ---------------------------------------------------------------

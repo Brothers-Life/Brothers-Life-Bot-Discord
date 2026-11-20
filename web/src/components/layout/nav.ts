@@ -82,6 +82,8 @@ import {
 
 export type NavEntry = {
   title: string
+  // Name inside its own section of the sidebar, where the section already says the rest
+  short?: string
   url: string
   icon: React.ElementType
   // Entry shown only with this permission (null: every panel user)
@@ -111,10 +113,10 @@ export const navSections: NavSection[] = [
     title: 'FiveM',
     icon: Gamepad2,
     items: [
-      { title: 'FiveM · Statut', url: '/fivem', icon: Gamepad2, permission: 'fivem.view', keywords: 'jeu serveur statut joueurs' },
-      { title: 'FiveM · txAdmin et maintenance', url: '/fivem-events', icon: Wrench, permission: 'fivemevents.view', keywords: 'txadmin maintenance redémarrage restart reboot annonce pont bridge' },
-      { title: 'FiveM · Base de données', url: '/fivem-players', icon: Contact, permission: 'fivemdata.view', keywords: 'joueur personnage citizen véhicule plaque inventaire argent bdd base métier gang logs staff prison mdt économie activité données' },
-      { title: 'FiveM · Images', url: '/media', icon: Image, permission: 'fivemdata.view', keywords: 'médias images icônes objets véhicules inventaire voitures' },
+      { title: 'FiveM · Statut', short: 'Statut', url: '/fivem', icon: Gamepad2, permission: 'fivem.view', keywords: 'jeu serveur statut joueurs' },
+      { title: 'FiveM · txAdmin et maintenance', short: 'txAdmin et maintenance', url: '/fivem-events', icon: Wrench, permission: 'fivemevents.view', keywords: 'txadmin maintenance redémarrage restart reboot annonce pont bridge' },
+      { title: 'FiveM · Base de données', short: 'Base de données', url: '/fivem-players', icon: Contact, permission: 'fivemdata.view', keywords: 'joueur personnage citizen véhicule plaque inventaire argent bdd base métier gang logs staff prison mdt économie activité données' },
+      { title: 'FiveM · Images', short: 'Images', url: '/media', icon: Image, permission: 'fivemdata.view', keywords: 'médias images icônes objets véhicules inventaire voitures' },
       { title: 'Boutique', url: '/tebex', icon: ShoppingCart, permission: 'tebex.view', keywords: 'tebex achat paiement vip remboursement' },
     ],
   },
@@ -122,27 +124,27 @@ export const navSections: NavSection[] = [
     title: 'Télémétrie FiveM',
     icon: Radar,
     items: [
-      { title: 'Télémétrie · Vue d’ensemble', url: '/telemetry', icon: Radar, permission: 'telemetry.view', exact: true, keywords: 'fivem jeu en ligne tick disponibilité uptime erreurs' },
-      { title: 'Télémétrie · Direct', url: '/telemetry/live', icon: Satellite, permission: 'telemetry.view', keywords: 'temps réel live flux connexions morts chat' },
-      { title: 'Télémétrie · Joueurs', url: '/telemetry/players', icon: UsersRound, permission: 'telemetry.view', keywords: 'personnage citizenid fiche journal inventaire véhicules comptes liés' },
-      { title: 'Télémétrie · Entreprises', url: '/telemetry/businesses', icon: Store, permission: 'telemetry.view', keywords: 'métiers gangs sociétés service ouvert fermé caisse employés' },
-      { title: 'Télémétrie · Activités', url: '/telemetry/activities', icon: LayoutGrid, permission: 'telemetry.view', keywords: 'pêche chasse braquages gangs pôle emploi rachats fortunes boutique premium téléphone boîte de nuit locations animaux' },
-      { title: 'Télémétrie · Économie', url: '/telemetry/economy', icon: Wallet, permission: 'telemetry.economy', keywords: 'argent masse monétaire inflation banque boutiques achats crypto sociétés' },
-      { title: 'Télémétrie · Flux d’argent', url: '/telemetry/flows', icon: ArrowLeftRight, permission: 'telemetry.economy', keywords: 'entrées sorties argent créé raisons gros mouvements objets armes' },
-      { title: 'Télémétrie · Logs', url: '/telemetry/logs', icon: Terminal, permission: 'telemetry.logs', keywords: 'console chat commandes erreurs' },
-      { title: 'Télémétrie · Alertes', url: '/telemetry/alerts', icon: BellRing, permission: 'telemetry.view', keywords: 'anticheat serveur tombé saut d’argent rafale erreurs' },
-      { title: 'Télémétrie · Statistiques', url: '/telemetry/stats', icon: ChartPie, permission: 'telemetry.view', keywords: 'affluence métiers gangs tueurs armes causes pic' },
-      { title: 'Télémétrie · Carte des morts', url: '/telemetry/deathmap', icon: MapPinned, permission: 'telemetry.view', keywords: 'carte chaleur zones captures' },
-      { title: 'Télémétrie · Performances', url: '/telemetry/perf', icon: Zap, permission: 'telemetry.view', keywords: 'fps tick mlo intérieurs zones entités profiler ressources optimiser' },
-      { title: 'Télémétrie · Santé du serveur', url: '/telemetry/health', icon: HeartPulse, permission: 'telemetry.view', keywords: 'ping hitchs joueurs file d’attente requêtes lentes déconnexions connexions' },
-      { title: 'Télémétrie · Scripts', url: '/telemetry/scripts', icon: Cpu, permission: 'telemetry.view', keywords: 'ressources erreurs hitch ralentissements redémarrages' },
-      { title: 'Télémétrie · Suivi staff', url: '/telemetry/staff', icon: UserCog, permission: 'telemetry.view', keywords: 'ban kick tp téléportation qui fait quoi txadmin' },
-      { title: 'Télémétrie · Sécurité', url: '/telemetry/security', icon: ShieldEllipsis, permission: 'telemetry.view', keywords: 'actions staff connexions explosions morts' },
-      { title: 'Télémétrie · Recherche', url: '/telemetry/search', icon: Search, permission: 'telemetry.view', keywords: 'chercher joueurs logs chat journaux' },
-      { title: 'Télémétrie · Réception des données', url: '/telemetry/ingest', icon: Database, permission: 'telemetry.view', keywords: 'ingestion bl_telemetry reçu manquant miroir tables événements perdu' },
-      { title: 'Télémétrie · Base de données', url: '/telemetry/db', icon: Database, permission: 'telemetry.view', keywords: 'tables lignes taille fortunes bans' },
-      { title: 'Télémétrie · Annonces en jeu', url: '/telemetry/announce', icon: MessageSquareShare, permission: 'telemetry.announce', keywords: 'message joueurs notification chat' },
-      { title: 'Télémétrie · Réglages', url: '/telemetry/settings', icon: SlidersHorizontal, permission: 'telemetry.manage', keywords: 'jeton token ingestion seuils conservation fuseau' },
+      { title: 'Télémétrie · Vue d’ensemble', short: 'Vue d’ensemble', url: '/telemetry', icon: Radar, permission: 'telemetry.view', exact: true, keywords: 'fivem jeu en ligne tick disponibilité uptime erreurs' },
+      { title: 'Télémétrie · Direct', short: 'Direct', url: '/telemetry/live', icon: Satellite, permission: 'telemetry.view', keywords: 'temps réel live flux connexions morts chat' },
+      { title: 'Télémétrie · Joueurs', short: 'Joueurs', url: '/telemetry/players', icon: UsersRound, permission: 'telemetry.view', keywords: 'personnage citizenid fiche journal inventaire véhicules comptes liés' },
+      { title: 'Télémétrie · Entreprises', short: 'Entreprises', url: '/telemetry/businesses', icon: Store, permission: 'telemetry.view', keywords: 'métiers gangs sociétés service ouvert fermé caisse employés' },
+      { title: 'Télémétrie · Activités', short: 'Activités', url: '/telemetry/activities', icon: LayoutGrid, permission: 'telemetry.view', keywords: 'pêche chasse braquages gangs pôle emploi rachats fortunes boutique premium téléphone boîte de nuit locations animaux' },
+      { title: 'Télémétrie · Économie', short: 'Économie', url: '/telemetry/economy', icon: Wallet, permission: 'telemetry.economy', keywords: 'argent masse monétaire inflation banque boutiques achats crypto sociétés' },
+      { title: 'Télémétrie · Flux d’argent', short: 'Flux d’argent', url: '/telemetry/flows', icon: ArrowLeftRight, permission: 'telemetry.economy', keywords: 'entrées sorties argent créé raisons gros mouvements objets armes' },
+      { title: 'Télémétrie · Logs', short: 'Logs', url: '/telemetry/logs', icon: Terminal, permission: 'telemetry.logs', keywords: 'console chat commandes erreurs' },
+      { title: 'Télémétrie · Alertes', short: 'Alertes', url: '/telemetry/alerts', icon: BellRing, permission: 'telemetry.view', keywords: 'anticheat serveur tombé saut d’argent rafale erreurs' },
+      { title: 'Télémétrie · Statistiques', short: 'Statistiques', url: '/telemetry/stats', icon: ChartPie, permission: 'telemetry.view', keywords: 'affluence métiers gangs tueurs armes causes pic' },
+      { title: 'Télémétrie · Carte des morts', short: 'Carte des morts', url: '/telemetry/deathmap', icon: MapPinned, permission: 'telemetry.view', keywords: 'carte chaleur zones captures' },
+      { title: 'Télémétrie · Performances', short: 'Performances', url: '/telemetry/perf', icon: Zap, permission: 'telemetry.view', keywords: 'fps tick mlo intérieurs zones entités profiler ressources optimiser' },
+      { title: 'Télémétrie · Santé du serveur', short: 'Santé du serveur', url: '/telemetry/health', icon: HeartPulse, permission: 'telemetry.view', keywords: 'ping hitchs joueurs file d’attente requêtes lentes déconnexions connexions' },
+      { title: 'Télémétrie · Scripts', short: 'Scripts', url: '/telemetry/scripts', icon: Cpu, permission: 'telemetry.view', keywords: 'ressources erreurs hitch ralentissements redémarrages' },
+      { title: 'Télémétrie · Suivi staff', short: 'Suivi staff', url: '/telemetry/staff', icon: UserCog, permission: 'telemetry.view', keywords: 'ban kick tp téléportation qui fait quoi txadmin' },
+      { title: 'Télémétrie · Sécurité', short: 'Sécurité', url: '/telemetry/security', icon: ShieldEllipsis, permission: 'telemetry.view', keywords: 'actions staff connexions explosions morts' },
+      { title: 'Télémétrie · Recherche', short: 'Recherche', url: '/telemetry/search', icon: Search, permission: 'telemetry.view', keywords: 'chercher joueurs logs chat journaux' },
+      { title: 'Télémétrie · Réception des données', short: 'Réception des données', url: '/telemetry/ingest', icon: Database, permission: 'telemetry.view', keywords: 'ingestion bl_telemetry reçu manquant miroir tables événements perdu' },
+      { title: 'Télémétrie · Base de données', short: 'Base de données', url: '/telemetry/db', icon: Database, permission: 'telemetry.view', keywords: 'tables lignes taille fortunes bans' },
+      { title: 'Télémétrie · Annonces en jeu', short: 'Annonces en jeu', url: '/telemetry/announce', icon: MessageSquareShare, permission: 'telemetry.announce', keywords: 'message joueurs notification chat' },
+      { title: 'Télémétrie · Réglages', short: 'Réglages', url: '/telemetry/settings', icon: SlidersHorizontal, permission: 'telemetry.manage', keywords: 'jeton token ingestion seuils conservation fuseau' },
     ],
   },
   {

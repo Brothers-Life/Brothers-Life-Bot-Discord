@@ -85,7 +85,7 @@ export function AppSidebar() {
       <SidebarMenuButton asChild isActive={isActive(item.url, pathname, item.exact)} tooltip={item.title}>
         <Link to={item.url} onClick={() => setOpenMobile(false)}>
           <item.icon />
-          <span>{item.title}</span>
+          <span>{favorite ? item.title : item.short ?? item.title}</span>
         </Link>
       </SidebarMenuButton>
       {item.url !== '/' && (

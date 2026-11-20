@@ -96,10 +96,10 @@ function Card({ s, now }: { s: Service; now: number }) {
         </ul>
       )}
       {list.length > 0 && (
-        <dl className='grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 border-t pt-3 text-sm'>
+        <dl className='grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 border-t pt-3 text-sm'>
           {list.map(([label, value]) => (
             <div key={label} className='contents'>
-              <dt className='truncate text-muted-foreground'>{label}</dt>
+              <dt className='text-muted-foreground'>{label}</dt>
               <dd className='truncate text-end tabular-nums' title={value}>{value}</dd>
             </div>
           ))}

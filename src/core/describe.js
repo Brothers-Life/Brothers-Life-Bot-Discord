@@ -335,6 +335,11 @@ function formatValue(value) {
 }
 
 // Panel actions as log types: { category: { verb: label } }
+// Readable title of an audit action (null when it has none yet)
+export function auditTitle(action) {
+	return TITLES[action] ?? null;
+}
+
 export function auditTypes() {
 	const out = {};
 	for (const [action, title] of Object.entries(TITLES)) {

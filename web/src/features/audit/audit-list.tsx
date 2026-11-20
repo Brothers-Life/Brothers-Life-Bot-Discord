@@ -114,7 +114,7 @@ export function AuditList({ entries, compact = false }: { entries: AuditEntry[];
               <div className='min-w-0 flex-1'>
                 <div className='flex flex-wrap items-center gap-2'>
                   <span className={cn('text-sm font-medium', DANGER.has(entry.action) && 'text-destructive')}>
-                    {ACTION_LABELS[entry.action] ?? entry.action}
+                    {ACTION_LABELS[entry.action] ?? entry.title ?? entry.action}
                   </span>
                   {!compact && <Pill>{SOURCE_LABELS[entry.source]}</Pill>}
                 </div>

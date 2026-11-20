@@ -72,6 +72,8 @@ export type AuditEntry = {
   actorName?: string | null
   source: 'bot' | 'panel' | 'native' | 'system'
   action: string
+  // Readable title given by the server (null for an action it does not know)
+  title?: string | null
   guildId: string | null
   target: string | null
   details: Record<string, unknown> | null
