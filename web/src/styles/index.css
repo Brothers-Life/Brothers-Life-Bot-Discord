@@ -161,10 +161,10 @@
     position: absolute;
     top: -1px;
     right: -1px;
-    width: 18px;
-    height: 18px;
+    width: 28px;
+    height: 28px;
     pointer-events: none;
-    background: linear-gradient(225deg, var(--brand) 0 6px, var(--background) 6px 12.5px, transparent 13px);
+    background: linear-gradient(225deg, var(--brand) 0 10px, var(--background) 10px 19.5px, transparent 20px);
   }
 }
 
