@@ -73,6 +73,10 @@ export function normalizeAntinuke(input = {}) {
 		removeAllRoles: Boolean(input.removeAllRoles),
 		timeoutMinutes: int(input.timeoutMinutes, 0, 40_320, 0),
 		kickBots: input.kickBots !== false,
+		// Bots of the network (music, tickets...): anyone allowed by Discord may add them, they are never kicked
+		allowedBotIds: ids(input.allowedBotIds, 100),
+		// Any other bot is kicked whoever added it, exempt staff included (only the chief of the network may add one)
+		strictBots: Boolean(input.strictBots),
 		dmOwner: input.dmOwner !== false,
 		whitelistUserIds: ids(input.whitelistUserIds, 50),
 		whitelistRankIds: [...new Set((Array.isArray(input.whitelistRankIds) ? input.whitelistRankIds : []).filter(id => Number.isInteger(id) && id > 0))].slice(0, 50),
@@ -137,6 +141,12 @@ export function createAntinuke({ db, network, ranks, audit, executor, settings, 
 
 	function requireManage(actor) {
 		if (!actor.can('antinuke.manage')) throw new ForbiddenError('Permission manquante : antinuke.manage');
+	}
+
+	// The chief of the network (and the bot itself): the only ones a strict bot list never stops
+	async function isChief(userId) {
+		if (userId === ownerId || userId === executor.botUserId?.()) return true;
+		return Boolean((await ranks.resolve(userId).catch(() => null))?.isOwner);
 	}
 
 	async function isExempt(userId) {
@@ -283,7 +293,12 @@ export function createAntinuke({ db, network, ranks, audit, executor, settings, 
 			const cfg = await config();
 			const rule = cfg.actions[type];
 			if (!cfg.enabled || !rule || !executorId || (await network.find(guildId))?.status !== 'active') return { counted: false };
-			if (await isExempt(executorId)) return { counted: false, exempt: true };
+			const addedBot = type === 'bot_add' && targetId;
+			if (addedBot && cfg.allowedBotIds.includes(targetId)) return { counted: false, allowedBot: true };
+			const exempt = await isExempt(executorId);
+			// Strict mode: an exempt member of the staff is not punished, but their unknown bot still leaves
+			const strict = addedBot && exempt && cfg.kickBots && cfg.strictBots && !await isChief(executorId);
+			if (exempt && !strict) return { counted: false, exempt: true };
 
 			const action = { type, guildId, targetId, targetName, at: now() };
 
@@ -297,6 +312,8 @@ export function createAntinuke({ db, network, ranks, audit, executor, settings, 
 					logger.warn(`Anti-nuke kick of bot ${targetId} on ${guildId} failed:`, error.message);
 				}
 			}
+
+			if (exempt) return { counted: false, exempt: true };
 
 			// One action of a user at a time from here: the open incident is read then written
 			const outcome = await locked(executorId, async () => {

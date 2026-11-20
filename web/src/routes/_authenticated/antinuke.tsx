@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
 
 export const Route = createFileRoute('/_authenticated/antinuke')({
   component: AntinukePage,
@@ -30,6 +31,8 @@ type AntinukeConfig = {
   removeAllRoles: boolean
   timeoutMinutes: number
   kickBots: boolean
+  allowedBotIds: string[]
+  strictBots: boolean
   dmOwner: boolean
   whitelistUserIds: string[]
   whitelistRankIds: number[]
@@ -171,6 +174,23 @@ function AntinukePage() {
               <Checkbox className='mt-0.5' checked={config.kickBots} disabled={!manage} onCheckedChange={(v) => set({ kickBots: v === true })} />
               <span>Expulser tout bot ajouté par une personne non exemptée</span>
             </label>
+            {config.kickBots && (
+              <div className='ml-6 grid gap-3 rounded-md border p-3'>
+                <label className='flex items-start gap-2'>
+                  <Checkbox className='mt-0.5' checked={config.strictBots} disabled={!manage} onCheckedChange={(v) => set({ strictBots: v === true })} />
+                  <span>Mode strict : expulser aussi les bots ajoutés par le staff exempté. Seuls le chef du réseau et les bots autorisés ci-dessous passent.</span>
+                </label>
+                <div className='grid gap-1.5'>
+                  <Label htmlFor='an-bots'>Bots autorisés (un identifiant Discord par ligne)</Label>
+                  <Textarea
+                    id='an-bots' rows={3} disabled={!manage} placeholder='159985870458322944'
+                    value={config.allowedBotIds.join('\n')}
+                    onChange={(e) => set({ allowedBotIds: e.target.value.split(/[\s,;]+/).map((v) => v.trim()).filter(Boolean) })}
+                  />
+                  <p className='text-xs text-muted-foreground'>Ces bots ne sont jamais expulsés et leur ajout n’est pas compté, quelle que soit la personne qui les invite. Identifiant : clic droit sur le bot → Copier l’identifiant.</p>
+                </div>
+              </div>
+            )}
             <label className='flex items-start gap-2'>
               <Checkbox className='mt-0.5' checked={config.dmOwner} disabled={!manage} onCheckedChange={(v) => set({ dmOwner: v === true })} />
               <span>Prévenir le chef du réseau en message privé</span>

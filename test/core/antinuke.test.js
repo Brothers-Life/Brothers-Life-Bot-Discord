@@ -187,6 +187,29 @@ test('a bot added by someone untrusted is kicked', async () => {
 	assert.equal(executor.calls.filter(c => c[0] === 'kick').length, 0);
 });
 
+test('allowed bots always pass; strict mode kicks the bots of exempt staff too, never the chief’s', async () => {
+	const { act, executor, antinuke, owner } = await setup();
+	const kicks = () => executor.calls.filter(c => c[0] === 'kick').length;
+	const MUSIC = '300000000000000002';
+	await antinuke.save(owner, { enabled: true, allowedBotIds: [MUSIC, 'pas un id'], whitelistUserIds: [BOB] });
+	assert.deepEqual((await antinuke.get()).allowedBotIds, [MUSIC]);
+
+	// An allowed bot: not kicked, not counted, whoever adds it
+	assert.deepEqual(await act('bot_add', MAIN, ALICE, { targetId: MUSIC }), { counted: false, allowedBot: true });
+	assert.equal(kicks(), 0);
+
+	// Exempt staff may add any bot... unless the list is strict
+	await act('bot_add', MAIN, BOB, { targetId: BOT });
+	assert.equal(kicks(), 0);
+	await antinuke.save(owner, { enabled: true, allowedBotIds: [MUSIC], whitelistUserIds: [BOB], strictBots: true });
+	const result = await act('bot_add', MAIN, BOB, { targetId: BOT });
+	assert.equal(kicks(), 1);
+	assert.equal(result.exempt, true, 'the bot leaves, the exempt member is not counted');
+	await act('bot_add', MAIN, BOB, { targetId: MUSIC });
+	await act('bot_add', MAIN, OWNER, { targetId: BOT });
+	assert.equal(kicks(), 1);
+});
+
 test('only antinuke.manage can change the settings', async () => {
 	const { antinuke, core } = await setup();
 	const alice = await core.ranks.resolve(ALICE);
