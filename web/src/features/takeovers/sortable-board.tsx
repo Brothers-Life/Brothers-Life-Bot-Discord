@@ -99,7 +99,8 @@ function SortableColumn({ id, label, disabled, renderHeader, children }: {
 }
 
 // Categories and their items, both ordered by dragging. `onChange` gets the whole new layout; the board shows it until the promise settles
-export function SortableBoard({ columns, editable, onChange, columnLabel, itemLabel, renderHeader, renderItem, empty }: {
+// `collapsed` hides the rows of a column (its header stays, and can still be dragged)
+export function SortableBoard({ columns, editable, onChange, columnLabel, itemLabel, renderHeader, renderItem, empty, collapsed }: {
   columns: BoardColumn[]
   editable: boolean
   onChange: (columns: BoardColumn[]) => Promise<unknown>
@@ -108,6 +109,7 @@ export function SortableBoard({ columns, editable, onChange, columnLabel, itemLa
   renderHeader: (id: number | null, handle: ReactNode) => ReactNode
   renderItem: (id: number) => ReactNode
   empty: string
+  collapsed?: (id: number | null) => boolean
 }) {
   const [draft, setDraft] = useState<BoardColumn[] | null>(null)
   const [saving, setSaving] = useState(false)
@@ -162,7 +164,7 @@ export function SortableBoard({ columns, editable, onChange, columnLabel, itemLa
     void onChange(next).catch(() => undefined).finally(() => { setDraft(null); setSaving(false) })
   }
 
-  const body = (column: BoardColumn) => <ColumnBody column={column} disabled={disabled} itemLabel={itemLabel} renderItem={renderItem} empty={empty} />
+  const body = (column: BoardColumn) => (collapsed?.(column.id) ? null : <ColumnBody column={column} disabled={disabled} itemLabel={itemLabel} renderItem={renderItem} empty={empty} />)
   return (
     <DndContext sensors={sensors} collisionDetection={collision} accessibility={accessibility} onDragOver={onDragOver} onDragEnd={onDragEnd} onDragCancel={() => setDraft(null)}>
       <div className='grid grid-cols-[minmax(0,1fr)] gap-3 p-3'>

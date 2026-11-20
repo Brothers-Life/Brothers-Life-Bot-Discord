@@ -878,6 +878,11 @@ export function createExecutor(client) {
 			// payload.cards: more embeds after the main one (one per server in the links between servers)
 			const embeds = [...buildEmbeds(payload), ...(payload.cards ?? []).flatMap(card => buildEmbeds({ embed: card }))].slice(0, 10);
 			const body = { content: payload.content || null, embeds, allowedMentions: { parse: [] } };
+			// payload.files: images used by the embeds (attachment://name); on an edit they replace the old ones
+			if (payload.files) {
+				body.files = payload.files.map(f => new AttachmentBuilder(Buffer.from(f.buffer), { name: f.name }));
+				body.attachments = [];
+			}
 			if (buttons) {
 				const built = buttons.slice(0, 25).map((b) => {
 					const button = new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(b.label).setURL(b.url);

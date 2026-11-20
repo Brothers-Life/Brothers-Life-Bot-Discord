@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, FolderPlus, Pencil, Plus, RefreshCw, Save, Send, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Copy, FolderPlus, Pencil, Plus, RefreshCw, Save, Send, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { AnnouncementEmbed, AnnouncementTargetsPayload } from '@/lib/types'
@@ -47,8 +47,9 @@ type LinkServer = {
   inviteUrl: string | null
   inviteError: string | null
 }
-type Category = { id: number; name: string; emoji: string; color: string | null }
-type Card = { title?: string; url?: string; description?: string; thumbnailUrl?: string | null; color: string }
+type Category = { id: number; name: string; emoji: string; color: string | null; imageUrl: string | null }
+type Layout = 'list' | 'cards' | 'categories'
+type Card = { title?: string; url?: string; description?: string; thumbnailUrl?: string | null; imageUrl?: string | null; color: string; mosaic?: { tiles: { name: string; icon: string | null }[] } }
 type SyncResult = { ok: boolean; error?: string }
 type Board = {
   id: number
@@ -57,7 +58,8 @@ type Board = {
   channelId: string
   enabled: boolean
   payload: { content: string; embed: AnnouncementEmbed }
-  layout: 'list' | 'cards'
+  layout: Layout
+  logos: boolean
   line: string
   compact: boolean
   scope: 'all' | 'selected'
@@ -149,7 +151,7 @@ function ServerLinksPage() {
 }
 
 type ServerDraft = { listed: boolean; label: string; description: string; emoji: string; categoryId: number | null; inviteMode: 'auto' | 'manual'; inviteChannelId: string | null; inviteUrl: string }
-type CategoryDraft = { id?: number; name: string; emoji: string; color: string | null }
+type CategoryDraft = { id?: number; name: string; emoji: string; color: string | null; imageUrl: string | null }
 
 const serverDraft = (server: LinkServer): ServerDraft => ({
   listed: server.listed,
@@ -161,6 +163,28 @@ const serverDraft = (server: LinkServer): ServerDraft => ({
   inviteChannelId: server.inviteChannelId,
   inviteUrl: server.inviteMode === 'manual' ? server.inviteUrl ?? '' : '',
 })
+
+// Categories folded in the board, remembered in this browser ('none' = servers without category)
+const COLLAPSED_KEY = 'server-links-collapsed'
+function useCollapsed() {
+  const [collapsed, setCollapsed] = useState<string[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '[]')
+      return Array.isArray(saved) ? saved.map(String) : []
+    } catch {
+      return []
+    }
+  })
+  const update = (next: string[]) => {
+    setCollapsed(next)
+    try {
+      localStorage.setItem(COLLAPSED_KEY, JSON.stringify(next))
+    } catch {
+      // Private window: the choice only lasts for this visit
+    }
+  }
+  return { collapsed, update }
+}
 
 function useReport() {
   const qc = useQueryClient()
@@ -182,6 +206,12 @@ function ServersBoard({ data, manage }: { data: Payload; manage: boolean }) {
   const [editing, setEditing] = useState<LinkServer | null>(null)
   const [editingCategory, setEditingCategory] = useState<CategoryDraft | null>(null)
   const refresh = () => qc.invalidateQueries({ queryKey: KEY })
+  const { collapsed, update: setCollapsed } = useCollapsed()
+  const keyOf = (id: number | null) => (id === null ? 'none' : String(id))
+  const isCollapsed = (id: number | null) => collapsed.includes(keyOf(id))
+  const toggleCollapsed = (id: number | null) => setCollapsed(isCollapsed(id) ? collapsed.filter((k) => k !== keyOf(id)) : [...collapsed, keyOf(id)])
+  const allKeys = [...categories.map((c) => keyOf(c.id)), 'none']
+  const allCollapsed = allKeys.every((k) => collapsed.includes(k))
   const arrange = useMutation({
     mutationFn: (columns: BoardColumn[]) => api('/server-links/layout', { method: 'PUT', body: { groups: columns.map((c) => ({ id: c.id, items: c.items.map((i) => servers[i].guildId) })) } }),
     onSuccess: refresh,
@@ -206,6 +236,9 @@ function ServersBoard({ data, manage }: { data: Payload; manage: boolean }) {
     return (
       <div className='flex flex-wrap items-center gap-2 border-b bg-muted/40 px-2 py-1.5'>
         {handle}
+        <Button size='sm' variant='ghost' aria-expanded={!isCollapsed(id)} aria-label={`${isCollapsed(id) ? 'Développer' : 'Réduire'} ${category?.name ?? 'Sans catégorie'}`} onClick={() => toggleCollapsed(id)}>
+          {isCollapsed(id) ? <ChevronRight /> : <ChevronDown />}
+        </Button>
         <div className='flex min-w-32 flex-1 items-center gap-2 px-1 font-medium'>
           {category?.color && <span className='size-3 rounded-full' style={{ backgroundColor: category.color }} />}
           {category?.emoji && <EmojiView value={category.emoji} className='size-5' />}
@@ -254,7 +287,16 @@ function ServersBoard({ data, manage }: { data: Payload; manage: boolean }) {
     <Section
       title={`Serveurs du réseau (${servers.length})`}
       description='Range les serveurs par catégories (légal, illégal, staff…) en les glissant, dans l’ordre que tu veux : les messages suivent cet ordre. Un serveur non affiché n’apparaît dans aucun message.'
-      actions={manage && <Button size='sm' variant='outline' onClick={() => setEditingCategory({ name: '', emoji: '', color: null })}><FolderPlus /> Nouvelle catégorie</Button>}
+      actions={(
+        <div className='flex flex-wrap gap-2'>
+          {categories.length > 0 && (
+            <Button size='sm' variant='ghost' onClick={() => setCollapsed(allCollapsed ? [] : allKeys)}>
+              {allCollapsed ? <><ChevronsUpDown /> Tout développer</> : <><ChevronsDownUp /> Tout réduire</>}
+            </Button>
+          )}
+          {manage && <Button size='sm' variant='outline' onClick={() => setEditingCategory({ name: '', emoji: '', color: null, imageUrl: null })}><FolderPlus /> Nouvelle catégorie</Button>}
+        </div>
+      )}
     >
       {!servers.length ? <EmptyState title='Aucun serveur dans le réseau' /> : (
         <SortableBoard
@@ -266,6 +308,7 @@ function ServersBoard({ data, manage }: { data: Payload; manage: boolean }) {
           renderHeader={header}
           renderItem={(i) => (servers[i] ? row(servers[i]) : null)}
           empty={manage ? 'Glisse un serveur ici' : 'Aucun serveur'}
+          collapsed={isCollapsed}
         />
       )}
       {editing && <ServerDialog key={editing.guildId} server={editing} data={data} onClose={() => setEditing(null)} />}
@@ -348,7 +391,7 @@ function ServerDialog({ server, data, onClose }: { server: LinkServer; data: Pay
 function CategoryDialog({ draft, onClose, onSaved }: { draft: CategoryDraft; onClose: () => void; onSaved: () => void }) {
   const [c, setC] = useState(draft)
   const save = useMutation({
-    mutationFn: () => api(c.id ? `/server-links/categories/${c.id}` : '/server-links/categories', { method: c.id ? 'PUT' : 'POST', body: { name: c.name, emoji: c.emoji, color: c.color } }),
+    mutationFn: () => api(c.id ? `/server-links/categories/${c.id}` : '/server-links/categories', { method: c.id ? 'PUT' : 'POST', body: { name: c.name, emoji: c.emoji, color: c.color, imageUrl: c.imageUrl?.trim() || null } }),
     onSuccess: () => { toast.success('Catégorie enregistrée'); onSaved(); onClose() },
   })
   return (
@@ -361,7 +404,12 @@ function CategoryDialog({ draft, onClose, onSaved }: { draft: CategoryDraft; onC
             <Input id='sl-cat-name' maxLength={60} placeholder='Par exemple « Entreprises légales »' value={c.name} onChange={(e) => setC({ ...c, name: e.target.value })} />
           </div>
           <EmojiField label='Émoji (facultatif)' value={c.emoji} onChange={(emoji) => setC({ ...c, emoji })} />
-          <ColorPicker label='Couleur des cartes de cette catégorie' value={c.color ?? '#ff9628'} onChange={(color) => setC({ ...c, color })} />
+          <ColorPicker label='Couleur des embeds de cette catégorie' value={c.color ?? '#ff9628'} onChange={(color) => setC({ ...c, color })} />
+          <div className='grid gap-1.5'>
+            <Label htmlFor='sl-cat-image'>Bannière (lien https, facultatif)</Label>
+            <Input id='sl-cat-image' maxLength={500} placeholder='https://…/banniere.png' value={c.imageUrl ?? ''} onChange={(e) => setC({ ...c, imageUrl: e.target.value })} />
+            <p className='text-xs text-muted-foreground'>Affichée dans l’embed de la catégorie quand la mosaïque des logos est désactivée.</p>
+          </div>
         </div>
         <DialogFooter>
           <Button variant='outline' onClick={onClose}>Annuler</Button>
@@ -379,7 +427,8 @@ type Draft = {
   enabled: boolean
   content: string
   embed: AnnouncementEmbed
-  layout: 'list' | 'cards'
+  layout: Layout
+  logos: boolean
   line: string
   compact: boolean
   scope: 'all' | 'selected'
@@ -405,7 +454,8 @@ function toDraft(b: Board | null, data: Payload): Draft {
     compact: b?.compact ?? false,
     scope: b?.scope ?? 'all',
     guildIds: b?.guildIds ?? [],
-    layout: b?.layout ?? 'cards',
+    layout: b?.layout ?? 'categories',
+    logos: b?.logos ?? true,
     categoryIds: b?.categoryIds ?? [],
     groupByCategory: b?.groupByCategory ?? true,
     categoryHeader: b?.categoryHeader ?? data.defaults.categoryHeader,
@@ -436,6 +486,7 @@ function BoardEditor({ board, data, manage, onSaved, onDeleted, onDirty }: { boa
     scope: d.scope,
     guildIds: d.guildIds,
     layout: d.layout,
+    logos: d.logos,
     categoryIds: d.categoryIds,
     groupByCategory: d.groupByCategory,
     categoryHeader: d.categoryHeader,
@@ -569,20 +620,25 @@ function BoardEditor({ board, data, manage, onSaved, onDeleted, onDirty }: { boa
           </div>
         </Section>
 
-        <Section title='Contenu du message' description={d.layout === 'cards' ? 'Le message d’en-tête, suivi d’une carte par serveur. {count} = nombre de serveurs.' : '{links} est remplacé par la liste des serveurs, {count} par leur nombre.'}>
+        <Section title='Contenu du message' description={d.layout !== 'list' ? 'Le message d’en-tête, suivi des embeds des serveurs. {count} = nombre de serveurs.' : '{links} est remplacé par la liste des serveurs, {count} par leur nombre.'}>
           <div className='grid gap-4 p-4'>
             <div className='grid gap-1.5 sm:w-96'>
               <Label>Présentation</Label>
-              <Select value={d.layout} disabled={!manage} onValueChange={(v) => set({ layout: v as 'list' | 'cards' })}>
+              <Select value={d.layout} disabled={!manage} onValueChange={(v) => set({ layout: v as Layout })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value='cards'>Cartes avec le logo de chaque Discord</SelectItem>
+                  <SelectItem value='categories'>Un embed par catégorie, avec ses serveurs et leurs logos</SelectItem>
+                  <SelectItem value='cards'>Une carte par serveur, avec son logo</SelectItem>
                   <SelectItem value='list'>Liste de liens, sans logo</SelectItem>
                 </SelectContent>
               </Select>
               {d.layout === 'cards' && <p className='text-xs text-muted-foreground'>Une carte par serveur : logo, nom cliquable, description. Discord limite à 10 cartes par message : au-delà, le bot continue dans un message suivant.</p>}
+              {d.layout === 'categories' && <p className='text-xs text-muted-foreground'>Chaque catégorie a son embed : son nom, sa couleur, la liste de ses serveurs avec leur lien. Sans catégorie, tous les serveurs sont dans un seul embed.</p>}
             </div>
-            {d.layout === 'list' && (
+            {d.layout === 'categories' && (
+              <label className='flex items-center gap-2 text-sm'><Switch checked={d.logos} disabled={!manage} onCheckedChange={(v) => set({ logos: v })} /> Image de l’embed : mosaïque des logos des serveurs (sinon, la bannière de la catégorie)</label>
+            )}
+            {d.layout !== 'cards' && (
               <div className='grid gap-1.5'>
                 <Label htmlFor='sl-line'>Une ligne par serveur</Label>
                 <Textarea id='sl-line' ref={lineRef} rows={3} maxLength={400} value={d.line} disabled={!manage} onChange={(e) => set({ line: e.target.value })} />
@@ -627,7 +683,17 @@ function BoardEditor({ board, data, manage, onSaved, onDeleted, onDirty }: { boa
                       <div key={j} className='flex items-start gap-3 rounded border-l-4 bg-[#2b2d31] p-3 text-sm text-[#dbdee1]' style={{ borderLeftColor: c.color }}>
                         <div className='min-w-0 flex-1'>
                           {c.title && <div className='font-semibold text-[#00a8fc]'>{c.title}</div>}
-                          {c.description && <div className='whitespace-pre-wrap break-words text-xs'>{c.description.replace(/[_*]{2}/g, '')}</div>}
+                          {c.description && <div className='whitespace-pre-wrap break-words text-xs'>{c.description.replace(/[_*]{2}/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')}</div>}
+                          {c.mosaic ? (
+                            <div className='mt-2 flex flex-wrap gap-3 rounded-lg bg-[#1e1f22] p-3'>
+                              {c.mosaic.tiles.map((t, k) => (
+                                <div key={k} className='grid w-16 justify-items-center gap-1 text-center'>
+                                  <GuildIcon src={t.icon} name={t.name} className='size-10 rounded-full' />
+                                  <span className='w-full truncate text-[10px] text-white'>{t.name}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : c.imageUrl && <img src={c.imageUrl} alt='' className='mt-2 max-h-40 rounded' />}
                         </div>
                         {c.thumbnailUrl && <img src={c.thumbnailUrl} alt='' className='size-12 rounded' />}
                       </div>

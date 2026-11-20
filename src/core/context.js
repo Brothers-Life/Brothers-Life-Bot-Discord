@@ -40,6 +40,7 @@ import { createStats } from './stats.js';
 import { createVoiceRooms } from './voiceRooms.js';
 import { createLiveMessages } from './liveMessages.js';
 import { createServerLinks } from './serverLinks.js';
+import { renderMosaic } from './serverLinkMosaic.js';
 import { createChangelog } from './changelog.js';
 import { createPolls } from './polls.js';
 import { createGiveaways } from './giveaways.js';
@@ -122,7 +123,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	const stats = createStats({ db, network, audit, executor, logger });
 	const voiceRooms = createVoiceRooms({ db, network, audit, executor, logger });
 	const liveMessages = createLiveMessages({ db, network, audit, executor, stats, variables, logger });
-	const serverLinks = createServerLinks({ db, network, audit, executor, logs, variables, logger });
+	const serverLinks = createServerLinks({ db, network, audit, executor, logs, variables, logger, mosaic: tiles => renderMosaic(tiles, { fetchImpl }) });
 	const changelog = createChangelog({ db, network, audit, executor, logger });
 	logs.registerCategory('changelog', 'Changelog publié');
 	const polls = createPolls({ db, network, audit, executor, logger });

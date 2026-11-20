@@ -24,7 +24,8 @@ const boardProperties = {
 	payload: { type: 'object' },
 	line: { type: 'string', maxLength: 400 },
 	compact: { type: 'boolean' },
-	layout: { type: 'string', enum: ['list', 'cards'] },
+	layout: { type: 'string', enum: ['list', 'cards', 'categories'] },
+	logos: { type: 'boolean' },
 	categoryIds: { type: 'array', maxItems: 25, items: { type: 'integer' } },
 	groupByCategory: { type: 'boolean' },
 	categoryHeader: { type: 'string', maxLength: 200 },
@@ -41,6 +42,7 @@ const categoryBody = {
 		name: { type: 'string', maxLength: 60 },
 		emoji: { type: 'string', maxLength: 64 },
 		color: { anyOf: [{ type: 'null' }, { type: 'string', maxLength: 7 }] },
+		imageUrl: { anyOf: [{ type: 'null' }, { type: 'string', maxLength: 500 }] },
 	},
 };
 const boardBody = { type: 'object', required: ['name', 'guildId', 'channelId'], properties: boardProperties };

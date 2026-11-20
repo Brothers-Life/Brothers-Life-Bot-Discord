@@ -5,6 +5,7 @@ import { normalizePayload } from './announcements.js';
 import { fillPayload } from './onboarding.js';
 import { fillVars } from './cards.js';
 import { createVariables } from './variables.js';
+import { MAX_TILES, renderMosaic } from './serverLinkMosaic.js';
 
 definePermission('serverlinks.view', { label: 'Voir les liens entre serveurs', category: 'Réseau' });
 definePermission('serverlinks.manage', { label: 'Gérer les liens entre serveurs (invitations, catégories, messages)', category: 'Réseau' });
@@ -17,6 +18,10 @@ const SYNC_LOCK_MS = 60_000;
 const INVITE_CHECK_MS = 3600_000;
 const MAX_BUTTONS = 25;
 const MAX_EMBEDS = 10;
+// Discord: 6000 characters for all the embeds of one message, 4096 for one description
+const MAX_MESSAGE_TEXT = 5500;
+const MAX_DESCRIPTION = 4096;
+const IMAGE_URL = /^https:\/\/\S{1,480}$/;
 const MAX_MESSAGES = 10;
 const MAX_CATEGORIES = 25;
 const EMPTY_TEXT = '*Aucun autre serveur pour le moment.*';
@@ -53,8 +58,10 @@ function normalizeBoardConfig(input = {}) {
 	if (scope === 'selected' && !guildIds.length) throw new ValidationError('Choisis au moins un serveur à afficher, ou affiche tous les serveurs.');
 	const config = {
 		payload: normalizePayload(input.payload ?? DEFAULT_BOARD_PAYLOAD),
-		// list: every server in the text ({links}); cards: one embed per server, with its logo
-		layout: input.layout === 'list' ? 'list' : 'cards',
+		// list: every server in the text ({links}); cards: one embed per server, with its logo;
+		// categories: one embed per category, with its servers and a mosaic of their logos
+		layout: ['list', 'categories'].includes(input.layout) ? input.layout : 'cards',
+		logos: input.logos !== false,
 		line,
 		compact: Boolean(input.compact),
 		scope,
@@ -75,7 +82,7 @@ function normalizeBoardConfig(input = {}) {
 
 // Messages listing the other servers of the network with their invitation, sorted by category, edited in
 // place when a server, an invitation, a category or the board changes.
-export function createServerLinks({ db, network, audit, executor, logs, logger = console, now = Date.now, variables = createVariables({ executor, logger, now }) }) {
+export function createServerLinks({ db, network, audit, executor, logs, logger = console, now = Date.now, variables = createVariables({ executor, logger, now }), mosaic = renderMosaic }) {
 	logs?.registerCategory('serverlinks', 'Liens entre serveurs');
 	const q = {
 		guilds: db.prepare('SELECT * FROM server_link_guilds'),
@@ -94,8 +101,8 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 		uncategorize: db.prepare('UPDATE server_link_guilds SET category_id = NULL WHERE category_id = ?'),
 		categories: db.prepare('SELECT * FROM server_link_categories ORDER BY position, id'),
 		category: db.prepare('SELECT * FROM server_link_categories WHERE id = ?'),
-		insertCategory: db.prepare('INSERT INTO server_link_categories (name, emoji, color, position, created_at) VALUES (@name, @emoji, @color, @position, @at)'),
-		updateCategory: db.prepare('UPDATE server_link_categories SET name = @name, emoji = @emoji, color = @color WHERE id = @id'),
+		insertCategory: db.prepare('INSERT INTO server_link_categories (name, emoji, color, image_url, position, created_at) VALUES (@name, @emoji, @color, @imageUrl, @position, @at)'),
+		updateCategory: db.prepare('UPDATE server_link_categories SET name = @name, emoji = @emoji, color = @color, image_url = @imageUrl WHERE id = @id'),
 		categoryPosition: db.prepare('UPDATE server_link_categories SET position = ? WHERE id = ?'),
 		removeCategory: db.prepare('DELETE FROM server_link_categories WHERE id = ?'),
 		boards: db.prepare('SELECT * FROM server_link_boards ORDER BY id'),
@@ -135,7 +142,7 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 
 	const activeGuilds = async () => (await network.list()).filter(g => g.status === 'active' && g.botPresent);
 
-	const toCategory = row => ({ id: row.id, name: row.name, emoji: row.emoji, color: row.color, position: row.position });
+	const toCategory = row => ({ id: row.id, name: row.name, emoji: row.emoji, color: row.color, imageUrl: row.image_url ?? null, position: row.position });
 	const categories = async () => (await q.categories.all()).map(toCategory);
 
 	function toServer(guild, row, known) {
@@ -230,7 +237,7 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 			.map(category => ({ category, entries: entries.filter(e => e.categoryId === category.id) }))
 			.filter(g => g.entries.length);
 		const rest = entries.filter(e => !e.categoryId);
-		if (rest.length) groups.push({ category: { id: null, name: OTHERS, emoji: '', color: null }, entries: rest });
+		if (rest.length) groups.push({ category: { id: null, name: OTHERS, emoji: '', color: null, imageUrl: null }, entries: rest });
 		return groups;
 	}
 
@@ -262,8 +269,8 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 		});
 		const vars = {
 			...(await variables.server(guildId)),
-			// With cards, the cards are the list: {links} only says when there is nothing to show
-			links: !ordered.length ? EMPTY_TEXT : config.layout === 'cards' ? '' : blocks.join('\n\n'),
+			// With embeds per server or per category, they are the list: {links} only says when there is nothing to show
+			links: !ordered.length ? EMPTY_TEXT : config.layout === 'list' ? blocks.join('\n\n') : '',
 			count: ordered.length,
 		};
 		const first = fillPayload(config.payload, vars);
@@ -271,9 +278,25 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 			? ordered.slice(0, MAX_BUTTONS).map(e => ({ label: (e.label || e.name).slice(0, 80), url: e.inviteUrl, emoji: e.emoji || null }))
 			: [];
 		const messages = [{ ...first, cards: [] }];
-		if (config.layout === 'cards') {
+		if (config.layout !== 'list') {
 			const color = config.payload.embed.color;
-			const cards = groups.flatMap((group) => {
+			const cards = config.layout === 'categories' ? groups.filter(group => group.entries.length).map((group, index) => {
+				const lines = group.entries.map(entry => fill(config.line, varsOf(entry, group.category)));
+				const card = {
+					enabled: true,
+					title: group.category ? [group.category.emoji, group.category.name].filter(Boolean).join(' ').slice(0, 256) : '',
+					description: lines.join(separator).slice(0, MAX_DESCRIPTION),
+					color: group.category?.color ?? color,
+					imageUrl: group.category?.imageUrl ?? null,
+					fields: [],
+				};
+				// The logos of the category drawn in one image (rendered only when the message is really sent)
+				if (config.logos && group.entries.some(entry => entry.icon)) {
+					card.mosaic = { file: `logos-${index}.png`, tiles: group.entries.slice(0, MAX_TILES).map(entry => ({ name: entry.label || entry.name, icon: logoOf(entry.icon) })) };
+					card.imageUrl = `attachment://${card.mosaic.file}`;
+				}
+				return card;
+			}) : groups.flatMap((group) => {
 				const title = group.category && config.categoryHeader.trim() ? [{ enabled: true, description: header(group.category), color: group.category.color ?? color, fields: [] }] : [];
 				return [...title, ...group.entries.map((entry) => {
 					const v = varsOf(entry, group.category);
@@ -290,10 +313,12 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 			});
 			const hasHeader = Boolean(first.content) || buildsEmbed(first.embed);
 			if (!hasHeader) messages.pop();
+			const size = e => (e?.enabled ? [e.title, e.description, e.footerText, e.authorName].join('').length : 0);
 			for (const card of cards) {
 				let last = messages.at(-1);
 				const used = last ? last.cards.length + (last.embed.enabled && buildsEmbed(last.embed) ? 1 : 0) : MAX_EMBEDS;
-				if (used >= MAX_EMBEDS) {
+				const length = last ? size(last.embed) + last.cards.reduce((sum, c) => sum + size(c), 0) + size(card) : 0;
+				if (used >= MAX_EMBEDS || (used > 0 && length > MAX_MESSAGE_TEXT)) {
 					if (messages.length >= MAX_MESSAGES) break;
 					last = { content: '', embed: { enabled: false, fields: [] }, cards: [] };
 					messages.push(last);
@@ -325,7 +350,7 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 			for (const [index, message] of messages.entries()) {
 				// The buttons go under the last message, below every server
 				const options = { repost: board.repost, buttons: index === messages.length - 1 ? buttons : [] };
-				ids.push(await executor.upsertMessage(board.channelId, board.messageIds[index] ?? null, message, options));
+				ids.push(await executor.upsertMessage(board.channelId, board.messageIds[index] ?? null, await withMosaics(message), options));
 			}
 			for (const surplus of board.messageIds.slice(messages.length)) await executor.deleteMessage(board.channelId, surplus).catch(() => null);
 			await q.done.run(ids[0], JSON.stringify(ids.slice(1)), h, now(), board.id);
@@ -336,6 +361,25 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 			logger.warn(`Server links: board #${board.id}:`, error.message);
 			return { id: board.id, ok: false, error: error.message ?? String(error) };
 		}
+	}
+
+	// Draws the mosaics of a message and attaches them; a mosaic that cannot be drawn never blocks the message
+	async function withMosaics(message) {
+		const files = [];
+		const cards = [];
+		for (const { mosaic: wanted, ...card } of message.cards) {
+			if (wanted) {
+				try {
+					files.push({ name: wanted.file, buffer: await mosaic(wanted.tiles) });
+				}
+				catch (error) {
+					logger.warn('Server links: mosaic of logos:', error.message);
+					card.imageUrl = null;
+				}
+			}
+			cards.push(card);
+		}
+		return { ...message, cards, files };
 	}
 
 	async function syncAll() {
@@ -363,7 +407,9 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 		if (!name) throw new ValidationError('Le nom de la catégorie fait 1 à 60 caractères.');
 		const color = input.color ? String(input.color).toLowerCase() : null;
 		if (color && !COLOR.test(color)) throw new ValidationError('Couleur invalide (attendu : #rrggbb).');
-		return { name, emoji: text(input.emoji, 64), color };
+		const imageUrl = text(input.imageUrl, 500) || null;
+		if (imageUrl && !IMAGE_URL.test(imageUrl)) throw new ValidationError('Bannière invalide : attendu un lien « https://… » vers une image.');
+		return { name, emoji: text(input.emoji, 64), color, imageUrl };
 	}
 
 	const record = (actor, action, target, details, guildId = null) => audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action, guildId, target: String(target), details });

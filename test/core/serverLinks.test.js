@@ -14,8 +14,14 @@ async function setup() {
 	const ctx = await withNetwork();
 	const { core, executor, owner } = ctx;
 	await core.network.activate(owner, OTHER);
-	const links = createServerLinks({ db: core.db, network: core.network, audit: core.audit, executor, logs: core.logs, logger: { warn: () => undefined }, now: () => clock });
-	return { ...ctx, links, advance: (ms) => { clock += ms; } };
+	const mosaics = [];
+	const mosaic = async (tiles) => {
+		mosaics.push(tiles);
+		if (tiles.some(t => t.name === 'Cassé')) throw new Error('canvas');
+		return Buffer.from('png');
+	};
+	const links = createServerLinks({ db: core.db, network: core.network, audit: core.audit, executor, logs: core.logs, logger: { warn: () => undefined }, now: () => clock, mosaic });
+	return { ...ctx, links, mosaics, advance: (ms) => { clock += ms; } };
 }
 
 const only = (executor, channelId) => [...(executor.posted.get(channelId)?.values() ?? [])];
@@ -238,4 +244,41 @@ test('the panel board: servers dragged between categories, categories reordered'
 	const cards = await links.preview(owner, { guildId: MAIN, includeSelf: true });
 	assert.deepEqual(cards.messages[0].cards.map(c => c.title ?? c.description), ['__**Légal**__', 'Mairie']);
 	assert.doesNotMatch(cards.messages[0].embed.description, /\{links\}|discord\.gg/);
+});
+
+test('one embed per category: its servers, and their logos drawn in one image', async () => {
+	const { core, links, owner, executor, mosaics } = await setup();
+	const legal = await links.createCategory(owner, { name: 'Légal', emoji: '🏢', color: '#00aa00', imageUrl: 'https://example.com/legal.png' });
+	await assert.rejects(links.createCategory(owner, { name: 'Autre', imageUrl: 'http://example.com/a.png' }), /Bannière/);
+	await core.db.prepare('UPDATE guilds SET icon = ? WHERE id = ?').run('https://cdn.discordapp.com/icons/1/a.png?size=64', OTHER);
+	await links.saveServer(owner, MAIN, { listed: true, label: 'Mairie', categoryId: legal.id });
+	await links.saveServer(owner, OTHER, { listed: true, label: 'Garage', description: 'Réparations', categoryId: legal.id });
+	const header = { content: '', embed: { enabled: true, title: 'Nos serveurs', description: '{count} serveurs{links}' } };
+	const created = await links.create(owner, board({ layout: 'categories', includeSelf: true, compact: true, payload: header }));
+	const read = () => only(executor, C_MAIN)[0];
+	assert.equal(read().embed.description, '2 serveurs');
+	assert.equal(read().cards.length, 1);
+	const [card] = read().cards;
+	assert.equal(card.title, '🏢 Légal');
+	assert.equal(card.color, '#00aa00');
+	assert.equal(card.description, '**[Mairie](https://discord.gg/auto1)**\n**[Garage](https://discord.gg/auto2)**\nRéparations');
+	assert.equal(card.imageUrl, 'attachment://logos-0.png');
+	assert.equal(card.mosaic, undefined, 'only what Discord needs is sent');
+	assert.deepEqual(read().files.map(f => f.name), ['logos-0.png']);
+	assert.deepEqual(mosaics.at(-1).map(t => t.name), ['Mairie', 'Garage']);
+	assert.equal(mosaics.at(-1)[1].icon, 'https://cdn.discordapp.com/icons/1/a.png?size=256');
+
+	// Nothing changed: no new drawing, nothing sent
+	const drawn = mosaics.length;
+	await links.tick();
+	assert.equal(mosaics.length, drawn);
+
+	// Mosaic off: the banner of the category; a mosaic that cannot be drawn never blocks the message
+	await links.update(owner, created.id, board({ layout: 'categories', includeSelf: true, logos: false, payload: header }));
+	assert.equal(read().cards[0].imageUrl, 'https://example.com/legal.png');
+	assert.deepEqual(read().files, []);
+	await links.saveServer(owner, OTHER, { listed: true, label: 'Cassé', categoryId: legal.id });
+	const broken = await links.update(owner, created.id, board({ layout: 'categories', includeSelf: true, payload: header }));
+	assert.equal(broken.result.ok, true);
+	assert.equal(read().cards[0].imageUrl, null);
 });
