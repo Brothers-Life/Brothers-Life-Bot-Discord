@@ -49,7 +49,10 @@ type LinkServer = {
 }
 type Category = { id: number; name: string; emoji: string; color: string | null; imageUrl: string | null }
 type Layout = 'list' | 'cards' | 'categories'
-type Card = { authorName?: string; title?: string; url?: string; description?: string; thumbnailUrl?: string | null; imageUrl?: string | null; color: string; mosaic?: { tiles: { name: string; icon: string | null }[] } }
+type Card = { authorName?: string; title?: string; url?: string; description?: string; thumbnailUrl?: string | null; imageUrl?: string | null; color: string; mosaic?: Mosaic }
+type Mosaic = { options: Record<string, unknown>; tiles: { name: string; icon: string | null }[] }
+type CategoryImage = 'tiles' | 'slices' | 'rows' | 'picture' | 'none'
+type ServerImage = 'thumbnail' | 'banner' | 'none'
 type SyncResult = { ok: boolean; error?: string }
 type Board = {
   id: number
@@ -59,7 +62,11 @@ type Board = {
   enabled: boolean
   payload: { content: string; embed: AnnouncementEmbed }
   layout: Layout
-  logos: boolean
+  categoryImage: CategoryImage
+  serverImage: ServerImage
+  imageColumns: number
+  imageNames: boolean
+  imageStats: boolean
   line: string
   compact: boolean
   scope: 'all' | 'selected'
@@ -148,6 +155,19 @@ function ServerLinksPage() {
       {dialog}
     </Page>
   )
+}
+
+// The real image the bot will attach, drawn by the server
+function DrawnImage({ mosaic }: { mosaic: Mosaic }) {
+  const image = useQuery({
+    queryKey: ['server-links-image', JSON.stringify(mosaic)],
+    queryFn: () => api<{ image: string }>('/server-links/image', { method: 'POST', body: { tiles: mosaic.tiles, options: mosaic.options } }),
+    retry: false,
+    staleTime: 5 * 60_000,
+    placeholderData: (prev) => prev,
+  })
+  if (image.error) return <p className='mt-2 text-xs text-destructive'>Image impossible à dessiner : {(image.error as Error).message}</p>
+  return image.data ? <img src={image.data.image} alt='Image jointe au message' className='mt-2 w-full rounded-lg' /> : <Skeleton className='mt-2 h-24' />
 }
 
 type ServerDraft = { listed: boolean; label: string; description: string; emoji: string; categoryId: number | null; inviteMode: 'auto' | 'manual'; inviteChannelId: string | null; inviteUrl: string }
@@ -428,7 +448,11 @@ type Draft = {
   content: string
   embed: AnnouncementEmbed
   layout: Layout
-  logos: boolean
+  categoryImage: CategoryImage
+  serverImage: ServerImage
+  imageColumns: number
+  imageNames: boolean
+  imageStats: boolean
   line: string
   compact: boolean
   scope: 'all' | 'selected'
@@ -455,7 +479,11 @@ function toDraft(b: Board | null, data: Payload): Draft {
     scope: b?.scope ?? 'all',
     guildIds: b?.guildIds ?? [],
     layout: b?.layout ?? 'categories',
-    logos: b?.logos ?? true,
+    categoryImage: b?.categoryImage ?? 'tiles',
+    serverImage: b?.serverImage ?? 'thumbnail',
+    imageColumns: b?.imageColumns ?? 5,
+    imageNames: b?.imageNames ?? true,
+    imageStats: b?.imageStats ?? false,
     categoryIds: b?.categoryIds ?? [],
     groupByCategory: b?.groupByCategory ?? true,
     categoryHeader: b?.categoryHeader ?? data.defaults.categoryHeader,
@@ -486,7 +514,11 @@ function BoardEditor({ board, data, manage, onSaved, onDeleted, onDirty }: { boa
     scope: d.scope,
     guildIds: d.guildIds,
     layout: d.layout,
-    logos: d.logos,
+    categoryImage: d.categoryImage,
+    serverImage: d.serverImage,
+    imageColumns: d.imageColumns,
+    imageNames: d.imageNames,
+    imageStats: d.imageStats,
     categoryIds: d.categoryIds,
     groupByCategory: d.groupByCategory,
     categoryHeader: d.categoryHeader,
@@ -635,8 +667,54 @@ function BoardEditor({ board, data, manage, onSaved, onDeleted, onDirty }: { boa
               {d.layout === 'cards' && <p className='text-xs text-muted-foreground'>Une carte par serveur : logo, nom cliquable, description. Discord limite à 10 cartes par message : au-delà, le bot continue dans un message suivant.</p>}
               {d.layout === 'categories' && <p className='text-xs text-muted-foreground'>Chaque catégorie a son embed : son nom, sa couleur, la liste de ses serveurs avec leur lien. Sans catégorie, tous les serveurs sont dans un seul embed.</p>}
             </div>
-            {d.layout === 'categories' && (
-              <label className='flex items-center gap-2 text-sm'><Switch checked={d.logos} disabled={!manage} onCheckedChange={(v) => set({ logos: v })} /> Image de l’embed : mosaïque des logos des serveurs (sinon, la bannière de la catégorie)</label>
+            {d.layout !== 'list' && (
+              <div className='grid gap-3 rounded-md border p-3'>
+                <div className='grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2'>
+                  {d.layout === 'categories' ? (
+                    <div className='grid gap-1.5'>
+                      <Label>Image de chaque catégorie</Label>
+                      <Select value={d.categoryImage} disabled={!manage} onValueChange={(v) => set({ categoryImage: v as CategoryImage })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value='tiles'>Tuiles : logo et nom complet</SelectItem>
+                          <SelectItem value='slices'>Montage : logos en grand, coupes en diagonale</SelectItem>
+                          <SelectItem value='rows'>Lignes : logo, nom, description, statistiques</SelectItem>
+                          <SelectItem value='picture'>Bannière de la catégorie</SelectItem>
+                          <SelectItem value='none'>Aucune image</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : (
+                    <div className='grid gap-1.5'>
+                      <Label>Image de chaque serveur</Label>
+                      <Select value={d.serverImage} disabled={!manage} onValueChange={(v) => set({ serverImage: v as ServerImage })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value='banner'>Bannière dessinée : logo en grand, nom, description, statistiques</SelectItem>
+                          <SelectItem value='thumbnail'>Petit logo à droite</SelectItem>
+                          <SelectItem value='none'>Aucune image</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  {d.layout === 'categories' && ['tiles', 'slices'].includes(d.categoryImage) && (
+                    <div className='grid gap-1.5'>
+                      <Label>Serveurs par rangée</Label>
+                      <Select value={String(d.imageColumns)} disabled={!manage} onValueChange={(v) => set({ imageColumns: Number(v) })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>{[2, 3, 4, 5, 6].map((n) => <SelectItem key={n} value={String(n)}>{n} par rangée</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+                {((d.layout === 'categories' && ['tiles', 'slices', 'rows'].includes(d.categoryImage)) || (d.layout === 'cards' && d.serverImage === 'banner')) && (
+                  <div className='flex flex-wrap gap-x-6 gap-y-2'>
+                    {d.layout === 'categories' && <label className='flex items-center gap-2 text-sm'><Switch checked={d.imageNames} disabled={!manage} onCheckedChange={(v) => set({ imageNames: v })} /> Noms sur l’image</label>}
+                    <label className='flex items-center gap-2 text-sm'><Switch checked={d.imageStats} disabled={!manage} onCheckedChange={(v) => set({ imageStats: v })} /> Statistiques en direct (membres, en vocal, boosts)</label>
+                  </div>
+                )}
+                {d.imageStats && <p className='text-xs text-muted-foreground'>Les images sont redessinées quand les chiffres changent, au plus toutes les 10 minutes.</p>}
+              </div>
             )}
             {d.layout !== 'cards' && (
               <div className='grid gap-1.5'>
@@ -685,16 +763,7 @@ function BoardEditor({ board, data, manage, onSaved, onDeleted, onDirty }: { boa
                           {c.authorName && <div className='text-xs font-medium'>{c.authorName}</div>}
                           {c.title && <div className='font-semibold text-[#00a8fc]'>{c.title}</div>}
                           {c.description && <div className='whitespace-pre-wrap break-words text-xs'>{c.description.replace(/[_*]{2}/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')}</div>}
-                          {c.mosaic ? (
-                            <div className='mt-2 flex flex-wrap gap-3 rounded-lg bg-[#1e1f22] p-3'>
-                              {c.mosaic.tiles.map((t, k) => (
-                                <div key={k} className='grid w-16 justify-items-center gap-1 text-center'>
-                                  <GuildIcon src={t.icon} name={t.name} className='size-10 rounded-full' />
-                                  <span className='w-full truncate text-[10px] text-white'>{t.name}</span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : c.imageUrl && <img src={c.imageUrl} alt='' className='mt-2 max-h-40 rounded' />}
+                          {c.mosaic ? <DrawnImage mosaic={c.mosaic} /> : c.imageUrl && <img src={c.imageUrl} alt='' className='mt-2 max-h-40 rounded' />}
                         </div>
                         {c.thumbnailUrl && <img src={c.thumbnailUrl} alt='' className='size-12 rounded' />}
                       </div>

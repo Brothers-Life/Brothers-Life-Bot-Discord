@@ -1,0 +1,30 @@
+meta {
+  name: POST /server-links/image
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/server-links/image
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "tiles": [
+      {}
+    ],
+    "options": {}
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/server-links/image`
+
+  Permission requise : `serverlinks.manage`
+
+  Corps JSON :
+  - `tiles` (array) — obligatoire
+  - `options` (object)
+}

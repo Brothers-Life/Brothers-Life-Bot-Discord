@@ -219,7 +219,7 @@ test('cards: one embed with the logo per server, continued in more messages', as
 	assert.deepEqual(message.cards.map(c => [c.authorName, c.title]), [['Gangs', 'Gang']]);
 	const card = message.cards[0];
 	assert.equal(card.url, 'https://discord.gg/auto1');
-	assert.equal(card.thumbnailUrl, 'https://cdn.discordapp.com/icons/1/a.png?size=256');
+	assert.equal(card.thumbnailUrl, 'https://cdn.discordapp.com/icons/1/a.png?size=512');
 	assert.equal(card.color, '#aa0000');
 	assert.equal(card.description, 'Les rues');
 	assert.deepEqual(created.messageIds.length, 1);
@@ -266,7 +266,7 @@ test('one embed per category: its servers, and their logos drawn in one image', 
 	assert.equal(card.mosaic, undefined, 'only what Discord needs is sent');
 	assert.deepEqual(read().files.map(f => f.name), ['logos-0.png']);
 	assert.deepEqual(mosaics.at(-1).map(t => t.name), ['Mairie', 'Garage']);
-	assert.equal(mosaics.at(-1)[1].icon, 'https://cdn.discordapp.com/icons/1/a.png?size=256');
+	assert.equal(mosaics.at(-1)[1].icon, 'https://cdn.discordapp.com/icons/1/a.png?size=512');
 
 	// Nothing changed: no new drawing, nothing sent
 	const drawn = mosaics.length;
@@ -281,4 +281,40 @@ test('one embed per category: its servers, and their logos drawn in one image', 
 	const broken = await links.update(owner, created.id, board({ layout: 'categories', includeSelf: true, payload: header }));
 	assert.equal(broken.result.ok, true);
 	assert.equal(read().cards[0].imageUrl, null);
+});
+
+test('drawn images: style and statistics of a category, one banner per server', async () => {
+	const { core, links, owner, executor, mosaics } = await setup();
+	await links.saveServer(owner, OTHER, { listed: true, label: 'Garage', description: 'Réparations' });
+	executor.guildCounts.set(OTHER, { members: 96, humans: 90, bots: 6, voice: 2, boosts: 1 });
+	const header = { content: '', embed: { enabled: true, title: 'Nos serveurs' } };
+	const created = await links.create(owner, board({ layout: 'categories', categoryImage: 'slices', imageColumns: 9, imageStats: true, payload: header }));
+	assert.equal(created.imageColumns, 6, 'two to six servers per row');
+	assert.deepEqual(mosaics.at(-1).map(t => [t.name, t.description, t.members, t.voice, t.boosts]), [['Garage', 'Réparations', 96, 2, 1]]);
+
+	// The numbers changed: the image is drawn again at the next check; without statistics it would not be
+	executor.guildCounts.set(OTHER, { members: 97, humans: 91, bots: 6, voice: 0, boosts: 1 });
+	const drawn = mosaics.length;
+	await links.tick();
+	assert.equal(mosaics.length, drawn + 1);
+	assert.equal(mosaics.at(-1)[0].members, 97);
+
+	await links.update(owner, created.id, board({ layout: 'categories', categoryImage: 'none', payload: header }));
+	assert.equal(only(executor, C_MAIN)[0].cards[0].imageUrl, null);
+	assert.deepEqual(only(executor, C_MAIN)[0].files, []);
+
+	await links.update(owner, created.id, board({ layout: 'cards', serverImage: 'banner', payload: header }));
+	const [card] = only(executor, C_MAIN)[0].cards;
+	assert.equal(card.title, 'Garage');
+	assert.equal(card.url, 'https://discord.gg/auto1');
+	assert.equal(card.imageUrl, `attachment://server-${OTHER}.png`);
+	assert.equal(card.thumbnailUrl, undefined);
+	assert.deepEqual(only(executor, C_MAIN)[0].files.map(f => f.name), [`server-${OTHER}.png`]);
+	assert.deepEqual(mosaics.at(-1).map(t => [t.name, t.description, t.members]), [['Garage', 'Réparations', undefined]]);
+
+	// The image of the panel's preview
+	await assert.rejects(links.image(await core.ranks.resolve(ALICE), [{ name: 'x' }]), ForbiddenError);
+	await assert.rejects(links.image(owner, []), /Aucun serveur/);
+	assert.ok(Buffer.isBuffer(await links.image(owner, [{ name: 'Garage', icon: 'http://local/a.png', members: 3 }], { style: 'banner' })));
+	assert.deepEqual(mosaics.at(-1), [{ name: 'Garage', icon: null, description: '', members: 3 }]);
 });

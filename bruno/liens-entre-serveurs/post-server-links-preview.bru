@@ -1,7 +1,7 @@
 meta {
   name: POST /server-links/preview
   type: http
-  seq: 12
+  seq: 13
 }
 
 post {
@@ -31,6 +31,11 @@ docs {
   - `compact` (boolean)
   - `layout` ("list" | "cards" | "categories")
   - `logos` (boolean)
+  - `categoryImage` ("tiles" | "slices" | "rows" | "picture" | "none")
+  - `serverImage` ("thumbnail" | "banner" | "none")
+  - `imageColumns` (integer)
+  - `imageNames` (boolean)
+  - `imageStats` (boolean)
   - `categoryIds` (array)
   - `groupByCategory` (boolean)
   - `categoryHeader` (string)

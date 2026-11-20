@@ -5,7 +5,7 @@ import { normalizePayload } from './announcements.js';
 import { fillPayload } from './onboarding.js';
 import { fillVars } from './cards.js';
 import { createVariables } from './variables.js';
-import { MAX_TILES, renderMosaic } from './serverLinkMosaic.js';
+import { IMAGE_STYLES, MAX_TILES, renderMosaic } from './serverLinkMosaic.js';
 
 definePermission('serverlinks.view', { label: 'Voir les liens entre serveurs', category: 'Réseau' });
 definePermission('serverlinks.manage', { label: 'Gérer les liens entre serveurs (invitations, catégories, messages)', category: 'Réseau' });
@@ -26,6 +26,8 @@ const MAX_MESSAGES = 10;
 const MAX_CATEGORIES = 25;
 const EMPTY_TEXT = '*Aucun autre serveur pour le moment.*';
 const OTHERS = 'Autres serveurs';
+const CATEGORY_IMAGES = ['tiles', 'slices', 'rows', 'picture', 'none'];
+const SERVER_IMAGES = ['thumbnail', 'banner', 'none'];
 
 export const DEFAULT_LINE = '{emoji} **[{name}]({invite})** — {description}';
 export const DEFAULT_CATEGORY_HEADER = '__**{emoji} {category}**__';
@@ -43,7 +45,7 @@ const tidy = value => value.split('\n').map(l => l.trim().replace(/\s+[—–·|
 // A template filled without the holes of its empty variables ("{emoji} **Nom**" without emoji: "**Nom**")
 const fill = (template, vars) => tidy(fillVars(template.replace(/\{([a-z.]+)\}[ \t]*/gi, (match, key) => (vars[key] === '' ? '' : match)), vars));
 // The network keeps a small icon (64 px): cards show a sharper one
-const logoOf = icon => (icon ? icon.replace(/size=\d+/, 'size=256') : null);
+const logoOf = icon => (icon ? icon.replace(/size=\d+/, 'size=512') : null);
 
 // Code of an invitation typed as a link or as a bare code
 export function parseInvite(value) {
@@ -62,7 +64,14 @@ function normalizeBoardConfig(input = {}) {
 		// list: every server in the text ({links}); cards: one embed per server, with its logo;
 		// categories: one embed per category, with its servers and a mosaic of their logos
 		layout: ['list', 'categories'].includes(input.layout) ? input.layout : 'cards',
-		logos: input.logos !== false,
+		// Image of a category embed: drawn from the logos (tiles, slices, rows), the banner of the category (picture) or none
+		categoryImage: CATEGORY_IMAGES.includes(input.categoryImage) ? input.categoryImage : input.logos === false ? 'picture' : 'tiles',
+		// Image of a server card: its logo as a thumbnail, a drawn banner, or none
+		serverImage: SERVER_IMAGES.includes(input.serverImage) ? input.serverImage : 'thumbnail',
+		imageColumns: Number.isInteger(input.imageColumns) ? Math.min(6, Math.max(2, input.imageColumns)) : 5,
+		imageNames: input.imageNames !== false,
+		// Members, voice and boosts on the drawn images (they are then redrawn when the numbers change)
+		imageStats: Boolean(input.imageStats),
 		line,
 		compact: Boolean(input.compact),
 		scope,
@@ -250,9 +259,22 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 		const ordered = groups.flatMap(g => g.entries);
 		const everything = `${config.line}\n${JSON.stringify(config.payload)}`;
 		const counts = new Map();
-		if (everything.includes('{members}')) {
-			for (const entry of ordered) counts.set(entry.guildId, (await executor.getGuildCounts(entry.guildId).catch(() => null))?.members ?? null);
+		const drawn = config.layout === 'categories' ? ['tiles', 'slices', 'rows'].includes(config.categoryImage) : config.layout === 'cards' && config.serverImage === 'banner';
+		const drawnStats = drawn && config.imageStats;
+		if (everything.includes('{members}') || drawnStats) {
+			for (const entry of ordered) counts.set(entry.guildId, await executor.getGuildCounts(entry.guildId).catch(() => null));
 		}
+		// What the drawn images know of a server (statistics only when shown: they change often)
+		const tileOf = (entry) => {
+			const count = drawnStats ? counts.get(entry.guildId) : null;
+			return {
+				name: entry.label || entry.name,
+				icon: logoOf(entry.icon),
+				description: entry.description,
+				...(count ? { members: count.members, voice: count.voice, boosts: count.boosts } : {}),
+			};
+		};
+		const imageOptions = accent => ({ columns: config.imageColumns, names: config.imageNames, stats: config.imageStats, accent });
 		const varsOf = (entry, category) => ({
 			name: entry.label || entry.name,
 			invite: entry.inviteUrl,
@@ -260,7 +282,7 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 			emoji: entry.emoji,
 			icon: logoOf(entry.icon) ?? '',
 			category: category?.name ?? '',
-			members: counts.get(entry.guildId)?.toLocaleString('fr-FR') ?? '',
+			members: counts.get(entry.guildId)?.members?.toLocaleString('fr-FR') ?? '',
 		});
 		const header = category => fill(config.categoryHeader, { category: category.name, emoji: category.emoji });
 		const separator = config.compact ? '\n' : '\n\n';
@@ -288,12 +310,12 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 					title: group.category ? [group.category.emoji, group.category.name].filter(Boolean).join(' ').slice(0, 256) : '',
 					description: lines.join(separator).slice(0, MAX_DESCRIPTION),
 					color: group.category?.color ?? color,
-					imageUrl: group.category?.imageUrl ?? null,
+					imageUrl: config.categoryImage === 'picture' ? group.category?.imageUrl ?? null : null,
 					fields: [],
 				};
 				// The logos of the category drawn in one image (rendered only when the message is really sent)
-				if (config.logos && group.entries.some(entry => entry.icon)) {
-					card.mosaic = { file: `logos-${index}.png`, accent: card.color, tiles: group.entries.slice(0, MAX_TILES).map(entry => ({ name: entry.label || entry.name, icon: logoOf(entry.icon) })) };
+				if (drawn) {
+					card.mosaic = { file: `logos-${index}.png`, options: { style: config.categoryImage, ...imageOptions(card.color) }, tiles: group.entries.slice(0, MAX_TILES).map(tileOf) };
 					card.imageUrl = `attachment://${card.mosaic.file}`;
 				}
 				return card;
@@ -302,13 +324,27 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 				const label = group.category ? [/^</.test(group.category.emoji) ? '' : group.category.emoji, group.category.name].filter(Boolean).join(' ') : '';
 				return [...group.entries.map((entry) => {
 					const v = varsOf(entry, group.category);
+					// A drawn banner already carries the name, the description and the statistics
+					if (drawn) {
+						const file = `server-${entry.guildId}.png`;
+						return {
+							enabled: true,
+							authorName: label,
+							title: [v.emoji, v.name].filter(Boolean).join(' ').slice(0, 256),
+							url: v.invite,
+							imageUrl: `attachment://${file}`,
+							color: group.category?.color ?? color,
+							fields: [],
+							mosaic: { file, options: { style: 'banner', ...imageOptions(group.category?.color ?? color) }, tiles: [tileOf(entry)] },
+						};
+					}
 					return {
 						enabled: true,
 						authorName: label,
 						title: [v.emoji, v.name].filter(Boolean).join(' ').slice(0, 256),
 						url: v.invite,
 						description: [v.description, v.members && `👥 ${v.members} membres`].filter(Boolean).join('\n') || `[Rejoindre le serveur](${v.invite})`,
-						thumbnailUrl: v.icon || null,
+						thumbnailUrl: config.serverImage === 'thumbnail' ? v.icon || null : null,
 						color: group.category?.color ?? color,
 						fields: [],
 					};
@@ -373,7 +409,7 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 		for (const { mosaic: wanted, ...card } of message.cards) {
 			if (wanted) {
 				try {
-					files.push({ name: wanted.file, buffer: await mosaic(wanted.tiles, { accent: wanted.accent }) });
+					files.push({ name: wanted.file, buffer: await mosaic(wanted.tiles, wanted.options) });
 				}
 				catch (error) {
 					logger.warn('Server links: mosaic of logos:', error.message);
@@ -625,6 +661,27 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 			if (deleteMessage) await deleteMessages(board);
 			await q.removeBoard.run(id);
 			await record(actor, 'serverlinks.delete', id, { name: board.name }, board.guildId);
+		},
+
+		// One drawn image for the preview of the panel (tiles and options as returned by `preview`)
+		async image(actor, tiles, options = {}) {
+			need(actor);
+			const list = (Array.isArray(tiles) ? tiles : []).slice(0, MAX_TILES).map(tile => ({
+				name: text(tile?.name, 100) || '?',
+				icon: typeof tile?.icon === 'string' && /^https:\/\/\S{1,400}$/.test(tile.icon) ? tile.icon : null,
+				description: text(tile?.description, 300),
+				...(Number.isFinite(tile?.members) ? { members: tile.members } : {}),
+				...(Number.isFinite(tile?.voice) ? { voice: tile.voice } : {}),
+				...(Number.isFinite(tile?.boosts) ? { boosts: tile.boosts } : {}),
+			}));
+			if (!list.length) throw new ValidationError('Aucun serveur à dessiner.');
+			return await mosaic(list, {
+				style: IMAGE_STYLES.includes(options.style) ? options.style : 'tiles',
+				columns: Number.isInteger(options.columns) ? options.columns : 5,
+				names: options.names !== false,
+				stats: Boolean(options.stats),
+				accent: COLOR.test(options.accent ?? '') ? options.accent : null,
+			});
 		},
 
 		// What a board (saved or being edited) would post, without sending anything

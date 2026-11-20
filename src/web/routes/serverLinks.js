@@ -26,6 +26,11 @@ const boardProperties = {
 	compact: { type: 'boolean' },
 	layout: { type: 'string', enum: ['list', 'cards', 'categories'] },
 	logos: { type: 'boolean' },
+	categoryImage: { type: 'string', enum: ['tiles', 'slices', 'rows', 'picture', 'none'] },
+	serverImage: { type: 'string', enum: ['thumbnail', 'banner', 'none'] },
+	imageColumns: { type: 'integer', minimum: 2, maximum: 6 },
+	imageNames: { type: 'boolean' },
+	imageStats: { type: 'boolean' },
 	categoryIds: { type: 'array', maxItems: 25, items: { type: 'integer' } },
 	groupByCategory: { type: 'boolean' },
 	categoryHeader: { type: 'string', maxLength: 200 },
@@ -94,6 +99,19 @@ export function registerServerLinkRoutes(app, { core }) {
 	};
 	app.put('/api/server-links/layout', { config: { permission: 'serverlinks.manage' }, schema: { body: layoutBody } }, async (request) => {
 		return await serverLinks.arrange(request.actor, request.body.groups);
+	});
+	const imageBody = {
+		type: 'object',
+		required: ['tiles'],
+		properties: {
+			tiles: { type: 'array', minItems: 1, maxItems: 25, items: { type: 'object' } },
+			options: { type: 'object' },
+		},
+	};
+	// A drawn image of the preview, as a data URL the panel shows as is
+	app.post('/api/server-links/image', { config: { permission: 'serverlinks.manage' }, schema: { body: imageBody } }, async (request) => {
+		const buffer = await serverLinks.image(request.actor, request.body.tiles, request.body.options ?? {});
+		return { image: `data:image/png;base64,${Buffer.from(buffer).toString('base64')}` };
 	});
 	app.post('/api/server-links/preview', { config: { permission: 'serverlinks.manage' }, schema: { body: { type: 'object', required: ['guildId'], properties: boardProperties } } }, async (request) => {
 		return await serverLinks.preview(request.actor, request.body);
