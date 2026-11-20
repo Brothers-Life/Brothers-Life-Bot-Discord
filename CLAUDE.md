@@ -60,6 +60,7 @@ Réseau de serveurs, rangs et permissions synchronisés, staff sync, sanctions (
 ### Liens entre serveurs (`src/core/serverLinks.js`, page `/server-links`)
 - Par serveur (`server_link_guilds`) : affiché ou non (**non par défaut**, pour ne jamais publier un serveur staff), nom, description, émoji, ordre, invitation `auto` (`executor.createInvite`, permanente, salon choisi ou trouvé par le bot) ou `manual` (lien vérifié par `resolveInvite`).
 - Messages (`server_link_boards`) : un serveur + un salon, payload `{ content, embed }` avec `{links}` / `{count}`, modèle de ligne (`{name}` `{invite}` `{description}` `{emoji}` `{members}`), serveurs tous ou choisis, boutons lien (`upsertMessage(…, { buttons })`). Édité en place, empreinte pour ne rien renvoyer d'identique, verrou `syncing_at` (panel et tâche ne postent jamais en double).
+- Catégories (`server_link_categories` : nom, émoji, couleur, ordre ; « légal », « illégal »…) : une par serveur, les messages regroupent par catégorie (`groupByCategory`, titre `categoryHeader`), filtre `categoryIds`. Présentation `layout: 'cards'` : un embed par serveur avec son logo (`payload.cards`, 10 embeds par message, suite dans `extra_ids`), boutons sous le dernier message.
 - Tâche toutes les 10 min (`tick`) : invitations revérifiées une fois par heure (auto : recréée, manuelle : erreur affichée), serveurs entrés/sortis du réseau. Permissions `serverlinks.view` / `.manage`.
 
 ### Commandes et panel après l'audit de logique (v1.11.0)

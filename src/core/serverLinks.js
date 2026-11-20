@@ -7,17 +7,23 @@ import { fillVars } from './cards.js';
 import { createVariables } from './variables.js';
 
 definePermission('serverlinks.view', { label: 'Voir les liens entre serveurs', category: 'Réseau' });
-definePermission('serverlinks.manage', { label: 'Gérer les liens entre serveurs (invitations, messages)', category: 'Réseau' });
+definePermission('serverlinks.manage', { label: 'Gérer les liens entre serveurs (invitations, catégories, messages)', category: 'Réseau' });
 
 const SNOWFLAKE = /^\d{17,20}$/;
 const INVITE = /^(?:https?:\/\/)?(?:www\.)?(?:discord\.gg|discord(?:app)?\.com\/invite)\/([A-Za-z0-9-]{2,32})\/?$/;
 const CODE = /^[A-Za-z0-9-]{2,32}$/;
+const COLOR = /^#[0-9a-f]{6}$/i;
 const SYNC_LOCK_MS = 60_000;
 const INVITE_CHECK_MS = 3600_000;
 const MAX_BUTTONS = 25;
+const MAX_EMBEDS = 10;
+const MAX_MESSAGES = 10;
+const MAX_CATEGORIES = 25;
 const EMPTY_TEXT = '*Aucun autre serveur pour le moment.*';
+const OTHERS = 'Autres serveurs';
 
 export const DEFAULT_LINE = '{emoji} **[{name}]({invite})**\n{description}';
+export const DEFAULT_CATEGORY_HEADER = '__**{emoji} {category}**__';
 export const DEFAULT_BOARD_PAYLOAD = {
 	content: '',
 	embed: { enabled: true, title: 'Nos autres serveurs', description: '{links}', color: '#ff9628', fields: [] },
@@ -26,6 +32,12 @@ export const DEFAULT_BOARD_PAYLOAD = {
 const hash = value => createHash('sha1').update(JSON.stringify(value)).digest('hex');
 const inviteUrl = code => (code ? `https://discord.gg/${code}` : null);
 const text = (value, max) => String(value ?? '').trim().slice(0, max);
+// Lines of a template without the holes left by an empty variable
+const tidy = value => value.split('\n').map(l => l.trim()).filter(Boolean).join('\n');
+// A template filled without the holes of its empty variables ("{emoji} **Nom**" without emoji: "**Nom**")
+const fill = (template, vars) => tidy(fillVars(template.replace(/\{([a-z.]+)\}[ \t]*/gi, (match, key) => (vars[key] === '' ? '' : match)), vars));
+// The network keeps a small icon (64 px): cards show a sharper one
+const logoOf = icon => (icon ? icon.replace(/size=\d+/, 'size=256') : null);
 
 // Code of an invitation typed as a link or as a bare code
 export function parseInvite(value) {
@@ -41,37 +53,50 @@ function normalizeBoardConfig(input = {}) {
 	if (scope === 'selected' && !guildIds.length) throw new ValidationError('Choisis au moins un serveur à afficher, ou affiche tous les serveurs.');
 	const config = {
 		payload: normalizePayload(input.payload ?? DEFAULT_BOARD_PAYLOAD),
+		// list: every server in the text ({links}); cards: one embed per server, with its logo
+		layout: input.layout === 'cards' ? 'cards' : 'list',
 		line,
 		compact: Boolean(input.compact),
 		scope,
 		guildIds,
+		// Empty: every category (and the servers without one)
+		categoryIds: [...new Set((Array.isArray(input.categoryIds) ? input.categoryIds : []).map(Number).filter(Number.isInteger))].slice(0, MAX_CATEGORIES),
+		groupByCategory: input.groupByCategory !== false,
+		categoryHeader: String(input.categoryHeader ?? DEFAULT_CATEGORY_HEADER).slice(0, 200),
 		includeSelf: Boolean(input.includeSelf),
 		buttons: input.buttons !== false,
 		repost: input.repost !== false,
 	};
 	const e = config.payload.embed;
 	const everything = [config.payload.content, e.title, e.description, e.footerText, ...e.fields.flatMap(f => [f.name, f.value])].join('\n');
-	if (!config.buttons && !everything.includes('{links}')) throw new ValidationError('Le message n’affiche aucun lien : ajoute la variable {links} ou active les boutons.');
+	if (config.layout === 'list' && !config.buttons && !everything.includes('{links}')) throw new ValidationError('Le message n’affiche aucun lien : ajoute la variable {links} ou active les boutons.');
 	return config;
 }
 
-// One message per board listing the other servers of the network with their invitation, edited in place
-// when a server, an invitation or the board changes.
+// Messages listing the other servers of the network with their invitation, sorted by category, edited in
+// place when a server, an invitation, a category or the board changes.
 export function createServerLinks({ db, network, audit, executor, logs, logger = console, now = Date.now, variables = createVariables({ executor, logger, now }) }) {
 	logs?.registerCategory('serverlinks', 'Liens entre serveurs');
 	const q = {
 		guilds: db.prepare('SELECT * FROM server_link_guilds'),
 		guild: db.prepare('SELECT * FROM server_link_guilds WHERE guild_id = ?'),
 		upsertGuild: db.prepare(`
-			INSERT INTO server_link_guilds (guild_id, listed, label, description, emoji, invite_mode, invite_channel_id, invite_code, invite_error, invite_checked_at, position, updated_at)
-			VALUES (@guildId, @listed, @label, @description, @emoji, @inviteMode, @inviteChannelId, @inviteCode, NULL, @at, @position, @at)
+			INSERT INTO server_link_guilds (guild_id, listed, label, description, emoji, category_id, invite_mode, invite_channel_id, invite_code, invite_error, invite_checked_at, position, updated_at)
+			VALUES (@guildId, @listed, @label, @description, @emoji, @categoryId, @inviteMode, @inviteChannelId, @inviteCode, NULL, @at, @position, @at)
 			ON CONFLICT (guild_id) DO UPDATE SET listed = EXCLUDED.listed, label = EXCLUDED.label, description = EXCLUDED.description, emoji = EXCLUDED.emoji,
-				invite_mode = EXCLUDED.invite_mode, invite_channel_id = EXCLUDED.invite_channel_id, invite_code = EXCLUDED.invite_code, invite_error = NULL,
-				invite_checked_at = EXCLUDED.invite_checked_at, position = EXCLUDED.position, updated_at = EXCLUDED.updated_at
+				category_id = EXCLUDED.category_id, invite_mode = EXCLUDED.invite_mode, invite_channel_id = EXCLUDED.invite_channel_id, invite_code = EXCLUDED.invite_code,
+				invite_error = NULL, invite_checked_at = EXCLUDED.invite_checked_at, position = EXCLUDED.position, updated_at = EXCLUDED.updated_at
 		`),
 		setInvite: db.prepare('UPDATE server_link_guilds SET invite_code = ?, invite_channel_id = ?, invite_error = NULL, invite_checked_at = ? WHERE guild_id = ?'),
 		inviteState: db.prepare('UPDATE server_link_guilds SET invite_error = ?, invite_checked_at = ? WHERE guild_id = ?'),
 		setPosition: db.prepare('UPDATE server_link_guilds SET position = ? WHERE guild_id = ?'),
+		uncategorize: db.prepare('UPDATE server_link_guilds SET category_id = NULL WHERE category_id = ?'),
+		categories: db.prepare('SELECT * FROM server_link_categories ORDER BY position, id'),
+		category: db.prepare('SELECT * FROM server_link_categories WHERE id = ?'),
+		insertCategory: db.prepare('INSERT INTO server_link_categories (name, emoji, color, position, created_at) VALUES (@name, @emoji, @color, @position, @at)'),
+		updateCategory: db.prepare('UPDATE server_link_categories SET name = @name, emoji = @emoji, color = @color WHERE id = @id'),
+		categoryPosition: db.prepare('UPDATE server_link_categories SET position = ? WHERE id = ?'),
+		removeCategory: db.prepare('DELETE FROM server_link_categories WHERE id = ?'),
 		boards: db.prepare('SELECT * FROM server_link_boards ORDER BY id'),
 		board: db.prepare('SELECT * FROM server_link_boards WHERE id = ?'),
 		insertBoard: db.prepare(`
@@ -79,10 +104,10 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 			VALUES (@name, @guildId, @channelId, @enabled, @config, @by, @at, @at)
 		`),
 		updateBoard: db.prepare('UPDATE server_link_boards SET name = @name, guild_id = @guildId, channel_id = @channelId, enabled = @enabled, config = @config, updated_at = @at WHERE id = @id'),
-		moved: db.prepare('UPDATE server_link_boards SET discord_id = NULL, last_hash = NULL WHERE id = ?'),
+		moved: db.prepare('UPDATE server_link_boards SET discord_id = NULL, extra_ids = \'[]\', last_hash = NULL WHERE id = ?'),
 		removeBoard: db.prepare('DELETE FROM server_link_boards WHERE id = ?'),
 		claim: db.prepare('UPDATE server_link_boards SET syncing_at = ? WHERE id = ? AND (syncing_at IS NULL OR syncing_at < ?)'),
-		done: db.prepare('UPDATE server_link_boards SET discord_id = ?, last_hash = ?, last_error = NULL, synced_at = ?, syncing_at = NULL WHERE id = ?'),
+		done: db.prepare('UPDATE server_link_boards SET discord_id = ?, extra_ids = ?, last_hash = ?, last_error = NULL, synced_at = ?, syncing_at = NULL WHERE id = ?'),
 		failed: db.prepare('UPDATE server_link_boards SET last_error = ?, synced_at = ?, syncing_at = NULL WHERE id = ?'),
 		release: db.prepare('UPDATE server_link_boards SET syncing_at = NULL WHERE id = ?'),
 	};
@@ -98,6 +123,7 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 		label: server.label,
 		description: server.description,
 		emoji: server.emoji,
+		categoryId: server.categoryId,
 		inviteMode: server.inviteMode,
 		inviteChannelId: server.inviteChannelId,
 		inviteCode: server.inviteCode,
@@ -108,7 +134,10 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 
 	const activeGuilds = async () => (await network.list()).filter(g => g.status === 'active' && g.botPresent);
 
-	function toServer(guild, row) {
+	const toCategory = row => ({ id: row.id, name: row.name, emoji: row.emoji, color: row.color, position: row.position });
+	const categories = async () => (await q.categories.all()).map(toCategory);
+
+	function toServer(guild, row, known) {
 		return {
 			guildId: guild.id,
 			name: guild.name,
@@ -118,6 +147,8 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 			label: row?.label ?? '',
 			description: row?.description ?? '',
 			emoji: row?.emoji ?? '',
+			// A deleted category leaves its servers without one
+			categoryId: row?.category_id && known.has(row.category_id) ? row.category_id : null,
 			inviteMode: row?.invite_mode ?? 'auto',
 			inviteChannelId: row?.invite_channel_id ?? null,
 			inviteCode: row?.invite_code ?? null,
@@ -130,12 +161,14 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 	// Servers of the network in their display order
 	async function servers() {
 		const rows = new Map((await q.guilds.all()).map(r => [r.guild_id, r]));
+		const known = new Set((await categories()).map(c => c.id));
 		return (await activeGuilds())
-			.map(g => toServer(g, rows.get(g.id)))
+			.map(g => toServer(g, rows.get(g.id), known))
 			.sort((a, b) => a.position - b.position || Number(b.isMain) - Number(a.isMain) || a.name.localeCompare(b.name, 'fr'));
 	}
 
 	function toBoard(row) {
+		const extraIds = JSON.parse(row.extra_ids ?? '[]');
 		return {
 			id: row.id,
 			name: row.name,
@@ -144,6 +177,7 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 			enabled: row.enabled === 1,
 			...normalizeBoardConfig(JSON.parse(row.config)),
 			messageId: row.discord_id,
+			messageIds: [row.discord_id, ...extraIds].filter(Boolean),
 			error: row.last_error,
 			syncedAt: row.synced_at,
 			createdBy: row.created_by,
@@ -180,53 +214,119 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 			if (!server.listed) continue;
 			if (server.guildId === guildId && !config.includeSelf) continue;
 			if (config.scope === 'selected' && !config.guildIds.includes(server.guildId)) continue;
+			if (config.categoryIds.length && !config.categoryIds.includes(server.categoryId)) continue;
 			const ready = await ensureInvite(server);
 			if (ready.inviteUrl) out.push(ready);
 		}
 		return out;
 	}
 
-	async function render(config, guildId, list) {
-		const entries = await entriesFor(config, guildId, list);
-		const wantsMembers = config.line.includes('{members}');
-		const lines = [];
-		for (const entry of entries) {
-			const counts = wantsMembers ? await executor.getGuildCounts(entry.guildId).catch(() => null) : null;
-			const line = fillVars(config.line, {
-				name: entry.label || entry.name,
-				invite: entry.inviteUrl,
-				description: entry.description,
-				emoji: entry.emoji,
-				members: counts ? counts.members.toLocaleString('fr-FR') : '',
-			});
-			// A server without emoji or description leaves no hole
-			lines.push(line.split('\n').map(l => l.trim()).filter(Boolean).join('\n'));
-		}
-		const vars = {
-			...(await variables.server(guildId)),
-			links: lines.length ? lines.join(config.compact ? '\n' : '\n\n') : EMPTY_TEXT,
-			count: entries.length,
-		};
-		const buttons = config.buttons
-			? entries.slice(0, MAX_BUTTONS).map(e => ({ label: (e.label || e.name).slice(0, 80), url: e.inviteUrl, emoji: e.emoji || null }))
-			: [];
-		return { payload: fillPayload(config.payload, vars), buttons, servers: entries.map(e => e.guildId) };
+	// Entries sorted by category (in the order of the categories, servers without one last).
+	// Without grouping, or when no shown server has a category: one group without title.
+	function groupsOf(config, entries, cats) {
+		if (!config.groupByCategory || !entries.some(e => e.categoryId)) return [{ category: null, entries }];
+		const groups = cats
+			.map(category => ({ category, entries: entries.filter(e => e.categoryId === category.id) }))
+			.filter(g => g.entries.length);
+		const rest = entries.filter(e => !e.categoryId);
+		if (rest.length) groups.push({ category: { id: null, name: OTHERS, emoji: '', color: null }, entries: rest });
+		return groups;
 	}
 
-	// Posts or edits the message of a board; only a real change reaches Discord
-	async function sync(board, { force = false, list = null } = {}) {
+	// The messages of a board: [{ content, embed, cards }]. A message holds 10 embeds at most, so cards
+	// continue in the next messages.
+	async function render(config, guildId, list, cats) {
+		const entries = await entriesFor(config, guildId, list);
+		const groups = groupsOf(config, entries, cats);
+		const ordered = groups.flatMap(g => g.entries);
+		const everything = `${config.line}\n${JSON.stringify(config.payload)}`;
+		const counts = new Map();
+		if (everything.includes('{members}')) {
+			for (const entry of ordered) counts.set(entry.guildId, (await executor.getGuildCounts(entry.guildId).catch(() => null))?.members ?? null);
+		}
+		const varsOf = (entry, category) => ({
+			name: entry.label || entry.name,
+			invite: entry.inviteUrl,
+			description: entry.description,
+			emoji: entry.emoji,
+			icon: logoOf(entry.icon) ?? '',
+			category: category?.name ?? '',
+			members: counts.get(entry.guildId)?.toLocaleString('fr-FR') ?? '',
+		});
+		const header = category => fill(config.categoryHeader, { category: category.name, emoji: category.emoji });
+		const separator = config.compact ? '\n' : '\n\n';
+		const blocks = groups.map((group) => {
+			const lines = group.entries.map(entry => fill(config.line, varsOf(entry, group.category)));
+			return [group.category && config.categoryHeader.trim() ? header(group.category) : null, ...lines].filter(Boolean).join(separator);
+		});
+		const vars = {
+			...(await variables.server(guildId)),
+			links: ordered.length ? blocks.join('\n\n') : EMPTY_TEXT,
+			count: ordered.length,
+		};
+		const first = fillPayload(config.payload, vars);
+		const buttons = config.buttons
+			? ordered.slice(0, MAX_BUTTONS).map(e => ({ label: (e.label || e.name).slice(0, 80), url: e.inviteUrl, emoji: e.emoji || null }))
+			: [];
+		const messages = [{ ...first, cards: [] }];
+		if (config.layout === 'cards') {
+			const color = config.payload.embed.color;
+			const cards = groups.flatMap((group) => {
+				const title = group.category && config.categoryHeader.trim() ? [{ enabled: true, description: header(group.category), color: group.category.color ?? color, fields: [] }] : [];
+				return [...title, ...group.entries.map((entry) => {
+					const v = varsOf(entry, group.category);
+					return {
+						enabled: true,
+						title: [v.emoji, v.name].filter(Boolean).join(' ').slice(0, 256),
+						url: v.invite,
+						description: [v.description, v.members && `👥 ${v.members} membres`].filter(Boolean).join('\n') || `[Rejoindre le serveur](${v.invite})`,
+						thumbnailUrl: v.icon || null,
+						color: group.category?.color ?? color,
+						fields: [],
+					};
+				})];
+			});
+			const hasHeader = Boolean(first.content) || buildsEmbed(first.embed);
+			if (!hasHeader) messages.pop();
+			for (const card of cards) {
+				let last = messages.at(-1);
+				const used = last ? last.cards.length + (last.embed.enabled && buildsEmbed(last.embed) ? 1 : 0) : MAX_EMBEDS;
+				if (used >= MAX_EMBEDS) {
+					if (messages.length >= MAX_MESSAGES) break;
+					last = { content: '', embed: { enabled: false, fields: [] }, cards: [] };
+					messages.push(last);
+				}
+				last.cards.push(card);
+			}
+			if (!messages.length) messages.push({ ...first, cards: [] });
+		}
+		return { messages, payload: messages[0], buttons, servers: ordered.map(e => e.guildId) };
+	}
+
+	function buildsEmbed(e) {
+		return Boolean(e?.enabled && (e.title || e.description || e.fields?.length || e.imageUrl || e.authorName));
+	}
+
+	// Posts or edits the messages of a board; only a real change reaches Discord
+	async function sync(board, { force = false, list = null, cats = null } = {}) {
 		if (!board.enabled) return { id: board.id, ok: true, skipped: true };
 		if (!(await q.claim.run(now(), board.id, now() - SYNC_LOCK_MS)).changes) return { id: board.id, ok: true, busy: true };
 		try {
 			if ((await network.find(board.guildId))?.status !== 'active') throw new Error('Ce serveur ne fait plus partie du réseau.');
-			const { payload, buttons } = await render(board, board.guildId, list ?? await servers());
-			const h = hash({ payload, buttons });
+			const { messages, buttons } = await render(board, board.guildId, list ?? await servers(), cats ?? await categories());
+			const h = hash({ messages, buttons });
 			if (!force && h === (await q.board.get(board.id))?.last_hash && board.messageId) {
 				await q.release.run(board.id);
 				return { id: board.id, ok: true, unchanged: true };
 			}
-			const messageId = await executor.upsertMessage(board.channelId, board.messageId, payload, { repost: board.repost, buttons });
-			await q.done.run(messageId, h, now(), board.id);
+			const ids = [];
+			for (const [index, message] of messages.entries()) {
+				// The buttons go under the last message, below every server
+				const options = { repost: board.repost, buttons: index === messages.length - 1 ? buttons : [] };
+				ids.push(await executor.upsertMessage(board.channelId, board.messageIds[index] ?? null, message, options));
+			}
+			for (const surplus of board.messageIds.slice(messages.length)) await executor.deleteMessage(board.channelId, surplus).catch(() => null);
+			await q.done.run(ids[0], JSON.stringify(ids.slice(1)), h, now(), board.id);
 			return { id: board.id, ok: true };
 		}
 		catch (error) {
@@ -238,9 +338,14 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 
 	async function syncAll() {
 		const list = await servers();
+		const cats = await categories();
 		const results = [];
-		for (const row of await q.boards.all()) results.push(await sync(toBoard(row), { list }));
+		for (const row of await q.boards.all()) results.push(await sync(toBoard(row), { list, cats }));
 		return results;
+	}
+
+	async function deleteMessages(board) {
+		for (const id of board.messageIds) await executor.deleteMessage(board.channelId, id).catch(() => null);
 	}
 
 	async function validateBoard(input) {
@@ -251,12 +356,71 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 		return { name, guildId: input.guildId, channelId: input.channelId, enabled: input.enabled === false ? 0 : 1, config: JSON.stringify(normalizeBoardConfig(input)) };
 	}
 
+	function validateCategory(input = {}) {
+		const name = text(input.name, 60);
+		if (!name) throw new ValidationError('Le nom de la catégorie fait 1 à 60 caractères.');
+		const color = input.color ? String(input.color).toLowerCase() : null;
+		if (color && !COLOR.test(color)) throw new ValidationError('Couleur invalide (attendu : #rrggbb).');
+		return { name, emoji: text(input.emoji, 64), color };
+	}
+
 	const record = (actor, action, target, details, guildId = null) => audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action, guildId, target: String(target), details });
 
 	return {
 		servers,
+		categories,
 		boards: async () => (await q.boards.all()).map(toBoard),
 		get: getOrThrow,
+
+		// Categories sort the servers in the panel and in the messages (legal businesses, illegal groups...)
+		async createCategory(actor, input) {
+			need(actor);
+			const values = validateCategory(input);
+			const existing = await categories();
+			if (existing.length >= MAX_CATEGORIES) throw new ValidationError(`${MAX_CATEGORIES} catégories au maximum.`);
+			if (existing.some(c => c.name.toLowerCase() === values.name.toLowerCase())) throw new ValidationError('Une catégorie porte déjà ce nom.');
+			const id = Number((await q.insertCategory.run({ ...values, position: existing.length, at: now() })).lastInsertRowid);
+			await record(actor, 'serverlinks.category', id, { name: values.name });
+			return toCategory(await q.category.get(id));
+		},
+
+		async updateCategory(actor, id, input) {
+			need(actor);
+			if (!await q.category.get(id)) throw new NotFoundError('Catégorie introuvable.');
+			const values = validateCategory(input);
+			if ((await categories()).some(c => c.id !== id && c.name.toLowerCase() === values.name.toLowerCase())) throw new ValidationError('Une catégorie porte déjà ce nom.');
+			await q.updateCategory.run({ ...values, id });
+			await record(actor, 'serverlinks.category', id, { name: values.name });
+			await syncAll();
+			return toCategory(await q.category.get(id));
+		},
+
+		// Its servers stay listed, without category
+		async removeCategory(actor, id) {
+			need(actor);
+			const row = await q.category.get(id);
+			if (!row) throw new NotFoundError('Catégorie introuvable.');
+			await db.transaction(async () => {
+				await q.uncategorize.run(id);
+				await q.removeCategory.run(id);
+			})();
+			await record(actor, 'serverlinks.category_delete', id, { name: row.name });
+			await syncAll();
+		},
+
+		async reorderCategories(actor, ids) {
+			need(actor);
+			const wanted = [...new Set((Array.isArray(ids) ? ids : []).map(Number).filter(Number.isInteger))];
+			const existing = await categories();
+			await db.transaction(async () => {
+				for (const category of existing) {
+					const index = wanted.indexOf(category.id);
+					await q.categoryPosition.run(index === -1 ? wanted.length + category.position : index, category.id);
+				}
+			})();
+			await syncAll();
+			return await categories();
+		},
 
 		// How one server is presented in the boards of the others, and where its invitation comes from
 		async saveServer(actor, guildId, input = {}) {
@@ -265,6 +429,8 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 			if (!guild || guild.status !== 'active' || !guild.botPresent) throw new ValidationError('Ce serveur ne fait pas partie du réseau.');
 			const previous = await q.guild.get(guild.id);
 			const listed = Boolean(input.listed);
+			const categoryId = input.categoryId === null || input.categoryId === undefined ? null : Number(input.categoryId);
+			if (categoryId !== null && !await q.category.get(categoryId)) throw new ValidationError('Cette catégorie n’existe plus.');
 			const inviteMode = input.inviteMode === 'manual' ? 'manual' : 'auto';
 			let inviteChannelId = SNOWFLAKE.test(input.inviteChannelId ?? '') ? input.inviteChannelId : null;
 			let inviteCode = null;
@@ -295,6 +461,7 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 				label: text(input.label, 80),
 				description: text(input.description, 300),
 				emoji: text(input.emoji, 64),
+				categoryId,
 				inviteMode,
 				inviteChannelId,
 				inviteCode,
@@ -325,7 +492,7 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 			return { server: (await servers()).find(s => s.guildId === server.guildId), results };
 		},
 
-		// Display order of the servers in every board
+		// Display order of the servers in every board (inside their category)
 		async reorder(actor, guildIds) {
 			need(actor);
 			const ids = [...new Set((Array.isArray(guildIds) ? guildIds : []).filter(id => SNOWFLAKE.test(id)))];
@@ -356,13 +523,9 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 			const before = await getOrThrow(id);
 			const values = await validateBoard(input);
 			await q.updateBoard.run({ ...values, id, at: now() });
-			// Another channel: the old message is removed, a new one is posted
-			if (before.channelId !== values.channelId) {
-				if (before.messageId) await executor.deleteMessage(before.channelId, before.messageId).catch(() => null);
-				await q.moved.run(id);
-			}
-			else if (!values.enabled && before.messageId) {
-				await executor.deleteMessage(before.channelId, before.messageId).catch(() => null);
+			// Another channel, or turned off: the old messages are removed
+			if (before.channelId !== values.channelId || !values.enabled) {
+				await deleteMessages(before);
 				await q.moved.run(id);
 			}
 			await record(actor, 'serverlinks.update', id, { name: values.name }, values.guildId);
@@ -382,7 +545,7 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 		async remove(actor, id, { deleteMessage = true } = {}) {
 			need(actor);
 			const board = await getOrThrow(id);
-			if (deleteMessage && board.messageId) await executor.deleteMessage(board.channelId, board.messageId).catch(() => null);
+			if (deleteMessage) await deleteMessages(board);
 			await q.removeBoard.run(id);
 			await record(actor, 'serverlinks.delete', id, { name: board.name }, board.guildId);
 		},
@@ -392,7 +555,7 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 			need(actor);
 			if (!SNOWFLAKE.test(input.guildId)) throw new ValidationError('Choisis le serveur du message.');
 			const list = (await servers()).map(s => (s.listed && s.inviteMode === 'auto' && !s.inviteCode ? { ...s, inviteUrl: 'https://discord.gg/…', inviteCode: '…' } : s));
-			return await render(normalizeBoardConfig(input), input.guildId, list);
+			return await render(normalizeBoardConfig(input), input.guildId, list, await categories());
 		},
 
 		// Periodic: dead invitations are replaced (automatic) or flagged (manual), servers that joined or left

@@ -1,5 +1,5 @@
 import { networkTargets, snowflake } from './helpers.js';
-import { DEFAULT_BOARD_PAYLOAD, DEFAULT_LINE } from '../../core/serverLinks.js';
+import { DEFAULT_BOARD_PAYLOAD, DEFAULT_CATEGORY_HEADER, DEFAULT_LINE } from '../../core/serverLinks.js';
 
 const idParam = { type: 'object', properties: { id: { type: 'integer' } }, required: ['id'] };
 const guildParam = { type: 'object', properties: { guildId: snowflake }, required: ['guildId'] };
@@ -10,6 +10,7 @@ const serverBody = {
 		label: { type: 'string', maxLength: 80 },
 		description: { type: 'string', maxLength: 300 },
 		emoji: { type: 'string', maxLength: 64 },
+		categoryId: { anyOf: [{ type: 'null' }, { type: 'integer' }] },
 		inviteMode: { type: 'string', enum: ['auto', 'manual'] },
 		inviteChannelId: { anyOf: [{ type: 'null' }, snowflake] },
 		inviteUrl: { type: 'string', maxLength: 200 },
@@ -23,11 +24,24 @@ const boardProperties = {
 	payload: { type: 'object' },
 	line: { type: 'string', maxLength: 400 },
 	compact: { type: 'boolean' },
+	layout: { type: 'string', enum: ['list', 'cards'] },
+	categoryIds: { type: 'array', maxItems: 25, items: { type: 'integer' } },
+	groupByCategory: { type: 'boolean' },
+	categoryHeader: { type: 'string', maxLength: 200 },
 	scope: { type: 'string', enum: ['all', 'selected'] },
 	guildIds: { type: 'array', maxItems: 50, items: snowflake },
 	includeSelf: { type: 'boolean' },
 	buttons: { type: 'boolean' },
 	repost: { type: 'boolean' },
+};
+const categoryBody = {
+	type: 'object',
+	required: ['name'],
+	properties: {
+		name: { type: 'string', maxLength: 60 },
+		emoji: { type: 'string', maxLength: 64 },
+		color: { anyOf: [{ type: 'null' }, { type: 'string', maxLength: 7 }] },
+	},
 };
 const boardBody = { type: 'object', required: ['name', 'guildId', 'channelId'], properties: boardProperties };
 
@@ -39,8 +53,23 @@ export function registerServerLinkRoutes(app, { core }) {
 		servers: await serverLinks.servers(),
 		boards: await serverLinks.boards(),
 		targets: await networkTargets(core),
-		defaults: { line: DEFAULT_LINE, payload: DEFAULT_BOARD_PAYLOAD },
+		categories: await serverLinks.categories(),
+		defaults: { line: DEFAULT_LINE, payload: DEFAULT_BOARD_PAYLOAD, categoryHeader: DEFAULT_CATEGORY_HEADER },
 	}));
+	app.post('/api/server-links/categories', { config: { permission: 'serverlinks.manage' }, schema: { body: categoryBody } }, async (request, reply) => {
+		reply.code(201);
+		return await serverLinks.createCategory(request.actor, request.body);
+	});
+	app.put('/api/server-links/categories/order', { config: { permission: 'serverlinks.manage' }, schema: { body: { type: 'object', required: ['ids'], properties: { ids: { type: 'array', maxItems: 25, items: { type: 'integer' } } } } } }, async (request) => {
+		return await serverLinks.reorderCategories(request.actor, request.body.ids);
+	});
+	app.put('/api/server-links/categories/:id', { config: { permission: 'serverlinks.manage' }, schema: { params: idParam, body: categoryBody } }, async (request) => {
+		return await serverLinks.updateCategory(request.actor, request.params.id, request.body);
+	});
+	app.delete('/api/server-links/categories/:id', { config: { permission: 'serverlinks.manage', confirm: true }, schema: { params: idParam } }, async (request) => {
+		await serverLinks.removeCategory(request.actor, request.params.id);
+		return { ok: true };
+	});
 	app.put('/api/server-links/servers/:guildId', { config: { permission: 'serverlinks.manage' }, schema: { params: guildParam, body: serverBody } }, async (request) => {
 		return await serverLinks.saveServer(request.actor, request.params.guildId, request.body);
 	});

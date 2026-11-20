@@ -173,6 +173,8 @@ const TITLES = {
 	'messages.delete': 'Message dynamique supprimé',
 	'serverlinks.server': 'Liens entre serveurs : serveur modifié',
 	'serverlinks.invite': 'Liens entre serveurs : invitation renouvelée',
+	'serverlinks.category': 'Liens entre serveurs : catégorie enregistrée',
+	'serverlinks.category_delete': 'Liens entre serveurs : catégorie supprimée',
 	'serverlinks.create': 'Message de liens créé',
 	'serverlinks.update': 'Message de liens modifié',
 	'serverlinks.publish': 'Message de liens renvoyé',

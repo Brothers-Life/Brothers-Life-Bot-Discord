@@ -1,0 +1,29 @@
+meta {
+  name: DELETE /server-links/categories/:id
+  type: http
+  seq: 7
+}
+
+delete {
+  url: {{baseUrl}}/api/server-links/categories/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "confirm": true
+  }
+}
+
+docs {
+  Supprimer — `DELETE /api/server-links/categories/:id`
+
+  Permission requise : `serverlinks.manage`
+
+  Action sensible : le corps doit contenir `"confirm": true`.
+}

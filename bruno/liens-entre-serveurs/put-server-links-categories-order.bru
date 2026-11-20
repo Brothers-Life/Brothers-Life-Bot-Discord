@@ -1,0 +1,28 @@
+meta {
+  name: PUT /server-links/categories/order
+  type: http
+  seq: 9
+}
+
+put {
+  url: {{baseUrl}}/api/server-links/categories/order
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "ids": [
+      1
+    ]
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/server-links/categories/order`
+
+  Permission requise : `serverlinks.manage`
+
+  Corps JSON :
+  - `ids` (array) — obligatoire
+}

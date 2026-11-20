@@ -168,3 +168,52 @@ test('display order and preview', async () => {
 	assert.match(preview.payload.embed.description, /^\*\*\[Second\]/);
 	assert.equal(executor.calls.length, posted, 'nothing is sent');
 });
+
+test('categories sort the servers, in the list and in the buttons', async () => {
+	const { core, links, owner, executor } = await setup();
+	await assert.rejects(links.createCategory(await core.ranks.resolve(ALICE), { name: 'x' }), ForbiddenError);
+	const illegal = await links.createCategory(owner, { name: 'Illégal', emoji: '🔫', color: '#AA0000' });
+	const legal = await links.createCategory(owner, { name: 'Légal' });
+	assert.equal(illegal.color, '#aa0000');
+	await assert.rejects(links.createCategory(owner, { name: 'légal' }), /déjà ce nom/);
+	await assert.rejects(links.createCategory(owner, { name: 'Autre', color: 'rouge' }), /Couleur/);
+	await assert.rejects(links.saveServer(owner, MAIN, { listed: true, categoryId: 9999 }), /n’existe plus/);
+
+	await links.saveServer(owner, MAIN, { listed: true, label: 'Mairie', categoryId: legal.id });
+	await links.saveServer(owner, OTHER, { listed: true, label: 'Gang', categoryId: illegal.id });
+	const created = await links.create(owner, board({ includeSelf: true, compact: true }));
+	const read = () => only(executor, C_MAIN)[0];
+	assert.equal(read().embed.description, '__**🔫 Illégal**__\n**[Gang](https://discord.gg/auto2)**\n\n__**Légal**__\n**[Mairie](https://discord.gg/auto1)**');
+	assert.deepEqual(read().buttons.map(b => b.label), ['Gang', 'Mairie']);
+
+	// Order of the categories, then a board limited to one category
+	assert.deepEqual((await links.reorderCategories(owner, [legal.id, illegal.id])).map(c => c.name), ['Légal', 'Illégal']);
+	assert.match(read().embed.description, /^__\*\*Légal\*\*__/);
+	await links.update(owner, created.id, board({ includeSelf: true, categoryIds: [illegal.id], groupByCategory: false }));
+	assert.equal(read().embed.description, '**[Gang](https://discord.gg/auto2)**');
+
+	// A deleted category leaves its servers listed, without title when none has a category
+	await links.update(owner, created.id, board({ includeSelf: true, compact: true }));
+	await links.removeCategory(owner, illegal.id);
+	assert.equal(read().embed.description, '__**Légal**__\n**[Mairie](https://discord.gg/auto1)**\n\n__**Autres serveurs**__\n**[Gang](https://discord.gg/auto2)**');
+	await links.removeCategory(owner, legal.id);
+	assert.doesNotMatch(read().embed.description, /Autres serveurs|Légal/);
+	assert.equal((await links.servers()).every(s => s.categoryId === null), true);
+});
+
+test('cards: one embed with the logo per server, continued in more messages', async () => {
+	const { core, links, owner, executor } = await setup();
+	const gangs = await links.createCategory(owner, { name: 'Gangs', color: '#aa0000' });
+	await core.db.prepare('UPDATE guilds SET icon = ? WHERE id = ?').run('https://cdn.discordapp.com/icons/1/a.png?size=64', OTHER);
+	await links.saveServer(owner, OTHER, { listed: true, label: 'Gang', description: 'Les rues', categoryId: gangs.id });
+	const created = await links.create(owner, board({ layout: 'cards', payload: { content: '', embed: { enabled: true, title: 'Nos serveurs', description: '{count} serveur' } } }));
+	const [message] = only(executor, C_MAIN);
+	assert.equal(message.embed.description, '1 serveur');
+	assert.deepEqual(message.cards.map(c => c.title ?? c.description), ['__**Gangs**__', 'Gang']);
+	const card = message.cards[1];
+	assert.equal(card.url, 'https://discord.gg/auto1');
+	assert.equal(card.thumbnailUrl, 'https://cdn.discordapp.com/icons/1/a.png?size=256');
+	assert.equal(card.color, '#aa0000');
+	assert.equal(card.description, 'Les rues');
+	assert.deepEqual(created.messageIds.length, 1);
+});

@@ -1,0 +1,30 @@
+meta {
+  name: POST /server-links/categories
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/server-links/categories
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "name",
+    "emoji": "emoji",
+    "color": null
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/server-links/categories`
+
+  Permission requise : `serverlinks.manage`
+
+  Corps JSON :
+  - `name` (string) — obligatoire
+  - `emoji` (string)
+  - `color` (null | string)
+}

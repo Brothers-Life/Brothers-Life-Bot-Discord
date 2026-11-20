@@ -1,7 +1,7 @@
 meta {
   name: PUT /server-links/servers/:guildId
   type: http
-  seq: 8
+  seq: 12
 }
 
 put {
@@ -20,6 +20,7 @@ body:json {
     "label": "label",
     "description": "description",
     "emoji": "emoji",
+    "categoryId": null,
     "inviteMode": "auto",
     "inviteChannelId": null,
     "inviteUrl": "inviteUrl"
@@ -36,6 +37,7 @@ docs {
   - `label` (string)
   - `description` (string)
   - `emoji` (string)
+  - `categoryId` (null | integer)
   - `inviteMode` ("auto" | "manual")
   - `inviteChannelId` (null | string)
   - `inviteUrl` (string)

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, Copy, Plus, RefreshCw, Save, Send, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Copy, Plus, RefreshCw, Save, Send, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { AnnouncementEmbed, AnnouncementTargetsPayload } from '@/lib/types'
@@ -15,6 +15,7 @@ import { EmbedFields, EMPTY_EMBED, cleanEmbed } from '@/features/announcements/e
 import { DiscordPreview } from '@/features/announcements/discord-preview'
 import { ChannelSelect } from '@/components/app/pickers'
 import { EmojiField } from '@/components/app/emoji-picker'
+import { ColorPicker } from '@/components/app/color-picker'
 import { MarkdownTextarea } from '@/components/app/markdown-toolbar'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -38,11 +39,14 @@ type LinkServer = {
   label: string
   description: string
   emoji: string
+  categoryId: number | null
   inviteMode: 'auto' | 'manual'
   inviteChannelId: string | null
   inviteUrl: string | null
   inviteError: string | null
 }
+type Category = { id: number; name: string; emoji: string; color: string | null }
+type Card = { title?: string; url?: string; description?: string; thumbnailUrl?: string | null; color: string }
 type SyncResult = { ok: boolean; error?: string }
 type Board = {
   id: number
@@ -51,10 +55,14 @@ type Board = {
   channelId: string
   enabled: boolean
   payload: { content: string; embed: AnnouncementEmbed }
+  layout: 'list' | 'cards'
   line: string
   compact: boolean
   scope: 'all' | 'selected'
   guildIds: string[]
+  categoryIds: number[]
+  groupByCategory: boolean
+  categoryHeader: string
   includeSelf: boolean
   buttons: boolean
   repost: boolean
@@ -68,9 +76,11 @@ type Payload = {
   servers: LinkServer[]
   boards: Board[]
   targets: AnnouncementTargetsPayload
-  defaults: { line: string; payload: { content: string; embed: Partial<AnnouncementEmbed> } }
+  categories: Category[]
+  defaults: { line: string; categoryHeader: string; payload: { content: string; embed: Partial<AnnouncementEmbed> } }
 }
-type Preview = { payload: { content: string; embed: AnnouncementEmbed }; buttons: { label: string; url: string; emoji: string | null }[]; servers: string[] }
+type PreviewMessage = { content: string; embed: AnnouncementEmbed; cards: Card[] }
+type Preview = { messages: PreviewMessage[]; buttons: { label: string; url: string; emoji: string | null }[]; servers: string[] }
 
 const KEY = ['server-links']
 const LINE_VARS = [
@@ -91,6 +101,9 @@ function ServerLinksPage() {
   const select = (id: number | 'new' | null) => { if (id !== selected) void guard(() => { setDirty(false); setSelected(id) }) }
   const current = selected === 'new' ? null : data?.boards.find((b) => b.id === selected) ?? null
   const listed = data?.servers.filter((s) => s.listed).length ?? 0
+  // 'all', 'none' (servers without category) or the id of a category
+  const [filter, setFilter] = useState('all')
+  const shows = (s: LinkServer) => filter === 'all' || (filter === 'none' ? s.categoryId === null : String(s.categoryId) === filter)
 
   return (
     <Page
@@ -100,11 +113,26 @@ function ServerLinksPage() {
     >
       {!data ? <Skeleton className='h-64' /> : (
         <div className='grid grid-cols-[minmax(0,1fr)] gap-6'>
-          <Section title='Serveurs du réseau' description='Choisis les serveurs à présenter et d’où vient leur invitation. Un serveur non affiché n’apparaît dans aucun message.'>
-            {!data.servers.length ? <EmptyState title='Aucun serveur dans le réseau' /> : (
+          <CategoriesSection categories={data.categories} servers={data.servers} manage={manage} />
+
+          <Section
+            title='Serveurs du réseau'
+            description='Choisis les serveurs à présenter, leur catégorie et d’où vient leur invitation. Un serveur non affiché n’apparaît dans aucun message.'
+            actions={data.categories.length > 0 && (
+              <Select value={filter} onValueChange={setFilter}>
+                <SelectTrigger className='w-48' aria-label='Filtrer par catégorie'><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='all'>Toutes les catégories</SelectItem>
+                  {data.categories.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+                  <SelectItem value='none'>Sans catégorie</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+          >
+            {!data.servers.length ? <EmptyState title='Aucun serveur dans le réseau' /> : !data.servers.some(shows) ? <EmptyState title='Aucun serveur dans cette catégorie' /> : (
               <ul className='divide-y'>
-                {data.servers.map((s, i) => (
-                  <ServerRow key={`${s.guildId}-${JSON.stringify(s)}`} server={s} index={i} servers={data.servers} targets={data.targets} manage={manage} />
+                {data.servers.map((s, i) => shows(s) && (
+                  <ServerRow key={`${s.guildId}-${JSON.stringify(s)}`} server={s} index={i} servers={data.servers} targets={data.targets} categories={data.categories} manage={manage} />
                 ))}
               </ul>
             )}
@@ -144,9 +172,10 @@ function ServerLinksPage() {
   )
 }
 
-type ServerDraft = { listed: boolean; label: string; description: string; emoji: string; inviteMode: 'auto' | 'manual'; inviteChannelId: string | null; inviteUrl: string }
+type ServerDraft = { listed: boolean; label: string; description: string; emoji: string; categoryId: number | null; inviteMode: 'auto' | 'manual'; inviteChannelId: string | null; inviteUrl: string }
 
-function ServerRow({ server, index, servers, targets, manage }: { server: LinkServer; index: number; servers: LinkServer[]; targets: AnnouncementTargetsPayload; manage: boolean }) {
+function ServerRow({ server, index, servers, targets, categories, manage }: { server: LinkServer; index: number; servers: LinkServer[]; targets: AnnouncementTargetsPayload; categories: Category[]; manage: boolean }) {
+  const category = categories.find((c) => c.id === server.categoryId)
   const qc = useQueryClient()
   const { confirm, dialog } = useConfirm()
   const [initial] = useState<ServerDraft>(() => ({
@@ -154,6 +183,7 @@ function ServerRow({ server, index, servers, targets, manage }: { server: LinkSe
     label: server.label,
     description: server.description,
     emoji: server.emoji,
+    categoryId: server.categoryId,
     inviteMode: server.inviteMode,
     inviteChannelId: server.inviteChannelId,
     inviteUrl: server.inviteMode === 'manual' ? server.inviteUrl ?? '' : '',
@@ -193,6 +223,7 @@ function ServerRow({ server, index, servers, targets, manage }: { server: LinkSe
           <div className='flex flex-wrap items-center gap-2 font-medium'>
             <span className='truncate'>{server.name}</span>
             {server.isMain && <Pill tone='accent'>Principal</Pill>}
+            {category && <Pill style={category.color ? { borderColor: category.color, color: category.color } : undefined}>{category.emoji} {category.name}</Pill>}
             {server.inviteError && <Pill tone='danger'>Invitation en erreur</Pill>}
           </div>
           {server.inviteUrl ? (
@@ -222,6 +253,16 @@ function ServerRow({ server, index, servers, targets, manage }: { server: LinkSe
           </div>
           <EmojiField value={d.emoji} disabled={!manage} onChange={(emoji) => set({ emoji })} />
           <div className='grid gap-1.5'>
+            <Label>Catégorie</Label>
+            <Select value={d.categoryId === null ? 'none' : String(d.categoryId)} disabled={!manage || !categories.length} onValueChange={(v) => set({ categoryId: v === 'none' ? null : Number(v) })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value='none'>Sans catégorie</SelectItem>
+                {categories.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.emoji} {c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className='grid gap-1.5'>
             <Label>Invitation</Label>
             <Select value={d.inviteMode} disabled={!manage} onValueChange={(v) => set({ inviteMode: v as 'auto' | 'manual' })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -231,7 +272,7 @@ function ServerRow({ server, index, servers, targets, manage }: { server: LinkSe
               </SelectContent>
             </Select>
           </div>
-          <div className='md:col-span-2'>
+          <div>
             {d.inviteMode === 'auto'
               ? <ChannelSelect label='Salon de l’invitation' channels={channels} value={d.inviteChannelId} disabled={!manage} noneLabel='Choisi par le bot' onChange={(id) => set({ inviteChannelId: id })} />
               : (
@@ -265,10 +306,14 @@ type Draft = {
   enabled: boolean
   content: string
   embed: AnnouncementEmbed
+  layout: 'list' | 'cards'
   line: string
   compact: boolean
   scope: 'all' | 'selected'
   guildIds: string[]
+  categoryIds: number[]
+  groupByCategory: boolean
+  categoryHeader: string
   includeSelf: boolean
   buttons: boolean
   repost: boolean
@@ -287,6 +332,10 @@ function toDraft(b: Board | null, data: Payload): Draft {
     compact: b?.compact ?? false,
     scope: b?.scope ?? 'all',
     guildIds: b?.guildIds ?? [],
+    layout: b?.layout ?? 'list',
+    categoryIds: b?.categoryIds ?? [],
+    groupByCategory: b?.groupByCategory ?? true,
+    categoryHeader: b?.categoryHeader ?? data.defaults.categoryHeader,
     includeSelf: b?.includeSelf ?? false,
     buttons: b?.buttons ?? true,
     repost: b?.repost ?? true,
@@ -313,6 +362,10 @@ function BoardEditor({ board, data, manage, onSaved, onDeleted, onDirty }: { boa
     compact: d.compact,
     scope: d.scope,
     guildIds: d.guildIds,
+    layout: d.layout,
+    categoryIds: d.categoryIds,
+    groupByCategory: d.groupByCategory,
+    categoryHeader: d.categoryHeader,
     includeSelf: d.includeSelf,
     buttons: d.buttons,
     repost: d.repost,
@@ -415,6 +468,29 @@ function BoardEditor({ board, data, manage, onSaved, onDeleted, onDirty }: { boa
                 ))}
               </ul>
             )}
+            {data.categories.length > 0 && (
+              <div className='grid gap-2'>
+                <Label>Catégories affichées {d.categoryIds.length === 0 && <span className='font-normal text-muted-foreground'>(toutes)</span>}</Label>
+                <ul className='flex flex-wrap gap-x-4 gap-y-2'>
+                  {data.categories.map((c) => (
+                    <li key={c.id}>
+                      <label className='flex items-center gap-2 text-sm'>
+                        <Checkbox checked={d.categoryIds.includes(c.id)} disabled={!manage} onCheckedChange={(v) => set({ categoryIds: v ? [...d.categoryIds, c.id] : d.categoryIds.filter((id) => id !== c.id) })} />
+                        {c.emoji} {c.name}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+                <label className='flex items-center gap-2 text-sm'><Switch checked={d.groupByCategory} disabled={!manage} onCheckedChange={(v) => set({ groupByCategory: v })} /> Regrouper les serveurs par catégorie, avec un titre</label>
+                {d.groupByCategory && (
+                  <div className='grid gap-1.5 sm:w-80'>
+                    <Label htmlFor='sl-header'>Titre d’une catégorie</Label>
+                    <Input id='sl-header' value={d.categoryHeader} maxLength={200} disabled={!manage} onChange={(e) => set({ categoryHeader: e.target.value })} />
+                    <p className='text-xs text-muted-foreground'>{'{category}'} = nom, {'{emoji}'} = émoji. Vide : pas de titre.</p>
+                  </div>
+                )}
+              </div>
+            )}
             <label className='flex items-center gap-2 text-sm'><Switch checked={d.includeSelf} disabled={!manage} onCheckedChange={(v) => set({ includeSelf: v })} /> Lister aussi le serveur du message</label>
             <label className='flex items-center gap-2 text-sm'><Switch checked={d.buttons} disabled={!manage} onCheckedChange={(v) => set({ buttons: v })} /> Un bouton « rejoindre » par serveur sous le message (25 au plus)</label>
           </div>
@@ -422,8 +498,19 @@ function BoardEditor({ board, data, manage, onSaved, onDeleted, onDirty }: { boa
 
         <Section title='Contenu du message' description='{links} est remplacé par la liste des serveurs, {count} par leur nombre.'>
           <div className='grid gap-4 p-4'>
+            <div className='grid gap-1.5 sm:w-96'>
+              <Label>Présentation</Label>
+              <Select value={d.layout} disabled={!manage} onValueChange={(v) => set({ layout: v as 'list' | 'cards' })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='list'>Liste dans le message</SelectItem>
+                  <SelectItem value='cards'>Cartes avec le logo de chaque Discord</SelectItem>
+                </SelectContent>
+              </Select>
+              {d.layout === 'cards' && <p className='text-xs text-muted-foreground'>Une carte par serveur : logo, nom cliquable, description. Discord limite à 10 cartes par message : au-delà, le bot continue dans un message suivant.</p>}
+            </div>
             <div className='grid gap-1.5'>
-              <Label htmlFor='sl-line'>Une ligne par serveur</Label>
+              <Label htmlFor='sl-line'>Une ligne par serveur {d.layout === 'cards' && <span className='font-normal text-muted-foreground'>(pour {'{links}'}, facultatif avec les cartes)</span>}</Label>
               <Textarea id='sl-line' ref={lineRef} rows={3} maxLength={400} value={d.line} disabled={!manage} onChange={(e) => set({ line: e.target.value })} />
               <div className='flex flex-wrap gap-1.5'>
                 {LINE_VARS.map(([token, label]) => (
@@ -453,11 +540,130 @@ function BoardEditor({ board, data, manage, onSaved, onDeleted, onDirty }: { boa
       <div className='xl:sticky xl:top-20 xl:self-start'>
         <h3 className='mb-2 text-sm font-semibold'>Aperçu</h3>
         {preview.error ? <Notice tone='warning'>{(preview.error as Error).message}</Notice>
-          : shown ? <DiscordPreview content={shown.payload.content} embed={shown.payload.embed} roles={new Map()} extras={{ buttons: shown.buttons }} />
-            : <Skeleton className='h-40' />}
+          : shown ? (
+            <div className='grid gap-2'>
+              {shown.messages.map((m, i) => {
+                const last = i === shown.messages.length - 1
+                const hasBody = Boolean(m.content) || (m.embed.enabled && Boolean(m.embed.title || m.embed.description || m.embed.imageUrl || m.embed.authorName || m.embed.fields?.length))
+                return (
+                  <div key={i} className='grid gap-1'>
+                    {(hasBody || (last && !m.cards.length)) && <DiscordPreview content={m.content} embed={m.embed} roles={new Map()} extras={{ buttons: last && !m.cards.length ? shown.buttons : [] }} />}
+                    {m.cards.map((c, j) => (
+                      <div key={j} className='flex items-start gap-3 rounded border-l-4 bg-[#2b2d31] p-3 text-sm text-[#dbdee1]' style={{ borderLeftColor: c.color }}>
+                        <div className='min-w-0 flex-1'>
+                          {c.title && <div className='font-semibold text-[#00a8fc]'>{c.title}</div>}
+                          {c.description && <div className='whitespace-pre-wrap break-words text-xs'>{c.description.replace(/[_*]{2}/g, '')}</div>}
+                        </div>
+                        {c.thumbnailUrl && <img src={c.thumbnailUrl} alt='' className='size-12 rounded' />}
+                      </div>
+                    ))}
+                    {last && m.cards.length > 0 && shown.buttons.length > 0 && (
+                      <div className='flex flex-wrap gap-2'>
+                        {shown.buttons.map((b, j) => <span key={j} className='rounded bg-[#4e5058] px-3 py-1 text-xs font-medium text-white'>{b.label}</span>)}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          ) : <Skeleton className='h-40' />}
         {shown && <p className='mt-2 text-xs text-muted-foreground'>{shown.servers.length} serveur{shown.servers.length > 1 ? 's' : ''} listé{shown.servers.length > 1 ? 's' : ''}. Le message suit tout seul les changements du réseau et des invitations.</p>}
       </div>
       <ConfirmDialog open={deleting} onOpenChange={setDeleting} title='Supprimer ce message ?' desc='Il est aussi supprimé du salon Discord.' confirmText='Supprimer' destructive isLoading={remove.isPending} handleConfirm={() => remove.mutate()} />
+    </div>
+  )
+}
+
+type CategoryDraft = { name: string; emoji: string; color: string | null }
+
+function CategoriesSection({ categories, servers, manage }: { categories: Category[]; servers: LinkServer[]; manage: boolean }) {
+  const qc = useQueryClient()
+  const refresh = () => qc.invalidateQueries({ queryKey: KEY })
+  const [fresh, setFresh] = useState<CategoryDraft>({ name: '', emoji: '', color: null })
+  const create = useMutation({
+    mutationFn: () => api('/server-links/categories', { method: 'POST', body: fresh }),
+    onSuccess: () => { toast.success('Catégorie créée'); setFresh({ name: '', emoji: '', color: null }); refresh() },
+  })
+  const move = useMutation({
+    mutationFn: ({ from, to }: { from: number; to: number }) => {
+      const ids = categories.map((c) => c.id)
+      ids.splice(to, 0, ...ids.splice(from, 1))
+      return api('/server-links/categories/order', { method: 'PUT', body: { ids } })
+    },
+    onSuccess: refresh,
+  })
+
+  return (
+    <Section title='Catégories' description='Pour trier les serveurs : entreprises légales, groupes illégaux, staff… Dans les messages, les serveurs sont regroupés par catégorie, dans cet ordre.'>
+      <div className='grid gap-3 p-4'>
+        {!categories.length && <p className='text-sm text-muted-foreground'>Aucune catégorie : tous les serveurs sont dans une seule liste.</p>}
+        {categories.map((c, i) => (
+          <CategoryRow
+            key={`${c.id}-${c.name}-${c.emoji}-${c.color}`}
+            category={c}
+            count={servers.filter((s) => s.categoryId === c.id).length}
+            manage={manage}
+            onUp={i > 0 ? () => move.mutate({ from: i, to: i - 1 }) : undefined}
+            onDown={i < categories.length - 1 ? () => move.mutate({ from: i, to: i + 1 }) : undefined}
+          />
+        ))}
+        {manage && (
+          <div className='flex flex-wrap items-end gap-2 border-t pt-3'>
+            <EmojiField value={fresh.emoji} onChange={(emoji) => setFresh({ ...fresh, emoji })} />
+            <div className='grid min-w-40 flex-1 gap-1.5 sm:max-w-64'>
+              <Label htmlFor='sl-cat-new'>Nouvelle catégorie</Label>
+              <Input id='sl-cat-new' value={fresh.name} maxLength={60} placeholder='Entreprises légales' onChange={(e) => setFresh({ ...fresh, name: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter' && fresh.name.trim()) create.mutate() }} />
+            </div>
+            <ColorPicker value={fresh.color ?? '#ff9628'} onChange={(color) => setFresh({ ...fresh, color })} />
+            <Button disabled={!fresh.name.trim() || create.isPending} onClick={() => create.mutate()}><Plus /> Ajouter</Button>
+          </div>
+        )}
+      </div>
+    </Section>
+  )
+}
+
+function CategoryRow({ category, count, manage, onUp, onDown }: { category: Category; count: number; manage: boolean; onUp?: () => void; onDown?: () => void }) {
+  const qc = useQueryClient()
+  const { confirm, dialog } = useConfirm()
+  const [initial] = useState<CategoryDraft>({ name: category.name, emoji: category.emoji, color: category.color })
+  const [d, setD] = useState<CategoryDraft>(initial)
+  const dirty = JSON.stringify(d) !== JSON.stringify(initial)
+  const save = useMutation({
+    mutationFn: () => api(`/server-links/categories/${category.id}`, { method: 'PUT', body: d }),
+    onSuccess: () => { toast.success('Catégorie enregistrée'); qc.invalidateQueries({ queryKey: KEY }) },
+  })
+  const remove = useMutation({
+    mutationFn: () => api(`/server-links/categories/${category.id}`, { method: 'DELETE', body: { confirm: true } }),
+    onSuccess: () => { toast.success('Catégorie supprimée'); qc.invalidateQueries({ queryKey: KEY }) },
+  })
+
+  return (
+    <div className='flex flex-wrap items-end gap-2'>
+      <EmojiField value={d.emoji} disabled={!manage} onChange={(emoji) => setD({ ...d, emoji })} />
+      <div className='grid min-w-40 flex-1 gap-1.5 sm:max-w-64'>
+        <Label>Nom</Label>
+        <Input value={d.name} maxLength={60} disabled={!manage} onChange={(e) => setD({ ...d, name: e.target.value })} />
+      </div>
+      <ColorPicker value={d.color ?? '#ff9628'} disabled={!manage} onChange={(color) => setD({ ...d, color })} />
+      <Pill>{count} serveur{count > 1 ? 's' : ''}</Pill>
+      {manage && (
+        <div className='flex items-center gap-1'>
+          <Button size='icon' variant='ghost' aria-label='Monter' disabled={!onUp} onClick={onUp}><ArrowUp /></Button>
+          <Button size='icon' variant='ghost' aria-label='Descendre' disabled={!onDown} onClick={onDown}><ArrowDown /></Button>
+          {dirty && <Button size='sm' disabled={!d.name.trim() || save.isPending} onClick={() => save.mutate()}><Save /> Enregistrer</Button>}
+          <Button
+            size='icon'
+            variant='ghost'
+            aria-label='Supprimer'
+            disabled={remove.isPending}
+            onClick={async () => {
+              if (await confirm({ title: `Supprimer « ${category.name} » ?`, desc: count ? `Ses ${count} serveur(s) restent affichés, sans catégorie.` : 'Aucun serveur n’est dans cette catégorie.', confirmText: 'Supprimer', destructive: true })) remove.mutate()
+            }}
+          ><X /></Button>
+        </div>
+      )}
+      {dialog}
     </div>
   )
 }

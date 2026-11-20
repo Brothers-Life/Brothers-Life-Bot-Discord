@@ -875,7 +875,9 @@ export function createExecutor(client) {
 		// buttons: link buttons [{ label, url, emoji }] under the message (5 per row, 25 at most)
 		async upsertMessage(channelId, messageId, payload, { repost = true, buttons = null } = {}) {
 			const channel = await client.channels.fetch(channelId);
-			const body = { content: payload.content || null, embeds: buildEmbeds(payload), allowedMentions: { parse: [] } };
+			// payload.cards: more embeds after the main one (one per server in the links between servers)
+			const embeds = [...buildEmbeds(payload), ...(payload.cards ?? []).flatMap(card => buildEmbeds({ embed: card }))].slice(0, 10);
+			const body = { content: payload.content || null, embeds, allowedMentions: { parse: [] } };
 			if (buttons) {
 				const built = buttons.slice(0, 25).map((b) => {
 					const button = new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(b.label).setURL(b.url);
