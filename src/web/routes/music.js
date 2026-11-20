@@ -6,9 +6,14 @@ const guildParam = { type: 'object', properties: { guildId: snowflake }, require
 // Where a typed search goes (YouTube, YouTube Music, SoundCloud)
 const platformSchema = { type: 'string', enum: Object.keys(SEARCH_PLATFORMS) };
 
+// Who asks, from the panel. No function in there: the music runs in the bot process, and only data crosses the link.
+export function musicContext(request) {
+	return { actorId: request.actor.id, source: 'panel', grants: { 'music.use': request.actor.can('music.use'), 'music.manage': request.actor.can('music.manage') } };
+}
+
 export function registerMusicRoutes(app, { core }) {
 	const { music, network, executor, audit } = core;
-	const ctxOf = (request) => ({ actorId: request.actor.id, source: 'panel', can: request.actor.can });
+	const ctxOf = musicContext;
 	const withNames = async (state) => {
 		if (!state.connected) return state;
 		const names = await resolveNames(executor, state.queue.map(t => t.requestedBy));
@@ -131,7 +136,7 @@ export function registerMusicRoutes(app, { core }) {
 export function registerPlaylistRoutes(app, { core }) {
 	const { music, executor } = core;
 	const lists = music.playlists;
-	const ctxOf = (request) => ({ actorId: request.actor.id, source: 'panel', can: request.actor.can });
+	const ctxOf = musicContext;
 	const idParam = { type: 'object', properties: { id: { type: 'integer' } }, required: ['id'] };
 	const withOwners = async (items) => {
 		const names = await resolveNames(executor, items.map(p => p.ownerId));

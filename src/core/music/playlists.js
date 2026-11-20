@@ -20,6 +20,12 @@ function keep(t) {
 
 // Saved playlists. ctx: { actorId, can }. Everyone who plays music may make their own;
 // a shared one can be played by anyone, but only changed by its owner (or music.manage).
+// Does the person asking hold this permission? From Discord the context carries their `can`; from the panel
+// (another process) it carries the answers already worked out (`grants`), since a function cannot cross the link.
+export function allowed(ctx, permission) {
+	return typeof ctx?.can === 'function' ? Boolean(ctx.can(permission)) : Boolean(ctx?.grants?.[permission]);
+}
+
 export function createPlaylists({ db, audit, now = Date.now }) {
 	const q = {
 		visible: db.prepare('SELECT * FROM music_playlists WHERE shared = 1 OR owner_id = ? ORDER BY updated_at DESC, id DESC'),
@@ -50,7 +56,7 @@ export function createPlaylists({ db, audit, now = Date.now }) {
 	// lock: inside a transaction, the row stays locked until it ends (read-change-write of the tracks)
 	async function editable(ctx, id, { lock = false } = {}) {
 		const list = await load(id, ctx.actorId, { lock });
-		if (list.ownerId !== ctx.actorId && !ctx.can?.('music.manage')) throw new ForbiddenError('Seul son créateur peut modifier cette playlist.');
+		if (list.ownerId !== ctx.actorId && !allowed(ctx, 'music.manage')) throw new ForbiddenError('Seul son créateur peut modifier cette playlist.');
 		return list;
 	}
 

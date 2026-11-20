@@ -1,7 +1,7 @@
 import { definePermission } from '../permissions.js';
 import { isPlatform, parseSearch } from './platforms.js';
 import { ForbiddenError, ValidationError } from '../errors.js';
-import { createPlaylists } from './playlists.js';
+import { allowed, createPlaylists } from './playlists.js';
 
 export { SEARCH_PLATFORMS } from './platforms.js';
 
@@ -224,7 +224,7 @@ export function createMusic({ db, network, audit, settings, backend, resolver, e
 	}
 
 	async function assertCan(ctx, player, action) {
-		if (ctx.can?.('music.use')) return;
+		if (allowed(ctx, 'music.use')) return;
 		if (ctx.source === 'panel') throw new ForbiddenError('Permission manquante : music.use');
 		if (player?.channelId && ctx.voiceChannelId !== player.channelId) throw new ForbiddenError('Rejoins d’abord le salon vocal du bot.');
 		if (OPEN_ACTIONS.has(action)) return;
