@@ -414,7 +414,10 @@ test('status page: one card per service, a failing check is a card, not an error
 	assert.equal(res.statusCode, 200);
 	const body = res.json();
 	const state = key => body.services.find(s => s.key === key).state;
-	assert.deepEqual(body.services.map(s => s.key), ['api', 'bot', 'database', 'cache', 'telemetry', 'mirror', 'tebex', 'media']);
+	assert.deepEqual(body.services.map(s => s.key), ['api', 'bot', 'database', 'cache', 'telemetry', 'mirror', 'tebex', 'media', 'game', 'bridge', 'music', 'streams', 'tasks']);
+	// Nothing followed, received or scheduled in a test: these are "off" too, never a failure
+	assert.deepEqual(['game', 'bridge', 'streams'].map(state), ['off', 'off', 'off']);
+	assert.ok(['ok', 'off'].includes(state('music')) && ['ok', 'off', 'warn'].includes(state('tasks')));
 	assert.deepEqual([state('api'), state('database')], ['ok', 'ok']);
 	// Nothing configured or received yet: "off", which is not a failure
 	assert.deepEqual([state('cache'), state('telemetry'), state('mirror'), state('tebex'), state('media')], ['off', 'off', 'off', 'off', 'off']);

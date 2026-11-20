@@ -1,4 +1,6 @@
 import { AppError } from './core/errors.js';
+import { buildCommit } from './app/buildInfo.js';
+import { taskReport } from './app/taskLog.js';
 
 // What the panel can ask about/to the process: restart, stop, install a version.
 // Under launcher.js these go through IPC; alone (npm run dev) restart/stop just exit.
@@ -21,6 +23,9 @@ export function createRuntime({ ipc, logger, appVersion, shutdown }) {
 				node: process.version,
 				platform: `${process.platform}/${process.arch}`,
 				memory: process.memoryUsage().rss,
+				// Commit the process was built from (null when unknown) and its periodic tasks, for the status page
+				commit: buildCommit(),
+				tasks: taskReport(),
 			};
 		},
 

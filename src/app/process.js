@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import * as consoleLog from '../utils/consoleCapture.js';
 import * as ipc from '../utils/ipc.js';
 import logger from '../utils/logger.js';
+import { taskDeclared, taskEnded, taskStarted } from './taskLog.js';
 
 consoleLog.install();
 ipc.on('history', (message) => consoleLog.seed(message.lines ?? []));
@@ -45,18 +46,24 @@ export async function shutdown(code = 0) {
 
 // A periodic task that never runs twice at once: a slow run (many giveaways, Discord rate limits...) makes
 // the next one wait instead of overlapping (double draw, double post). A throw is logged, never fatal.
+// Each run is noted (taskLog) for the status page of the panel.
 export function every(ms, task, label, level = 'error') {
 	let running = false;
+	taskDeclared(label, ms);
 	return setInterval(async () => {
 		if (running || shuttingDown) return;
 		running = true;
+		taskStarted(label, ms);
+		let failure = null;
 		try {
 			await task();
 		}
 		catch (error) {
+			failure = error ?? new Error('erreur inconnue');
 			logger[level](`${label}:`, level === 'warn' ? error?.message : error);
 		}
 		finally {
+			taskEnded(label, failure);
 			running = false;
 		}
 	}, ms);

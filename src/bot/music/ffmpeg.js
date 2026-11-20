@@ -34,6 +34,9 @@ export function createFfmpeg({ dataDir, logger = console }) {
 	}
 
 	return {
+		// Ready to play without a download first
+		installed: () => Boolean(found || process.env.FFMPEG_PATH || fs.existsSync(file)),
+
 		async path() {
 			if (found) return found;
 			if (process.env.FFMPEG_PATH) return (found = process.env.FFMPEG_PATH);

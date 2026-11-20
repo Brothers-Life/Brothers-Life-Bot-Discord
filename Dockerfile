@@ -25,6 +25,10 @@ COPY assets ./assets
 COPY launcher ./launcher
 COPY launcher.js ./
 COPY scripts/migrate-sqlite.mjs ./scripts/
+# Which commit this image is (shown on the status page). The brackets make each of these optional:
+# package.json always matches, so the build never fails where the git folder is not sent.
+COPY package.json .git/HEA[D] .git/packed-ref[s] ./buildinfo/
+COPY package.json .git/refs/heads/mai[n] ./buildinfo/refs/heads/
 COPY --from=panel /build/web/dist ./web/dist
 # data/: backups of the database, TLS certificate of the front, yt-dlp/ffmpeg of the bot
 RUN mkdir -p data logs && chown -R node:node data logs

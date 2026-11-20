@@ -43,7 +43,10 @@ export function createBot({ dataDir = path.join(__dirname, '..', '..', 'data') }
 	const executor = createExecutor(client);
 	// Music: yt-dlp and ffmpeg are fetched into data/bin the first time they are needed
 	const ytdlp = createYtDlp({ dataDir, logger });
-	executor.music = createMusicBackend(client, { ytdlp, ffmpeg: createFfmpeg({ dataDir, logger }), logger });
+	const ffmpeg = createFfmpeg({ dataDir, logger });
+	executor.music = createMusicBackend(client, { ytdlp, ffmpeg, logger });
+	// For the status page: are the two tools of the music already on the disk of the bot
+	executor.musicTools = () => ({ ytdlp: ytdlp.installed(), ffmpeg: ffmpeg.installed() });
 	executor.musicResolver = createMusicResolver({ ytdlp });
 	// Cookies of a YouTube account (Netscape format) read by yt-dlp: kept next to it, set from the panel.
 	// Also kept in the database (files table): the disk of a container is wiped at each restart.

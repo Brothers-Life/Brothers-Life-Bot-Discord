@@ -9,6 +9,9 @@ current.json
 .env.*
 !.env.example
 .git
+!.git/HEAD
+!.git/packed-refs
+!.git/refs/heads/main
 .github
 docs/superpowers
 bruno

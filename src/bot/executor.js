@@ -1515,6 +1515,7 @@ export function createExecutor(client) {
 				guilds: client.guilds.cache.size,
 				uptime: client.uptime,
 				user: client.user ? { id: client.user.id, username: client.user.username, avatar: client.user.displayAvatarURL({ size: 64 }) } : null,
+				music: this.musicTools?.() ?? null,
 			};
 		},
 	};

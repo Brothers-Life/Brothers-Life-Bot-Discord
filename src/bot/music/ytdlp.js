@@ -90,6 +90,8 @@ export function createYtDlp({ dataDir, logger = console }) {
 
 	return {
 		cookiesPath: cookies,
+		// Ready to play without a download first
+		installed: () => fs.existsSync(file),
 
 		// The audio of a link, written on stdout as it downloads (piped into ffmpeg)
 		async spawnAudio(target) {
