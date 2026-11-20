@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderLeaderboard, renderMemberStats, renderServerStats } from '../../src/core/statsCards.js';
 import { renderMosaic } from '../../src/core/serverLinkMosaic.js';
+import { renderMemberFile, since } from '../../src/core/memberCard.js';
 
 // Width and height of a PNG, read from its header
 function size(buffer) {
@@ -34,6 +35,31 @@ test('member and server pictures: with or without favourite channels, with or wi
 	const noChart = size(await renderServerStats({ name: 'Brothers Life', icon: null, periodDays: 7, totals, days: [] }, offline));
 	const chart = size(await renderServerStats({ name: 'Brothers Life', icon: null, periodDays: 7, totals, days: [{ messages: 0 }, { messages: 4 }, { messages: 6 }] }, offline));
 	assert.ok(chart.height > noChart.height);
+});
+
+test('member file: grows with ranks, servers and temporary roles; a banned or unknown member still draws', async () => {
+	const now = Date.UTC(2026, 10, 20);
+	const day = 86_400_000;
+	assert.equal(since(now - 3 * 3600_000, now), 'aujourd’hui');
+	assert.equal(since(now - day, now), 'il y a 1 jour');
+	assert.equal(since(now - 70 * day, now), 'il y a 2 mois');
+	assert.equal(since(now - 800 * day, now), 'il y a 2 ans');
+
+	const file = {
+		name: 'Pedro', username: 'pedro', id: '123456789012345678', avatar: null, createdAt: now - 900 * day, joinedAt: null, isOwner: false,
+		ranks: [], guilds: [], sanctions: { total: 0, warns: 0, active: 0, banned: false }, tempRoles: [],
+	};
+	const empty = size(await renderMemberFile(file, { ...offline, now }));
+	const full = size(await renderMemberFile({
+		...file,
+		isOwner: true,
+		joinedAt: now - 10 * day,
+		guilds: Array.from({ length: 30 }, (_, i) => `Serveur numéro ${i}`),
+		sanctions: { total: 9, warns: 2, active: 1, banned: true },
+		tempRoles: [{ name: 'VIP', expiresAt: now + 3 * day }],
+	}, { ...offline, now }));
+	assert.equal(empty.width, 1000);
+	assert.ok(full.height > empty.height);
 });
 
 test('server pictures: every style is 1000 px wide, long names never break the drawing', async () => {

@@ -1,5 +1,7 @@
-import { EmbedBuilder } from 'discord.js';
+import { AttachmentBuilder, EmbedBuilder } from 'discord.js';
 import { moderationCommand, runModeration } from '../../moderation.js';
+import { renderMemberFile } from '../../../core/memberCard.js';
+import logger from '../../../utils/logger.js';
 
 export const data = moderationCommand('fiche', 'Voir la fiche réseau d’un membre : rangs, serveurs, sanctions')
 	.addUserOption(o => o.setName('membre').setDescription('Membre').setRequired(true));
@@ -27,6 +29,23 @@ export async function execute(interaction) {
 		if (info.tempRoles.length) {
 			embed.addFields({ name: 'Rôles temporaires', value: info.tempRoles.slice(0, 10).map(t => `${t.roleName} · fin <t:${Math.round(t.expiresAt / 1000)}:R>`).join('\n') });
 		}
-		return { embeds: [embed] };
+		// The file as a picture; the embed stays as the fallback when it cannot be drawn
+		const image = await renderMemberFile({
+			name: interaction.guild.members.cache.get(user.id)?.displayName ?? user.globalName ?? user.username,
+			username: user.username,
+			id: user.id,
+			avatar: user.displayAvatarURL({ extension: 'png', size: 256 }),
+			createdAt: created * 1000,
+			joinedAt: here?.joinedAt ?? null,
+			isOwner: info.isOwner,
+			ranks: info.ranks.map(r => ({ name: r.name, color: r.color ?? null })),
+			guilds: info.guilds.filter(g => g.member).map(g => g.name),
+			sanctions: { total: info.sanctions.total, warns: info.sanctions.warns, active: info.sanctions.active.length, banned: Boolean(info.sanctions.banned) },
+			tempRoles: info.tempRoles.map(t => ({ name: t.roleName, expiresAt: t.expiresAt })),
+		}).catch((error) => {
+			logger.warn('Member file picture not drawn:', error.message);
+			return null;
+		});
+		return image ? { files: [new AttachmentBuilder(image, { name: 'fiche.png' })] } : { embeds: [embed] };
 	});
 }
