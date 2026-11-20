@@ -19,7 +19,8 @@ async function setup() {
 }
 
 const only = (executor, channelId) => [...(executor.posted.get(channelId)?.values() ?? [])];
-const board = (patch = {}) => ({ name: 'Nos serveurs', guildId: MAIN, channelId: C_MAIN, ...patch });
+const LIST = { content: '', embed: { enabled: true, title: 'Nos serveurs', description: '{links}' } };
+const board = (patch = {}) => ({ name: 'Nos serveurs', guildId: MAIN, channelId: C_MAIN, layout: 'list', payload: LIST, ...patch });
 
 test('invite links are read from a URL or a bare code', () => {
 	assert.equal(parseInvite('https://discord.gg/brothers'), 'brothers');
@@ -216,4 +217,25 @@ test('cards: one embed with the logo per server, continued in more messages', as
 	assert.equal(card.color, '#aa0000');
 	assert.equal(card.description, 'Les rues');
 	assert.deepEqual(created.messageIds.length, 1);
+});
+
+test('the panel board: servers dragged between categories, categories reordered', async () => {
+	const { core, links, owner, executor } = await setup();
+	const legal = await links.createCategory(owner, { name: 'Légal' });
+	const illegal = await links.createCategory(owner, { name: 'Illégal' });
+	await links.saveServer(owner, MAIN, { listed: true, label: 'Mairie' });
+	await links.create(owner, board({ includeSelf: true, compact: true }));
+	await assert.rejects(links.arrange(await core.ranks.resolve(ALICE), []), ForbiddenError);
+	await assert.rejects(links.arrange(owner, [{ id: 9999, items: [] }]), /supprimée/);
+
+	// OTHER has no settings yet: it gets its category without becoming listed
+	const arranged = await links.arrange(owner, [{ id: illegal.id, items: [OTHER] }, { id: legal.id, items: [MAIN] }, { id: null, items: [] }]);
+	assert.deepEqual(arranged.categories.map(c => c.name), ['Illégal', 'Légal']);
+	assert.deepEqual(arranged.servers.map(s => [s.guildId, s.categoryId, s.listed]), [[OTHER, illegal.id, false], [MAIN, legal.id, true]]);
+	assert.equal(only(executor, C_MAIN)[0].embed.description, '__**Légal**__\n**[Mairie](https://discord.gg/auto1)**');
+
+	// By default a board shows cards (the logos), and the default text keeps no empty list
+	const cards = await links.preview(owner, { guildId: MAIN, includeSelf: true });
+	assert.deepEqual(cards.messages[0].cards.map(c => c.title ?? c.description), ['__**Légal**__', 'Mairie']);
+	assert.doesNotMatch(cards.messages[0].embed.description, /\{links\}|discord\.gg/);
 });

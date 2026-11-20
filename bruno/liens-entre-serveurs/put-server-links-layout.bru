@@ -1,0 +1,33 @@
+meta {
+  name: PUT /server-links/layout
+  type: http
+  seq: 10
+}
+
+put {
+  url: {{baseUrl}}/api/server-links/layout
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "groups": [
+      {
+        "id": null,
+        "items": [
+          "000000000000000000"
+        ]
+      }
+    ]
+  }
+}
+
+docs {
+  Remplacer — `PUT /api/server-links/layout`
+
+  Permission requise : `serverlinks.manage`
+
+  Corps JSON :
+  - `groups` (array) — obligatoire
+}

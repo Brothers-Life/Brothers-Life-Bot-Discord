@@ -14,3 +14,17 @@ docs/superpowers
 bruno
 test
 *.log
+docs
+fivem
+pterodactyl
+.claude
+.playwright-mcp
+.vscode
+*.md
+LICENSE
+docker-compose.yml
+nodemon.json
+eslint.config.js
+scripts/*
+!scripts/migrate-sqlite.mjs
+web/eslint.config.js

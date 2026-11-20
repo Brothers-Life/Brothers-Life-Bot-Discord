@@ -79,6 +79,20 @@ export function registerServerLinkRoutes(app, { core }) {
 	app.put('/api/server-links/order', { config: { permission: 'serverlinks.manage' }, schema: { body: { type: 'object', required: ['guildIds'], properties: { guildIds: { type: 'array', maxItems: 100, items: snowflake } } } } }, async (request) => {
 		return await serverLinks.reorder(request.actor, request.body.guildIds);
 	});
+	const layoutBody = {
+		type: 'object',
+		required: ['groups'],
+		properties: {
+			groups: {
+				type: 'array',
+				maxItems: 30,
+				items: { type: 'object', required: ['items'], properties: { id: { anyOf: [{ type: 'null' }, { type: 'integer' }] }, items: { type: 'array', maxItems: 200, items: snowflake } } },
+			},
+		},
+	};
+	app.put('/api/server-links/layout', { config: { permission: 'serverlinks.manage' }, schema: { body: layoutBody } }, async (request) => {
+		return await serverLinks.arrange(request.actor, request.body.groups);
+	});
 	app.post('/api/server-links/preview', { config: { permission: 'serverlinks.manage' }, schema: { body: { type: 'object', required: ['guildId'], properties: boardProperties } } }, async (request) => {
 		return await serverLinks.preview(request.actor, request.body);
 	});

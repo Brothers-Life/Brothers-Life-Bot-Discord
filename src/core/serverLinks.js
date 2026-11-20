@@ -26,7 +26,7 @@ export const DEFAULT_LINE = '{emoji} **[{name}]({invite})**\n{description}';
 export const DEFAULT_CATEGORY_HEADER = '__**{emoji} {category}**__';
 export const DEFAULT_BOARD_PAYLOAD = {
 	content: '',
-	embed: { enabled: true, title: 'Nos autres serveurs', description: '{links}', color: '#ff9628', fields: [] },
+	embed: { enabled: true, title: 'Nos autres serveurs', description: 'Retrouve ici tous les Discord du réseau.\n{links}', color: '#ff9628', fields: [] },
 };
 
 const hash = value => createHash('sha1').update(JSON.stringify(value)).digest('hex');
@@ -54,7 +54,7 @@ function normalizeBoardConfig(input = {}) {
 	const config = {
 		payload: normalizePayload(input.payload ?? DEFAULT_BOARD_PAYLOAD),
 		// list: every server in the text ({links}); cards: one embed per server, with its logo
-		layout: input.layout === 'cards' ? 'cards' : 'list',
+		layout: input.layout === 'list' ? 'list' : 'cards',
 		line,
 		compact: Boolean(input.compact),
 		scope,
@@ -90,6 +90,7 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 		setInvite: db.prepare('UPDATE server_link_guilds SET invite_code = ?, invite_channel_id = ?, invite_error = NULL, invite_checked_at = ? WHERE guild_id = ?'),
 		inviteState: db.prepare('UPDATE server_link_guilds SET invite_error = ?, invite_checked_at = ? WHERE guild_id = ?'),
 		setPosition: db.prepare('UPDATE server_link_guilds SET position = ? WHERE guild_id = ?'),
+		place: db.prepare('UPDATE server_link_guilds SET category_id = ?, position = ? WHERE guild_id = ?'),
 		uncategorize: db.prepare('UPDATE server_link_guilds SET category_id = NULL WHERE category_id = ?'),
 		categories: db.prepare('SELECT * FROM server_link_categories ORDER BY position, id'),
 		category: db.prepare('SELECT * FROM server_link_categories WHERE id = ?'),
@@ -261,7 +262,8 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 		});
 		const vars = {
 			...(await variables.server(guildId)),
-			links: ordered.length ? blocks.join('\n\n') : EMPTY_TEXT,
+			// With cards, the cards are the list: {links} only says when there is nothing to show
+			links: !ordered.length ? EMPTY_TEXT : config.layout === 'cards' ? '' : blocks.join('\n\n'),
 			count: ordered.length,
 		};
 		const first = fillPayload(config.payload, vars);
@@ -420,6 +422,32 @@ export function createServerLinks({ db, network, audit, executor, logs, logger =
 			})();
 			await syncAll();
 			return await categories();
+		},
+
+		// The whole board of the panel after a drag and drop: order of the categories, and for each one its
+		// servers in order. layout: [{ id: categoryId | null, items: [guildId] }]
+		async arrange(actor, layout) {
+			need(actor);
+			const groups = (Array.isArray(layout) ? layout : []).map(g => ({ id: g?.id ?? null, items: (Array.isArray(g?.items) ? g.items : []).filter(id => SNOWFLAKE.test(id)) }));
+			const known = new Set((await categories()).map(c => c.id));
+			if (groups.some(g => g.id !== null && !known.has(g.id))) throw new ValidationError('Une catégorie vient d’être supprimée : recharge la page.');
+			const byId = new Map((await servers()).map(s => [s.guildId, s]));
+			await db.transaction(async () => {
+				let categoryPosition = 0;
+				let position = 0;
+				for (const group of groups) {
+					if (group.id !== null) await q.categoryPosition.run(categoryPosition++, group.id);
+					for (const guildId of group.items) {
+						const server = byId.get(guildId);
+						if (!server) continue;
+						if (await q.guild.get(guildId)) await q.place.run(group.id, position++, guildId);
+						else await q.upsertGuild.run(guildParams(server, { categoryId: group.id, position: position++ }));
+					}
+				}
+			})();
+			await record(actor, 'serverlinks.reorder', 'layout', { categories: groups.filter(g => g.id !== null).length });
+			await syncAll();
+			return { servers: await servers(), categories: await categories() };
 		},
 
 		// How one server is presented in the boards of the others, and where its invitation comes from

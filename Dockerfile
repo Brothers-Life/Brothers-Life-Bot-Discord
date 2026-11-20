@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # One image for every part of the bot: APP_ROLE (all, bot, api, front) or the command chooses what runs
 #   node src/index.js prod   everything in one process
 #   node src/bot.js prod     the Discord bot (+ periodic tasks; dials the API on API_URL)
@@ -8,15 +9,17 @@
 FROM node:22-bookworm-slim AS panel
 WORKDIR /build/web
 COPY web/package.json web/package-lock.json ./
-RUN npm ci --no-audit --no-fund
+# The npm cache is kept between builds when the builder allows it (BuildKit)
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 COPY web/ ./
-RUN npm run build
+# Types are checked by the CI (tsc -b): the image only bundles
+RUN npx vite build
 
 FROM node:22-bookworm-slim
 ENV NODE_ENV=production
 WORKDIR /app
 COPY package.json package-lock.json .npmrc ./
-RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund && npm cache clean --force
+RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 COPY src ./src
 COPY assets ./assets
 COPY launcher ./launcher

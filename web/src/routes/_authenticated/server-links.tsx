@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, Copy, Plus, RefreshCw, Save, Send, Trash2, X } from 'lucide-react'
+import { Copy, FolderPlus, Pencil, Plus, RefreshCw, Save, Send, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { AnnouncementEmbed, AnnouncementTargetsPayload } from '@/lib/types'
@@ -14,7 +14,9 @@ import { useConfirm, useDiscardGuard } from '@/components/app/confirm'
 import { EmbedFields, EMPTY_EMBED, cleanEmbed } from '@/features/announcements/embed-editor'
 import { DiscordPreview } from '@/features/announcements/discord-preview'
 import { ChannelSelect } from '@/components/app/pickers'
-import { EmojiField } from '@/components/app/emoji-picker'
+import { EmojiField, EmojiView } from '@/components/app/emoji-picker'
+import { SortableBoard, type BoardColumn } from '@/features/takeovers/sortable-board'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ColorPicker } from '@/components/app/color-picker'
 import { MarkdownTextarea } from '@/components/app/markdown-toolbar'
 import { Button } from '@/components/ui/button'
@@ -101,9 +103,6 @@ function ServerLinksPage() {
   const select = (id: number | 'new' | null) => { if (id !== selected) void guard(() => { setDirty(false); setSelected(id) }) }
   const current = selected === 'new' ? null : data?.boards.find((b) => b.id === selected) ?? null
   const listed = data?.servers.filter((s) => s.listed).length ?? 0
-  // 'all', 'none' (servers without category) or the id of a category
-  const [filter, setFilter] = useState('all')
-  const shows = (s: LinkServer) => filter === 'all' || (filter === 'none' ? s.categoryId === null : String(s.categoryId) === filter)
 
   return (
     <Page
@@ -113,30 +112,7 @@ function ServerLinksPage() {
     >
       {!data ? <Skeleton className='h-64' /> : (
         <div className='grid grid-cols-[minmax(0,1fr)] gap-6'>
-          <CategoriesSection categories={data.categories} servers={data.servers} manage={manage} />
-
-          <Section
-            title='Serveurs du réseau'
-            description='Choisis les serveurs à présenter, leur catégorie et d’où vient leur invitation. Un serveur non affiché n’apparaît dans aucun message.'
-            actions={data.categories.length > 0 && (
-              <Select value={filter} onValueChange={setFilter}>
-                <SelectTrigger className='w-48' aria-label='Filtrer par catégorie'><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value='all'>Toutes les catégories</SelectItem>
-                  {data.categories.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
-                  <SelectItem value='none'>Sans catégorie</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
-          >
-            {!data.servers.length ? <EmptyState title='Aucun serveur dans le réseau' /> : !data.servers.some(shows) ? <EmptyState title='Aucun serveur dans cette catégorie' /> : (
-              <ul className='divide-y'>
-                {data.servers.map((s, i) => shows(s) && (
-                  <ServerRow key={`${s.guildId}-${JSON.stringify(s)}`} server={s} index={i} servers={data.servers} targets={data.targets} categories={data.categories} manage={manage} />
-                ))}
-              </ul>
-            )}
-          </Section>
+          <ServersBoard data={data} manage={manage} />
 
           {manage && !listed && <Notice tone='warning' title='Aucun serveur affiché'>Active « Affiché » sur au moins un serveur ci-dessus : sans ça, les messages n’ont aucun lien à montrer.</Notice>}
 
@@ -173,98 +149,174 @@ function ServerLinksPage() {
 }
 
 type ServerDraft = { listed: boolean; label: string; description: string; emoji: string; categoryId: number | null; inviteMode: 'auto' | 'manual'; inviteChannelId: string | null; inviteUrl: string }
+type CategoryDraft = { id?: number; name: string; emoji: string; color: string | null }
 
-function ServerRow({ server, index, servers, targets, categories, manage }: { server: LinkServer; index: number; servers: LinkServer[]; targets: AnnouncementTargetsPayload; categories: Category[]; manage: boolean }) {
-  const category = categories.find((c) => c.id === server.categoryId)
+const serverDraft = (server: LinkServer): ServerDraft => ({
+  listed: server.listed,
+  label: server.label,
+  description: server.description,
+  emoji: server.emoji,
+  categoryId: server.categoryId,
+  inviteMode: server.inviteMode,
+  inviteChannelId: server.inviteChannelId,
+  inviteUrl: server.inviteMode === 'manual' ? server.inviteUrl ?? '' : '',
+})
+
+function useReport() {
   const qc = useQueryClient()
-  const { confirm, dialog } = useConfirm()
-  const [initial] = useState<ServerDraft>(() => ({
-    listed: server.listed,
-    label: server.label,
-    description: server.description,
-    emoji: server.emoji,
-    categoryId: server.categoryId,
-    inviteMode: server.inviteMode,
-    inviteChannelId: server.inviteChannelId,
-    inviteUrl: server.inviteMode === 'manual' ? server.inviteUrl ?? '' : '',
-  }))
-  const [d, setD] = useState<ServerDraft>(initial)
-  const set = (patch: Partial<ServerDraft>) => setD((prev) => ({ ...prev, ...patch }))
-  const dirty = JSON.stringify(d) !== JSON.stringify(initial)
-  const channels = targets.find((g) => g.id === server.guildId)?.channels ?? []
-  const report = (results: SyncResult[], label: string) => {
+  return (results: SyncResult[], label: string) => {
     const failed = results.filter((r) => !r.ok).length
     if (failed) toast.warning(`${label}, mais ${failed} message(s) en échec`)
     else toast.success(label)
     qc.invalidateQueries({ queryKey: KEY })
   }
+}
+
+// Categories as columns, servers as rows: drag a server into a category, drag a category to reorder it.
+// The board works with numbers: a server is its index in the list.
+function ServersBoard({ data, manage }: { data: Payload; manage: boolean }) {
+  const qc = useQueryClient()
+  const report = useReport()
+  const { confirm, dialog } = useConfirm()
+  const { servers, categories } = data
+  const [editing, setEditing] = useState<LinkServer | null>(null)
+  const [editingCategory, setEditingCategory] = useState<CategoryDraft | null>(null)
+  const refresh = () => qc.invalidateQueries({ queryKey: KEY })
+  const arrange = useMutation({
+    mutationFn: (columns: BoardColumn[]) => api('/server-links/layout', { method: 'PUT', body: { groups: columns.map((c) => ({ id: c.id, items: c.items.map((i) => servers[i].guildId) })) } }),
+    onSuccess: refresh,
+  })
+  const toggle = useMutation({
+    mutationFn: ({ server, listed }: { server: LinkServer; listed: boolean }) => api<{ results: SyncResult[] }>(`/server-links/servers/${server.guildId}`, { method: 'PUT', body: { ...serverDraft(server), listed } }),
+    onSuccess: (r, { listed }) => report(r.results, listed ? 'Serveur affiché, messages mis à jour' : 'Serveur retiré des messages'),
+  })
+  const removeCategory = useMutation({
+    mutationFn: (c: Category) => api(`/server-links/categories/${c.id}`, { method: 'DELETE', body: { confirm: true } }),
+    onSuccess: () => { toast.success('Catégorie supprimée'); refresh() },
+  })
+  const indexes = servers.map((_, i) => i)
+  const columns: BoardColumn[] = [
+    ...categories.map((c) => ({ id: c.id, items: indexes.filter((i) => servers[i].categoryId === c.id) })),
+    { id: null, items: indexes.filter((i) => servers[i].categoryId === null) },
+  ]
+  const header = (id: number | null, handle: ReactNode) => {
+    if (id === null && !categories.length) return null
+    const category = categories.find((c) => c.id === id)
+    const count = servers.filter((x) => x.categoryId === id).length
+    return (
+      <div className='flex flex-wrap items-center gap-2 border-b bg-muted/40 px-2 py-1.5'>
+        {handle}
+        <div className='flex min-w-32 flex-1 items-center gap-2 px-1 font-medium'>
+          {category?.color && <span className='size-3 rounded-full' style={{ backgroundColor: category.color }} />}
+          {category?.emoji && <EmojiView value={category.emoji} className='size-5' />}
+          <span className='truncate'>{category?.name ?? 'Sans catégorie'}</span>
+          <span className='text-xs font-normal text-muted-foreground'>{count} serveur{count > 1 ? 's' : ''}</span>
+        </div>
+        {manage && category && (
+          <div className='flex items-center gap-1'>
+            <Button size='sm' variant='ghost' aria-label={`Modifier la catégorie ${category.name}`} onClick={() => setEditingCategory(category)}><Pencil /></Button>
+            <Button size='sm' variant='danger-ghost' aria-label={`Supprimer la catégorie ${category.name}`} onClick={async () => {
+              if (await confirm({ title: `Supprimer la catégorie ${category.name} ?`, desc: 'Ses serveurs restent, sans catégorie.', confirmText: 'Supprimer', destructive: true })) removeCategory.mutate(category)
+            }}><Trash2 /></Button>
+          </div>
+        )}
+      </div>
+    )
+  }
+  const row = (server: LinkServer) => (
+    <div className='flex flex-wrap items-center gap-3 px-3 py-3'>
+      <GuildIcon src={server.icon} name={server.name} />
+      <div className='min-w-40 flex-1'>
+        <div className='flex flex-wrap items-center gap-2 font-medium'>
+          {server.emoji && <EmojiView value={server.emoji} className='size-5' />}
+          <span className='truncate'>{server.label || server.name}</span>
+          {server.isMain && <Pill tone='accent'>Principal</Pill>}
+          {server.inviteError && <Pill tone='danger'>Invitation en erreur</Pill>}
+        </div>
+        {server.inviteUrl ? (
+          <button type='button' className='flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground' onClick={() => { void navigator.clipboard.writeText(server.inviteUrl!); toast.success('Lien copié') }}>
+            <Copy className='size-3' /> {server.inviteUrl}
+          </button>
+        ) : <div className='text-xs text-muted-foreground'>{server.listed ? 'Pas encore d’invitation' : 'Non affiché dans les messages'}</div>}
+        {server.inviteError && <div className='text-xs text-destructive'>{server.inviteError}</div>}
+      </div>
+      <div className='flex flex-wrap items-center gap-2'>
+        <label className='flex items-center gap-2 text-sm'>
+          <Switch checked={server.listed} disabled={!manage || toggle.isPending} onCheckedChange={(listed) => toggle.mutate({ server, listed })} aria-label={`Affiché : ${server.name}`} />
+          <span className='hidden sm:inline'>Affiché</span>
+        </label>
+        {manage && <Button size='sm' variant='outline' onClick={() => setEditing(server)}>Modifier</Button>}
+      </div>
+    </div>
+  )
+
+  return (
+    <Section
+      title={`Serveurs du réseau (${servers.length})`}
+      description='Range les serveurs par catégories (légal, illégal, staff…) en les glissant, dans l’ordre que tu veux : les messages suivent cet ordre. Un serveur non affiché n’apparaît dans aucun message.'
+      actions={manage && <Button size='sm' variant='outline' onClick={() => setEditingCategory({ name: '', emoji: '', color: null })}><FolderPlus /> Nouvelle catégorie</Button>}
+    >
+      {!servers.length ? <EmptyState title='Aucun serveur dans le réseau' /> : (
+        <SortableBoard
+          columns={columns}
+          editable={manage}
+          onChange={(next) => arrange.mutateAsync(next)}
+          columnLabel={(id) => categories.find((c) => c.id === id)?.name ?? ''}
+          itemLabel={(i) => servers[i]?.name ?? ''}
+          renderHeader={header}
+          renderItem={(i) => (servers[i] ? row(servers[i]) : null)}
+          empty={manage ? 'Glisse un serveur ici' : 'Aucun serveur'}
+        />
+      )}
+      {editing && <ServerDialog key={editing.guildId} server={editing} data={data} onClose={() => setEditing(null)} />}
+      {editingCategory && <CategoryDialog draft={editingCategory} onClose={() => setEditingCategory(null)} onSaved={refresh} />}
+      {dialog}
+    </Section>
+  )
+}
+
+function ServerDialog({ server, data, onClose }: { server: LinkServer; data: Payload; onClose: () => void }) {
+  const report = useReport()
+  const [d, setD] = useState<ServerDraft>(() => serverDraft(server))
+  const set = (patch: Partial<ServerDraft>) => setD((prev) => ({ ...prev, ...patch }))
+  const channels = data.targets.find((g) => g.id === server.guildId)?.channels ?? []
   const save = useMutation({
     mutationFn: () => api<{ results: SyncResult[] }>(`/server-links/servers/${server.guildId}`, { method: 'PUT', body: d }),
-    onSuccess: (r) => report(r.results, 'Serveur enregistré, messages mis à jour'),
+    onSuccess: (r) => { report(r.results, 'Serveur enregistré, messages mis à jour'); onClose() },
   })
   const renew = useMutation({
     mutationFn: () => api<{ results: SyncResult[] }>(`/server-links/servers/${server.guildId}/invite`, { method: 'POST' }),
-    onSuccess: (r) => report(r.results, 'Nouvelle invitation créée'),
-  })
-  const move = useMutation({
-    mutationFn: (to: number) => {
-      const ids = servers.map((s) => s.guildId)
-      ids.splice(to, 0, ...ids.splice(index, 1))
-      return api('/server-links/order', { method: 'PUT', body: { guildIds: ids } })
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
+    onSuccess: (r) => { report(r.results, 'Nouvelle invitation créée'); onClose() },
   })
 
   return (
-    <li className='grid gap-3 p-4'>
-      <div className='flex flex-wrap items-center gap-3'>
-        <GuildIcon src={server.icon} name={server.name} />
-        <div className='min-w-0 flex-1'>
-          <div className='flex flex-wrap items-center gap-2 font-medium'>
-            <span className='truncate'>{server.name}</span>
-            {server.isMain && <Pill tone='accent'>Principal</Pill>}
-            {category && <Pill style={category.color ? { borderColor: category.color, color: category.color } : undefined}>{category.emoji} {category.name}</Pill>}
-            {server.inviteError && <Pill tone='danger'>Invitation en erreur</Pill>}
-          </div>
-          {server.inviteUrl ? (
-            <button type='button' className='flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground' onClick={() => { void navigator.clipboard.writeText(server.inviteUrl!); toast.success('Lien copié') }}>
-              <Copy className='size-3' /> {server.inviteUrl}
-            </button>
-          ) : <div className='text-xs text-muted-foreground'>{server.listed ? 'Pas encore d’invitation' : 'Non affiché'}</div>}
-          {server.inviteError && <div className='text-xs text-destructive'>{server.inviteError}</div>}
-        </div>
-        {manage && (
-          <div className='flex items-center gap-1'>
-            <Button size='icon' variant='ghost' aria-label='Monter' disabled={index === 0 || move.isPending} onClick={() => move.mutate(index - 1)}><ArrowUp /></Button>
-            <Button size='icon' variant='ghost' aria-label='Descendre' disabled={index === servers.length - 1 || move.isPending} onClick={() => move.mutate(index + 1)}><ArrowDown /></Button>
-          </div>
-        )}
-        <label className='flex items-center gap-2 text-sm font-medium'><Switch checked={d.listed} disabled={!manage} onCheckedChange={(v) => set({ listed: v })} /> Affiché</label>
-      </div>
-      {(d.listed || dirty) && (
-        <div className='grid grid-cols-[minmax(0,1fr)] gap-3 md:grid-cols-2 xl:grid-cols-4'>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className='sm:max-w-xl'>
+        <DialogHeader><DialogTitle className='flex items-center gap-2'><GuildIcon src={server.icon} name={server.name} className='size-7' /> {server.name}</DialogTitle></DialogHeader>
+        <div className='grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
+          <label className='flex items-center gap-2 text-sm font-medium sm:col-span-2'><Switch checked={d.listed} onCheckedChange={(v) => set({ listed: v })} /> Affiché dans les messages des autres serveurs</label>
           <div className='grid gap-1.5'>
-            <Label>Nom affiché</Label>
-            <Input value={d.label} maxLength={80} disabled={!manage} placeholder={server.name} onChange={(e) => set({ label: e.target.value })} />
+            <Label htmlFor='sl-label'>Nom affiché</Label>
+            <Input id='sl-label' value={d.label} maxLength={80} placeholder={server.name} onChange={(e) => set({ label: e.target.value })} />
           </div>
-          <div className='grid gap-1.5'>
-            <Label>Description</Label>
-            <Input value={d.description} maxLength={300} disabled={!manage} placeholder='Le serveur de…' onChange={(e) => set({ description: e.target.value })} />
+          <EmojiField value={d.emoji} onChange={(emoji) => set({ emoji })} />
+          <div className='grid gap-1.5 sm:col-span-2'>
+            <Label htmlFor='sl-description'>Description</Label>
+            <Input id='sl-description' value={d.description} maxLength={300} placeholder='Le serveur de…' onChange={(e) => set({ description: e.target.value })} />
           </div>
-          <EmojiField value={d.emoji} disabled={!manage} onChange={(emoji) => set({ emoji })} />
           <div className='grid gap-1.5'>
             <Label>Catégorie</Label>
-            <Select value={d.categoryId === null ? 'none' : String(d.categoryId)} disabled={!manage || !categories.length} onValueChange={(v) => set({ categoryId: v === 'none' ? null : Number(v) })}>
+            <Select value={d.categoryId === null ? 'none' : String(d.categoryId)} disabled={!data.categories.length} onValueChange={(v) => set({ categoryId: v === 'none' ? null : Number(v) })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value='none'>Sans catégorie</SelectItem>
-                {categories.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.emoji} {c.name}</SelectItem>)}
+                {data.categories.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
           <div className='grid gap-1.5'>
             <Label>Invitation</Label>
-            <Select value={d.inviteMode} disabled={!manage} onValueChange={(v) => set({ inviteMode: v as 'auto' | 'manual' })}>
+            <Select value={d.inviteMode} onValueChange={(v) => set({ inviteMode: v as 'auto' | 'manual' })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value='auto'>Créée par le bot (permanente)</SelectItem>
@@ -272,30 +324,51 @@ function ServerRow({ server, index, servers, targets, categories, manage }: { se
               </SelectContent>
             </Select>
           </div>
-          <div>
+          <div className='sm:col-span-2'>
             {d.inviteMode === 'auto'
-              ? <ChannelSelect label='Salon de l’invitation' channels={channels} value={d.inviteChannelId} disabled={!manage} noneLabel='Choisi par le bot' onChange={(id) => set({ inviteChannelId: id })} />
+              ? <ChannelSelect label='Salon de l’invitation' channels={channels} value={d.inviteChannelId} noneLabel='Choisi par le bot' onChange={(id) => set({ inviteChannelId: id })} />
               : (
                 <div className='grid gap-1.5'>
-                  <Label>Lien d’invitation</Label>
-                  <Input value={d.inviteUrl} maxLength={200} disabled={!manage} placeholder='https://discord.gg/…' onChange={(e) => set({ inviteUrl: e.target.value })} />
+                  <Label htmlFor='sl-invite'>Lien d’invitation</Label>
+                  <Input id='sl-invite' value={d.inviteUrl} maxLength={200} placeholder='https://discord.gg/…' onChange={(e) => set({ inviteUrl: e.target.value })} />
                 </div>
               )}
           </div>
-          {manage && (
-            <div className='flex flex-wrap items-end gap-2 md:col-span-2'>
-              <Button size='sm' disabled={!dirty || save.isPending} onClick={() => save.mutate()}><Save /> Enregistrer</Button>
-              {server.inviteMode === 'auto' && server.inviteUrl && !dirty && (
-                <Button size='sm' variant='outline' disabled={renew.isPending} onClick={async () => {
-                  if (await confirm({ title: 'Créer une nouvelle invitation ?', desc: 'Le bot crée un nouveau lien et met à jour tous les messages. L’ancien lien continue de marcher tant qu’il n’est pas supprimé sur Discord.', confirmText: 'Créer' })) renew.mutate()
-                }}><RefreshCw /> Nouvelle invitation</Button>
-              )}
-            </div>
-          )}
         </div>
-      )}
-      {dialog}
-    </li>
+        <DialogFooter>
+          {server.inviteMode === 'auto' && server.inviteUrl && <Button variant='outline' className='sm:mr-auto' loading={renew.isPending} onClick={() => renew.mutate()}><RefreshCw /> Nouvelle invitation</Button>}
+          <Button variant='outline' onClick={onClose}>Annuler</Button>
+          <Button loading={save.isPending} onClick={() => save.mutate()}><Save /> Enregistrer</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function CategoryDialog({ draft, onClose, onSaved }: { draft: CategoryDraft; onClose: () => void; onSaved: () => void }) {
+  const [c, setC] = useState(draft)
+  const save = useMutation({
+    mutationFn: () => api(c.id ? `/server-links/categories/${c.id}` : '/server-links/categories', { method: c.id ? 'PUT' : 'POST', body: { name: c.name, emoji: c.emoji, color: c.color } }),
+    onSuccess: () => { toast.success('Catégorie enregistrée'); onSaved(); onClose() },
+  })
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className='sm:max-w-md'>
+        <DialogHeader><DialogTitle>{c.id ? `Modifier ${draft.name}` : 'Nouvelle catégorie'}</DialogTitle></DialogHeader>
+        <div className='grid grid-cols-[minmax(0,1fr)] gap-4'>
+          <div className='grid gap-1.5'>
+            <Label htmlFor='sl-cat-name'>Nom</Label>
+            <Input id='sl-cat-name' maxLength={60} placeholder='Par exemple « Entreprises légales »' value={c.name} onChange={(e) => setC({ ...c, name: e.target.value })} />
+          </div>
+          <EmojiField label='Émoji (facultatif)' value={c.emoji} onChange={(emoji) => setC({ ...c, emoji })} />
+          <ColorPicker label='Couleur des cartes de cette catégorie' value={c.color ?? '#ff9628'} onChange={(color) => setC({ ...c, color })} />
+        </div>
+        <DialogFooter>
+          <Button variant='outline' onClick={onClose}>Annuler</Button>
+          <Button loading={save.isPending} disabled={!c.name.trim()} onClick={() => save.mutate()}><Save /> Enregistrer</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -332,7 +405,7 @@ function toDraft(b: Board | null, data: Payload): Draft {
     compact: b?.compact ?? false,
     scope: b?.scope ?? 'all',
     guildIds: b?.guildIds ?? [],
-    layout: b?.layout ?? 'list',
+    layout: b?.layout ?? 'cards',
     categoryIds: b?.categoryIds ?? [],
     groupByCategory: b?.groupByCategory ?? true,
     categoryHeader: b?.categoryHeader ?? data.defaults.categoryHeader,
@@ -496,29 +569,31 @@ function BoardEditor({ board, data, manage, onSaved, onDeleted, onDirty }: { boa
           </div>
         </Section>
 
-        <Section title='Contenu du message' description='{links} est remplacé par la liste des serveurs, {count} par leur nombre.'>
+        <Section title='Contenu du message' description={d.layout === 'cards' ? 'Le message d’en-tête, suivi d’une carte par serveur. {count} = nombre de serveurs.' : '{links} est remplacé par la liste des serveurs, {count} par leur nombre.'}>
           <div className='grid gap-4 p-4'>
             <div className='grid gap-1.5 sm:w-96'>
               <Label>Présentation</Label>
               <Select value={d.layout} disabled={!manage} onValueChange={(v) => set({ layout: v as 'list' | 'cards' })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value='list'>Liste dans le message</SelectItem>
                   <SelectItem value='cards'>Cartes avec le logo de chaque Discord</SelectItem>
+                  <SelectItem value='list'>Liste de liens, sans logo</SelectItem>
                 </SelectContent>
               </Select>
               {d.layout === 'cards' && <p className='text-xs text-muted-foreground'>Une carte par serveur : logo, nom cliquable, description. Discord limite à 10 cartes par message : au-delà, le bot continue dans un message suivant.</p>}
             </div>
-            <div className='grid gap-1.5'>
-              <Label htmlFor='sl-line'>Une ligne par serveur {d.layout === 'cards' && <span className='font-normal text-muted-foreground'>(pour {'{links}'}, facultatif avec les cartes)</span>}</Label>
-              <Textarea id='sl-line' ref={lineRef} rows={3} maxLength={400} value={d.line} disabled={!manage} onChange={(e) => set({ line: e.target.value })} />
-              <div className='flex flex-wrap gap-1.5'>
-                {LINE_VARS.map(([token, label]) => (
-                  <button key={token} type='button' disabled={!manage} title={label} onClick={() => insertVar(token)} className='rounded border px-1.5 py-0.5 font-mono text-xs text-muted-foreground hover:bg-accent/40 hover:text-foreground'>{token}</button>
-                ))}
+            {d.layout === 'list' && (
+              <div className='grid gap-1.5'>
+                <Label htmlFor='sl-line'>Une ligne par serveur</Label>
+                <Textarea id='sl-line' ref={lineRef} rows={3} maxLength={400} value={d.line} disabled={!manage} onChange={(e) => set({ line: e.target.value })} />
+                <div className='flex flex-wrap gap-1.5'>
+                  {LINE_VARS.map(([token, label]) => (
+                    <button key={token} type='button' disabled={!manage} title={label} onClick={() => insertVar(token)} className='rounded border px-1.5 py-0.5 font-mono text-xs text-muted-foreground hover:bg-accent/40 hover:text-foreground'>{token}</button>
+                  ))}
+                </div>
+                <label className='flex items-center gap-2 text-sm'><Switch checked={d.compact} disabled={!manage} onCheckedChange={(v) => set({ compact: v })} /> Liste serrée (sans ligne vide entre les serveurs)</label>
               </div>
-              <label className='flex items-center gap-2 text-sm'><Switch checked={d.compact} disabled={!manage} onCheckedChange={(v) => set({ compact: v })} /> Liste serrée (sans ligne vide entre les serveurs)</label>
-            </div>
+            )}
             <div className='grid gap-1.5'>
               <Label htmlFor='sl-content'>Texte au-dessus de l’embed</Label>
               <MarkdownTextarea id='sl-content' rows={2} maxLength={2000} value={d.content} disabled={!manage} onChange={(e) => set({ content: e.target.value })} />
@@ -570,100 +645,6 @@ function BoardEditor({ board, data, manage, onSaved, onDeleted, onDirty }: { boa
         {shown && <p className='mt-2 text-xs text-muted-foreground'>{shown.servers.length} serveur{shown.servers.length > 1 ? 's' : ''} listé{shown.servers.length > 1 ? 's' : ''}. Le message suit tout seul les changements du réseau et des invitations.</p>}
       </div>
       <ConfirmDialog open={deleting} onOpenChange={setDeleting} title='Supprimer ce message ?' desc='Il est aussi supprimé du salon Discord.' confirmText='Supprimer' destructive isLoading={remove.isPending} handleConfirm={() => remove.mutate()} />
-    </div>
-  )
-}
-
-type CategoryDraft = { name: string; emoji: string; color: string | null }
-
-function CategoriesSection({ categories, servers, manage }: { categories: Category[]; servers: LinkServer[]; manage: boolean }) {
-  const qc = useQueryClient()
-  const refresh = () => qc.invalidateQueries({ queryKey: KEY })
-  const [fresh, setFresh] = useState<CategoryDraft>({ name: '', emoji: '', color: null })
-  const create = useMutation({
-    mutationFn: () => api('/server-links/categories', { method: 'POST', body: fresh }),
-    onSuccess: () => { toast.success('Catégorie créée'); setFresh({ name: '', emoji: '', color: null }); refresh() },
-  })
-  const move = useMutation({
-    mutationFn: ({ from, to }: { from: number; to: number }) => {
-      const ids = categories.map((c) => c.id)
-      ids.splice(to, 0, ...ids.splice(from, 1))
-      return api('/server-links/categories/order', { method: 'PUT', body: { ids } })
-    },
-    onSuccess: refresh,
-  })
-
-  return (
-    <Section title='Catégories' description='Pour trier les serveurs : entreprises légales, groupes illégaux, staff… Dans les messages, les serveurs sont regroupés par catégorie, dans cet ordre.'>
-      <div className='grid gap-3 p-4'>
-        {!categories.length && <p className='text-sm text-muted-foreground'>Aucune catégorie : tous les serveurs sont dans une seule liste.</p>}
-        {categories.map((c, i) => (
-          <CategoryRow
-            key={`${c.id}-${c.name}-${c.emoji}-${c.color}`}
-            category={c}
-            count={servers.filter((s) => s.categoryId === c.id).length}
-            manage={manage}
-            onUp={i > 0 ? () => move.mutate({ from: i, to: i - 1 }) : undefined}
-            onDown={i < categories.length - 1 ? () => move.mutate({ from: i, to: i + 1 }) : undefined}
-          />
-        ))}
-        {manage && (
-          <div className='flex flex-wrap items-end gap-2 border-t pt-3'>
-            <EmojiField value={fresh.emoji} onChange={(emoji) => setFresh({ ...fresh, emoji })} />
-            <div className='grid min-w-40 flex-1 gap-1.5 sm:max-w-64'>
-              <Label htmlFor='sl-cat-new'>Nouvelle catégorie</Label>
-              <Input id='sl-cat-new' value={fresh.name} maxLength={60} placeholder='Entreprises légales' onChange={(e) => setFresh({ ...fresh, name: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter' && fresh.name.trim()) create.mutate() }} />
-            </div>
-            <ColorPicker value={fresh.color ?? '#ff9628'} onChange={(color) => setFresh({ ...fresh, color })} />
-            <Button disabled={!fresh.name.trim() || create.isPending} onClick={() => create.mutate()}><Plus /> Ajouter</Button>
-          </div>
-        )}
-      </div>
-    </Section>
-  )
-}
-
-function CategoryRow({ category, count, manage, onUp, onDown }: { category: Category; count: number; manage: boolean; onUp?: () => void; onDown?: () => void }) {
-  const qc = useQueryClient()
-  const { confirm, dialog } = useConfirm()
-  const [initial] = useState<CategoryDraft>({ name: category.name, emoji: category.emoji, color: category.color })
-  const [d, setD] = useState<CategoryDraft>(initial)
-  const dirty = JSON.stringify(d) !== JSON.stringify(initial)
-  const save = useMutation({
-    mutationFn: () => api(`/server-links/categories/${category.id}`, { method: 'PUT', body: d }),
-    onSuccess: () => { toast.success('Catégorie enregistrée'); qc.invalidateQueries({ queryKey: KEY }) },
-  })
-  const remove = useMutation({
-    mutationFn: () => api(`/server-links/categories/${category.id}`, { method: 'DELETE', body: { confirm: true } }),
-    onSuccess: () => { toast.success('Catégorie supprimée'); qc.invalidateQueries({ queryKey: KEY }) },
-  })
-
-  return (
-    <div className='flex flex-wrap items-end gap-2'>
-      <EmojiField value={d.emoji} disabled={!manage} onChange={(emoji) => setD({ ...d, emoji })} />
-      <div className='grid min-w-40 flex-1 gap-1.5 sm:max-w-64'>
-        <Label>Nom</Label>
-        <Input value={d.name} maxLength={60} disabled={!manage} onChange={(e) => setD({ ...d, name: e.target.value })} />
-      </div>
-      <ColorPicker value={d.color ?? '#ff9628'} disabled={!manage} onChange={(color) => setD({ ...d, color })} />
-      <Pill>{count} serveur{count > 1 ? 's' : ''}</Pill>
-      {manage && (
-        <div className='flex items-center gap-1'>
-          <Button size='icon' variant='ghost' aria-label='Monter' disabled={!onUp} onClick={onUp}><ArrowUp /></Button>
-          <Button size='icon' variant='ghost' aria-label='Descendre' disabled={!onDown} onClick={onDown}><ArrowDown /></Button>
-          {dirty && <Button size='sm' disabled={!d.name.trim() || save.isPending} onClick={() => save.mutate()}><Save /> Enregistrer</Button>}
-          <Button
-            size='icon'
-            variant='ghost'
-            aria-label='Supprimer'
-            disabled={remove.isPending}
-            onClick={async () => {
-              if (await confirm({ title: `Supprimer « ${category.name} » ?`, desc: count ? `Ses ${count} serveur(s) restent affichés, sans catégorie.` : 'Aucun serveur n’est dans cette catégorie.', confirmText: 'Supprimer', destructive: true })) remove.mutate()
-            }}
-          ><X /></Button>
-        </div>
-      )}
-      {dialog}
     </div>
   )
 }
