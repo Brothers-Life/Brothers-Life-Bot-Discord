@@ -94,6 +94,19 @@ export function createStaffSync({ db, network, ranks, audit, executor, settings,
 
 	// Puts the network roles of a server on top of its own roles, in the same order everywhere.
 	// `stuck`: roles above the bot's own role, which it can neither move nor pass
+	// Can the bot put these roles at these places? null when it can, else the reason, for the person reading the panel.
+	function orderRefusal(info, positions) {
+		if (!info) return null;
+		if (!info.manageRoles) return 'Le bot n’a pas la permission « Gérer les rôles » sur ce serveur.';
+		// Discord numbers the roles itself, and several can share a number (roles created by a bot all start at 1).
+		// The bot may only use numbers below its own role's: with too few of them it cannot order the roles under it.
+		const highest = Math.max(...positions.map(p => p.position));
+		if (highest >= info.rawPosition) {
+			return `Le rôle du bot est trop bas pour Discord (numéro ${info.rawPosition}, il en faudrait plus de ${highest}) : dans Paramètres du serveur → Rôles, fais glisser le rôle du bot au-dessus des rôles du réseau, puis relance la synchronisation.`;
+		}
+		return null;
+	}
+
 	// A server where the order could not be applied (the bot may not manage roles there) is left alone for an hour
 	// by the automatic syncs: trying again at every change only filled the logs and Discord's quota.
 	const orderRefused = new Map();
@@ -106,6 +119,9 @@ export function createStaffSync({ db, network, ranks, audit, executor, settings,
 			const all = await executor.listRolePositions(guildId);
 			const positions = roleArrangement(all, block);
 			if (positions.length) {
+				// Why Discord would refuse, said in plain words before asking it (it only answers "Missing Permissions")
+				const refusal = orderRefusal(await executor.botRoleInfo?.(guildId), positions);
+				if (refusal) throw new Error(refusal);
 				ownMoves.set(guildId, now() + OWN_MOVE_MS);
 				await executor.moveRoles(guildId, positions);
 				orderRefused.delete(guildId);

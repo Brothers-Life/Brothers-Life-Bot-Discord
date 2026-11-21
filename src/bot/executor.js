@@ -700,6 +700,16 @@ export function createExecutor(client) {
 				.map(r => ({ id: r.id, name: r.name, position: r.position, managed: r.managed, belowBot: r.position < top, aboveBot: r.position > top }));
 		},
 
+		// What the bot may do with the roles of a server: the permission, and where its own highest role really sits.
+		// rawPosition is the number Discord stores (several roles can share one); the "position" of listRolePositions
+		// is the rank in the sorted list. Discord refuses any move to a number that is not below the bot's own.
+		async botRoleInfo(guildId) {
+			const guild = client.guilds.cache.get(guildId);
+			const me = guild?.members.me;
+			if (!me) return null;
+			return { manageRoles: me.permissions.has(PermissionFlagsBits.ManageRoles), rawPosition: me.roles.highest.rawPosition };
+		},
+
 		// [{ role, position }]
 		async moveRoles(guildId, positions) {
 			await guildOf(guildId).roles.setPositions(positions);

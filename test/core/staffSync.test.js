@@ -319,6 +319,26 @@ test('the list of ranks, read in one go, says the same as each rank read alone',
 	assert.deepEqual(await core.ranks.list(), list);
 });
 
+test('role order: the reason of a refusal is told before asking Discord', async () => {
+	const { core, executor } = await setup();
+	await core.staffSync.flush();
+	const moves = [];
+	executor.listRolePositions = async () => [{ id: MODO_OTHER, name: 'Modo', position: 1, belowBot: true }, { id: HELPER_OTHER, name: 'Helper', position: 2, belowBot: true }];
+	executor.moveRoles = async guildId => void moves.push(guildId);
+
+	executor.botRoleInfo = async () => ({ manageRoles: false, rawPosition: 30 });
+	assert.match((await core.staffSync.syncAll()).order[0].error, /Gérer les rôles/);
+	// Enough permission, but Discord stores the bot's role at number 2: no room under it for two ordered roles
+	executor.botRoleInfo = async () => ({ manageRoles: true, rawPosition: 2 });
+	assert.match((await core.staffSync.syncAll()).order[0].error, /trop bas pour Discord \(numéro 2/);
+	assert.deepEqual(moves, [], 'Discord is not asked for what it would refuse');
+
+	executor.botRoleInfo = async () => ({ manageRoles: true, rawPosition: 3 });
+	const { order } = await core.staffSync.syncAll();
+	assert.deepEqual([order[0].moved, order[0].error], [true, undefined]);
+	assert.deepEqual(moves, [OTHER]);
+});
+
 test('a server where the role order is refused is left alone by the automatic syncs for a while', async () => {
 	const { core, executor } = await setup();
 	const moves = [];
