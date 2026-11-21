@@ -298,3 +298,47 @@ test('role events: a moved role only checks the order, a renamed one redoes its 
 	await core.staffSync.flush();
 	assert.deepEqual(reads, []);
 });
+
+test('the list of ranks, read in one go, says the same as each rank read alone', async () => {
+	const { core, owner, modo } = await setup();
+	const helper = await core.ranks.create(owner, { name: 'Helper', level: 10, permissions: ['panel.access'] });
+	await core.ranks.create(owner, { name: 'Admin', level: 80, permissions: ['ranks.view'], inherit: true });
+	await core.ranks.setRoleLinks(owner, helper.id, ['800000000000000009']);
+
+	const list = await core.ranks.list();
+	assert.deepEqual(list.map(r => r.name), ['Admin', 'Modo', 'Helper'], 'from the highest level down');
+	const sorted = rank => ({ ...rank, roles: [...rank.roles].sort((a, b) => a.roleId.localeCompare(b.roleId)) });
+	for (const rank of list) assert.deepEqual(sorted(rank), sorted(await core.ranks.get(rank.id)));
+	assert.deepEqual(list[0].inherited, [{ permission: 'panel.access', from: 'Helper' }]);
+	assert.deepEqual(list.find(r => r.id === modo.id).roles.map(r => r.roleId).sort(), [MODO_MAIN, MODO_OTHER]);
+
+	// Asked many times at once (a page listing every server): one read is shared, and nobody can spoil it for the others
+	const many = await Promise.all(Array.from({ length: 40 }, () => core.ranks.list()));
+	many[0][0].permissions.push('changed.by.a.caller');
+	assert.deepEqual(many[1], list);
+	assert.deepEqual(await core.ranks.list(), list);
+});
+
+test('a server where the role order is refused is left alone by the automatic syncs for a while', async () => {
+	const { core, executor } = await setup();
+	const moves = [];
+	executor.listRolePositions = async () => [{ id: MODO_OTHER, name: 'Modo', position: 1, belowBot: true }, { id: HELPER_OTHER, name: 'Helper', position: 2, belowBot: true }];
+	executor.moveRoles = async (guildId) => {
+		moves.push(guildId);
+		throw new Error('Missing Permissions');
+	};
+	await core.staffSync.flush();
+	moves.length = 0;
+
+	// From the panel the answer is always asked again, so the person sees the error
+	assert.equal((await core.staffSync.syncAll()).order[0].error, 'Missing Permissions');
+	assert.equal((await core.staffSync.syncAll()).order[0].error, 'Missing Permissions');
+	assert.equal(moves.length, 2);
+
+	// On their own, the syncs do not insist
+	core.staffSync.schedule({ all: true });
+	await core.staffSync.flush();
+	core.staffSync.schedule({ guilds: [OTHER] });
+	await core.staffSync.flush();
+	assert.equal(moves.length, 2);
+});

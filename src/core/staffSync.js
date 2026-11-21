@@ -20,6 +20,7 @@ const COPIED_KEY = 'staffSync.copiedRoles';
 
 // How long role moves on a server are taken for the bot's own (it just put the network roles in order there)
 const OWN_MOVE_MS = 20_000;
+const ORDER_RETRY_MS = 3600_000;
 
 export function createStaffSync({ db, network, ranks, audit, executor, settings, logs, logger = console, now = Date.now, delayMs = 1500 }) {
 	logs.registerCategory('staff_sync', 'Synchronisation des rôles du staff');
@@ -93,8 +94,12 @@ export function createStaffSync({ db, network, ranks, audit, executor, settings,
 
 	// Puts the network roles of a server on top of its own roles, in the same order everywhere.
 	// `stuck`: roles above the bot's own role, which it can neither move nor pass
-	async function alignRoles(guildId) {
+	// A server where the order could not be applied (the bot may not manage roles there) is left alone for an hour
+	// by the automatic syncs: trying again at every change only filled the logs and Discord's quota.
+	const orderRefused = new Map();
+	async function alignRoles(guildId, { automatic = false } = {}) {
 		const name = (await network.find(guildId))?.name ?? guildId;
+		if (automatic && (orderRefused.get(guildId) ?? 0) > now()) return null;
 		try {
 			const block = await networkRoles(guildId);
 			if (!block.length) return null;
@@ -103,11 +108,13 @@ export function createStaffSync({ db, network, ranks, audit, executor, settings,
 			if (positions.length) {
 				ownMoves.set(guildId, now() + OWN_MOVE_MS);
 				await executor.moveRoles(guildId, positions);
+				orderRefused.delete(guildId);
 				await audit.record({ actorId: 'system', source: 'system', action: 'staff_sync.order', guildId, target: name, details: { rôles: block.length } });
 			}
 			return { guildId, name, moved: positions.length > 0, stuck: all.filter(r => r.aboveBot && !r.managed).map(r => r.name) };
 		}
 		catch (error) {
+			orderRefused.set(guildId, now() + ORDER_RETRY_MS);
 			logger.warn(`Role order not applied on ${name}:`, error.message);
 			return { guildId, name, moved: false, stuck: [], error: error.message };
 		}
@@ -187,8 +194,8 @@ export function createStaffSync({ db, network, ranks, audit, executor, settings,
 
 	// One server: order of its network roles, then the members whose roles differ from what they should hold.
 	// A server already in sync costs one read of its member list and no change.
-	async function syncGuild(guildId, shared = null) {
-		const aligned = await alignRoles(guildId);
+	async function syncGuild(guildId, shared = null, { automatic = false } = {}) {
+		const aligned = await alignRoles(guildId, { automatic });
 		const links = await linksOf(guildId, { syncedOnly: true });
 		const mirror = await mirrorOf(guildId);
 		if (!links.size && !mirror.size) return { aligned, changed: 0 };
@@ -208,12 +215,12 @@ export function createStaffSync({ db, network, ranks, audit, executor, settings,
 		return results;
 	}
 
-	async function syncEverything() {
+	async function syncEverything({ automatic = false } = {}) {
 		const shared = await holdersOfMain();
 		let changed = 0;
 		const order = [];
 		for (const guildId of await satelliteIds()) {
-			const result = await syncGuild(guildId, shared);
+			const result = await syncGuild(guildId, shared, { automatic });
 			if (result.aligned) order.push(result.aligned);
 			changed += result.changed;
 		}
@@ -241,16 +248,16 @@ export function createStaffSync({ db, network, ranks, audit, executor, settings,
 		for (const set of [pending.guilds, pending.users, pending.order]) set.clear();
 		if (!todo.all && !todo.guilds.length && !todo.users.length && !todo.order.length) return;
 		await exclusive(async () => {
-			if (todo.all) return void await syncEverything();
+			if (todo.all) return void await syncEverything({ automatic: true });
 			const satellites = new Set(await satelliteIds());
 			const guilds = todo.guilds.filter(id => satellites.has(id));
 			const shared = guilds.length ? await holdersOfMain() : null;
-			for (const guildId of guilds) await syncGuild(guildId, shared);
+			for (const guildId of guilds) await syncGuild(guildId, shared, { automatic: true });
 			// Members: only on the servers that were not just redone as a whole
 			for (const userId of todo.users) {
 				for (const guildId of satellites) if (!guilds.includes(guildId)) await syncMember(guildId, userId).catch(() => null);
 			}
-			for (const guildId of todo.order) if (satellites.has(guildId) && !guilds.includes(guildId)) await alignRoles(guildId);
+			for (const guildId of todo.order) if (satellites.has(guildId) && !guilds.includes(guildId)) await alignRoles(guildId, { automatic: true });
 		}).catch(error => logger.error('Staff sync failed:', error));
 	}
 
@@ -287,11 +294,14 @@ export function createStaffSync({ db, network, ranks, audit, executor, settings,
 		// Links of every rank on every server (main server links = roles that grant the rank)
 		async overview() {
 			const guilds = (await network.list()).filter(g => g.status === 'active' && g.botPresent);
-			return Promise.all(guilds.map(async g => {
+			// One server after the other: 37 servers asked together used up every database connection
+			const out = [];
+			for (const g of guilds) {
 				const mirrored = {};
 				for (const { rankId, roleId } of (await mirrorOf(g.id)).values()) (mirrored[rankId] ??= []).push(roleId);
-				return { id: g.id, name: g.name, isMain: g.isMain, links: Object.fromEntries(await linksOf(g.id)), mirrored };
-			}));
+				out.push({ id: g.id, name: g.name, isMain: g.isMain, links: Object.fromEntries(await linksOf(g.id)), mirrored });
+			}
+			return out;
 		},
 
 		async setLinks(actor, rankId, guildId, roleIds) {
@@ -461,6 +471,6 @@ export function createStaffSync({ db, network, ranks, audit, executor, settings,
 		syncUser,
 
 		// Everybody concerned, on every server: rank holders and current holders of linked roles
-		syncAll: () => exclusive(syncEverything),
+		syncAll: () => exclusive(() => syncEverything()),
 	};
 }

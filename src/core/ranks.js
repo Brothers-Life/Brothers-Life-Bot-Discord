@@ -12,6 +12,8 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 		all: db.prepare('SELECT * FROM ranks ORDER BY level DESC, name'),
 		count: db.prepare('SELECT COUNT(*) AS n FROM ranks'),
 		get: db.prepare('SELECT * FROM ranks WHERE id = ?'),
+		allPerms: db.prepare('SELECT rank_id, permission FROM rank_permissions ORDER BY permission'),
+		allRoles: db.prepare('SELECT rank_id, guild_id, role_id FROM rank_roles'),
 		perms: db.prepare('SELECT permission FROM rank_permissions WHERE rank_id = ? ORDER BY permission'),
 		roles: db.prepare('SELECT guild_id, role_id FROM rank_roles WHERE rank_id = ?'),
 		insert: db.prepare('INSERT INTO ranks (name, level, color, inherit, sync_roles, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'),
@@ -62,6 +64,55 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 			updatedAt: row.updated_at,
 		};
 	}
+
+	// Every rank with its permissions and roles in three queries, whatever the number of ranks. One at a time:
+	// callers asking together share the same read. (Loading the ranks one by one took about ten queries per rank;
+	// a page listing 37 servers asked for the list 37 times at once and used up every database connection.)
+	let loading = null;
+	function loadAll() {
+		loading ??= (async () => {
+			const [rows, perms, roles] = await Promise.all([q.all.all(), q.allPerms.all(), q.allRoles.all()]);
+			const permsOf = new Map();
+			for (const { rank_id: id, permission } of perms) permsOf.set(id, [...(permsOf.get(id) ?? []), permission]);
+			const rolesOf = new Map();
+			for (const r of roles) rolesOf.set(r.rank_id, [...(rolesOf.get(r.rank_id) ?? []), { guildId: r.guild_id, roleId: r.role_id }]);
+			// rows are sorted from the highest level down: the ranks below one are the ones after it with a lower level
+			return rows.map((row) => {
+				const own = permsOf.get(row.id) ?? [];
+				const inherited = [];
+				if (row.inherit) {
+					const seen = new Set(own);
+					for (const lower of rows) {
+						if (lower.level >= row.level) continue;
+						for (const permission of permsOf.get(lower.id) ?? []) {
+							if (seen.has(permission)) continue;
+							seen.add(permission);
+							inherited.push({ permission, from: lower.name });
+						}
+					}
+				}
+				return {
+					id: row.id,
+					name: row.name,
+					level: row.level,
+					color: row.color,
+					inherit: Boolean(row.inherit),
+					syncRoles: Boolean(row.sync_roles),
+					permissions: own,
+					inherited,
+					effectivePermissions: [...own, ...inherited.map(i => i.permission)],
+					roles: rolesOf.get(row.id) ?? [],
+					createdAt: row.created_at,
+					updatedAt: row.updated_at,
+				};
+			});
+		})().finally(() => {
+			loading = null;
+		});
+		return loading;
+	}
+	// Each caller gets its own copies: the shared read is never changed by one of them
+	const copyOf = rank => ({ ...rank, permissions: [...rank.permissions], inherited: rank.inherited.map(i => ({ ...i })), effectivePermissions: [...rank.effectivePermissions], roles: rank.roles.map(r => ({ ...r })) });
 
 	async function getOrThrow(id) {
 		const row = await q.get.get(id);
@@ -129,8 +180,8 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 			}
 		}
 
-		const rows = (await Promise.all([...rankIds].map(id => q.get.get(id)))).filter(Boolean);
-		return Promise.all(rows.map(hydrate));
+		if (!rankIds.size) return [];
+		return (await loadAll()).filter(rank => rankIds.has(rank.id)).map(copyOf);
 	}
 
 	const service = {
@@ -142,7 +193,7 @@ export function createRankService({ db, audit, ownerId, getMainGuildId, getMembe
 		},
 
 		async list() {
-			return Promise.all((await q.all.all()).map(hydrate));
+			return (await loadAll()).map(copyOf);
 		},
 
 		get: getOrThrow,
