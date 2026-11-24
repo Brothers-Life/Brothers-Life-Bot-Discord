@@ -32,26 +32,29 @@ function normalizeOptions(input, where) {
 // Discord limits of a modal field: 45 characters for its label, 100 for the description under it
 const LABEL_MAX = 45;
 const DESCRIPTION_MAX = 100;
-export const QUESTION_MAX = LABEL_MAX + DESCRIPTION_MAX;
+export const QUESTION_MAX = 250;
+// Top-level blocks of a Discord modal: a field is one, a question written above its field is one more
+const MODAL_BLOCKS = 5;
+const ANSWER_LABEL = 'Ta réponse';
 
 // A question longer than a Discord label continues in the description of the field, cut between
-// two words. Returns what the modal shows: { label, description }.
+// two words. Returns what the modal shows: { label, description, text }. A question too long even
+// for that is written in full above its field (`text`), which takes one more block of the modal.
 export function modalLabel(q) {
 	const question = String(q?.label ?? '').trim();
 	const description = String(q?.description ?? '').trim();
-	if (question.length <= LABEL_MAX) return { label: question, description };
+	if (question.length <= LABEL_MAX) return { label: question, description, text: '' };
 	const space = question.lastIndexOf(' ', LABEL_MAX);
 	const cut = space >= 20 ? space : LABEL_MAX;
 	const rest = question.slice(cut).trim();
-	return { label: question.slice(0, cut).trim(), description: description ? `${rest} — ${description}` : rest };
+	const under = description ? `${rest} — ${description}` : rest;
+	if (under.length > DESCRIPTION_MAX) return { label: ANSWER_LABEL, description, text: question };
+	return { label: question.slice(0, cut).trim(), description: under, text: '' };
 }
 
 function normalizeField(q, where, seen, fallbackId) {
 	const label = text(q?.label, QUESTION_MAX).trim();
 	if (!label) throw new ValidationError(`${where} : le libellé est obligatoire.`);
-	if (modalLabel({ label, description: text(q?.description, DESCRIPTION_MAX) }).description.length > DESCRIPTION_MAX) {
-		throw new ValidationError(`${where} : la question est trop longue pour Discord (${QUESTION_MAX} caractères max, description comprise). Raccourcis la question ou sa description.`);
-	}
 	let id = typeof q?.id === 'string' && ID.test(q.id) ? q.id : fallbackId;
 	while (seen.has(id)) id = `${id}_`;
 	seen.add(id);
@@ -89,6 +92,10 @@ export function normalizeForm(input, { fallback = null, maxSteps = 5 } = {}) {
 		const questions = (Array.isArray(step?.questions) ? step.questions : []).slice(0, 5)
 			.map((q, qi) => normalizeField(q, `Étape ${si + 1}, question ${qi + 1}`, seen, `q${si + 1}_${qi + 1}`));
 		if (!questions.length) throw new ValidationError(`L’étape ${si + 1} du formulaire n’a aucune question.`);
+		const long = questions.filter(q => modalLabel(q).text).length;
+		if (questions.length + long > MODAL_BLOCKS) {
+			throw new ValidationError(`Étape ${si + 1} : Discord n’affiche que ${MODAL_BLOCKS} blocs par fenêtre et une très longue question en prend deux. Raccourcis une question (ou son aide) ou déplace-la dans une autre étape.`);
+		}
 		// Optional condition: this step is shown only if an earlier answer has this value
 		const when = step?.when && seen.has(step.when.field) && typeof step.when.equals === 'string'
 			? { field: step.when.field, equals: step.when.equals.slice(0, 100) }

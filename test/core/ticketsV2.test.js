@@ -60,11 +60,16 @@ test('forms: a question longer than a Discord label continues in the description
 	assert.ok(shown.label.length <= 45 && shown.description.length <= 100);
 	assert.equal(`${shown.label} ${shown.description}`, long);
 	assert.ok(modalLabel(b).description.endsWith(' — Sois honnête'));
-	assert.deepEqual(modalLabel(c), { label: 'Ton âge', description: 'En années' });
+	assert.deepEqual(modalLabel(c), { label: 'Ton âge', description: 'En années', text: '' });
 	// The whole question stays the title of the answer
 	assert.equal(readStep(form.steps[0], { a: 'x', b: 'y', c: '20' })[0].label, long);
-	const tooLong = { id: 'd', label: 'mot '.repeat(36).trim(), description: 'x'.repeat(60) };
-	assert.throws(() => normalizeForm({ steps: [{ questions: [tooLong] }] }), ValidationError);
+	// Too long for the label and its description: written in full above the field, which takes two blocks
+	const veryLong = n => ({ id: `v${n}`, label: 'mot '.repeat(60).trim() });
+	const shownLong = modalLabel(normalizeForm({ steps: [{ questions: [veryLong(1)] }] }).steps[0].questions[0]);
+	assert.equal(shownLong.text, veryLong(1).label);
+	assert.ok(shownLong.label.length <= 45);
+	assert.ok(normalizeForm({ steps: [{ questions: [veryLong(1), veryLong(2), { id: 's', label: 'Court' }] }] }));
+	assert.throws(() => normalizeForm({ steps: [{ questions: [veryLong(1), veryLong(2), veryLong(3)] }] }), ValidationError);
 });
 
 test('a multi-step form fills the answers of the ticket and its welcome message', async () => {

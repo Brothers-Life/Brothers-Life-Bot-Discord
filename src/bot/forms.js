@@ -1,5 +1,5 @@
 import {
-	ChannelSelectMenuBuilder, FileUploadBuilder, LabelBuilder, ModalBuilder, RoleSelectMenuBuilder, StringSelectMenuBuilder,
+	ChannelSelectMenuBuilder, FileUploadBuilder, LabelBuilder, ModalBuilder, TextDisplayBuilder, RoleSelectMenuBuilder, StringSelectMenuBuilder,
 	MessageFlags, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder,
 } from 'discord.js';
 import { emojiOf } from './messages.js';
@@ -16,8 +16,7 @@ export function fromEphemeralMessage(interaction) {
 // Modal of one step of a form (src/core/forms.js)
 export function formModal(customId, title, step, { emojis = true } = {}) {
 	const modal = new ModalBuilder().setCustomId(customId).setTitle(title.slice(0, 45));
-	modal.addLabelComponents(step.questions.map((q) => {
-		const shown = modalLabel(q);
+	const field = (q, shown) => {
 		const label = new LabelBuilder().setLabel(shown.label);
 		if (shown.description) label.setDescription(shown.description.slice(0, 100));
 		switch (q.type) {
@@ -57,7 +56,13 @@ export function formModal(customId, title, step, { emojis = true } = {}) {
 			return label.setTextInputComponent(input);
 		}
 		}
-	}));
+	};
+	// Blocks are added one by one: a very long question is written in full above its field
+	for (const q of step.questions) {
+		const shown = modalLabel(q);
+		if (shown.text) modal.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${shown.text}**`));
+		modal.addLabelComponents(field(q, shown));
+	}
 	return modal;
 }
 
