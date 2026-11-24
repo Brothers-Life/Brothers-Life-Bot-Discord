@@ -785,7 +785,7 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			const category = await findCategory(guildId, categoryId);
 			await checkAccess(guildId, userId, category);
 
-			const cleanAnswers = answers.filter(a => a.value).slice(0, 25).map(a => ({ id: a.id, label: a.label.slice(0, 45), type: a.type ?? 'paragraph', value: a.value.slice(0, 4000) }));
+			const cleanAnswers = answers.filter(a => a.value).slice(0, 25).map(a => ({ id: a.id, label: a.label.slice(0, 145), type: a.type ?? 'paragraph', value: a.value.slice(0, 4000) }));
 			const vars = await ticketVars({ guildId, userId, userName, answers: cleanAnswers, category });
 			// Another opening of the same member may have finished meanwhile: the limits are checked again and the
 			// number taken under the server's opening lock, so two openings never interleave between the check and the insert

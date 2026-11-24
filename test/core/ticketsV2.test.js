@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { withNetwork, ALICE, MAIN } from '../helpers.js';
 import { ForbiddenError, ValidationError } from '../../src/core/errors.js';
 import { isWithinHours, normalizeCategoryConfig } from '../../src/core/ticketConfig.js';
-import { normalizeForm, nextStep, readStep } from '../../src/core/forms.js';
+import { normalizeForm, nextStep, readStep, modalLabel } from '../../src/core/forms.js';
 
 const MEMBER = '300000000000000001';
 const CAT_OPEN = '620000000000000001';
@@ -45,6 +45,26 @@ test('forms: several steps, choices and conditional steps', async () => {
 	assert.equal(nextStep(form, 1, question), 2);
 	assert.throws(() => readStep(form.steps[1], { steps: '' }), ValidationError);
 	assert.throws(() => normalizeForm({ steps: [{ questions: [] }] }), ValidationError);
+});
+
+test('forms: a question longer than a Discord label continues in the description', () => {
+	const long = 'Pourquoi veux-tu rejoindre notre équipe et que penses-tu pouvoir lui apporter ?';
+	const form = normalizeForm({ steps: [{ questions: [
+		{ id: 'a', label: long },
+		{ id: 'b', label: long, description: 'Sois honnête' },
+		{ id: 'c', label: 'Ton âge', description: 'En années' },
+	] }] });
+	const [a, b, c] = form.steps[0].questions;
+	assert.equal(a.label, long);
+	const shown = modalLabel(a);
+	assert.ok(shown.label.length <= 45 && shown.description.length <= 100);
+	assert.equal(`${shown.label} ${shown.description}`, long);
+	assert.ok(modalLabel(b).description.endsWith(' — Sois honnête'));
+	assert.deepEqual(modalLabel(c), { label: 'Ton âge', description: 'En années' });
+	// The whole question stays the title of the answer
+	assert.equal(readStep(form.steps[0], { a: 'x', b: 'y', c: '20' })[0].label, long);
+	const tooLong = { id: 'd', label: 'mot '.repeat(36).trim(), description: 'x'.repeat(60) };
+	assert.throws(() => normalizeForm({ steps: [{ questions: [tooLong] }] }), ValidationError);
 });
 
 test('a multi-step form fills the answers of the ticket and its welcome message', async () => {

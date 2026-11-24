@@ -29,9 +29,29 @@ function normalizeOptions(input, where) {
 	return options;
 }
 
+// Discord limits of a modal field: 45 characters for its label, 100 for the description under it
+const LABEL_MAX = 45;
+const DESCRIPTION_MAX = 100;
+export const QUESTION_MAX = LABEL_MAX + DESCRIPTION_MAX;
+
+// A question longer than a Discord label continues in the description of the field, cut between
+// two words. Returns what the modal shows: { label, description }.
+export function modalLabel(q) {
+	const question = String(q?.label ?? '').trim();
+	const description = String(q?.description ?? '').trim();
+	if (question.length <= LABEL_MAX) return { label: question, description };
+	const space = question.lastIndexOf(' ', LABEL_MAX);
+	const cut = space >= 20 ? space : LABEL_MAX;
+	const rest = question.slice(cut).trim();
+	return { label: question.slice(0, cut).trim(), description: description ? `${rest} — ${description}` : rest };
+}
+
 function normalizeField(q, where, seen, fallbackId) {
-	const label = text(q?.label, 45).trim();
-	if (!label) throw new ValidationError(`${where} : le libellé est obligatoire (45 caractères max).`);
+	const label = text(q?.label, QUESTION_MAX).trim();
+	if (!label) throw new ValidationError(`${where} : le libellé est obligatoire.`);
+	if (modalLabel({ label, description: text(q?.description, DESCRIPTION_MAX) }).description.length > DESCRIPTION_MAX) {
+		throw new ValidationError(`${where} : la question est trop longue pour Discord (${QUESTION_MAX} caractères max, description comprise). Raccourcis la question ou sa description.`);
+	}
 	let id = typeof q?.id === 'string' && ID.test(q.id) ? q.id : fallbackId;
 	while (seen.has(id)) id = `${id}_`;
 	seen.add(id);

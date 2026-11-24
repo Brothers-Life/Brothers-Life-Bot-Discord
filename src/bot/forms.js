@@ -3,6 +3,7 @@ import {
 	MessageFlags, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder,
 } from 'discord.js';
 import { emojiOf } from './messages.js';
+import { modalLabel } from '../core/forms.js';
 import logger from '../utils/logger.js';
 
 // A modal submitted from the ephemeral "continue" message of a form, which can be replaced.
@@ -16,8 +17,9 @@ export function fromEphemeralMessage(interaction) {
 export function formModal(customId, title, step, { emojis = true } = {}) {
 	const modal = new ModalBuilder().setCustomId(customId).setTitle(title.slice(0, 45));
 	modal.addLabelComponents(step.questions.map((q) => {
-		const label = new LabelBuilder().setLabel(q.label);
-		if (q.description) label.setDescription(q.description);
+		const shown = modalLabel(q);
+		const label = new LabelBuilder().setLabel(shown.label);
+		if (shown.description) label.setDescription(shown.description.slice(0, 100));
 		switch (q.type) {
 		case 'select': {
 			const menu = new StringSelectMenuBuilder().setCustomId(q.id).setRequired(q.required).setMinValues(q.minValues).setMaxValues(q.maxValues)

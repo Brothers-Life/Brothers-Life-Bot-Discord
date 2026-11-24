@@ -98,8 +98,9 @@ export function FormBuilder({ value, onChange, disabled, allowEmpty = true }: {
                 <li key={qi} className='grid gap-3 rounded-md border bg-muted/30 p-3'>
                   <div className='flex flex-wrap items-end gap-2'>
                     <div className='grid min-w-48 flex-1 gap-1.5'>
-                      <Label htmlFor={`q-${si}-${qi}-label`}>Question {qi + 1} (45 max)</Label>
-                      <Input id={`q-${si}-${qi}-label`} value={q.label} maxLength={45} disabled={disabled} placeholder='Ton pseudo en jeu' onChange={(e) => patchField(si, qi, { label: e.target.value })} />
+                      <Label htmlFor={`q-${si}-${qi}-label`}>Question {qi + 1} ({q.label.length}/145)</Label>
+                      <Input id={`q-${si}-${qi}-label`} value={q.label} maxLength={145} disabled={disabled} placeholder='Ton pseudo en jeu' onChange={(e) => patchField(si, qi, { label: e.target.value })} />
+                      {q.label.trim().length > 45 && <p className='text-xs text-muted-foreground'>Au-delà de 45 caractères, Discord affiche la suite en petit sous le titre du champ (145 au total, description comprise).</p>}
                     </div>
                     <div className='grid gap-1.5'>
                       <Label>Type</Label>
