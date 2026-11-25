@@ -89,6 +89,32 @@ test('a multi-step form fills the answers of the ticket and its welcome message'
 	assert.equal(welcome.answers.length, 2);
 });
 
+test('form asked in the ticket: opened right away, one question per message, answers saved at the end', async () => {
+	const { core, executor, category } = await setup({
+		formMode: 'chat',
+		form: { steps: [
+			{ questions: [{ id: 'pseudo', type: 'short', label: 'Pseudo en jeu' }] },
+			{ questions: [{ id: 'details', label: 'Explique en détail ce qui t’est arrivé, où tu étais et ce que tu as déjà essayé pour régler le problème' }] },
+		] },
+	});
+	assert.equal(category.config.formMode, 'chat');
+	const ticket = await core.tickets.open({ guildId: MAIN, userId: MEMBER, userName: 'bob', categoryId: category.id, ask: true });
+	assert.equal(ticket.answers.length, 0);
+	const say = (content, userId = MEMBER) => core.formChats.message({ channelId: ticket.channelId, userId, content });
+	const last = () => executor.messages.at(-1).payload.content;
+	assert.match(last(), /Question 1\/2\*\* — Pseudo en jeu/);
+	// The staff talking in the ticket does not answer for the member
+	assert.equal(await say('Bonjour', ALICE), false);
+	assert.equal(await say('Bob_RP'), true);
+	assert.match(last(), /Question 2\/2\*\* — Explique en détail[\s\S]*régler le problème/);
+	assert.equal(await say('Je suis bloqué au garage'), true);
+	assert.match(last(), /c’est noté/);
+	assert.equal(await say('Merci'), false);
+	const saved = await core.tickets.get(ticket.id);
+	assert.deepEqual(saved.answers.map(a => a.value), ['Bob_RP', 'Je suis bloqué au garage']);
+	assert.equal(saved.subject, 'Bob_RP');
+});
+
 test('an expired or skipped form step is refused', async () => {
 	const { core, category } = await setup();
 	await assert.rejects(async () => core.tickets.submitFormStep({ guildId: MAIN, userId: MEMBER, categoryId: category.id, step: 0, values: { subject: 'x' } }), /expiré/);

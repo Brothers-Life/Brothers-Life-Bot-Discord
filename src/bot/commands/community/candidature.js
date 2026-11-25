@@ -21,6 +21,7 @@ export async function execute(interaction) {
 	}
 	catch (error) {
 		if (!(error instanceof AppError)) throw error;
-		await interaction.reply({ content: errorContent(error), flags: MessageFlags.Ephemeral });
+		if (interaction.deferred || interaction.replied) await interaction.editReply({ content: errorContent(error), components: [] });
+		else await interaction.reply({ content: errorContent(error), flags: MessageFlags.Ephemeral });
 	}
 }

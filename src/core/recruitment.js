@@ -3,6 +3,7 @@ import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
 import { normalizeForm, nextStep, readStep } from './forms.js';
 import { accountCreatedAt, fill } from './ticketConfig.js';
 import { assertFivemAllowed, createVariables, usesFivem } from './variables.js';
+import { createFormChats } from './formChats.js';
 
 definePermission('recruitment.view', { label: 'Voir les candidatures', category: 'Recrutement' });
 definePermission('recruitment.vote', { label: 'Voter et commenter les candidatures', category: 'Recrutement' });
@@ -11,6 +12,8 @@ definePermission('recruitment.manage', { label: 'Gérer les postes et décider d
 const SNOWFLAKE = /^\d{17,20}$/;
 const DAY_MS = 86_400_000;
 const FORM_TTL_MS = 30 * 60_000;
+// An application filled as a conversation is dropped after this long without an answer
+const CHAT_TTL_MS = 60 * 60_000;
 const int = (value, min, max, fallback) => (Number.isInteger(value) ? Math.min(Math.max(value, min), max) : fallback);
 const ids = value => (Array.isArray(value) ? value : []).filter(v => SNOWFLAKE.test(v)).slice(0, 25);
 
@@ -55,6 +58,9 @@ export function normalizePosition(input = {}) {
 		description: String(input.description ?? '').slice(0, 1000),
 		config: {
 			open: c.open !== false,
+			// The bot asks the questions one by one in a private channel made for the application ('channel')
+			// or in private messages ('chat'); 'modal': Discord windows
+			mode: ['channel', 'chat', 'modal'].includes(c.mode) ? c.mode : 'channel',
 			closesAt: Number.isFinite(c.closesAt) ? c.closesAt : null,
 			form: normalizeForm(c.form ?? DEFAULT_FORM, { fallback: DEFAULT_FORM }),
 			requirements: {
@@ -77,7 +83,7 @@ export function normalizePosition(input = {}) {
 	};
 }
 
-export function createRecruitment({ db, network, ranks, audit, executor, sanctions, stats, logger = console, now = Date.now, variables = createVariables({ executor, logger, now }) }) {
+export function createRecruitment({ db, network, ranks, audit, executor, sanctions, stats, logger = console, now = Date.now, variables = createVariables({ executor, logger, now }), formChats = createFormChats({ db, executor, logger, now }) }) {
 	const q = {
 		positions: db.prepare('SELECT * FROM recruit_positions WHERE guild_id = ? ORDER BY id'),
 		position: db.prepare('SELECT * FROM recruit_positions WHERE id = ?'),
@@ -102,7 +108,6 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 		votes: db.prepare('SELECT user_id AS "userId", vote, comment, at FROM recruit_votes WHERE application_id = ? ORDER BY at, user_id'),
 	};
 	const forms = new Map();
-
 	const toPosition = row => row && ({ id: row.id, guildId: row.guild_id, name: row.name, description: row.description, config: normalizePosition({ name: row.name, config: JSON.parse(row.config) }).config, panelChannelId: row.panel_channel_id, panelMessageId: row.panel_message_id });
 	async function toApplication(row) {
 		if (!row) return null;
@@ -165,6 +170,49 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 			.catch(error => logger.warn(`Application #${application.id} not refreshed:`, error.message));
 	}
 
+	// Throws when this member cannot apply to this position right now
+	async function eligible(positionId, userId, guildId) {
+		const position = await getPosition(positionId);
+		if (position.guildId !== guildId) throw new NotFoundError('Poste introuvable.');
+		if (!position.config.open || (position.config.closesAt && position.config.closesAt <= now())) throw new ValidationError('Les candidatures pour ce poste sont fermées.');
+		const last = await toApplication(await q.lastOf.get(positionId, userId));
+		if (last && ['received', 'review', 'interview'].includes(last.status)) throw new ValidationError('Tu as déjà une candidature en cours pour ce poste.');
+		// The delay counts from the decision; a withdrawn application does not count
+		const decided = position.config.cooldownDays ? await toApplication(await q.lastDecided.get(positionId, userId)) : null;
+		const decidedAt = decided ? decided.decidedAt ?? decided.createdAt : null;
+		if (decided && decidedAt > now() - position.config.cooldownDays * DAY_MS) {
+			throw new ValidationError(`Tu pourras repostuler à ce poste dans ${Math.ceil((decidedAt + position.config.cooldownDays * DAY_MS - now()) / DAY_MS)} jour(s).`);
+		}
+		const reasons = await requirements(position, userId, guildId);
+		if (reasons.length) throw new ValidationError(`Tu ne remplis pas les conditions :\n• ${reasons.join('\n• ')}`);
+		return position;
+	}
+
+	formChats.register('recruitment', {
+		ttl: CHAT_TTL_MS,
+		cancel: true,
+		form: async session => (await getPosition(session.meta.positionId).catch(() => null))?.config.form ?? null,
+		async done(session, answers) {
+			const { positionId, guildId, userName } = session.meta;
+			// Closed or already applied meanwhile (two devices)
+			const position = await eligible(positionId, session.userId, guildId);
+			await service.submit({ positionId, guildId, userId: session.userId, userName, answers: answers.map(({ id, label, value }) => ({ id, label, value })), channelId: session.channelId });
+			if (session.channelId) return '✅ Merci, c’était la dernière question : ta candidature est envoyée. Le staff te répondra ici.';
+			// In private messages the "received" message of the position is the confirmation
+			return position.config.dm.received ? null : '✅ Merci, c’était la dernière question : ta candidature est envoyée au staff.';
+		},
+		// The channel of an application that was never sent is deleted
+		async cancelled(session, reason) {
+			if (session.channelId) {
+				await executor.deleteChannel(session.channelId, 'Candidature abandonnée').catch(error => logger.warn(`Application channel ${session.channelId} not deleted:`, error.message));
+				return null;
+			}
+			if (reason === 'cancel') return 'Candidature annulée. Tu peux recommencer quand tu veux depuis le panneau.';
+			if (reason === 'expired') return 'Ta candidature a expiré faute de réponse : clique à nouveau sur **Postuler** pour recommencer.';
+			return 'Le formulaire de ce poste vient de changer : clique à nouveau sur **Postuler**.';
+		},
+	});
+
 	const service = {
 		statuses: STATUSES,
 		positions: async guildId => (await q.positions.all(guildId)).map(toPosition),
@@ -220,23 +268,54 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 		},
 
 		async startApplication(positionId, userId, guildId) {
-			const position = await getPosition(positionId);
-			if (position.guildId !== guildId) throw new NotFoundError('Poste introuvable.');
-			if (!position.config.open || (position.config.closesAt && position.config.closesAt <= now())) throw new ValidationError('Les candidatures pour ce poste sont fermées.');
-			const last = await toApplication(await q.lastOf.get(positionId, userId));
-			if (last && ['received', 'review', 'interview'].includes(last.status)) throw new ValidationError('Tu as déjà une candidature en cours pour ce poste.');
-			// The delay counts from the decision; a withdrawn application does not count
-			const decided = position.config.cooldownDays ? await toApplication(await q.lastDecided.get(positionId, userId)) : null;
-			const decidedAt = decided ? decided.decidedAt ?? decided.createdAt : null;
-			if (decided && decidedAt > now() - position.config.cooldownDays * DAY_MS) {
-				throw new ValidationError(`Tu pourras repostuler à ce poste dans ${Math.ceil((decidedAt + position.config.cooldownDays * DAY_MS - now()) / DAY_MS)} jour(s).`);
-			}
-			const reasons = await requirements(position, userId, guildId);
-			if (reasons.length) throw new ValidationError(`Tu ne remplis pas les conditions :\n• ${reasons.join('\n• ')}`);
+			const position = await eligible(positionId, userId, guildId);
 			const step = nextStep(position.config.form, 0, []);
 			forms.set(`${positionId}:${userId}`, { answers: [], step, at: now() });
 			return { position, step };
 		},
+
+		// The bot asks the questions one by one, in a private channel made for the application ('channel')
+		// or in private messages ('chat'). { sent: false } when the member does not accept private
+		// messages: the caller then offers the Discord windows instead.
+		async startChat(positionId, userId, guildId, userName = null) {
+			const position = await eligible(positionId, userId, guildId);
+			const { form, mode } = position.config;
+			const meta = { positionId, guildId, userName };
+			if (mode !== 'channel') {
+				const intro = `📋 **Candidature : ${position.name}**\nJe te pose les questions une par une : réponds simplement ici, un message par question. Écris \`annuler\` pour arrêter.`;
+				try {
+					await formChats.start({ kind: 'recruitment', userId, meta, form, intro });
+				}
+				catch (error) {
+					logger.warn(`Application of ${userId} not started in DM:`, error.message);
+					return { position, sent: false, channelId: null };
+				}
+				return { position, sent: true, channelId: null };
+			}
+			// Already filling this application: back to its channel instead of a second one
+			const current = formChats.find('recruitment', s => s.userId === userId && s.channelId && s.meta.positionId === positionId);
+			if (current) return { position, sent: true, channelId: current.channelId };
+			let channelId;
+			try {
+				channelId = await executor.createInterviewChannel(guildId, {
+					name: `candidature-${userName ?? userId}`,
+					parentId: position.config.interviewCategoryId,
+					candidateId: userId,
+					staffRoleIds: position.config.interviewerRoleIds,
+					welcome: `<@${userId}> voici ta candidature pour **${position.name}**.`,
+				});
+			}
+			catch (error) {
+				logger.warn(`Application channel of ${userId} not created:`, error.message);
+				throw new ValidationError('Impossible de créer ton salon de candidature : le bot doit pouvoir gérer les salons. Préviens le staff.');
+			}
+			const intro = 'Je te pose les questions une par une : réponds simplement ici, un message par question. Écris `annuler` pour arrêter (le salon sera supprimé).';
+			await formChats.start({ kind: 'recruitment', userId, channelId, meta, form, intro });
+			return { position, sent: true, channelId };
+		},
+
+		// A private message received by the bot: true when it was an answer to an application in progress
+		chatMessage: ({ userId, content = '', attachments = [] }) => formChats.message({ userId, content, attachments }),
 
 		async submitStep(positionId, userId, step, values) {
 			const position = await getPosition(positionId);
@@ -254,9 +333,11 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 			return { done: true, answers: state.answers.map(({ id, label, value }) => ({ id, label, value })) };
 		},
 
-		async submit({ positionId, guildId, userId, userName, answers }) {
+		// channelId: the private channel where the application was filled, kept for the interview
+		async submit({ positionId, guildId, userId, userName, answers, channelId = null }) {
 			const position = await getPosition(positionId);
 			const id = Number((await q.insert.run({ positionId, guildId, userId, userName, answers: JSON.stringify(answers), history: JSON.stringify([{ status: 'received', by: userId, at: now() }]), at: now() })).lastInsertRowid);
+			if (channelId) await q.setInterview.run(channelId, id);
 			let application = await getApplication(id);
 			if (position.config.reviewChannelId) {
 				const posted = await executor.upsertApplicationMessage(position.config.reviewChannelId, null, { position, application, status: STATUSES.received }, { thread: true, pingRoleIds: position.config.pingRoleIds })

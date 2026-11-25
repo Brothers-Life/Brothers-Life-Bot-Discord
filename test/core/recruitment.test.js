@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { withNetwork, ALICE, BOB, MAIN } from '../helpers.js';
 import { ForbiddenError } from '../../src/core/errors.js';
 import { createRecruitment } from '../../src/core/recruitment.js';
+import { createFormChats } from '../../src/core/formChats.js';
 import { createAbsences } from '../../src/core/absences.js';
 import { absencePayload } from '../../src/bot/absencesUi.js';
 
@@ -13,14 +14,15 @@ async function setup() {
 	let clock = Date.now();
 	const ctx = await withNetwork();
 	const { core, executor, owner } = ctx;
-	const recruitment = createRecruitment({ db: core.db, network: core.network, ranks: core.ranks, audit: core.audit, executor, sanctions: core.sanctions, stats: core.stats, logger: { warn: () => undefined }, now: () => clock });
+	const formChats = createFormChats({ db: core.db, executor, logger: { warn: () => undefined }, now: () => clock });
+	const recruitment = createRecruitment({ db: core.db, network: core.network, ranks: core.ranks, audit: core.audit, executor, sanctions: core.sanctions, stats: core.stats, logger: { warn: () => undefined }, now: () => clock, formChats });
 	const absences = createAbsences({ db: core.db, network: core.network, ranks: core.ranks, audit: core.audit, executor, settings: core.settings, logger: { warn: () => undefined }, now: () => clock });
 	const helper = await core.ranks.create(owner, { name: 'Helper', level: 10, permissions: ['panel.access', 'absences.declare'] });
 	const recruiter = await core.ranks.create(owner, { name: 'Recruteur', level: 40, permissions: ['recruitment.view', 'recruitment.vote', 'absences.manage', 'absences.view', 'members.assign'] });
 	await core.ranks.assignDirect(owner, ALICE, recruiter.id);
 	await core.ranks.assignDirect(owner, BOB, helper.id);
 	executor.memberRoles.set(`${MAIN}:${CANDIDATE}`, []);
-	return { ...ctx, recruitment, absences, helper, advance: (ms) => { clock += ms; } };
+	return { ...ctx, recruitment, formChats, absences, helper, advance: (ms) => { clock += ms; } };
 }
 
 async function apply(recruitment, positionId, values) {
@@ -174,4 +176,112 @@ test('decision: the candidate leaves the interview channel; the delay counts fro
 	await assert.rejects(recruitment.startApplication(position.id, CANDIDATE, MAIN), /dans 7 jour/);
 	advance(7 * 86_400_000 + 60_000);
 	await recruitment.startApplication(position.id, CANDIDATE, MAIN);
+});
+
+test('application in private messages: one question at a time, choices by number, optional and invalid answers', async () => {
+	const { recruitment, owner, executor, advance } = await setup();
+	const long = 'Un joueur t’insulte en vocal pendant une scène alors que tu es seul en service : comment réagis-tu et dans quel ordre ?';
+	const position = await recruitment.savePosition(owner, MAIN, { name: 'Modérateur', config: { mode: 'chat', reviewChannelId: REVIEW, form: { steps: [
+		{ questions: [
+			{ id: 'age', type: 'short', label: 'Ton âge', maxLength: 3 },
+			{ id: 'kind', type: 'select', label: 'Tu vises quel pôle ?', options: [{ label: 'Modération' }, { label: 'Animation' }] },
+		] },
+		{ when: { field: 'kind', equals: 'Animation' }, questions: [{ id: 'idea', label: 'Une idée d’événement ?' }] },
+		{ questions: [{ id: 'case', label: long, maxLength: 1500 }, { id: 'more', label: 'Autre chose ?', required: false }] },
+	] } } });
+	assert.equal(position.config.mode, 'chat');
+	const say = content => recruitment.chatMessage({ userId: CANDIDATE, content });
+	const last = () => executor.dms.at(-1)[1];
+
+	// Nothing in progress: the message is an ordinary private message
+	assert.equal(await say('bonjour'), false);
+	assert.equal((await recruitment.startChat(position.id, CANDIDATE, MAIN, 'lea')).sent, true);
+	assert.match(last(), /Candidature : Modérateur[\s\S]*Question 1\*\* — Ton âge/);
+
+	assert.equal(await say('dix-neuf ans'), true);
+	assert.match(last(), /maximum est 3/);
+	await say('19');
+	assert.match(last(), /Question 2\*\* — Tu vises quel pôle[\s\S]*`1` Modération[\s\S]*`2` Animation/);
+	await say('Animation');
+	assert.match(last(), /numéro entre 1 et 2/);
+	await say('1');
+	// The step for "Animation" is skipped, the long question is written in full
+	assert.ok(last().includes(long));
+	await say('Je calme, je préviens, puis je sanctionne.');
+	assert.match(last(), /Autre chose \?[\s\S]*passer/);
+	await say('passer');
+	assert.match(last(), /bien été reçue/);
+	assert.equal(await say('merci'), false);
+
+	const [application] = await recruitment.list(owner, { guildId: MAIN });
+	assert.deepEqual(application.answers.map(a => a.value), ['19', 'Modération', 'Je calme, je préviens, puis je sanctionne.', '']);
+	assert.equal(application.answers[2].label, long);
+	assert.equal(application.userName, 'lea');
+	await assert.rejects(recruitment.startChat(position.id, CANDIDATE, MAIN), /déjà une candidature/);
+
+	// Cancelled, expired, private messages closed
+	const other = await recruitment.savePosition(owner, MAIN, { name: 'Helper', config: { mode: 'chat', form: { steps: [{ questions: [{ id: 'why', label: 'Pourquoi ?' }] }] } } });
+	await recruitment.startChat(other.id, CANDIDATE, MAIN, 'lea');
+	await say('Annuler');
+	assert.match(last(), /annulée/);
+	assert.equal(await say('trop tard'), false);
+	await recruitment.startChat(other.id, CANDIDATE, MAIN, 'lea');
+	advance(61 * 60_000);
+	assert.equal(await say('Motivé'), true);
+	assert.match(last(), /expiré/);
+	executor.sendDM = async () => {
+		throw new Error('Cannot send messages to this user');
+	};
+	assert.equal((await recruitment.startChat(other.id, CANDIDATE, MAIN, 'lea')).sent, false);
+	assert.equal(await say('Motivé'), false);
+	assert.equal((await recruitment.list(owner, { guildId: MAIN })).length, 1);
+});
+
+test('application in a private channel: the questions are asked there, then it is the interview channel', async () => {
+	const { core, recruitment, formChats, owner, executor, advance } = await setup();
+	const CHANNEL = '830000000000000001';
+	const deleted = [];
+	executor.deleteChannel = async (channelId) => {
+		deleted.push(channelId);
+	};
+	const position = await recruitment.savePosition(owner, MAIN, { name: 'Modérateur', config: { interviewerRoleIds: ['800000000000000099'], form: { steps: [{ questions: [{ id: 'why', label: 'Pourquoi toi ?' }, { id: 'age', type: 'short', label: 'Ton âge' }] }] } } });
+	assert.equal(position.config.mode, 'channel');
+	const say = (content, userId = CANDIDATE) => formChats.message({ channelId: CHANNEL, userId, content });
+	const last = () => executor.messages.at(-1).payload.content;
+
+	const started = await recruitment.startChat(position.id, CANDIDATE, MAIN, 'lea');
+	assert.equal(started.channelId, CHANNEL);
+	assert.equal(executor.interviews.at(-1).name, 'candidature-lea');
+	assert.deepEqual(executor.interviews.at(-1).staffRoleIds, ['800000000000000099']);
+	assert.match(last(), /Question 1\/2\*\* — Pourquoi toi/);
+	// A second click goes back to the same channel, and only the candidate answers
+	assert.equal((await recruitment.startChat(position.id, CANDIDATE, MAIN, 'lea')).channelId, CHANNEL);
+	assert.equal(executor.interviews.length, 1);
+	assert.equal(await say('Il a l’air bien', ALICE), false);
+
+	// Given up or left without an answer: the channel is deleted
+	await say('annuler');
+	assert.deepEqual(deleted, [CHANNEL]);
+	await recruitment.startChat(position.id, CANDIDATE, MAIN, 'lea');
+	advance(61 * 60_000);
+	await formChats.tick();
+	assert.deepEqual(deleted, [CHANNEL, CHANNEL]);
+	assert.equal(await say('Motivé'), false);
+
+	// The progress survives a restart of the bot
+	await recruitment.startChat(position.id, CANDIDATE, MAIN, 'lea');
+	assert.equal(await say('Motivé'), true);
+	assert.match(last(), /Question 2\/2\*\* — Ton âge/);
+	const restarted = createFormChats({ db: core.db, executor, logger: { warn: () => undefined } });
+	const again = createRecruitment({ db: core.db, network: core.network, ranks: core.ranks, audit: core.audit, executor, sanctions: core.sanctions, stats: core.stats, logger: { warn: () => undefined }, formChats: restarted });
+	await restarted.init();
+	assert.equal(await restarted.message({ channelId: CHANNEL, userId: CANDIDATE, content: '19' }), true);
+	assert.match(last(), /candidature est envoyée/);
+
+	const [application] = await again.list(owner, { guildId: MAIN });
+	assert.deepEqual(application.answers.map(a => a.value), ['Motivé', '19']);
+	assert.equal(application.interviewChannelId, CHANNEL);
+	const created = executor.interviews.length;
+	await again.setStatus(owner, application.id, 'interview');
+	assert.equal(executor.interviews.length, created);
 });

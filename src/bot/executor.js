@@ -866,7 +866,7 @@ export function createExecutor(client) {
 		},
 
 		// Private channel between the candidate and the recruiters
-		async createInterviewChannel(guildId, { name, parentId, candidateId, staffRoleIds }) {
+		async createInterviewChannel(guildId, { name, parentId, candidateId, staffRoleIds, welcome = null }) {
 			const guild = guildOf(guildId);
 			const parent = parentId ? guild.channels.cache.get(parentId) : null;
 			const people = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles];
@@ -880,9 +880,9 @@ export function createExecutor(client) {
 					{ id: candidateId, allow: people },
 					...staffRoleIds.filter(id => guild.roles.cache.has(id)).map(id => ({ id, allow: people })),
 				],
-				reason: 'Entretien de recrutement',
+				reason: 'Recrutement',
 			});
-			await channel.send({ content: `<@${candidateId}> bienvenue dans ton entretien : l’équipe de recrutement va te parler ici.`, allowedMentions: { users: [candidateId] } });
+			await channel.send({ content: welcome ?? `<@${candidateId}> bienvenue dans ton entretien : l’équipe de recrutement va te parler ici.`, allowedMentions: { users: [candidateId] } });
 			return channel.id;
 		},
 

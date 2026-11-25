@@ -15,13 +15,14 @@ function stepTitle(category, step) {
 	return steps[step].title || (steps.length > 1 ? `${category.name} · ${step + 1}/${steps.length}` : `Ticket · ${category.name}`);
 }
 
-async function openTicket(interaction, categoryId, answers = []) {
+async function openTicket(interaction, categoryId, answers = [], ask = false) {
 	const ticket = await interaction.client.core.tickets.open({
 		guildId: interaction.guildId,
 		userId: interaction.user.id,
 		userName: interaction.user.username,
 		categoryId,
 		answers,
+		ask,
 	});
 	return `Ton ticket est ouvert : <#${ticket.channelId}>`;
 }
@@ -30,9 +31,11 @@ async function openTicket(interaction, categoryId, answers = []) {
 async function start(interaction, categoryId) {
 	const { tickets } = interaction.client.core;
 	const { category, step } = await tickets.startOpening({ guildId: interaction.guildId, userId: interaction.user.id, categoryId });
-	if (step >= 0) return showFormModal(interaction, `ticket:form:${categoryId}:${step}`, stepTitle(category, step), category.config.form.steps[step]);
+	// Form asked as a conversation: the ticket opens right away, the bot asks the questions in its channel
+	const ask = step >= 0 && category.config.formMode === 'chat';
+	if (step >= 0 && !ask) return showFormModal(interaction, `ticket:form:${categoryId}:${step}`, stepTitle(category, step), category.config.form.steps[step]);
 	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-	return interaction.editReply(await openTicket(interaction, categoryId));
+	return interaction.editReply(await openTicket(interaction, categoryId, [], ask));
 }
 
 export async function execute(interaction) {

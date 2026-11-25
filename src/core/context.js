@@ -46,6 +46,7 @@ import { createPolls } from './polls.js';
 import { createGiveaways } from './giveaways.js';
 import { createFeedback } from './feedback.js';
 import { createRecruitment } from './recruitment.js';
+import { createFormChats } from './formChats.js';
 import { createTakeovers } from './takeovers.js';
 import { createAbsences } from './absences.js';
 import { createStreams } from './streams.js';
@@ -117,7 +118,9 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	// Template variables shared by every message of the bot; {fivem.*} come from fivemData, created further down
 	const variables = createVariables({ executor, logger, fivemVars: discordId => fivemData.discordVars(discordId), fivemEnabled: async () => (await fivemData.settingsView()).enabled });
 	const announcements = createAnnouncements({ db, network, audit, executor, logs, uploads, variables, logger });
-	const tickets = createTickets({ db, network, ranks, audit, executor, logs, variables, logger, files, fetchImpl });
+	// Forms asked as a conversation (tickets, applications): only the process connected to Discord receives the answers
+	const formChats = createFormChats({ db, executor, logger });
+	const tickets = createTickets({ db, network, ranks, audit, executor, logs, variables, logger, files, fetchImpl, formChats });
 	const onboarding = createOnboarding({ db, network, audit, executor, uploads, variables, logger, fetchImpl });
 	logs.registerCategory('onboarding', 'Accueil (règlement accepté, boosts, réglages)');
 	const antiraid = createAntiraid({ db, network, audit, executor, sanctions, logs, logger });
@@ -133,7 +136,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	logs.registerCategory('giveaways', 'Giveaways (lancés, gagnants, relances, lots réclamés)');
 	const feedback = createFeedback({ db, network, ranks, audit, executor, logger });
 	logs.registerCategory('feedback', 'Suggestions et bugs (nouveaux, statuts)');
-	const recruitment = createRecruitment({ db, network, ranks, audit, executor, sanctions, stats, variables, logger });
+	const recruitment = createRecruitment({ db, network, ranks, audit, executor, sanctions, stats, variables, logger, formChats });
 	logs.registerCategory('recruitment', 'Recrutement (candidatures, décisions)');
 	const takeovers = createTakeovers({ db, network, audit, executor, settings, logger });
 	logs.registerCategory('takeovers', 'Reprises (entreprises, groupes illégaux)');
@@ -228,7 +231,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 		await network.replay(entry);
 	}
 
-	const core = { db, config, executor, cache, files, variables, settings, audit, network, ranks, logs, sessions, apiKeys, sanctions, sanctionTemplates, music, memberInsights, channelFeatures, verification, embedBuilder, appeals, channelSchedules, archives, meetings, fivemMirror, fivemData, fivemRoles, gameSanctions, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, takeovers, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents, antinuke, fivemEvents, feeds, tebex, serverLinks };
+	const core = { db, config, executor, cache, files, variables, settings, audit, network, ranks, logs, sessions, apiKeys, sanctions, sanctionTemplates, music, memberInsights, channelFeatures, verification, embedBuilder, appeals, channelSchedules, archives, meetings, fivemMirror, fivemData, fivemRoles, gameSanctions, restrictions, moderation, events, automod, staffSync, members, tickets, permissionSync, roleImport, announcements, uploads, onboarding, antiraid, stats, voiceRooms, liveMessages, changelog, polls, giveaways, feedback, recruitment, formChats, takeovers, absences, streams, fivem, dms, templates, customCommands, backups, staffActivity, rpEvents, antinuke, fivemEvents, feeds, tebex, serverLinks };
 	// FiveM telemetry (bl_telemetry): every process works on the database itself, the API takes the batches
 	core.telemetry = createTelemetry({ db, settings, logs, audit, config, logger, fetchImpl, notifications: () => core.notifications });
 	for (const name of BOT_SERVICES) core[name] = shared(name, core[name]);
@@ -244,7 +247,7 @@ export function createCore({ db, config, executor, logger = console, fetchImpl =
 	// What the services load from the database before working (open tickets, raids in progress…).
 	// `worker`: the process running the Discord bot also repairs what a restart cut (announcements being sent…).
 	core.init = async ({ worker = false } = {}) => {
-		if (!remote) for (const service of [tickets, antiraid, fivemEvents]) await service.init();
+		if (!remote) for (const service of [tickets, antiraid, fivemEvents, formChats]) await service.init();
 		if (worker) for (const service of [templates, announcements]) await service.recover();
 	};
 	return core;

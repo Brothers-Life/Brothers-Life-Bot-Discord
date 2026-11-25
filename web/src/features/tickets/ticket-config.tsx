@@ -430,8 +430,20 @@ function CategoryDialog({ guildId, config, initial, onClose }: { guildId: string
             </TabsContent>
 
             <TabsContent value='form' className='mt-4 grid gap-3'>
+              <div className='grid gap-1.5'>
+                <Label>Comment les questions sont posées</Label>
+                <Select value={cfg.formMode ?? 'modal'} onValueChange={(v) => setCfg({ ...cfg, formMode: v as 'modal' | 'chat' })}>
+                  <SelectTrigger className='w-full sm:w-96' aria-label='Comment les questions sont posées'><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='modal'>Dans des fenêtres Discord, avant l’ouverture</SelectItem>
+                    <SelectItem value='chat'>Dans le ticket, une question à la fois</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <p className='text-sm text-muted-foreground'>
-                Chaque étape est une fenêtre Discord de 5 questions maximum. Entre deux étapes, le membre clique sur « Continuer ». Les réponses s’affichent dans le ticket et dans le panel.
+                {(cfg.formMode ?? 'modal') === 'chat'
+                  ? 'Le ticket s’ouvre tout de suite, puis le bot écrit les questions une par une dans le salon et attend chaque réponse : elles s’affichent en entier, sans limite de longueur. Les réponses rejoignent le ticket et le panel à la fin.'
+                  : 'Chaque étape est une fenêtre Discord de 5 questions maximum. Entre deux étapes, le membre clique sur « Continuer ». Les réponses s’affichent dans le ticket et dans le panel.'}
               </p>
               <FormBuilder value={cfg.form} onChange={(form) => setCfg({ ...cfg, form })} />
             </TabsContent>

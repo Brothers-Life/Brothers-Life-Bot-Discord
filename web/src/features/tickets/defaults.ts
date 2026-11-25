@@ -4,6 +4,7 @@ import type { TicketCategoryConfig } from '@/lib/types'
 export const DEFAULT_CATEGORY_CONFIG: TicketCategoryConfig = {
   buttonStyle: 'secondary',
   form: { steps: [{ title: '', when: null, questions: [{ id: 'subject', type: 'paragraph', label: 'Sujet de ta demande', description: '', placeholder: '', required: true, minLength: 0, maxLength: 200, defaultValue: '' }] }] },
+  formMode: 'modal',
   nameTemplate: 'ticket-{number}-{user}',
   ping: 'staff',
   pingRoleIds: [],

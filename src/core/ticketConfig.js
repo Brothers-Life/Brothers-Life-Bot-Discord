@@ -68,6 +68,9 @@ export function normalizeCategoryConfig(input = {}) {
 	return {
 		buttonStyle: BUTTON_STYLES.includes(input.buttonStyle) ? input.buttonStyle : 'secondary',
 		form: normalizeForm(input.form),
+		// 'modal': Discord windows before the ticket opens; 'chat': the ticket opens, then the bot asks
+		// the questions one by one in its channel
+		formMode: input.formMode === 'chat' ? 'chat' : 'modal',
 		nameTemplate: text(input.nameTemplate, 90).trim() || 'ticket-{number}-{user}',
 		ping: ['staff', 'none', 'roles'].includes(input.ping) ? input.ping : 'staff',
 		pingRoleIds: ids(input.pingRoleIds),

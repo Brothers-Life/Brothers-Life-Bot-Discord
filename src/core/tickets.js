@@ -4,6 +4,7 @@ import { assertFivemAllowed, createVariables, fivemKeysIn } from './variables.js
 import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
 import { normalizePayload } from './announcements.js';
 import { nextStep, readStep } from './forms.js';
+import { createFormChats } from './formChats.js';
 import {
 	BUILTIN_KEYS, BUILTIN_STATUSES, PRIORITIES, PRIORITY_LABELS,
 	TICKET_VARIABLES, accountCreatedAt, fill, isWithinHours, normalizeCategoryConfig, normalizeGuildConfig, normalizeStatuses, slugName,
@@ -34,7 +35,7 @@ const DEFAULT_PANEL_PAYLOAD = {
 
 // variables: shared template variables (member, server, FiveM account), see variables.js
 // files: where the HTML transcripts are kept for the panel (none in some tests)
-export function createTickets({ db, network, ranks, audit, executor, logs, logger = console, now = Date.now, files = null, fetchImpl = fetch, variables = createVariables({ executor, logger, now }) }) {
+export function createTickets({ db, network, ranks, audit, executor, logs, logger = console, now = Date.now, files = null, fetchImpl = fetch, variables = createVariables({ executor, logger, now }), formChats = createFormChats({ db, executor, logger, now }) }) {
 	logs.registerCategory('tickets', 'Tickets (ouverture, fermeture, transcripts)');
 
 	const q = {
@@ -78,6 +79,8 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			VALUES (@guildId, @number, @categoryId, @openerId, @openerName, @subject, @answers, @vars, @history, @createdAt, @createdAt)
 		`),
 		setChannel: db.prepare('UPDATE tickets SET channel_id = ? WHERE id = ?'),
+		// Answers given in the channel after the opening (form asked as a conversation)
+		setAnswers: db.prepare('UPDATE tickets SET answers = ?, subject = COALESCE(subject, ?), vars = ? WHERE id = ? AND status = \'open\''),
 		deleteTicket: db.prepare('DELETE FROM tickets WHERE id = ?'),
 		ticket: db.prepare('SELECT * FROM tickets WHERE id = ?'),
 		openedBy: db.prepare('SELECT COUNT(*) AS n FROM tickets WHERE guild_id = ? AND opener_id = ?'),
@@ -566,6 +569,26 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 		}).trim().slice(0, 2000);
 	}
 
+	const cleanTicketAnswers = answers => answers.filter(a => a.value).slice(0, 25).map(a => ({ id: a.id, label: a.label.slice(0, 250), type: a.type ?? 'paragraph', value: a.value.slice(0, 4000) }));
+
+	// Form asked in the channel of the ticket, one question per message: the answers join the ticket at the end
+	formChats.register('ticket', {
+		ttl: 24 * 3600_000,
+		cancel: false,
+		form: async session => (await findCategory(session.meta.guildId, session.meta.categoryId).catch(() => null))?.config.form ?? null,
+		async done(session, answers) {
+			const ticket = await getTicket(session.meta.ticketId);
+			if (!ticket || ticket.status !== 'open') return null;
+			const category = await findCategory(session.meta.guildId, session.meta.categoryId);
+			const clean = cleanTicketAnswers(answers);
+			const vars = await ticketVars({ guildId: ticket.guildId, userId: ticket.openerId, userName: ticket.openerName, answers: clean, category });
+			const subject = (clean.find(a => a.type === 'short' || a.type === 'paragraph') ?? clean[0])?.value?.slice(0, 200) || null;
+			await q.setAnswers.run(clean.length ? JSON.stringify(clean) : null, subject, JSON.stringify(vars), ticket.id);
+			return '✅ Merci, c’est noté : l’équipe va te répondre ici.';
+		},
+		cancelled: () => null,
+	});
+
 	const service = {
 		init,
 		settings: settingsOf,
@@ -780,12 +803,13 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			return { done: true, answers: state.answers.map(({ id, label, type, value }) => ({ id, label, type, value })) };
 		},
 
-		async open({ guildId, userId, userName, categoryId, subject, answers = [] }) {
+		// ask: the form is not filled yet, the bot asks its questions one by one in the channel of the ticket
+		async open({ guildId, userId, userName, categoryId, subject, answers = [], ask = false }) {
 			if ((await network.find(guildId))?.status !== 'active') throw new ValidationError('Les tickets ne sont pas disponibles sur ce serveur.');
 			const category = await findCategory(guildId, categoryId);
 			await checkAccess(guildId, userId, category);
 
-			const cleanAnswers = answers.filter(a => a.value).slice(0, 25).map(a => ({ id: a.id, label: a.label.slice(0, 250), type: a.type ?? 'paragraph', value: a.value.slice(0, 4000) }));
+			const cleanAnswers = cleanTicketAnswers(answers);
 			const vars = await ticketVars({ guildId, userId, userName, answers: cleanAnswers, category });
 			// Another opening of the same member may have finished meanwhile: the limits are checked again and the
 			// number taken under the server's opening lock, so two openings never interleave between the check and the insert
@@ -828,6 +852,12 @@ export function createTickets({ db, network, ranks, audit, executor, logs, logge
 			liveChannels.set(channelId, id);
 			const ticket = await getTicket(id);
 			await executor.sendTicketWelcome(channelId, await service.welcomeData(ticket, category)).catch(error => logger.warn('Ticket welcome failed:', error.message));
+			if (ask) {
+				await formChats.start({
+					kind: 'ticket', userId, channelId, meta: { ticketId: id, guildId, categoryId }, form: category.config.form,
+					intro: `<@${userId}> quelques questions pour traiter ta demande : réponds ici, un message par question.`,
+				}).catch(error => logger.warn(`Questions of ticket #${ticket.number} not asked:`, error.message));
+			}
 			await record(userId, 'bot', 'tickets.open', ticket, { category: category.name, subject: ticket.subject, channel: `<#${channelId}>` });
 			return ticket;
 		},

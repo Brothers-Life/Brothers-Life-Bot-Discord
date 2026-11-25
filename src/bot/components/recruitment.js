@@ -1,4 +1,4 @@
-import { MessageFlags } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { AppError } from '../../core/errors.js';
 import { showFormModal, readModal, fromEphemeralMessage } from '../forms.js';
 import { nextStepPayload } from '../ticketsUi.js';
@@ -13,10 +13,25 @@ function title(position, step) {
 	return steps[step].title || `${position.name} · ${step + 1}/${steps.length}`;
 }
 
-export async function startApplication(interaction, positionId) {
+async function openForm(interaction, positionId) {
 	const { recruitment } = interaction.client.core;
 	const { position, step } = await recruitment.startApplication(positionId, interaction.user.id, interaction.guildId);
 	return showFormModal(interaction, `rc:form:${positionId}:${step}`, title(position, step), position.config.form.steps[step]);
+}
+
+// Questions asked one by one in a private channel or in private messages, or the Discord windows
+// (choice of the position, and what is offered when the member does not accept private messages)
+export async function startApplication(interaction, positionId) {
+	const { recruitment } = interaction.client.core;
+	if ((await recruitment.getPosition(positionId)).config.mode === 'modal') return openForm(interaction, positionId);
+	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+	const { position, sent, channelId } = await recruitment.startChat(positionId, interaction.user.id, interaction.guildId, interaction.user.username);
+	if (channelId) return interaction.editReply(`📋 Ta candidature pour **${position.name}** se passe ici : <#${channelId}>`);
+	if (sent) return interaction.editReply(`📬 Je t’ai envoyé les questions pour **${position.name}** en message privé : réponds-y là-bas.`);
+	return interaction.editReply({
+		content: 'Je n’arrive pas à t’écrire en message privé (ils sont fermés pour ce serveur). Ouvre-les puis reclique sur **Postuler**, ou remplis le formulaire ici.',
+		components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`rc:modal:${positionId}`).setLabel('Remplir le formulaire ici').setStyle(ButtonStyle.Secondary))],
+	});
 }
 
 export async function execute(interaction) {
@@ -32,6 +47,8 @@ export async function execute(interaction) {
 		switch (action) {
 		case 'apply':
 			return await startApplication(interaction, id);
+		case 'modal':
+			return await openForm(interaction, id);
 		case 'next': {
 			const position = await recruitment.getPosition(id);
 			const step = Number(extra);

@@ -336,6 +336,7 @@ export type TicketHoursDay = { open: boolean; from: string; to: string }
 export type TicketCategoryConfig = {
   buttonStyle: 'primary' | 'secondary' | 'success' | 'danger'
   form: FormDef
+  formMode: 'modal' | 'chat'
   nameTemplate: string
   ping: 'staff' | 'none' | 'roles'
   pingRoleIds: string[]

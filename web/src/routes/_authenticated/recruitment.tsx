@@ -33,7 +33,7 @@ type StatusKey = 'received' | 'review' | 'interview' | 'accepted' | 'rejected' |
 type Position = {
   id: number; name: string; description: string; panelChannelId: string | null; panelMessageId: string | null
   config: {
-    open: boolean; closesAt: number | null; form: FormDef; cooldownDays: number; reviewChannelId: string | null; pingRoleIds: string[]; acceptRoleIds: string[]
+    open: boolean; closesAt: number | null; mode: 'channel' | 'chat' | 'modal'; form: FormDef; cooldownDays: number; reviewChannelId: string | null; pingRoleIds: string[]; acceptRoleIds: string[]
     acceptRankId: number | null; interviewCategoryId: string | null; interviewerRoleIds: string[]; dm: Record<string, string>
     requirements: { minAccountAgeDays: number; minMemberDays: number; noSanctionDays: number; requiredRoleIds: string[]; minMessages: number; activityDays: number }
   }
@@ -241,7 +241,7 @@ function ApplicationDialog({ id, data, guildId, onClose }: { id: number; data: P
 const EMPTY_POSITION: Omit<Position, 'id'> & { id?: number } = {
   name: '', description: '', panelChannelId: null, panelMessageId: null,
   config: {
-    open: true, closesAt: null, form: { steps: [{ title: 'Ta candidature', when: null, questions: [{ id: 'why', type: 'paragraph', label: 'Pourquoi toi ?', description: '', required: true, maxLength: 2000 }] }] },
+    open: true, closesAt: null, mode: 'channel', form: { steps: [{ title: 'Ta candidature', when: null, questions: [{ id: 'why', type: 'paragraph', label: 'Pourquoi toi ?', description: '', required: true, maxLength: 2000 }] }] },
     cooldownDays: 14, reviewChannelId: null, pingRoleIds: [], acceptRoleIds: [], acceptRankId: null, interviewCategoryId: null, interviewerRoleIds: [], dm: {},
     requirements: { minAccountAgeDays: 0, minMemberDays: 0, noSanctionDays: 0, requiredRoleIds: [], minMessages: 0, activityDays: 30 },
   },
@@ -351,7 +351,27 @@ function PositionDialog({ initial, data, guildId, onClose }: { initial: Omit<Pos
               {num('Délai avant de repostuler (jours)', c.cooldownDays, (n) => set({ cooldownDays: n }))}
             </div>
           </TabsContent>
-          <TabsContent value='form' className='mt-4'><FormBuilder value={c.form} allowEmpty={false} onChange={(form) => set({ form })} /></TabsContent>
+          <TabsContent value='form' className='mt-4 grid grid-cols-[minmax(0,1fr)] gap-4'>
+            <div className='grid gap-1.5'>
+              <Label>Comment les questions sont posées</Label>
+              <Select value={c.mode ?? 'channel'} onValueChange={(v) => set({ mode: v as 'channel' | 'chat' | 'modal' })}>
+                <SelectTrigger className='w-full sm:w-96' aria-label='Comment les questions sont posées'><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='channel'>Dans un salon privé, une question à la fois</SelectItem>
+                  <SelectItem value='chat'>En message privé, une question à la fois</SelectItem>
+                  <SelectItem value='modal'>Dans des fenêtres Discord</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className='text-xs text-muted-foreground'>
+                {{
+                  channel: 'Le bot ouvre un salon privé (le candidat et les recruteurs, dans la catégorie des entretiens) et y écrit les questions une par une : elles s’affichent en entier, sans limite de longueur. Le salon sert ensuite à l’entretien ; il est supprimé si le candidat abandonne.',
+                  chat: 'Le bot écrit chaque question au candidat en message privé et attend sa réponse. Si ses messages privés sont fermés, il peut remplir les fenêtres Discord à la place.',
+                  modal: 'Le candidat remplit une fenêtre Discord par étape (5 champs au plus, titres limités par Discord).',
+                }[c.mode ?? 'channel']}
+              </p>
+            </div>
+            <FormBuilder value={c.form} allowEmpty={false} onChange={(form) => set({ form })} />
+          </TabsContent>
           <TabsContent value='rules' className='mt-4 grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2'>
             {num('Âge du compte (jours)', c.requirements.minAccountAgeDays, (n) => setReq({ minAccountAgeDays: n }))}
             {num('Ancienneté sur le serveur (jours)', c.requirements.minMemberDays, (n) => setReq({ minMemberDays: n }))}
