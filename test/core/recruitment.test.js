@@ -309,9 +309,9 @@ test('application channel: closed and reopened by the recruiters, closed by the 
 	executor.memberRoles.set(`${MAIN}:${BOB}`, [RECRUITER_ROLE]);
 	const position = await recruitment.savePosition(owner, MAIN, {
 		name: 'Helper',
-		config: { reviewChannelId: REVIEW, interviewerRoleIds: [RECRUITER_ROLE], channelDeleteHours: 2, form: { steps: [{ questions: [{ id: 'why', label: 'Pourquoi ?' }] }] } },
+		config: { reviewChannelId: REVIEW, interviewerRoleIds: [RECRUITER_ROLE], channelDeleteMinutes: 120, form: { steps: [{ questions: [{ id: 'why', label: 'Pourquoi ?' }] }] } },
 	});
-	assert.equal(position.config.channelDeleteHours, 2);
+	assert.equal(position.config.channelDeleteMinutes, 120);
 	const alice = await core.ranks.resolve(ALICE);
 	const bob = await core.ranks.resolve(BOB);
 	const state = async id => (await recruitment.get(owner, id)).interviewState;
@@ -356,14 +356,42 @@ test('application channel: closed and reopened by the recruiters, closed by the 
 	await assert.rejects(recruitment.reopenChannel(alice, app.id), /plus de salon/);
 
 	// Delay at 0: kept until a recruiter deletes it
-	await recruitment.savePosition(owner, MAIN, { ...position, config: { ...position.config, channelDeleteHours: 0, cooldownDays: 0 } });
+	await recruitment.savePosition(owner, MAIN, { ...position, config: { ...position.config, channelDeleteMinutes: 0, cooldownDays: 0 } });
 	const second = await apply(recruitment, position.id, [{ why: 'Encore' }]);
 	await recruitment.setStatus(owner, second.id, 'interview');
 	await recruitment.setStatus(owner, second.id, 'rejected');
 	advance(30 * 86_400_000);
 	await recruitment.tick();
 	assert.equal(deleted.length, 1);
-	await recruitment.deleteChannel(alice, second.id);
+	// Refused by Discord: said to the recruiter, and the channel stays closed (it can be deleted again)
+	executor.deleteChannel = async () => {
+		throw new Error('Missing Permissions');
+	};
+	await assert.rejects(recruitment.deleteChannel(alice, second.id), /Discord a refusé[\s\S]*Missing Permissions/);
+	assert.equal(await state(second.id), 'closed');
+	assert.deepEqual(await recruitment.deleteClosedChannels(owner, MAIN).then(r => [r.deleted, r.failed]), [0, 1]);
+	executor.deleteChannel = async (channelId) => {
+		deleted.push(channelId);
+	};
+	await assert.rejects(recruitment.deleteClosedChannels(alice, MAIN), ForbiddenError);
+	assert.deepEqual(await recruitment.deleteClosedChannels(owner, MAIN).then(r => [r.deleted, r.failed]), [1, 0]);
 	assert.equal(deleted.length, 2);
 	await assert.rejects(recruitment.deleteChannel(alice, second.id), /plus de salon/);
+
+	// The automatic deletion does not insist when Discord refuses
+	await recruitment.savePosition(owner, MAIN, { ...position, config: { ...position.config, channelDeleteMinutes: 5, cooldownDays: 0 } });
+	const third = await apply(recruitment, position.id, [{ why: 'Toujours' }]);
+	await recruitment.setStatus(owner, third.id, 'interview');
+	await recruitment.setStatus(owner, third.id, 'rejected');
+	let tries = 0;
+	executor.deleteChannel = async () => {
+		tries += 1;
+		throw new Error('Missing Permissions');
+	};
+	advance(6 * 60_000);
+	await recruitment.tick();
+	advance(6 * 60_000);
+	await recruitment.tick();
+	assert.equal(tries, 1);
+	assert.equal(await state(third.id), 'closed');
 });

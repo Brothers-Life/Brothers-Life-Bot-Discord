@@ -34,17 +34,18 @@ type Position = {
   id: number; name: string; description: string; panelChannelId: string | null; panelMessageId: string | null
   config: {
     open: boolean; closesAt: number | null; mode: 'channel' | 'chat' | 'modal'; form: FormDef; cooldownDays: number; reviewChannelId: string | null; pingRoleIds: string[]; acceptRoleIds: string[]
-    acceptRankId: number | null; interviewCategoryId: string | null; interviewerRoleIds: string[]; channelDeleteHours: number; dm: Record<string, string>
+    acceptRankId: number | null; interviewCategoryId: string | null; interviewerRoleIds: string[]; channelDeleteMinutes: number; dm: Record<string, string>
     requirements: { minAccountAgeDays: number; minMemberDays: number; noSanctionDays: number; requiredRoleIds: string[]; minMessages: number; activityDays: number }
   }
 }
 type Application = {
+  interviewChannelId: string | null; interviewState: 'open' | 'closed' | null
   id: number; positionId: number; userId: string; status: StatusKey; createdAt: number; score: { for: number; against: number; neutral: number }
   names: { userId: { name: string | null; avatar: string | null } | null }
 }
 type Detail = Application & {
   answers: { id: string; label: string; value: string }[]; history: { status: string; by: string; at: number; reason: string | null }[]
-  notes: { by: string; at: number; text: string }[]; votes: { userId: string; vote: number; comment: string | null; at: number }[]; interviewChannelId: string | null; interviewState: 'open' | 'closed' | null
+  notes: { by: string; at: number; text: string }[]; votes: { userId: string; vote: number; comment: string | null; at: number }[]
   names: Record<string, { name: string | null; avatar: string | null } | null>
 }
 type Payload = { positions: Position[]; applications: Application[]; statuses: Record<StatusKey, { label: string; emoji: string; color: string }>; channels: Channel[]; categories: { id: string; name: string }[]; roles: Role[]; ranks: RankSummary[] }
@@ -78,8 +79,20 @@ function Recruitment({ guildId }: { guildId: string }) {
   const { data } = useQuery({ queryKey: ['recruitment', guildId], queryFn: () => api<Payload>(`/recruitment/${guildId}`), refetchInterval: 20_000 })
   const [status, setStatus] = useState<'open' | 'all' | StatusKey>('open')
   const [viewing, setViewing] = useState<number | null>(null)
+  const { can } = useMe()
+  const qc = useQueryClient()
+  const { confirm, dialog } = useConfirm()
+  const purge = useMutation({
+    mutationFn: () => api<{ deleted: number; failed: number; error: string | null }>(`/recruitment/${guildId}/channels/delete-closed`, { method: 'POST' }),
+    onSuccess: (r) => {
+      if (r.failed) toast.error(`${r.deleted} supprimé(s), ${r.failed} refusé(s). ${r.error ?? ''}`)
+      else toast.success(`${r.deleted} salon(s) supprimé(s)`)
+      qc.invalidateQueries({ queryKey: ['recruitment', guildId] })
+    },
+  })
   if (!data) return <Skeleton className='h-96 w-full' />
   const list = data.applications.filter((a) => (status === 'all' ? true : status === 'open' ? ['received', 'review', 'interview'].includes(a.status) : a.status === status))
+  const closedChannels = data.applications.filter((a) => a.interviewChannelId && a.interviewState === 'closed').length
   const positionName = (id: number) => data.positions.find((p) => p.id === id)?.name ?? 'Poste supprimé'
   return (
     <Tabs defaultValue='applications'>
@@ -96,7 +109,15 @@ function Recruitment({ guildId }: { guildId: string }) {
         <Section
           title={`${list.length} candidature${list.length > 1 ? 's' : ''}`}
           actions={
-            <div className='flex gap-2'>
+            <div className='flex flex-wrap gap-2'>
+              {closedChannels > 0 && can('recruitment.manage') && (
+                <Button
+                  variant='outline' disabled={purge.isPending}
+                  onClick={async () => {
+                    if (await confirm({ title: `Supprimer ${closedChannels} salon${closedChannels > 1 ? 's' : ''} fermé${closedChannels > 1 ? 's' : ''} ?`, desc: 'Tous les salons de candidature déjà fermés de ce serveur sont supprimés de Discord. Les conversations sont gardées en fichier avec chaque candidature quand le poste a un salon d’étude.', confirmText: 'Supprimer', destructive: true })) purge.mutate()
+                  }}
+                ><Trash2 /> Salons fermés ({closedChannels})</Button>
+              )}
               <Select value={status} onValueChange={(v) => setStatus(v as typeof status)}>
                 <SelectTrigger className='w-44'><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -136,6 +157,7 @@ function Recruitment({ guildId }: { guildId: string }) {
         {viewing !== null && <ApplicationDialog id={viewing} data={data} guildId={guildId} onClose={() => setViewing(null)} />}
       </TabsContent>
       <TabsContent value='positions' className='mt-4'><Positions data={data} guildId={guildId} /></TabsContent>
+      {dialog}
     </Tabs>
   )
 }
@@ -260,7 +282,7 @@ const EMPTY_POSITION: Omit<Position, 'id'> & { id?: number } = {
   name: '', description: '', panelChannelId: null, panelMessageId: null,
   config: {
     open: true, closesAt: null, mode: 'channel', form: { steps: [{ title: 'Ta candidature', when: null, questions: [{ id: 'why', type: 'paragraph', label: 'Pourquoi toi ?', description: '', required: true, maxLength: 2000 }] }] },
-    cooldownDays: 14, reviewChannelId: null, pingRoleIds: [], acceptRoleIds: [], acceptRankId: null, interviewCategoryId: null, interviewerRoleIds: [], channelDeleteHours: 24, dm: {},
+    cooldownDays: 14, reviewChannelId: null, pingRoleIds: [], acceptRoleIds: [], acceptRankId: null, interviewCategoryId: null, interviewerRoleIds: [], channelDeleteMinutes: 5, dm: {},
     requirements: { minAccountAgeDays: 0, minMemberDays: 0, noSanctionDays: 0, requiredRoleIds: [], minMessages: 0, activityDays: 30 },
   },
 }
@@ -368,7 +390,7 @@ function PositionDialog({ initial, data, guildId, onClose }: { initial: Omit<Pos
               <div className='grid gap-1.5'><Label>Recruteurs (voient les entretiens)</Label><RolesPicker roles={data.roles} value={c.interviewerRoleIds} onChange={(ids) => set({ interviewerRoleIds: ids })} label='Recruteurs' /></div>
               {num('Délai avant de repostuler (jours)', c.cooldownDays, (n) => set({ cooldownDays: n }))}
               <div className='grid gap-1.5'>
-                {num('Suppression du salon après sa fermeture (heures)', c.channelDeleteHours ?? 24, (n) => set({ channelDeleteHours: Math.min(720, Math.max(0, Math.round(n))) }))}
+                {num('Suppression du salon après sa fermeture (minutes)', c.channelDeleteMinutes ?? 5, (n) => set({ channelDeleteMinutes: Math.min(43200, Math.max(0, Math.round(n))) }))}
                 <p className='text-xs text-muted-foreground'>Le salon se ferme à la décision (ou par le bouton « Fermer »), puis est supprimé après ce délai. 0 : gardé jusqu’à ce qu’un recruteur le supprime.</p>
               </div>
             </div>

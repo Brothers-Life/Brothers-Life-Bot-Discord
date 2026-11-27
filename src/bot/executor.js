@@ -1270,8 +1270,12 @@ export function createExecutor(client) {
 			}).join('\n');
 		},
 
+		// Already gone: nothing to do. Anything else (missing permission, no access) is thrown to the caller.
 		async deleteChannel(channelId, reason) {
-			const channel = await client.channels.fetch(channelId).catch(() => null);
+			const channel = await client.channels.fetch(channelId).catch((error) => {
+				if (error.code === RESTJSONErrorCodes.UnknownChannel) return null;
+				throw error;
+			});
 			if (channel) await channel.delete(reason);
 		},
 

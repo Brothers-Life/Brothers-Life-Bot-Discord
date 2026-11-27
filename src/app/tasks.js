@@ -28,7 +28,7 @@ export function startTasks({ core, every }) {
 		// Forms asked as a conversation and left without an answer
 		every(60_000, () => core.formChats.tick(), 'Form conversations failed'),
 		// Closed application channels reaching their deletion delay
-		every(5 * 60_000, () => core.recruitment.tick(), 'Application channels failed'),
+		every(60_000, () => core.recruitment.tick(), 'Application channels failed'),
 		// Monthly staff activity report
 		every(10 * 60_000, () => core.staffActivity.tick(), 'Staff report failed'),
 		// Nightly server backups

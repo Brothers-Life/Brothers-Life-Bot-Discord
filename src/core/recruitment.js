@@ -12,7 +12,7 @@ definePermission('recruitment.manage', { label: 'Gérer les postes et décider d
 
 const SNOWFLAKE = /^\d{17,20}$/;
 const DAY_MS = 86_400_000;
-const HOUR_MS = 3600_000;
+const MINUTE_MS = 60_000;
 const FORM_TTL_MS = 30 * 60_000;
 // An application filled as a conversation is dropped after this long without an answer
 const CHAT_TTL_MS = 60 * 60_000;
@@ -80,8 +80,8 @@ export function normalizePosition(input = {}) {
 			acceptRankId: Number.isInteger(c.acceptRankId) ? c.acceptRankId : null,
 			interviewCategoryId: SNOWFLAKE.test(c.interviewCategoryId) ? c.interviewCategoryId : null,
 			interviewerRoleIds: ids(c.interviewerRoleIds),
-			// Hours between the closing of an application channel and its deletion (0: kept until the staff deletes it)
-			channelDeleteHours: int(c.channelDeleteHours, 0, 720, 24),
+			// Minutes between the closing of an application channel and its deletion (0: kept until the staff deletes it)
+			channelDeleteMinutes: int(c.channelDeleteMinutes, 0, 43_200, 5),
 			dm,
 		},
 	};
@@ -111,6 +111,9 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 		closeChannel: db.prepare('UPDATE recruit_applications SET interview_state = \'closed\', interview_closed_at = ? WHERE id = ? AND interview_state = \'open\' AND interview_channel_id IS NOT NULL'),
 		reopenChannel: db.prepare('UPDATE recruit_applications SET interview_state = \'open\', interview_closed_at = NULL WHERE id = ? AND interview_state = \'closed\' AND interview_channel_id IS NOT NULL'),
 		dropChannel: db.prepare('UPDATE recruit_applications SET interview_channel_id = NULL, interview_state = NULL, interview_closed_at = NULL WHERE id = ? AND interview_state = \'closed\''),
+		// A deletion refused by Discord: the channel is known again (closedAt NULL: the bot does not try again on its own)
+		restoreChannel: db.prepare('UPDATE recruit_applications SET interview_channel_id = ?, interview_state = \'closed\', interview_closed_at = ? WHERE id = ? AND interview_channel_id IS NULL'),
+		closedOf: db.prepare('SELECT * FROM recruit_applications WHERE guild_id = ? AND interview_state = \'closed\' AND interview_channel_id IS NOT NULL ORDER BY id LIMIT 200'),
 		closedChannels: db.prepare('SELECT * FROM recruit_applications WHERE interview_state = \'closed\' AND interview_closed_at IS NOT NULL ORDER BY interview_closed_at, id LIMIT 200'),
 		setNotes: db.prepare('UPDATE recruit_applications SET notes = ?, updated_at = ? WHERE id = ?'),
 		vote: db.prepare('INSERT INTO recruit_votes (application_id, user_id, vote, comment, at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (application_id, user_id) DO UPDATE SET vote = EXCLUDED.vote, comment = COALESCE(EXCLUDED.comment, recruit_votes.comment), at = EXCLUDED.at'),
@@ -190,15 +193,28 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 	}
 	async function closeInterview(application, by) {
 		if (!application.interviewChannelId || !(await q.closeChannel.run(now(), application.id)).changes) return false;
-		const hours = (await getPosition(application.positionId).catch(() => null))?.config.channelDeleteHours ?? 0;
+		const minutes = (await getPosition(application.positionId).catch(() => null))?.config.channelDeleteMinutes ?? 0;
 		await executor.removeChannelMember(application.interviewChannelId, application.userId).catch(warn(`Channel of application #${application.id} not closed`));
-		await executor.sendInterviewNotice(application.interviewChannelId, { kind: 'closed', applicationId: application.id, by, deleteAt: hours ? now() + hours * HOUR_MS : null })
+		await executor.sendInterviewNotice(application.interviewChannelId, { kind: 'closed', applicationId: application.id, by, deleteAt: minutes ? now() + minutes * MINUTE_MS : null })
 			.catch(warn(`Notice of application #${application.id} not sent`));
 		return true;
 	}
-	// The conversation is kept as a file next to the application (its thread, or the review channel)
-	async function deleteInterview(application, by) {
+	// Throws when Discord refuses the deletion: the channel then stays known and closed
+	async function deleteInterview(application, by, { retry = true } = {}) {
 		if (!(await q.dropChannel.run(application.id)).changes) return false;
+		const channelId = application.interviewChannelId;
+		await saveConversation(application, by);
+		try {
+			await executor.deleteChannel(channelId, `Candidature #${application.id} terminée`);
+		}
+		catch (error) {
+			await q.restoreChannel.run(channelId, retry ? application.interviewClosedAt : null, application.id);
+			throw error;
+		}
+		return true;
+	}
+	// The conversation is kept as a file next to the application (its thread, or the review channel)
+	async function saveConversation(application, by) {
 		const channelId = application.interviewChannelId;
 		const target = application.threadId ?? application.reviewChannelId;
 		const history = target ? await executor.fetchChannelHistory(channelId, { limit: 2000 }).catch(() => null) : null;
@@ -210,9 +226,8 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 				files: [{ name: `candidature-${application.id}.txt`, content: transcriptText(history.messages, history.mentions) }],
 			}).catch(warn(`Conversation of application #${application.id} not saved`));
 		}
-		await executor.deleteChannel(channelId, `Candidature #${application.id} terminée`).catch(warn(`Channel of application #${application.id} not deleted`));
-		return true;
 	}
+	const refused = error => new ValidationError(`Discord a refusé la suppression du salon (${error.message}) : le bot doit avoir « Gérer les salons » sur ce salon et sa catégorie.`);
 	const recordChannel = (actor, action, application) => audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action, guildId: application.guildId, target: String(application.id), details: { member: `<@${application.userId}>` } });
 
 	// Throws when this member cannot apply to this position right now
@@ -511,17 +526,40 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 			await requireRecruiter(actor, application);
 			if (!application.interviewChannelId) throw new ValidationError('Cette candidature n’a plus de salon.');
 			if (application.interviewState !== 'closed') throw new ValidationError('Ferme d’abord ce salon avant de le supprimer.');
-			if (!await deleteInterview(application, actor.id)) throw new ValidationError('Ce salon vient d’être rouvert ou supprimé.');
+			const done = await deleteInterview(application, actor.id).catch((error) => {
+				logger.warn(`Channel of application #${applicationId} not deleted:`, error.message);
+				throw refused(error);
+			});
+			if (!done) throw new ValidationError('Ce salon vient d’être rouvert ou supprimé.');
 			await recordChannel(actor, 'recruitment.channel_delete', application);
 			return await getApplication(applicationId);
 		},
 
-		// Closed channels reaching the delay of their position
+		// Every closed channel of a server at once (those left by old applications): { deleted, failed }
+		async deleteClosedChannels(actor, guildId) {
+			need(actor, 'recruitment.manage');
+			const result = { deleted: 0, failed: 0, error: null };
+			for (const row of await q.closedOf.all(guildId)) {
+				try {
+					if (await deleteInterview(await toApplication(row), actor.id)) result.deleted += 1;
+				}
+				catch (error) {
+					logger.warn(`Channel of application #${row.id} not deleted:`, error.message);
+					result.failed += 1;
+					result.error = refused(error).message;
+				}
+			}
+			if (result.deleted) await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'recruitment.channel_delete', guildId, target: guildId, details: { count: result.deleted } });
+			return result;
+		},
+
+		// Closed channels reaching the delay of their position. A deletion refused by Discord is not
+		// tried again every minute: the staff sees why when it deletes the channel by hand.
 		async tick() {
 			for (const row of await q.closedChannels.all()) {
-				const hours = toPosition(await q.position.get(row.position_id))?.config.channelDeleteHours ?? 0;
-				if (!hours || row.interview_closed_at + hours * HOUR_MS > now()) continue;
-				await deleteInterview(await toApplication(row), 'system').catch(warn(`Channel of application #${row.id} not deleted`));
+				const minutes = toPosition(await q.position.get(row.position_id))?.config.channelDeleteMinutes ?? 0;
+				if (!minutes || row.interview_closed_at + minutes * MINUTE_MS > now()) continue;
+				await deleteInterview(await toApplication(row), 'system', { retry: false }).catch(warn(`Channel of application #${row.id} not deleted`));
 			}
 		},
 

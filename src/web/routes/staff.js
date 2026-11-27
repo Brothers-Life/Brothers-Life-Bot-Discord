@@ -60,6 +60,9 @@ export function registerStaffRoutes(app, { core }) {
 		if (action === 'reopen') return await recruitment.reopenChannel(request.actor, request.params.id);
 		return await recruitment.deleteChannel(request.actor, request.params.id);
 	});
+	app.post('/api/recruitment/:guildId/channels/delete-closed', { config: { permission: 'recruitment.manage' }, schema: { params: guildParam } }, async (request) => {
+		return await recruitment.deleteClosedChannels(request.actor, request.params.guildId);
+	});
 	app.post('/api/recruitment/applications/:id/vote', {
 		config: { permission: 'recruitment.vote' },
 		schema: { params: idParam, body: { type: 'object', required: ['vote'], properties: { vote: { type: 'integer', enum: [-1, 0, 1] }, comment: { type: ['string', 'null'], maxLength: 500 } } } },

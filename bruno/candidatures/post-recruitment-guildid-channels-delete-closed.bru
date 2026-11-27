@@ -1,0 +1,21 @@
+meta {
+  name: POST /recruitment/:guildId/channels/delete-closed
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/recruitment/:guildId/channels/delete-closed
+  body: none
+  auth: inherit
+}
+
+params:path {
+  guildId: 
+}
+
+docs {
+  Créer / agir — `POST /api/recruitment/:guildId/channels/delete-closed`
+
+  Permission requise : `recruitment.manage`
+}
