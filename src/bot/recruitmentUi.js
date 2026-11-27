@@ -50,6 +50,26 @@ export function applicationPayload({ position, application: a, status }) {
 	return { embeds: [embed], components };
 }
 
+// Message of the bot in the channel of an application, with the buttons of the recruiters
+// (customId rc:chclose|chopen|chdel:<application id>)
+export function interviewNoticePayload({ kind, applicationId, by = null, deleteAt = null }) {
+	const who = by && by !== 'system' ? ` par <@${by}>` : '';
+	const button = (action, label, emoji, style) => new ButtonBuilder().setCustomId(`rc:${action}:${applicationId}`).setLabel(label).setEmoji(emoji).setStyle(style);
+	if (kind === 'closed') {
+		return {
+			content: `🔒 **Salon fermé**${who} : le candidat ne le voit plus.${deleteAt ? ` Il sera supprimé <t:${Math.floor(deleteAt / 1000)}:R> (la conversation est gardée avec la candidature).` : ''}`,
+			components: [new ActionRowBuilder().addComponents(button('chopen', 'Rouvrir', '🔓', ButtonStyle.Secondary), button('chdel', 'Supprimer', '🗑️', ButtonStyle.Danger))],
+			allowedMentions: { parse: [] },
+		};
+	}
+	const content = {
+		opened: '📨 Candidature envoyée au staff. Recruteurs : fermez ce salon quand l’échange est terminé.',
+		interview: '🗣️ Salon d’entretien ouvert. Recruteurs : fermez ce salon quand l’entretien est terminé.',
+		reopened: `🔓 **Salon rouvert**${who} : le candidat y a de nouveau accès.`,
+	}[kind];
+	return { content, components: [new ActionRowBuilder().addComponents(button('chclose', 'Fermer le salon', '🔒', ButtonStyle.Secondary))], allowedMentions: { parse: [] } };
+}
+
 // Final decision from the menu: an optional word for the candidate, added to the DM (customId rc:decide:<id>:<accepted|rejected>)
 export function decisionModal(applicationId, status) {
 	const accepted = status === 'accepted';

@@ -1,0 +1,30 @@
+meta {
+  name: POST /recruitment/applications/:id/channel
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/recruitment/applications/:id/channel
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+body:json {
+  {
+    "action": "close"
+  }
+}
+
+docs {
+  Créer / agir — `POST /api/recruitment/applications/:id/channel`
+
+  Permission requise : `recruitment.vote`
+
+  Corps JSON :
+  - `action` ("close" | "reopen" | "delete") — obligatoire
+}

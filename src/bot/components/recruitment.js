@@ -81,6 +81,23 @@ export async function execute(interaction) {
 			await recruitment.setStatus(await actorOf(interaction), id, status);
 			return await interaction.editReply('Décision enregistrée : le candidat est prévenu.');
 		}
+		// Channel of the application: closed, reopened, deleted by the recruiters
+		case 'chclose': {
+			await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+			await recruitment.closeChannel(await actorOf(interaction), id);
+			return await interaction.editReply('🔒 Salon fermé : le candidat ne le voit plus.');
+		}
+		case 'chopen': {
+			await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+			await recruitment.reopenChannel(await actorOf(interaction), id);
+			return await interaction.editReply('🔓 Salon rouvert.');
+		}
+		case 'chdel': {
+			await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+			await recruitment.deleteChannel(await actorOf(interaction), id);
+			// The channel of this reply is gone
+			return await interaction.editReply('Salon supprimé.').catch(() => null);
+		}
 		case 'decide': {
 			if (!['accepted', 'rejected'].includes(extra)) return;
 			await interaction.deferReply({ flags: MessageFlags.Ephemeral });

@@ -615,6 +615,10 @@ export function createFakeExecutor() {
 			this.interviews.push({ guildId, ...options });
 			return '830000000000000001';
 		},
+		interviewNotices: [],
+		async sendInterviewNotice(channelId, data) {
+			this.interviewNotices.push({ channelId, ...data });
+		},
 		raidLocks: [],
 		async setRaidLocks(guildId, options) {
 			this.raidLocks.push(['lock', guildId, options]);

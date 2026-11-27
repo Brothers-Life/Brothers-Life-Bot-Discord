@@ -285,3 +285,85 @@ test('application in a private channel: the questions are asked there, then it i
 	await again.setStatus(owner, application.id, 'interview');
 	assert.equal(executor.interviews.length, created);
 });
+
+test('application channel: closed and reopened by the recruiters, closed by the decision, deleted by hand or after the delay', async () => {
+	const { core, recruitment, owner, executor, advance } = await setup();
+	const CHANNEL = '830000000000000001';
+	const RECRUITER_ROLE = '800000000000000099';
+	const deleted = [];
+	const access = [];
+	const files = [];
+	executor.deleteChannel = async (channelId) => {
+		deleted.push(channelId);
+	};
+	executor.removeChannelMember = async (channelId, userId) => {
+		access.push(['remove', userId]);
+	};
+	executor.addChannelMember = async (channelId, userId) => {
+		access.push(['add', userId]);
+	};
+	executor.sendLog = async (channelId, message) => {
+		files.push(...message.files ?? []);
+	};
+	executor.history.set(CHANNEL, [{ id: '1', authorId: CANDIDATE, authorName: 'lea', authorAvatar: null, bot: false, content: 'Bonjour le staff', createdAt: 1_700_000_000_000, attachments: [], embeds: [] }]);
+	executor.memberRoles.set(`${MAIN}:${BOB}`, [RECRUITER_ROLE]);
+	const position = await recruitment.savePosition(owner, MAIN, {
+		name: 'Helper',
+		config: { reviewChannelId: REVIEW, interviewerRoleIds: [RECRUITER_ROLE], channelDeleteHours: 2, form: { steps: [{ questions: [{ id: 'why', label: 'Pourquoi ?' }] }] } },
+	});
+	assert.equal(position.config.channelDeleteHours, 2);
+	const alice = await core.ranks.resolve(ALICE);
+	const bob = await core.ranks.resolve(BOB);
+	const state = async id => (await recruitment.get(owner, id)).interviewState;
+
+	const app = await apply(recruitment, position.id, [{ why: 'Motivé' }]);
+	assert.equal(await state(app.id), null);
+	await assert.rejects(recruitment.closeChannel(alice, app.id), /pas de salon/);
+	await recruitment.setStatus(owner, app.id, 'interview');
+	assert.equal(await state(app.id), 'open');
+	assert.equal(executor.interviewNotices.at(-1).kind, 'interview');
+
+	// Closed by a recruiter (rank or recruiter role of the position), never by the candidate
+	await assert.rejects(recruitment.closeChannel({ id: CANDIDATE, can: () => false }, app.id), ForbiddenError);
+	await assert.rejects(recruitment.deleteChannel(alice, app.id), /Ferme d’abord/);
+	assert.equal((await recruitment.closeChannel(alice, app.id)).interviewState, 'closed');
+	assert.deepEqual(access.at(-1), ['remove', CANDIDATE]);
+	assert.equal(executor.interviewNotices.at(-1).kind, 'closed');
+	assert.ok(executor.interviewNotices.at(-1).deleteAt);
+	await assert.rejects(recruitment.closeChannel(alice, app.id), /déjà fermé/);
+
+	// Reopened: the candidate is back, and nothing is deleted while it is open
+	assert.equal((await recruitment.reopenChannel(bob, app.id)).interviewState, 'open');
+	assert.deepEqual(access.at(-1), ['add', CANDIDATE]);
+	await assert.rejects(recruitment.reopenChannel(bob, app.id), /déjà ouvert/);
+	advance(5 * 3600_000);
+	await recruitment.tick();
+	assert.deepEqual(deleted, []);
+
+	// The decision closes it; it is deleted 2 hours later, the conversation kept as a file
+	await recruitment.setStatus(owner, app.id, 'rejected');
+	assert.equal(await state(app.id), 'closed');
+	advance(3600_000);
+	await recruitment.tick();
+	assert.deepEqual(deleted, []);
+	advance(3600_000 + 60_000);
+	await recruitment.tick();
+	assert.deepEqual(deleted, [CHANNEL]);
+	assert.match(files.at(-1).content, /Bonjour le staff/);
+	const after = await recruitment.get(owner, app.id);
+	assert.equal(after.interviewChannelId, null);
+	assert.equal(after.interviewState, null);
+	await assert.rejects(recruitment.reopenChannel(alice, app.id), /plus de salon/);
+
+	// Delay at 0: kept until a recruiter deletes it
+	await recruitment.savePosition(owner, MAIN, { ...position, config: { ...position.config, channelDeleteHours: 0, cooldownDays: 0 } });
+	const second = await apply(recruitment, position.id, [{ why: 'Encore' }]);
+	await recruitment.setStatus(owner, second.id, 'interview');
+	await recruitment.setStatus(owner, second.id, 'rejected');
+	advance(30 * 86_400_000);
+	await recruitment.tick();
+	assert.equal(deleted.length, 1);
+	await recruitment.deleteChannel(alice, second.id);
+	assert.equal(deleted.length, 2);
+	await assert.rejects(recruitment.deleteChannel(alice, second.id), /plus de salon/);
+});

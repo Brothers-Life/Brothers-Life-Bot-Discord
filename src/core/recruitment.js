@@ -4,6 +4,7 @@ import { normalizeForm, nextStep, readStep } from './forms.js';
 import { accountCreatedAt, fill } from './ticketConfig.js';
 import { assertFivemAllowed, createVariables, usesFivem } from './variables.js';
 import { createFormChats } from './formChats.js';
+import { transcriptText } from './transcript.js';
 
 definePermission('recruitment.view', { label: 'Voir les candidatures', category: 'Recrutement' });
 definePermission('recruitment.vote', { label: 'Voter et commenter les candidatures', category: 'Recrutement' });
@@ -11,6 +12,7 @@ definePermission('recruitment.manage', { label: 'Gérer les postes et décider d
 
 const SNOWFLAKE = /^\d{17,20}$/;
 const DAY_MS = 86_400_000;
+const HOUR_MS = 3600_000;
 const FORM_TTL_MS = 30 * 60_000;
 // An application filled as a conversation is dropped after this long without an answer
 const CHAT_TTL_MS = 60 * 60_000;
@@ -78,6 +80,8 @@ export function normalizePosition(input = {}) {
 			acceptRankId: Number.isInteger(c.acceptRankId) ? c.acceptRankId : null,
 			interviewCategoryId: SNOWFLAKE.test(c.interviewCategoryId) ? c.interviewCategoryId : null,
 			interviewerRoleIds: ids(c.interviewerRoleIds),
+			// Hours between the closing of an application channel and its deletion (0: kept until the staff deletes it)
+			channelDeleteHours: int(c.channelDeleteHours, 0, 720, 24),
 			dm,
 		},
 	};
@@ -102,7 +106,12 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 		// Only from the status that was read: two decisions at once (double click, two staff members) apply once
 		setStatus: db.prepare('UPDATE recruit_applications SET status = ?, history = ?, decided_by = ?, decided_at = ?, updated_at = ? WHERE id = ? AND status = ?'),
 		setReview: db.prepare('UPDATE recruit_applications SET review_channel_id = ?, review_message_id = ?, thread_id = ? WHERE id = ?'),
-		setInterview: db.prepare('UPDATE recruit_applications SET interview_channel_id = ? WHERE id = ?'),
+		setInterview: db.prepare('UPDATE recruit_applications SET interview_channel_id = ?, interview_state = \'open\', interview_closed_at = NULL WHERE id = ?'),
+		// Only from the state that was read: two clicks close, reopen or delete once
+		closeChannel: db.prepare('UPDATE recruit_applications SET interview_state = \'closed\', interview_closed_at = ? WHERE id = ? AND interview_state = \'open\' AND interview_channel_id IS NOT NULL'),
+		reopenChannel: db.prepare('UPDATE recruit_applications SET interview_state = \'open\', interview_closed_at = NULL WHERE id = ? AND interview_state = \'closed\' AND interview_channel_id IS NOT NULL'),
+		dropChannel: db.prepare('UPDATE recruit_applications SET interview_channel_id = NULL, interview_state = NULL, interview_closed_at = NULL WHERE id = ? AND interview_state = \'closed\''),
+		closedChannels: db.prepare('SELECT * FROM recruit_applications WHERE interview_state = \'closed\' AND interview_closed_at IS NOT NULL ORDER BY interview_closed_at, id LIMIT 200'),
 		setNotes: db.prepare('UPDATE recruit_applications SET notes = ?, updated_at = ? WHERE id = ?'),
 		vote: db.prepare('INSERT INTO recruit_votes (application_id, user_id, vote, comment, at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (application_id, user_id) DO UPDATE SET vote = EXCLUDED.vote, comment = COALESCE(EXCLUDED.comment, recruit_votes.comment), at = EXCLUDED.at'),
 		votes: db.prepare('SELECT user_id AS "userId", vote, comment, at FROM recruit_votes WHERE application_id = ? ORDER BY at, user_id'),
@@ -115,7 +124,7 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 		return {
 			id: row.id, positionId: row.position_id, guildId: row.guild_id, userId: row.user_id, userName: row.user_name, answers: JSON.parse(row.answers), status: row.status,
 			history: JSON.parse(row.history), notes: JSON.parse(row.notes), reviewChannelId: row.review_channel_id, reviewMessageId: row.review_message_id, threadId: row.thread_id,
-			interviewChannelId: row.interview_channel_id, decidedBy: row.decided_by, decidedAt: row.decided_at, createdAt: row.created_at, updatedAt: row.updated_at,
+			interviewChannelId: row.interview_channel_id, interviewState: row.interview_channel_id ? row.interview_state ?? 'open' : null, interviewClosedAt: row.interview_closed_at ?? null, decidedBy: row.decided_by, decidedAt: row.decided_at, createdAt: row.created_at, updatedAt: row.updated_at,
 			votes, score: { for: votes.filter(v => v.vote === 1).length, against: votes.filter(v => v.vote === -1).length, neutral: votes.filter(v => v.vote === 0).length },
 		};
 	}
@@ -169,6 +178,42 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 		await executor.upsertApplicationMessage(application.reviewChannelId, application.reviewMessageId, { position, application, status: STATUSES[application.status] })
 			.catch(error => logger.warn(`Application #${application.id} not refreshed:`, error.message));
 	}
+
+	// The channel of an application works like a ticket: open, closed (the candidate no longer sees it,
+	// the staff keeps it and can reopen it), then deleted by the staff or some hours after its closing.
+	const warn = what => error => logger.warn(`${what}:`, error.message);
+	async function requireRecruiter(actor, application) {
+		if (actor.can('recruitment.manage') || actor.can('recruitment.vote')) return;
+		const roleIds = (await getPosition(application.positionId).catch(() => null))?.config.interviewerRoleIds ?? [];
+		const mine = roleIds.length ? await executor.getMemberRoleIds(application.guildId, actor.id).catch(() => null) ?? [] : [];
+		if (!roleIds.some(id => mine.includes(id))) throw new ForbiddenError('Seuls les recruteurs peuvent gérer ce salon.');
+	}
+	async function closeInterview(application, by) {
+		if (!application.interviewChannelId || !(await q.closeChannel.run(now(), application.id)).changes) return false;
+		const hours = (await getPosition(application.positionId).catch(() => null))?.config.channelDeleteHours ?? 0;
+		await executor.removeChannelMember(application.interviewChannelId, application.userId).catch(warn(`Channel of application #${application.id} not closed`));
+		await executor.sendInterviewNotice(application.interviewChannelId, { kind: 'closed', applicationId: application.id, by, deleteAt: hours ? now() + hours * HOUR_MS : null })
+			.catch(warn(`Notice of application #${application.id} not sent`));
+		return true;
+	}
+	// The conversation is kept as a file next to the application (its thread, or the review channel)
+	async function deleteInterview(application, by) {
+		if (!(await q.dropChannel.run(application.id)).changes) return false;
+		const channelId = application.interviewChannelId;
+		const target = application.threadId ?? application.reviewChannelId;
+		const history = target ? await executor.fetchChannelHistory(channelId, { limit: 2000 }).catch(() => null) : null;
+		if (history?.messages.length) {
+			await executor.sendLog(target, {
+				title: 'Salon de candidature supprimé',
+				description: `Candidature #${application.id} de <@${application.userId}> · supprimé par ${by === 'system' ? 'le bot' : `<@${by}>`}`,
+				color: 'neutral',
+				files: [{ name: `candidature-${application.id}.txt`, content: transcriptText(history.messages, history.mentions) }],
+			}).catch(warn(`Conversation of application #${application.id} not saved`));
+		}
+		await executor.deleteChannel(channelId, `Candidature #${application.id} terminée`).catch(warn(`Channel of application #${application.id} not deleted`));
+		return true;
+	}
+	const recordChannel = (actor, action, application) => audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action, guildId: application.guildId, target: String(application.id), details: { member: `<@${application.userId}>` } });
 
 	// Throws when this member cannot apply to this position right now
 	async function eligible(positionId, userId, guildId) {
@@ -337,7 +382,10 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 		async submit({ positionId, guildId, userId, userName, answers, channelId = null }) {
 			const position = await getPosition(positionId);
 			const id = Number((await q.insert.run({ positionId, guildId, userId, userName, answers: JSON.stringify(answers), history: JSON.stringify([{ status: 'received', by: userId, at: now() }]), at: now() })).lastInsertRowid);
-			if (channelId) await q.setInterview.run(channelId, id);
+			if (channelId) {
+				await q.setInterview.run(channelId, id);
+				await executor.sendInterviewNotice(channelId, { kind: 'opened', applicationId: id }).catch(warn(`Notice of application #${id} not sent`));
+			}
 			let application = await getApplication(id);
 			if (position.config.reviewChannelId) {
 				const posted = await executor.upsertApplicationMessage(position.config.reviewChannelId, null, { position, application, status: STATUSES.received }, { thread: true, pingRoleIds: position.config.pingRoleIds })
@@ -406,13 +454,13 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 					logger.warn(`Interview channel of #${applicationId} failed:`, error.message);
 					return null;
 				});
-				if (channelId) await q.setInterview.run(channelId, applicationId);
+				if (channelId) {
+					await q.setInterview.run(channelId, applicationId);
+					await executor.sendInterviewNotice(channelId, { kind: 'interview', applicationId }).catch(warn(`Notice of application #${applicationId} not sent`));
+				}
 			}
-			// Interview over: the candidate no longer sees the channel (the staff keeps its history)
-			if (final && application.interviewChannelId) {
-				await executor.removeChannelMember(application.interviewChannelId, application.userId)
-					.catch(error => logger.warn(`Interview channel of #${applicationId} not closed:`, error.message));
-			}
+			// Decision taken: the channel is closed (the candidate no longer sees it, the staff can reopen or delete it)
+			if (final) await closeInterview(await getApplication(applicationId), 'system');
 			if (status === 'accepted') {
 				for (const roleId of position.config.acceptRoleIds) {
 					await executor.addRole(application.guildId, application.userId, roleId, `Candidature acceptée (${position.name})`).catch(error => logger.warn('Accept role failed:', error.message));
@@ -427,6 +475,54 @@ export function createRecruitment({ db, network, ranks, audit, executor, sanctio
 			if (text && status !== 'withdrawn') await executor.sendDM(application.userId, `${text}${reason ? `\n${reason}` : ''}`).catch(() => null);
 			await audit.record({ actorId: actor.id, source: actor.source ?? 'panel', action: 'recruitment.status', guildId: application.guildId, target: String(applicationId), details: { position: position.name, member: `<@${application.userId}>`, status: STATUSES[status].label, reason: reason || null } });
 			return updated;
+		},
+
+		async closeChannel(actor, applicationId) {
+			const application = await getApplication(applicationId);
+			await requireRecruiter(actor, application);
+			if (!application.interviewChannelId) throw new ValidationError('Cette candidature n’a pas de salon.');
+			if (!await closeInterview(application, actor.id)) throw new ValidationError('Ce salon est déjà fermé.');
+			await recordChannel(actor, 'recruitment.channel_close', application);
+			return await getApplication(applicationId);
+		},
+
+		async reopenChannel(actor, applicationId) {
+			const application = await getApplication(applicationId);
+			await requireRecruiter(actor, application);
+			if (!application.interviewChannelId) throw new ValidationError('Cette candidature n’a plus de salon.');
+			if (!(await q.reopenChannel.run(applicationId)).changes) throw new ValidationError('Ce salon est déjà ouvert.');
+			try {
+				await executor.addChannelMember(application.interviewChannelId, application.userId);
+			}
+			catch (error) {
+				// The channel is gone or the bot cannot edit it: back to closed, with what went wrong
+				await q.closeChannel.run(application.interviewClosedAt, applicationId);
+				logger.warn(`Channel of application #${applicationId} not reopened:`, error.message);
+				throw new ValidationError('Impossible de rouvrir ce salon : il a été supprimé ou le bot ne peut plus le modifier.');
+			}
+			await executor.sendInterviewNotice(application.interviewChannelId, { kind: 'reopened', applicationId, by: actor.id }).catch(warn(`Notice of application #${applicationId} not sent`));
+			await recordChannel(actor, 'recruitment.channel_reopen', application);
+			return await getApplication(applicationId);
+		},
+
+		// Only a closed channel is deleted (the candidate was told it is over)
+		async deleteChannel(actor, applicationId) {
+			const application = await getApplication(applicationId);
+			await requireRecruiter(actor, application);
+			if (!application.interviewChannelId) throw new ValidationError('Cette candidature n’a plus de salon.');
+			if (application.interviewState !== 'closed') throw new ValidationError('Ferme d’abord ce salon avant de le supprimer.');
+			if (!await deleteInterview(application, actor.id)) throw new ValidationError('Ce salon vient d’être rouvert ou supprimé.');
+			await recordChannel(actor, 'recruitment.channel_delete', application);
+			return await getApplication(applicationId);
+		},
+
+		// Closed channels reaching the delay of their position
+		async tick() {
+			for (const row of await q.closedChannels.all()) {
+				const hours = toPosition(await q.position.get(row.position_id))?.config.channelDeleteHours ?? 0;
+				if (!hours || row.interview_closed_at + hours * HOUR_MS > now()) continue;
+				await deleteInterview(await toApplication(row), 'system').catch(warn(`Channel of application #${row.id} not deleted`));
+			}
 		},
 
 		async list(actor, { guildId, positionId, status, userId } = {}) {

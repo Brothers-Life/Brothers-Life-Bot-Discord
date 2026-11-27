@@ -50,6 +50,16 @@ export function registerStaffRoutes(app, { core }) {
 		config: { permission: 'recruitment.manage' },
 		schema: { params: idParam, body: { type: 'object', required: ['status'], properties: { status: { type: 'string', maxLength: 20 }, reason: { type: 'string', maxLength: 500 } } } },
 	}, async (request) => recruitment.setStatus(request.actor, request.params.id, request.body.status, { reason: request.body.reason ?? '' }));
+	// The channel of the application: closed, reopened or deleted (the service checks who may)
+	app.post('/api/recruitment/applications/:id/channel', {
+		config: { permission: 'recruitment.vote' },
+		schema: { params: idParam, body: { type: 'object', required: ['action'], properties: { action: { type: 'string', enum: ['close', 'reopen', 'delete'] } } } },
+	}, async (request) => {
+		const { action } = request.body;
+		if (action === 'close') return await recruitment.closeChannel(request.actor, request.params.id);
+		if (action === 'reopen') return await recruitment.reopenChannel(request.actor, request.params.id);
+		return await recruitment.deleteChannel(request.actor, request.params.id);
+	});
 	app.post('/api/recruitment/applications/:id/vote', {
 		config: { permission: 'recruitment.vote' },
 		schema: { params: idParam, body: { type: 'object', required: ['vote'], properties: { vote: { type: 'integer', enum: [-1, 0, 1] }, comment: { type: ['string', 'null'], maxLength: 500 } } } },

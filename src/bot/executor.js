@@ -5,7 +5,7 @@ import { roomPanel } from './voiceUi.js';
 import { pollPayload, pollResultsPayload } from './pollsUi.js';
 import { giveawayPayload, winnersPayload } from './giveawaysUi.js';
 import { boxPanelPayload, feedbackPayload, reviewPayload } from './feedbackUi.js';
-import { applicationPayload, recruitmentPanelPayload } from './recruitmentUi.js';
+import { applicationPayload, interviewNoticePayload, recruitmentPanelPayload } from './recruitmentUi.js';
 import { takeoverPanelPayload } from './takeoversUi.js';
 import { fivemPayload } from './fivemUi.js';
 import { rpEventPayload } from './rpEventsUi.js';
@@ -884,6 +884,11 @@ export function createExecutor(client) {
 			});
 			await channel.send({ content: welcome ?? `<@${candidateId}> bienvenue dans ton entretien : l’équipe de recrutement va te parler ici.`, allowedMentions: { users: [candidateId] } });
 			return channel.id;
+		},
+
+		async sendInterviewNotice(channelId, data) {
+			const channel = await client.channels.fetch(channelId);
+			await channel.send(interviewNoticePayload(data));
 		},
 
 		async lockThread(threadId) {

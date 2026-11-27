@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, Download, Inbox, MessageSquarePlus, MessagesSquare, Plus, Save, Send, ThumbsDown, ThumbsUp, Trash2, Minus } from 'lucide-react'
+import { CheckCircle2, Download, Inbox, Lock, LockOpen, MessageSquarePlus, MessagesSquare, Plus, Save, Send, ThumbsDown, ThumbsUp, Trash2, Minus } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { Channel, FormDef, Guild, RankSummary, Role } from '@/lib/types'
@@ -34,7 +34,7 @@ type Position = {
   id: number; name: string; description: string; panelChannelId: string | null; panelMessageId: string | null
   config: {
     open: boolean; closesAt: number | null; mode: 'channel' | 'chat' | 'modal'; form: FormDef; cooldownDays: number; reviewChannelId: string | null; pingRoleIds: string[]; acceptRoleIds: string[]
-    acceptRankId: number | null; interviewCategoryId: string | null; interviewerRoleIds: string[]; dm: Record<string, string>
+    acceptRankId: number | null; interviewCategoryId: string | null; interviewerRoleIds: string[]; channelDeleteHours: number; dm: Record<string, string>
     requirements: { minAccountAgeDays: number; minMemberDays: number; noSanctionDays: number; requiredRoleIds: string[]; minMessages: number; activityDays: number }
   }
 }
@@ -44,7 +44,7 @@ type Application = {
 }
 type Detail = Application & {
   answers: { id: string; label: string; value: string }[]; history: { status: string; by: string; at: number; reason: string | null }[]
-  notes: { by: string; at: number; text: string }[]; votes: { userId: string; vote: number; comment: string | null; at: number }[]; interviewChannelId: string | null
+  notes: { by: string; at: number; text: string }[]; votes: { userId: string; vote: number; comment: string | null; at: number }[]; interviewChannelId: string | null; interviewState: 'open' | 'closed' | null
   names: Record<string, { name: string | null; avatar: string | null } | null>
 }
 type Payload = { positions: Position[]; applications: Application[]; statuses: Record<StatusKey, { label: string; emoji: string; color: string }>; channels: Channel[]; categories: { id: string; name: string }[]; roles: Role[]; ranks: RankSummary[] }
@@ -151,6 +151,10 @@ function ApplicationDialog({ id, data, guildId, onClose }: { id: number; data: P
   const vote = useMutation({ mutationFn: (v: number) => api(`/recruitment/applications/${id}/vote`, { method: 'POST', body: { vote: v } }), onSuccess: () => { toast.success('Vote enregistré'); refresh() } })
   const addNote = useMutation({ mutationFn: () => api(`/recruitment/applications/${id}/notes`, { method: 'POST', body: { text: note } }), onSuccess: () => { setNote(''); refresh() } })
   const decide = useMutation({ mutationFn: (status: string) => api(`/recruitment/applications/${id}/status`, { method: 'POST', body: { status, reason } }), onSuccess: () => { toast.success('Décision enregistrée, le candidat est prévenu'); setReason(''); refresh() } })
+  const channel = useMutation({
+    mutationFn: (action: 'close' | 'reopen' | 'delete') => api(`/recruitment/applications/${id}/channel`, { method: 'POST', body: { action } }),
+    onSuccess: (_, action) => { toast.success({ close: 'Salon fermé : le candidat ne le voit plus', reopen: 'Salon rouvert', delete: 'Salon supprimé' }[action]); refresh() },
+  })
   const name = (userId: string) => a?.names[userId]?.name ?? userId
   const open = a && ['received', 'review', 'interview'].includes(a.status)
   const { confirm, dialog } = useConfirm()
@@ -186,8 +190,22 @@ function ApplicationDialog({ id, data, guildId, onClose }: { id: number; data: P
               <div className='flex flex-wrap items-center gap-2'>
                 <Pill style={{ color: data.statuses[a.status].color }}>{data.statuses[a.status].emoji} {data.statuses[a.status].label}</Pill>
                 <span className='text-xs text-muted-foreground'>Déposée le {dateTime(a.createdAt)}</span>
-                {a.interviewChannelId && <Pill tone='accent'>Salon d’entretien ouvert</Pill>}
+                {a.interviewChannelId && <Pill tone={a.interviewState === 'closed' ? undefined : 'accent'}>{a.interviewState === 'closed' ? 'Salon fermé' : 'Salon ouvert'}</Pill>}
               </div>
+              {a.interviewChannelId && can('recruitment.vote') && (
+                <div className='flex flex-wrap gap-2'>
+                  {a.interviewState !== 'closed' && <Button size='sm' variant='outline' disabled={channel.isPending} onClick={() => channel.mutate('close')}><Lock /> Fermer le salon</Button>}
+                  {a.interviewState === 'closed' && <Button size='sm' variant='outline' disabled={channel.isPending} onClick={() => channel.mutate('reopen')}><LockOpen /> Rouvrir le salon</Button>}
+                  {a.interviewState === 'closed' && (
+                    <Button
+                      size='sm' variant='destructive' disabled={channel.isPending}
+                      onClick={async () => {
+                        if (await confirm({ title: 'Supprimer le salon de cette candidature ?', desc: 'Le salon Discord est supprimé pour de bon. La conversation est gardée en fichier avec la candidature (son fil ou le salon d’étude).', confirmText: 'Supprimer', destructive: true })) channel.mutate('delete')
+                      }}
+                    ><Trash2 /> Supprimer le salon</Button>
+                  )}
+                </div>
+              )}
               <dl className='grid gap-3'>
                 {a.answers.map((x) => <div key={x.id}><dt className='text-xs font-medium text-muted-foreground'>{x.label}</dt><dd className='whitespace-pre-wrap text-sm'>{x.value || '—'}</dd></div>)}
               </dl>
@@ -242,7 +260,7 @@ const EMPTY_POSITION: Omit<Position, 'id'> & { id?: number } = {
   name: '', description: '', panelChannelId: null, panelMessageId: null,
   config: {
     open: true, closesAt: null, mode: 'channel', form: { steps: [{ title: 'Ta candidature', when: null, questions: [{ id: 'why', type: 'paragraph', label: 'Pourquoi toi ?', description: '', required: true, maxLength: 2000 }] }] },
-    cooldownDays: 14, reviewChannelId: null, pingRoleIds: [], acceptRoleIds: [], acceptRankId: null, interviewCategoryId: null, interviewerRoleIds: [], dm: {},
+    cooldownDays: 14, reviewChannelId: null, pingRoleIds: [], acceptRoleIds: [], acceptRankId: null, interviewCategoryId: null, interviewerRoleIds: [], channelDeleteHours: 24, dm: {},
     requirements: { minAccountAgeDays: 0, minMemberDays: 0, noSanctionDays: 0, requiredRoleIds: [], minMessages: 0, activityDays: 30 },
   },
 }
@@ -349,6 +367,10 @@ function PositionDialog({ initial, data, guildId, onClose }: { initial: Omit<Pos
               <div className='grid gap-1.5'><Label>Catégorie des salons d’entretien</Label><CategorySelect categories={data.categories} value={c.interviewCategoryId} onChange={(v) => set({ interviewCategoryId: v })} label='Catégorie des entretiens' /></div>
               <div className='grid gap-1.5'><Label>Recruteurs (voient les entretiens)</Label><RolesPicker roles={data.roles} value={c.interviewerRoleIds} onChange={(ids) => set({ interviewerRoleIds: ids })} label='Recruteurs' /></div>
               {num('Délai avant de repostuler (jours)', c.cooldownDays, (n) => set({ cooldownDays: n }))}
+              <div className='grid gap-1.5'>
+                {num('Suppression du salon après sa fermeture (heures)', c.channelDeleteHours ?? 24, (n) => set({ channelDeleteHours: Math.min(720, Math.max(0, Math.round(n))) }))}
+                <p className='text-xs text-muted-foreground'>Le salon se ferme à la décision (ou par le bouton « Fermer »), puis est supprimé après ce délai. 0 : gardé jusqu’à ce qu’un recruteur le supprime.</p>
+              </div>
             </div>
           </TabsContent>
           <TabsContent value='form' className='mt-4 grid grid-cols-[minmax(0,1fr)] gap-4'>
